@@ -3,19 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import PaginationControls from "../../components/PaginationControls";
-import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import {
   CephAdminRgwAccount,
   CephAdminRgwAccountDetail,
@@ -34,6 +31,7 @@ import {
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
   advancedFilterHeaderClass,
+  advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
@@ -48,28 +46,11 @@ import {
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
 import { extractApiError } from "../../utils/apiError";
+import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
+import { formatBytes, formatNumber } from "../../utils/format";
 
 const extractError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
-};
-
-const formatBytes = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let size = value;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const decimals = size >= 10 || idx === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[idx]}`;
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  return value.toLocaleString();
 };
 
 type ColumnId =
@@ -273,32 +254,24 @@ const buildAdvancedFilterPayload = (
 };
 
 const loadVisibleColumns = (): ColumnId[] => {
-  if (typeof window === "undefined") return defaultVisibleColumns;
-  const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
-  if (!raw) return defaultVisibleColumns;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return defaultVisibleColumns;
-    const allowed = new Set<ColumnId>([
-      "account_name",
-      "email",
-      "max_users",
-      "max_buckets",
-      "quota_max_size_bytes",
-      "quota_max_objects",
-      "bucket_count",
-      "user_count",
-    ]);
-    const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
-    return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
-  } catch {
-    return defaultVisibleColumns;
-  }
+  const parsed = readClientJsonFromKey<unknown>(COLUMNS_STORAGE_KEY);
+  if (!Array.isArray(parsed)) return defaultVisibleColumns;
+  const allowed = new Set<ColumnId>([
+    "account_name",
+    "email",
+    "max_users",
+    "max_buckets",
+    "quota_max_size_bytes",
+    "quota_max_objects",
+    "bucket_count",
+    "user_count",
+  ]);
+  const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
+  return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
 };
 
 const persistVisibleColumns = (value: ColumnId[]) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  writeClientJsonToKey(COLUMNS_STORAGE_KEY, value);
 };
 
 const rowKey = (account: CephAdminRgwAccount) => account.account_id;
@@ -561,18 +534,6 @@ export default function CephAdminAccountsPage() {
       return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
-  };
-  const matchModeButtonClass = (active: boolean, locked: boolean = false) => {
-    if (locked) {
-      if (active) {
-        return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-      }
-      return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
-    }
-    if (active) {
-      return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-    }
-    return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
   };
   const activeFieldClass =
     "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
@@ -854,15 +815,7 @@ export default function CephAdminAccountsPage() {
     );
   };
 
-  type ColumnDef = {
-    id: string;
-    label: string;
-    field: SortField | null;
-    align?: "left" | "right";
-    headerClassName?: string;
-    cellClassName?: string;
-    render: (account: CephAdminRgwAccount) => ReactNode;
-  };
+  type ColumnDef = DataTableColumn<CephAdminRgwAccount, SortField>;
 
   const accountTableColumns: ColumnDef[] = (() => {
     const visible = new Set(visibleColumns);
@@ -1249,7 +1202,7 @@ export default function CephAdminAccountsPage() {
                                       type="button"
                                       disabled={accountNameDraftForcesExact}
                                       onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "contains")}
-                                      className={matchModeButtonClass(accountNameDraftMode === "contains", accountNameDraftForcesExact)}
+                                      className={advancedFilterMatchModeButtonClass(accountNameDraftMode === "contains", accountNameDraftForcesExact)}
                                     >
                                       Contains
                                     </button>
@@ -1257,7 +1210,7 @@ export default function CephAdminAccountsPage() {
                                       type="button"
                                       disabled={accountNameDraftForcesExact}
                                       onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "exact")}
-                                      className={matchModeButtonClass(accountNameDraftMode === "exact", accountNameDraftForcesExact)}
+                                      className={advancedFilterMatchModeButtonClass(accountNameDraftMode === "exact", accountNameDraftForcesExact)}
                                     >
                                       Exact
                                     </button>
@@ -1291,7 +1244,7 @@ export default function CephAdminAccountsPage() {
                                       type="button"
                                       disabled={emailDraftForcesExact}
                                       onClick={() => updateAdvancedMatchMode("emailMatchMode", "contains")}
-                                      className={matchModeButtonClass(emailDraftMode === "contains", emailDraftForcesExact)}
+                                      className={advancedFilterMatchModeButtonClass(emailDraftMode === "contains", emailDraftForcesExact)}
                                     >
                                       Contains
                                     </button>
@@ -1299,7 +1252,7 @@ export default function CephAdminAccountsPage() {
                                       type="button"
                                       disabled={emailDraftForcesExact}
                                       onClick={() => updateAdvancedMatchMode("emailMatchMode", "exact")}
-                                      className={matchModeButtonClass(emailDraftMode === "exact", emailDraftForcesExact)}
+                                      className={advancedFilterMatchModeButtonClass(emailDraftMode === "exact", emailDraftForcesExact)}
                                     >
                                       Exact
                                     </button>
@@ -1404,61 +1357,28 @@ export default function CephAdminAccountsPage() {
 
           {renderAdvancedSearchProgress(advancedProgress)}
 
-          <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
-            <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr>
-                  {accountTableColumns.map((col) => (
-                    <SortableHeader
-                      key={col.id}
-                      label={col.label}
-                      field={col.field}
-                      activeField={sort.field}
-                      direction={sort.direction}
-                      align={col.align ?? "left"}
-                      className={col.headerClassName ?? ""}
-                      onSort={(field) => toggleSort(field as SortField)}
-                    />
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
-                {tableStatus === "error" && (
-                  <TableEmptyState colSpan={accountTableColumns.length} message="Unable to load accounts." tone="error" />
-                )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts." />}
-                {items.map((account) => (
-                  <tr key={rowKey(account)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    {accountTableColumns.map((col) => {
-                      const align = col.align ?? "left";
-                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
-                      const textClass =
-                        col.id === "account_id"
-                          ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                          : "ui-body text-slate-600 dark:text-slate-300";
-                      return (
-                        <td key={`${rowKey(account)}:${col.id}`} className={`${cellBase} ${textClass} ${col.cellClassName ?? ""}`}>
-                          {col.render(account)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
+          <DataTableShell
+            columns={accountTableColumns}
+            rows={items}
+            rowKey={rowKey}
+            status={tableStatus}
+            loadingMessage="Loading accounts..."
+            errorMessage="Unable to load accounts."
+            emptyMessage="No accounts."
+            primaryColumnId="account_id"
+            overflowXHidden={showAdvancedFilter}
+            sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setPage(1);
+              },
+              disabled: loading || !selectedEndpointId,
             }}
-            disabled={loading || !selectedEndpointId}
           />
         </div>
       )}

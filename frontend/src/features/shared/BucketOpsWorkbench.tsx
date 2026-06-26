@@ -178,45 +178,26 @@ import {
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
   advancedFilterHeaderClass,
+  buildTextFieldRules,
+  FILTER_COST_LABEL,
+  formatAdvancedSearchStage,
+  formatTextFilterSummary,
+  formatTextMatchModeLabel,
   advancedFilterRootClass,
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
+  parseExactListInput,
+  renderFilterCostIndicator,
+  type FilterCostLevel,
 } from "../cephAdmin/filtering/advancedFilterShared";
 import { extractApiError } from "../../utils/apiError";
+import { formatBytes, formatNumber } from "../../utils/format";
 
 const extractError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
 };
 
-const formatBytes = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let size = value;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const decimals = size >= 10 || idx === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[idx]}`;
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  return value.toLocaleString();
-};
-
 const isStatsSortField = (field: SortField) => field === "used_bytes" || field === "object_count";
-
-const formatAdvancedSearchStage = (stage: string) => {
-  if (!stage.trim()) return "";
-  return stage
-    .split("_")
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-};
 
 const sanitizeExportFilenamePart = (value?: string | null) => {
   const normalized = (value ?? "").trim();
@@ -1129,7 +1110,6 @@ type ActiveFilterSummaryItem = {
   label: string;
   remove: ActiveFilterRemoveAction;
 };
-type FilterCostLevel = "none" | "low" | "medium" | "high";
 type AdvancedFilterSecondarySectionId = "metrics" | "featureStates" | "featureDetails";
 type AdvancedFilterSecondarySectionState = Record<AdvancedFilterSecondarySectionId, boolean>;
 
@@ -1430,27 +1410,6 @@ const formatFeatureFilterStateLabel = (state: FeatureFilterState) => {
   return state.charAt(0).toUpperCase() + state.slice(1);
 };
 
-const formatTextMatchModeLabel = (mode: TextMatchMode) => (mode === "exact" ? "exact" : "contains");
-const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
-  none: "No additional cost",
-  low: "Low cost",
-  medium: "Medium cost",
-  high: "High cost",
-};
-
-const FILTER_COST_ENABLED_DOTS: Record<FilterCostLevel, number> = {
-  none: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
-const FILTER_COST_DOT_CLASS: Record<Exclude<FilterCostLevel, "none">, string> = {
-  low: "bg-emerald-500 dark:bg-emerald-300",
-  medium: "bg-amber-500 dark:bg-amber-300",
-  high: "bg-rose-500 dark:bg-rose-300",
-};
-
 const buildAdvancedFilterSecondarySectionState = (
   activeCounts: Partial<Record<AdvancedFilterSecondarySectionId, number>> = {}
 ): AdvancedFilterSecondarySectionState => ({
@@ -1458,25 +1417,6 @@ const buildAdvancedFilterSecondarySectionState = (
   featureStates: Boolean(activeCounts.featureStates),
   featureDetails: Boolean(activeCounts.featureDetails),
 });
-
-const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: string) => {
-  const enabledDots = FILTER_COST_ENABLED_DOTS[level];
-  const activeClass = level === "none" ? "" : FILTER_COST_DOT_CLASS[level];
-  return (
-    <span
-      className="inline-flex items-center gap-1"
-      title={tooltip}
-      aria-label={tooltip}
-    >
-      {[0, 1, 2].map((idx) => (
-        <span
-          key={`${level}-${idx}`}
-          className={`h-1.5 w-1.5 rounded-full ${idx < enabledDots ? activeClass : "bg-slate-300 dark:bg-slate-600"}`}
-        />
-      ))}
-    </span>
-  );
-};
 
 const parseS3TagExpressions = (value: string): string[] => {
   const seen = new Set<string>();
@@ -1492,33 +1432,6 @@ const parseS3TagExpressions = (value: string): string[] => {
       expressions.push(item);
     });
   return expressions;
-};
-
-type ParsedExactListInput = {
-  values: string[];
-  listProvided: boolean;
-};
-
-const parseExactListInput = (value: string): ParsedExactListInput => {
-  const raw = value.trim();
-  if (!raw) return { values: [], listProvided: false };
-  const listProvided = /[\n,]/.test(value);
-  if (!listProvided) {
-    return { values: [raw], listProvided: false };
-  }
-  const seen = new Set<string>();
-  const values: string[] = [];
-  value
-    .split(/[\n,]/g)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((item) => {
-      const normalized = item.toLowerCase();
-      if (seen.has(normalized)) return;
-      seen.add(normalized);
-      values.push(item);
-    });
-  return { values, listProvided: true };
 };
 
 const BUCKET_STATS_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
@@ -1553,36 +1466,6 @@ const OWNER_USAGE_NUMERIC_FILTER_FIELDS: AdvancedNumericField[] = [
   "minOwnerQuotaUsageObjectPercent",
   "maxOwnerQuotaUsageObjectPercent",
 ];
-
-const buildTextFieldRules = (
-  field: "name" | "tenant" | "owner" | "owner_name",
-  rawValue: string,
-  mode: TextMatchMode
-): Array<Record<string, unknown>> => {
-  const parsed = parseExactListInput(rawValue);
-  if (parsed.values.length === 0) return [];
-  if (parsed.listProvided) {
-    if (parsed.values.length === 1) {
-      return [{ field, op: "eq", value: parsed.values[0] }];
-    }
-    return [{ field, op: "in", value: parsed.values }];
-  }
-  return [{ field, op: mode === "exact" ? "eq" : "contains", value: parsed.values[0] }];
-};
-
-const formatTextFilterSummary = (
-  label: string,
-  rawValue: string,
-  mode: TextMatchMode
-) => {
-  const parsed = parseExactListInput(rawValue);
-  if (parsed.values.length === 0) return null;
-  if (parsed.listProvided) {
-    const preview = formatBucketNamesPreview(parsed.values, 2);
-    return `${label} exact list: ${preview}`;
-  }
-  return `${label} ${formatTextMatchModeLabel(mode)}: ${parsed.values[0]}`;
-};
 
 const serializeS3TagExpressions = (values: string[]) =>
   values

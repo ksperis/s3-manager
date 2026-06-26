@@ -51,12 +51,16 @@ import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCardMutedClass, uiDataTableClass, uiInputClass, uiTableContainerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import {
+  AdminAssociationPickerPanel,
+  AdminAssociationSectionHeader,
+} from "./AdminAssociationPicker";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type UserModalTab = "general" | "associations" | "groups" | "access" | "browser" | "manager_tools";
@@ -73,20 +77,16 @@ type Option = {
   label: string;
 };
 
-const userModalLabelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
-const userModalFieldClass =
-  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
-const userModalCancelButtonClass =
-  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-4 py-2 ui-body font-medium text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
+const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
+const userModalCancelButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-4 py-2 ui-body");
 const associationTableContainerClass = uiTableContainerClass;
 const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 const associationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
-const associationCompactInputClass =
-  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
-const associationCompactSelectClass =
-  "w-44 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+const associationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
+const associationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
 const associationSecondaryButtonClass =
-  "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+  cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 ui-caption");
 const associationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${
     selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
@@ -239,19 +239,12 @@ const AssociationsTabs = ({
             label: `Accounts (${accounts.selected.length})`,
             content: (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked accounts</span>
-                    <span className="ui-caption text-slate-500">{accounts.selected.length} linked</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => accounts.setShowPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {accounts.showPanel ? "Close" : "Add accounts"}
-                  </button>
-                </div>
+                <AdminAssociationSectionHeader
+                  title="Linked accounts"
+                  countLabel={`${accounts.selected.length} linked`}
+                  actionLabel={accounts.showPanel ? "Close" : "Add accounts"}
+                  onAction={() => accounts.setShowPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead>
@@ -345,26 +338,34 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {accounts.showPanel && (
-                  <div className={associationAddPanelClass}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add accounts</span>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={accounts.search}
-                        onChange={(e) => accounts.setSearch(e.target.value)}
-                        placeholder="Search..."
-                        className={associationCompactInputClass}
-                      />
-                    </div>
-                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                      {accounts.loading ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading accounts...</p>
-                      ) : accounts.available.length === 0 ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      ) : null}
+                  <AdminAssociationPickerPanel
+                    title="Add accounts"
+                    hint="(search by name)"
+                    search={accounts.search}
+                    onSearchChange={accounts.setSearch}
+                    loading={accounts.loading}
+                    availableCount={accounts.available.length}
+                    maxVisibleOptions={maxVisibleOptions}
+                    selectedCount={accounts.selections.length}
+                    loadingLabel="Loading accounts..."
+                    addDisabled={accounts.selections.length === 0}
+                    onCancel={() => {
+                      accounts.setShowPanel(false);
+                      accounts.setSelections([]);
+                      accounts.setSearch("");
+                    }}
+                    onAdd={() => {
+                      if (accounts.selections.length === 0) return;
+                      const next = accounts.selections.map((accountId) => {
+                        const account_admin = accounts.adminChoice[accountId] ?? false;
+                        return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
+                      });
+                      accounts.setSelected((prev) => [...prev, ...next]);
+                      accounts.setSelections([]);
+                      accounts.setSearch("");
+                      accounts.setShowPanel(false);
+                    }}
+                  >
                       {accounts.visible.map((opt) => {
                         const accountId = Number(opt.id);
                         const isSelected = accounts.selections.includes(accountId);
@@ -402,49 +403,7 @@ const AssociationsTabs = ({
                           </div>
                         );
                       })}
-                      {accounts.available.length > maxVisibleOptions && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {accounts.selections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            accounts.setShowPanel(false);
-                            accounts.setSelections([]);
-                            accounts.setSearch("");
-                          }}
-                          className={associationSecondaryButtonClass}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={accounts.selections.length === 0}
-                          onClick={() => {
-                            if (accounts.selections.length === 0) return;
-                            const next = accounts.selections.map((accountId) => {
-                              const account_admin = accounts.adminChoice[accountId] ?? false;
-                              return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
-                            });
-                            accounts.setSelected((prev) => [...prev, ...next]);
-                            accounts.setSelections([]);
-                            accounts.setSearch("");
-                            accounts.setShowPanel(false);
-                          }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        >
-                          Add selected
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             ),
@@ -454,19 +413,12 @@ const AssociationsTabs = ({
             label: `S3 Users (${s3Users.selected.length})`,
             content: (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked users</span>
-                    <span className="ui-caption text-slate-500">{s3Users.selected.length} linked</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => s3Users.setShowPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {s3Users.showPanel ? "Close" : "Add users"}
-                  </button>
-                </div>
+                <AdminAssociationSectionHeader
+                  title="Linked users"
+                  countLabel={`${s3Users.selected.length} linked`}
+                  actionLabel={s3Users.showPanel ? "Close" : "Add users"}
+                  onAction={() => s3Users.setShowPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead>
@@ -508,26 +460,30 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {s3Users.showPanel && (
-                  <div className={associationAddPanelClass}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add users</span>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={s3Users.search}
-                        onChange={(e) => s3Users.setSearch(e.target.value)}
-                        placeholder="Search..."
-                        className={associationCompactInputClass}
-                      />
-                    </div>
-                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                      {s3Users.loading ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading users...</p>
-                      ) : s3Users.available.length === 0 ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      ) : null}
+                  <AdminAssociationPickerPanel
+                    title="Add users"
+                    hint="(search by name)"
+                    search={s3Users.search}
+                    onSearchChange={s3Users.setSearch}
+                    loading={s3Users.loading}
+                    availableCount={s3Users.available.length}
+                    maxVisibleOptions={maxVisibleOptions}
+                    selectedCount={s3Users.selections.length}
+                    loadingLabel="Loading users..."
+                    addDisabled={s3Users.selections.length === 0}
+                    onCancel={() => {
+                      s3Users.setShowPanel(false);
+                      s3Users.setSelections([]);
+                      s3Users.setSearch("");
+                    }}
+                    onAdd={() => {
+                      if (s3Users.selections.length === 0) return;
+                      s3Users.setSelected((prev) => [...prev, ...s3Users.selections]);
+                      s3Users.setSelections([]);
+                      s3Users.setSearch("");
+                      s3Users.setShowPanel(false);
+                    }}
+                  >
                       {s3Users.visible.map((opt) => {
                         const isSelected = s3Users.selections.includes(opt.id);
                         return (
@@ -547,45 +503,7 @@ const AssociationsTabs = ({
                           </div>
                         );
                       })}
-                      {s3Users.available.length > maxVisibleOptions && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {s3Users.selections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            s3Users.setShowPanel(false);
-                            s3Users.setSelections([]);
-                            s3Users.setSearch("");
-                          }}
-                          className={associationSecondaryButtonClass}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={s3Users.selections.length === 0}
-                          onClick={() => {
-                            if (s3Users.selections.length === 0) return;
-                            s3Users.setSelected((prev) => [...prev, ...s3Users.selections]);
-                            s3Users.setSelections([]);
-                            s3Users.setSearch("");
-                            s3Users.setShowPanel(false);
-                          }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        >
-                          Add selected
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             ),
@@ -595,20 +513,16 @@ const AssociationsTabs = ({
             label: `Connections (${connections.selected.length})`,
             content: (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked connections</span>
-                    <span className="ui-caption text-slate-500">{connections.selected.length} linked</span>
-                    <span className="ui-caption text-slate-400">(shared only)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => connections.setShowPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {connections.showPanel ? "Close" : "Add connections"}
-                  </button>
-                </div>
+                <AdminAssociationSectionHeader
+                  title={
+                    <>
+                      Linked connections <span className="ui-caption text-slate-400">(shared only)</span>
+                    </>
+                  }
+                  countLabel={`${connections.selected.length} linked`}
+                  actionLabel={connections.showPanel ? "Close" : "Add connections"}
+                  onAction={() => connections.setShowPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead>
@@ -652,26 +566,30 @@ const AssociationsTabs = ({
                   </table>
                 </div>
                 {connections.showPanel && (
-                  <div className={associationAddPanelClass}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="ui-body font-medium text-slate-700 dark:text-slate-200">Add connections</span>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={connections.search}
-                        onChange={(e) => connections.setSearch(e.target.value)}
-                        placeholder="Search..."
-                        className={associationCompactInputClass}
-                      />
-                    </div>
-                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                      {connections.loading ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading connections...</p>
-                      ) : connections.available.length === 0 ? (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      ) : null}
+                  <AdminAssociationPickerPanel
+                    title="Add connections"
+                    hint="(search by name)"
+                    search={connections.search}
+                    onSearchChange={connections.setSearch}
+                    loading={connections.loading}
+                    availableCount={connections.available.length}
+                    maxVisibleOptions={maxVisibleOptions}
+                    selectedCount={connections.selections.length}
+                    loadingLabel="Loading connections..."
+                    addDisabled={connections.selections.length === 0}
+                    onCancel={() => {
+                      connections.setShowPanel(false);
+                      connections.setSelections([]);
+                      connections.setSearch("");
+                    }}
+                    onAdd={() => {
+                      if (connections.selections.length === 0) return;
+                      connections.setSelected((prev) => [...prev, ...connections.selections]);
+                      connections.setSelections([]);
+                      connections.setSearch("");
+                      connections.setShowPanel(false);
+                    }}
+                  >
                       {connections.visible.map((opt) => {
                         const isSelected = connections.selections.includes(opt.id);
                         return (
@@ -691,45 +609,7 @@ const AssociationsTabs = ({
                           </div>
                         );
                       })}
-                      {connections.available.length > maxVisibleOptions && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {connections.selections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            connections.setShowPanel(false);
-                            connections.setSelections([]);
-                            connections.setSearch("");
-                          }}
-                          className={associationSecondaryButtonClass}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={connections.selections.length === 0}
-                          onClick={() => {
-                            if (connections.selections.length === 0) return;
-                            connections.setSelected((prev) => [...prev, ...connections.selections]);
-                            connections.setSelections([]);
-                            connections.setSearch("");
-                            connections.setShowPanel(false);
-                          }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        >
-                          Add selected
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             ),

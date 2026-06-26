@@ -3,19 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import PaginationControls from "../../components/PaginationControls";
-import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
@@ -29,6 +26,7 @@ import {
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
   advancedFilterHeaderClass,
+  advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
@@ -43,28 +41,11 @@ import {
   type TextMatchMode,
 } from "./filtering/advancedFilterShared";
 import { extractApiError } from "../../utils/apiError";
+import { readClientJsonFromKey, writeClientJsonToKey } from "../../utils/clientStorage";
+import { formatBytes, formatNumber } from "../../utils/format";
 
 const extractError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
-};
-
-const formatBytes = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let size = value;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const decimals = size >= 10 || idx === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[idx]}`;
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  return value.toLocaleString();
 };
 
 type ColumnId =
@@ -258,32 +239,24 @@ const buildAdvancedFilterPayload = (
 };
 
 const loadVisibleColumns = (): ColumnId[] => {
-  if (typeof window === "undefined") return defaultVisibleColumns;
-  const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
-  if (!raw) return defaultVisibleColumns;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return defaultVisibleColumns;
-    const allowed = new Set<ColumnId>([
-      "tenant",
-      "account_name",
-      "full_name",
-      "email",
-      "suspended",
-      "max_buckets",
-      "quota_max_size_bytes",
-      "quota_max_objects",
-    ]);
-    const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
-    return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
-  } catch {
-    return defaultVisibleColumns;
-  }
+  const parsed = readClientJsonFromKey<unknown>(COLUMNS_STORAGE_KEY);
+  if (!Array.isArray(parsed)) return defaultVisibleColumns;
+  const allowed = new Set<ColumnId>([
+    "tenant",
+    "account_name",
+    "full_name",
+    "email",
+    "suspended",
+    "max_buckets",
+    "quota_max_size_bytes",
+    "quota_max_objects",
+  ]);
+  const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
+  return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
 };
 
 const persistVisibleColumns = (value: ColumnId[]) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+  writeClientJsonToKey(COLUMNS_STORAGE_KEY, value);
 };
 
 const rowKey = (user: CephAdminRgwUser) => `${user.tenant ?? ""}:${user.uid}`;
@@ -554,18 +527,6 @@ export default function CephAdminUsersPage() {
       return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
-  };
-  const matchModeButtonClass = (active: boolean, locked: boolean = false) => {
-    if (locked) {
-      if (active) {
-        return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-      }
-      return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
-    }
-    if (active) {
-      return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-    }
-    return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
   };
   const activeFieldClass =
     "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
@@ -949,14 +910,7 @@ export default function CephAdminUsersPage() {
     );
   };
 
-  type ColumnDef = {
-    id: string;
-    label: string;
-    field: SortField | null;
-    align?: "left" | "right";
-    headerClassName?: string;
-    render: (user: CephAdminRgwUser) => ReactNode;
-  };
+  type ColumnDef = DataTableColumn<CephAdminRgwUser, SortField>;
 
   const detailPlaceholder = loadingDetails ? "Loading..." : "-";
 
@@ -1400,7 +1354,7 @@ export default function CephAdminUsersPage() {
                                         type="button"
                                         disabled={field.locked}
                                         onClick={() => field.setMode("contains")}
-                                        className={matchModeButtonClass(field.mode === "contains", field.locked)}
+                                        className={advancedFilterMatchModeButtonClass(field.mode === "contains", field.locked)}
                                       >
                                         Contains
                                       </button>
@@ -1408,7 +1362,7 @@ export default function CephAdminUsersPage() {
                                         type="button"
                                         disabled={field.locked}
                                         onClick={() => field.setMode("exact")}
-                                        className={matchModeButtonClass(field.mode === "exact", field.locked)}
+                                        className={advancedFilterMatchModeButtonClass(field.mode === "exact", field.locked)}
                                       >
                                         Exact
                                       </button>
@@ -1534,71 +1488,28 @@ export default function CephAdminUsersPage() {
 
           {renderAdvancedSearchProgress(advancedProgress)}
 
-          <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
-            <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr>
-                  {userTableColumns.map((col) =>
-                    col.field ? (
-                      <SortableHeader
-                        key={col.id}
-                        label={col.label}
-                        field={col.field}
-                        activeField={sort.field}
-                        direction={sort.direction}
-                        align={col.align ?? (col.id === "actions" ? "right" : "left")}
-                        onSort={(field) => toggleSort(field as SortField)}
-                      />
-                    ) : (
-                      <th
-                        key={col.id}
-                        className={`px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                          col.align === "right" ? "text-right" : "text-left"
-                        } ${col.headerClassName ?? ""}`}
-                      >
-                        {col.label}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-                {tableStatus === "error" && (
-                  <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
-                )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
-                {items.map((user) => (
-                  <tr key={rowKey(user)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    {userTableColumns.map((col) => {
-                      const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
-                      const textClass =
-                        col.id === "uid"
-                          ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                          : "ui-body text-slate-600 dark:text-slate-300";
-                      return (
-                        <td key={`${rowKey(user)}:${col.id}`} className={`${cellBase} ${textClass} ${col.cellClassName ?? ""}`}>
-                          {col.render(user)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
+          <DataTableShell
+            columns={userTableColumns}
+            rows={items}
+            rowKey={rowKey}
+            status={tableStatus}
+            loadingMessage="Loading users..."
+            errorMessage="Unable to load users."
+            emptyMessage="No users."
+            primaryColumnId="uid"
+            overflowXHidden={showAdvancedFilter}
+            sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setPage(1);
+              },
+              disabled: loading || !selectedEndpointId,
             }}
-            disabled={loading || !selectedEndpointId}
           />
         </div>
       )}

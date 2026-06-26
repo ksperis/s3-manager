@@ -109,6 +109,36 @@ export function writeClientJson(key: ClientStorageKey, value: unknown): void {
   writeClientStorage(key, JSON.stringify(value));
 }
 
+export function readClientJsonFromKey<T>(key: ClientStorageKey | LegacyClientStorageKey): T | null {
+  const raw = readClientStorageKey(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function writeClientJsonToKey(key: ClientStorageKey | LegacyClientStorageKey, value: unknown): void {
+  writeClientStorageKey(key, JSON.stringify(value));
+}
+
+export function readClientStorageKey(key: ClientStorageKey | LegacyClientStorageKey): string | null {
+  try {
+    return resolveLocalStorage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeClientStorageKey(key: ClientStorageKey | LegacyClientStorageKey, value: string): void {
+  try {
+    resolveLocalStorage()?.setItem(key, value);
+  } catch {
+    // Ignore storage failures in private mode, disabled storage, or quota pressure.
+  }
+}
+
 export function clearAuthStorage(): void {
   removeClientStorage(CLIENT_STORAGE_KEYS.authToken);
   removeClientStorage(CLIENT_STORAGE_KEYS.sessionUser);

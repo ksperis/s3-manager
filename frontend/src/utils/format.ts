@@ -16,6 +16,11 @@ export function formatBytes(value?: number | null): string {
   return `${size.toFixed(decimals)} ${units[idx]}`;
 }
 
+export function formatNumber(value?: number | null): string {
+  if (value === undefined || value === null) return "-";
+  return value.toLocaleString();
+}
+
 export function formatCompactNumber(value?: number | null): string {
   if (value === undefined || value === null) return "-";
   const absValue = Math.abs(value);

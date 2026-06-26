@@ -2,6 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import UiProgressBar from "../../../components/ui/UiProgressBar";
+
 export type TextMatchMode = "contains" | "exact";
 export type FilterCostLevel = "none" | "low" | "medium" | "high";
 export type AdvancedSearchProgress = {
@@ -53,6 +55,19 @@ export const advancedFilterSectionClass =
 
 export const advancedFilterAccordionClass =
   "rounded-lg border border-[color:var(--ui-border)] bg-white text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/70";
+
+export const advancedFilterMatchModeButtonClass = (active: boolean, locked: boolean = false) => {
+  if (locked) {
+    if (active) {
+      return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+    }
+    return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
+  }
+  if (active) {
+    return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+  }
+  return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+};
 
 export const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
   none: "No additional cost",
@@ -140,16 +155,12 @@ export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) =
           </p>
         )}
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
-        {progress.determinate ? (
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-            style={{ width: `${percent}%` }}
-          />
-        ) : (
-          <div className="h-full w-full animate-pulse rounded-full bg-primary/70" />
-        )}
-      </div>
+      <UiProgressBar
+        value={progress.determinate ? percent : 100}
+        label="Advanced search progress"
+        className="mt-2 h-2 bg-slate-200 dark:bg-slate-800"
+        barClassName={progress.determinate ? "bg-primary transition-[width] duration-150 ease-out" : "animate-pulse bg-primary/70"}
+      />
     </div>
   );
 };
