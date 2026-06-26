@@ -61,8 +61,6 @@ export function resolvePortalWorkspacePageState({
 export function portalStorageSpaceStatusTone(space: PortalWorkspaceSpace): UiTone {
   if (space.status === "Archived") return "neutral";
   if (space.status === "Attention") return "warning";
-  if (space.status === "Shared") return "primary";
-  if (space.status === "Private") return "neutral";
   return "success";
 }
 

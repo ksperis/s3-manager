@@ -873,6 +873,7 @@ export default function BucketsPage() {
           containsObjects && !canDeleteBucketWithPurge
             ? "Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager."
             : null;
+        const deleteDisabledLabel = deleteDisabledReason ? "Not empty" : null;
         const deleteLabel = containsObjects && canDeleteBucketWithPurge ? "Purge and Delete" : "Delete";
         const deleteButton = (
           <button
@@ -894,8 +895,10 @@ export default function BucketsPage() {
               </Link>
               {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
             </div>
-            {deleteDisabledReason && (
-              <span className="max-w-72 text-right ui-caption text-slate-500 dark:text-slate-400">{deleteDisabledReason}</span>
+            {deleteDisabledLabel && (
+              <span className="ui-caption text-slate-500 dark:text-slate-400" title={deleteDisabledReason ?? undefined}>
+                {deleteDisabledLabel}
+              </span>
             )}
           </div>
         );

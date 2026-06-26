@@ -28,8 +28,6 @@ export function portalRoleLabel(role: PortalWorkspaceRole, t: TFunction): string
 export function portalStatusLabel(status: PortalWorkspaceStatus | "Archived", t: TFunction): string {
   if (status === "Archived") return t({ en: "Archived", fr: "Archivé", de: "Archiviert" });
   if (status === "Attention") return t({ en: "Attention", fr: "Attention", de: "Achtung" });
-  if (status === "Private") return t({ en: "Private", fr: "Privé", de: "Privat" });
-  if (status === "Shared") return t({ en: "Shared", fr: "Partagé", de: "Geteilt" });
   return t({ en: "Active", fr: "Actif", de: "Aktiv" });
 }
 

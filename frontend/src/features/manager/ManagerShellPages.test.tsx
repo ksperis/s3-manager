@@ -1212,6 +1212,31 @@ describe("manager shell pages", () => {
     expect(screen.queryByLabelText("Type DELETE BUCKET bucket-empty")).not.toBeInTheDocument();
   });
 
+  it("keeps non-empty delete guidance compact when purge access is unavailable", async () => {
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-filled",
+        used_bytes: 1024,
+        object_count: 12,
+      },
+    ]);
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    const bucketRow = (await screen.findByText("bucket-filled")).closest("tr");
+    expect(bucketRow).not.toBeNull();
+    expect(within(bucketRow!).getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(within(bucketRow!).getByText("Not empty")).toBeInTheDocument();
+    expect(
+      within(bucketRow!).queryByText("Bucket is not empty. Empty it first, or enable bucket purge access to delete it from Manager.")
+    ).not.toBeInTheDocument();
+  });
+
   it("opens the normal delete confirmation when object count is unknown without purge access", async () => {
     listBucketsMock.mockResolvedValue([
       {

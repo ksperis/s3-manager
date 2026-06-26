@@ -126,4 +126,38 @@ describe("buildPortalWorkspaceModel", () => {
       quotaBytes: 800,
     });
   });
+
+  it("treats legacy Private and Shared statuses as visibility, not operational states", () => {
+    const workspace = buildPortalWorkspaceModel({
+      account: { id: "101", name: "Account 101", tags: [] },
+      state: {
+        account_id: 101,
+        iam_user: {},
+        access_keys: [],
+        buckets: [],
+      },
+      storageSpaces: [
+        {
+          id: "shared-space",
+          name: "Shared Space",
+          role: "Viewer",
+          status: "Shared",
+        },
+        {
+          id: "private-space",
+          name: "Private Space",
+          role: "Owner",
+          status: "Private",
+          visibility: "private",
+        },
+      ],
+      usage: null,
+      userEmail: "manager@example.com",
+    });
+
+    expect(workspace.spaces.map((space) => ({ access: space.access, status: space.status, visibility: space.visibility }))).toEqual([
+      { access: "Shared", status: "Active", visibility: "shared" },
+      { access: "Private", status: "Active", visibility: "private" },
+    ]);
+  });
 });

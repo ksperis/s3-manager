@@ -27,9 +27,8 @@ import {
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-function visibleStatus(space: { status: string; visibility: PortalStorageSpaceVisibility }) {
-  const visibilityStatus = space.visibility === "shared" ? "Shared" : "Private";
-  if (space.status === visibilityStatus || space.status === "Active") return null;
+function visibleStatus(space: { status: string }) {
+  if (space.status === "Active") return null;
   return space.status;
 }
 
@@ -225,8 +224,6 @@ export default function PortalStorageSpacesPage() {
           <select className="ui-control h-9 py-1.5 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="all">{t({ en: "All states", fr: "Tous les états", de: "Alle Status" })}</option>
             <option value="Active">{portalStatusLabel("Active", t)}</option>
-            <option value="Private">{portalStatusLabel("Private", t)}</option>
-            <option value="Shared">{portalStatusLabel("Shared", t)}</option>
             <option value="Attention">{portalStatusLabel("Attention", t)}</option>
             <option value="Archived">{portalStatusLabel("Archived", t)}</option>
           </select>
@@ -270,7 +267,7 @@ export default function PortalStorageSpacesPage() {
                     <td>
                       <div className="flex flex-wrap items-center gap-2">
                         <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalVisibilityLabel(space.visibility, t)}</UiBadge>
-                        {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Private" | "Shared" | "Archived", t)}</UiBadge> : null}
+                        {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
                       </div>
                     </td>
                     <td>{formatCompactNumber(space.objectCount)}</td>

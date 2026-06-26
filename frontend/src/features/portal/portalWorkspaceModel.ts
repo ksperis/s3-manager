@@ -11,7 +11,7 @@ import { portalDateLabel } from "./portalI18n";
 type TFunction = (message: I18nMessage) => string;
 
 export type PortalWorkspaceRole = "Viewer" | "Editor" | "Owner";
-export type PortalWorkspaceStatus = "Active" | "Attention" | "Private" | "Shared";
+export type PortalWorkspaceStatus = "Active" | "Attention";
 export type PortalWorkspaceAccess = "Private" | "Shared" | "Public" | "Public Read" | "Unavailable";
 export type PortalWorkspaceAlertTone = "info" | "warning" | "danger";
 
@@ -127,14 +127,20 @@ function roleFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspace
   return "Viewer";
 }
 
-function statusFromStorageSpace(space: PortalStorageSpaceSummary, role: PortalWorkspaceRole): PortalWorkspaceStatus {
-  if (space.status === "Active" || space.status === "Attention" || space.status === "Private" || space.status === "Shared") {
+function statusFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspaceStatus {
+  if (space.status === "Active" || space.status === "Attention") {
     return space.status;
   }
   if (typeof space.status === "string" && ["attention", "warning", "degraded"].includes(space.status.toLowerCase())) {
     return "Attention";
   }
-  return role === "Owner" ? "Active" : "Shared";
+  return "Active";
+}
+
+function visibilityFromStorageSpace(space: PortalStorageSpaceSummary): PortalStorageSpaceVisibility {
+  if (space.visibility === "shared") return "shared";
+  if (space.visibility === "private") return "private";
+  return space.status === "Shared" ? "shared" : "private";
 }
 
 function createdLabel(raw?: string | null, locale: UiLanguage = "en"): string {
@@ -183,7 +189,7 @@ export function buildPortalWorkspaceModel({
     const usageSpace = usageBySpace.get(storageSpace.id);
     const role = roleFromStorageSpace(storageSpace);
     const name = storageSpace.name || prettyName(storageSpace.id);
-    const visibility = storageSpace.visibility === "shared" ? "shared" : "private";
+    const visibility = visibilityFromStorageSpace(storageSpace);
     return {
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
@@ -197,7 +203,7 @@ export function buildPortalWorkspaceModel({
       projectKey: storageSpace.project_key ?? null,
       datasetLabel: storageSpace.dataset_label ?? null,
       role,
-      status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace, role),
+      status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace),
       access: visibility === "shared" ? "Shared" : "Private",
       region: storageSpace.region ?? null,
       createdLabel: createdLabel(storageSpace.created_at, locale),
