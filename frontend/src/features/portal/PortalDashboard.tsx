@@ -222,10 +222,7 @@ function StorageOverviewCard({
   return (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
-          <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">{t({ en: "Storage overview", fr: "Vue du stockage", de: "Speicherübersicht" })}</h2>
-          <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
-        </div>
+        <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">{t({ en: "Storage overview", fr: "Vue du stockage", de: "Speicherübersicht" })}</h2>
         <Link to="/portal/usage" className="inline-flex items-center gap-2 ui-caption font-semibold text-primary">
           {t({ en: "Usage analytics", fr: "Analyse d'utilisation", de: "Nutzungsanalyse" })}
           <OpenIcon className="h-3.5 w-3.5" />
