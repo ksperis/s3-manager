@@ -63,14 +63,22 @@ nav:
   - User Guide:
       - Overview: user/index.md
       - Start here: user/start-here.md
+      - "Common tasks: storage users": user/common-tasks-storage-user.md
+      - "Common tasks: storage administrators": user/common-tasks-storage-admin.md
       - User profile: user/profile.md
       - Use cases (storage admin): user/use-cases-storage-admin.md
       - Use cases (storage user): user/use-cases-storage-user.md
+      - Feature availability: user/feature-availability.md
       - "Workspace: Admin": user/workspace-admin.md
       - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
       - "Feature: Billing in Admin": user/feature-billing-admin.md
       - "Workspace: Manager": user/workspace-manager.md
       - "Workspace: Portal": user/workspace-portal.md
+      - "Portal: Storage Spaces": user/portal-storage-spaces.md
+      - "Portal: Files": user/portal-files.md
+      - "Portal: Sharing": user/portal-sharing.md
+      - "Portal: Access Keys": user/portal-access-keys.md
+      - "Portal: Usage and Alerts": user/portal-usage-alerts.md
       - "Workspace: Browser": user/workspace-browser.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Workspace: Storage Ops": user/workspace-storage-ops.md
@@ -87,6 +95,7 @@ nav:
       - "Feature: Bucket compare": user/feature-bucket-compare.md
       - "Feature: Bucket integrity check": user/feature-bucket-integrity-check.md
       - "Feature: Bucket purge": user/feature-bucket-purge.md
+      - "Safe destructive and bulk operations": user/safe-destructive-operations.md
       - "Feature: Bucket usage stats": user/feature-bucket-usage-stats.md
       - "Feature: Bucket migration": user/feature-bucket-migration.md
       - Troubleshooting: user/troubleshooting.md

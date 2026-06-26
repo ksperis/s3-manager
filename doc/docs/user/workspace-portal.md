@@ -29,156 +29,28 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    history, usage composition, usage history, and consumption tracking.
 8. Use **Settings** for simple account and preference changes.
 
-## Portal V3 workflows
+## Main workflows
 
-### Dashboard
+| Workflow | Read next | What it covers |
+|---|---|---|
+| Open, create, import, or archive a Storage Space | [Portal: Storage Spaces](portal-storage-spaces.md) | Visibility, active/archived states, creation, and imports. |
+| Browse, upload, download, or inspect files | [Portal: Files](portal-files.md) | Object list, folders, safe details, and Portal-specific limits. |
+| Share with collaborators or understand roles | [Portal: Sharing](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
+| Create credentials for external S3 tools | [Portal: Access Keys](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
+| Understand quota, usage, traffic, and alerts | [Portal: Usage and Alerts](portal-usage-alerts.md) | Storage used, per-space usage, history, billing source, and unavailable metrics. |
 
-The dashboard is the default Portal landing page. It summarizes total storage,
-object counts, requests, egress, usage by Storage Space, recent activity,
-recent transfers, and simple alerts. It should never open directly inside a
-bucket or advanced object browser.
+## Portal model in one minute
 
-### Storage Spaces and files
-
-**Storage Spaces** are the user-facing abstraction for assigned storage areas.
-In v1, a Storage Space can still map to a bucket internally, but Portal labels
-and navigation stay user-oriented.
-
-A Storage Space has a visibility:
-
-- **Private**: visible to its owner and Portal managers only.
-- **Shared**: visible through the existing Viewer, Editor, and Owner grants.
-
-A Storage Space can also be **Archived**. Archived spaces stay registered for
-future restoration, but Portal file browsing, sharing, and public links are
-suspended while the archive status is active.
-
-When Portal user Storage Space creation is enabled for the account, portal-user
-members can create their own Storage Spaces from the Storage Spaces page. Portal
-managers can still import existing buckets as Storage Spaces; regular
-portal-users only see the create flow.
-
-From a Storage Space, users can:
-
-- browse folders and files;
-- upload files when their role allows it;
-- download files they can read;
-- create simple folders when their role allows it;
-- delete files only when their role allows it;
-- open a file detail view with safe metadata and a safe preview when available.
-
-The file browser shown inside a Storage Space is the main Browser in a locked,
-minimal Portal profile. It opens only the selected Storage Space, keeps the
-Storage Space label in the UI, and uses the Portal execution identity.
-Archived Storage Spaces do not show the embedded file browser.
-For Viewer spaces, upload, folder creation, and delete actions are hidden from
-the embedded browser. Storage-side IAM/S3 permissions remain the enforcement
-source for every operation.
-
-Use **Details** on a file to open the Portal object detail page. This page
-keeps the safe preview, public-link workflow, basic metadata, and recent object
-events separate from the advanced Browser object-inspection tools.
-
-Advanced object features such as versions, tags, raw metadata headers, object
-lock, diagnostics, and batch operations belong in Browser or Manager, not in
-Portal.
-
-Uploads and backend-observed downloads are shown in **Transfers** immediately.
-Direct downloads opened through a presigned browser URL may appear in Activity
-when the backend issues the URL or serves the object, but Portal does not mark
-the browser's final file-save completion because the application cannot observe
-that event.
-
-### Access keys for external tools
-
-Portal users can create IAM access keys for S3-compatible clients such as CLI
-tools, backup jobs, or desktop browsers. The secret is displayed only once when
-the key is created, so copy it before leaving the page.
-
-The key used internally by Portal to execute file operations is intentionally
-hidden and cannot be disabled or deleted from the Access keys page. Admins can
-disable Portal user key creation and set the maximum number of user-managed
-keys from Portal settings.
-
-By default, the `portal-manager` IAM group is not an S3 administrator policy.
-It only grants the account-level actions needed to list buckets for Portal
-state and create a bucket for a new Storage Space. Per-Storage Space file
-access is granted through the Portal user's storage-space policy, while bucket
-defaults, IAM group synchronization, sharing, and public-link orchestration stay
-server-side workflows.
-
-### Sharing and roles
-
-Portal exposes collaboration through simple roles:
-
-- **Viewer** can list, read, and download.
-- **Editor** can do Viewer actions plus simple upload, folder creation, and
-  file deletion.
-- **Owner** can do Editor actions plus manage sharing.
-
-These roles are translated by the backend into storage-side permissions. They
-do not create a separate permission source.
-
-Only shared, active Storage Spaces can receive new shares or public links.
-Private spaces keep access limited to the owner and Portal managers. Archived
-spaces keep their stored grants and links so they can be restored later, but
-those grants and links are inactive while archived.
-
-### Settings
-
-Portal settings are personal. Users can update their display name, password
-when their sign-in provider allows it, UI language, theme, quota-alert email
-preference, and default Portal account. These preferences are stored on the UI
-user profile and do not grant access to accounts that are not already assigned.
-
-### Empty and unavailable states
-
-Portal uses real backend data first. When a source is missing, it shows a clear
-empty or unavailable state:
-
-- no Storage Spaces;
-- no shares or public links;
-- no recent activity;
-- no recent transfers;
-- no quota;
-- no traffic metrics;
-- no billing source;
-- no alerts.
+- **Storage Spaces** are the user-facing storage areas. They may map to buckets internally, but Portal keeps labels and navigation simple.
+- **Private** spaces are visible to their owner and Portal managers. **Shared** spaces use Viewer, Editor, and Owner grants.
+- **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
+- File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
+- Portal roles are translated into storage-side permissions; they do not replace IAM or S3 authorization.
 
 ## Expected result
 
 Portal actions stay user-oriented and use the storage permissions configured by
 the platform as the source of truth.
-
-## Usage, alerts, and availability
-
-Portal metrics are scoped to the selected Portal account and use bytes for
-storage and traffic values. Object counts are counts reported by the storage
-backend.
-
-- **Storage used** comes from the Portal usage API. When account-level usage is
-  unavailable, Portal may use the sum of visible Storage Space usage. If neither
-  source is available, the metric is shown as unavailable.
-- **Quota** comes from the account quota exposed to Portal. If no quota is
-  configured or metrics are disabled for the endpoint, Portal shows a clear
-  unavailable state instead of treating the quota as unlimited.
-- **Usage by Storage Space** is based on real per-space usage returned by the
-  Portal usage API. When the backend cannot report per-space values, the chart
-  is hidden behind an unavailable state.
-- **Usage composition** reuses the latest calculated usage snapshots for the
-  Storage Spaces visible in the selected Portal account. It is read-only in
-  Portal; platform collection or Manager workflows produce the snapshots.
-- **Usage history** shows stored quota history for the selected Portal account.
-  It is account-scoped, so it may include the account-level consumption trend
-  even when a user normally works from a subset of Storage Spaces.
-- **Traffic and requests** come from traffic metrics for the selected account.
-  If traffic collection is disabled or temporarily unavailable, Portal shows the
-  last billing-derived values when available, otherwise an unavailable state.
-- **Billing source** is optional. It appears only when billing is enabled and
-  the selected account has billing data for the month.
-- **Alerts** are deduplicated and ordered by severity. They can include quota
-  near limit, public Storage Space or public link, expiring public link, failed
-  transfer, and degraded storage endpoint signals.
 
 ## Limits / feature flags
 
@@ -195,6 +67,11 @@ backend.
 
 ## Related pages
 
+- [Portal: Storage Spaces](portal-storage-spaces.md)
+- [Portal: Files](portal-files.md)
+- [Portal: Sharing](portal-sharing.md)
+- [Portal: Access Keys](portal-access-keys.md)
+- [Portal: Usage and Alerts](portal-usage-alerts.md)
 - [Workspace: Browser](workspace-browser.md)
 - [Use cases for storage users](use-cases-storage-user.md)
 

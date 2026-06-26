@@ -17,6 +17,17 @@ Use this page when a user action fails or an expected menu/page is missing.
 4. Retry and capture exact error text.
 5. If needed, ask ops/admin to check audit trail and backend logs.
 
+## Quick diagnosis
+
+| Symptom | First checks | Good report |
+|---|---|---|
+| Workspace is missing | Role, account links, feature flag, entitlement | User email, expected workspace, current visible workspaces. |
+| Bucket or Storage Space is missing | Selected context, account link, visibility, archive state | Workspace, context, missing name, whether other items are visible. |
+| Action is disabled or hidden | Feature flag, Manager tool access, Portal role, endpoint capability | Page, selected target, expected action, role or entitlement expected. |
+| `AccessDenied` appears | IAM/S3 policy, selected execution identity, object or bucket scope | Exact error, target bucket/key, context, time of action. |
+| Metrics are unavailable | Collection jobs, endpoint usage/metrics capability, billing source | Account/context, metric card name, last known collection time if visible. |
+| Object version is not visible | Bucket versioning status, deleted marker state, selected object | Bucket, object key, expected version, current Browser context. |
+
 ## Expected result
 
 You can identify whether the issue is permission, feature flag, endpoint capability, or operational failure.
@@ -30,6 +41,7 @@ You can identify whether the issue is permission, feature flag, endpoint capabil
 
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
+- [Feature availability](feature-availability.md)
 - [Ops / Observability](../ops/operations-observability.md)
 
 ## Visual example

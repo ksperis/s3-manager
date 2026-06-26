@@ -10,10 +10,19 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 ## Recommended reading order
 
 1. [Start here](start-here.md)
-2. [User profile](profile.md)
-3. [Use cases for storage administrators](use-cases-storage-admin.md)
-4. [Use cases for storage users](use-cases-storage-user.md)
-5. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
+2. [Common tasks for storage users](common-tasks-storage-user.md) or [common tasks for storage administrators](common-tasks-storage-admin.md)
+3. [User profile](profile.md)
+4. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
+5. Feature pages for the exact action you need.
+
+## Choose your path
+
+| If you are... | Read next | Good first outcome |
+|---|---|---|
+| A storage user | [Common tasks for storage users](common-tasks-storage-user.md) | You know where to browse files, manage simple access, and report missing permissions. |
+| A storage administrator | [Common tasks for storage administrators](common-tasks-storage-admin.md) | You can map endpoint, account, bucket, IAM, and usage tasks to the right workspace. |
+| A Portal user | [Workspace: Portal](workspace-portal.md) | You understand Storage Spaces, files, sharing, usage, and access keys. |
+| A Browser user | [Workspace: Browser](workspace-browser.md) | You can select the right context and act on objects safely. |
 
 ## Visual example
 
