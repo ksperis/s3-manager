@@ -172,6 +172,7 @@ def _resolve_portal_browser_context(
         using_root_key=False,
     )
     account._portal_browser_role = role  # type: ignore[attr-defined]
+    account._portal_browser_access = portal_access  # type: ignore[attr-defined]
     account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
     account._portal_storage_spaces = visible_spaces  # type: ignore[attr-defined]
     return account

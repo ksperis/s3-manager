@@ -1,11 +1,13 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from app.db import S3Account
 from app.main import app
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
 from app.models.browser import BrowserBucket, PaginatedBrowserBucketsResponse
+from app.models.portal import PortalUsage
 from app.routers import browser as browser_router
 from app.routers import dependencies
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
@@ -291,6 +293,103 @@ def test_browser_usage_summary_uses_s3_user_snapshots_when_bucket_listing_is_den
         "label": "S3 User",
         "used_bytes": 40,
         "object_count": 1,
+    }
+
+
+def test_browser_usage_summary_uses_portal_account_usage(client, db_session, monkeypatch):
+    account = S3Account(name="portal-browser-summary")
+    account.id = 77
+    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
+    account._portal_browser_access = SimpleNamespace(actor=object())  # type: ignore[attr-defined]
+
+    class FakePortalService:
+        def __init__(self, db):  # noqa: ANN001
+            assert db is db_session
+
+        def get_usage(self, actor, access):  # noqa: ANN001
+            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
+            assert access is account._portal_browser_access  # type: ignore[attr-defined]
+            return PortalUsage(
+                used_bytes=900,
+                used_objects=90,
+                quota_max_size_bytes=1_000,
+                quota_max_objects=100,
+            )
+
+    class FakeService:
+        def list_buckets(self, account):  # noqa: ANN001
+            raise AssertionError("portal account usage should not depend on storage-space rows")
+
+    monkeypatch.setattr(browser_router, "PortalService", FakePortalService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "portal",
+        "label": "Storage Spaces",
+        "used_bytes": 900,
+        "object_count": 90,
+        "quota_max_size_bytes": 1_000,
+        "quota_max_objects": 100,
+    }
+
+
+def test_browser_usage_summary_uses_visible_portal_storage_space_stats(client, db_session, monkeypatch):
+    account = S3Account(name="portal-browser-summary")
+    account.id = 77
+    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
+    account._portal_browser_access = SimpleNamespace(actor=object())  # type: ignore[attr-defined]
+    account._portal_storage_spaces = [  # type: ignore[attr-defined]
+        SimpleNamespace(id="space-a", internal_bucket_name="bucket-a"),
+        SimpleNamespace(id="space-b", internal_bucket_name="bucket-b"),
+    ]
+
+    class FakePortalService:
+        def __init__(self, db):  # noqa: ANN001
+            assert db is db_session
+
+        def get_usage(self, actor, access):  # noqa: ANN001
+            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
+            assert access is account._portal_browser_access  # type: ignore[attr-defined]
+            return PortalUsage(
+                used_bytes=None,
+                used_objects=None,
+                quota_max_size_bytes=1_000,
+                quota_max_objects=100,
+            )
+
+        def get_bucket_stats(self, actor, access, bucket_name):  # noqa: ANN001
+            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
+            assert access is account._portal_browser_access  # type: ignore[attr-defined]
+            payload = {
+                "bucket-a": SimpleNamespace(used_bytes=400, object_count=40),
+                "bucket-b": SimpleNamespace(used_bytes=500, object_count=50),
+            }
+            return payload[bucket_name]
+
+    class FakeService:
+        def list_buckets(self, account):  # noqa: ANN001
+            raise AssertionError("portal account usage should not depend on storage-space rows")
+
+    monkeypatch.setattr(browser_router, "PortalService", FakePortalService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "portal",
+        "label": "Storage Spaces",
+        "used_bytes": 900,
+        "object_count": 90,
+        "quota_max_size_bytes": 1_000,
+        "quota_max_objects": 100,
     }
 
 

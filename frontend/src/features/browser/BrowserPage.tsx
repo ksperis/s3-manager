@@ -4557,7 +4557,10 @@ export default function BrowserPage({
     [bucketName, resolvedLockedBucketName],
   );
   const workspaceAccountActionTarget = useMemo<"manager" | "portal" | null>(() => {
-    if (selectedContext?.manager_account_is_admin === true) {
+    if (
+      selectedContext?.manager_account_is_admin === true ||
+      selectedContext?.kind === "legacy_user"
+    ) {
       return "manager";
     }
     if (selectedContext?.kind === "portal_account" || isPortalBrowserSurface) {

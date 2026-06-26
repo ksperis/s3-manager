@@ -2362,8 +2362,11 @@ describe("BrowserPage interactions", () => {
       initialEntry: "/browser?bucket=bucket-1",
     });
     await waitFor(() => {
-      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+      expect(
+        getCurrentBucketPanel().getByRole("button", { name: "docs" }),
+      ).toBeInTheDocument();
     });
+    expect(getCurrentBucketPanel().queryByText("bucket-1")).not.toBeInTheDocument();
 
     expect(
       getCurrentBucketPanel().getByRole("button", { name: "docs" }),
@@ -2386,10 +2389,10 @@ describe("BrowserPage interactions", () => {
       );
     });
 
-    expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
     expect(
       getCurrentBucketPanel().getByRole("button", { name: "images" }),
     ).toBeInTheDocument();
+    expect(getCurrentBucketPanel().queryByText("bucket-2")).not.toBeInTheDocument();
     expect(
       getCurrentBucketPanel().queryByRole("button", { name: "docs" }),
     ).not.toBeInTheDocument();
@@ -2430,7 +2433,9 @@ describe("BrowserPage interactions", () => {
     });
 
     await waitFor(() => {
-      expect(getCurrentBucketPanel().getByText("bucket-2")).toBeInTheDocument();
+      expect(
+        getCurrentBucketPanel().getByRole("button", { name: "docs" }),
+      ).toBeInTheDocument();
     });
 
     const sidebar = screen.getByTestId("browser-workspace-sidebar");
@@ -2439,6 +2444,11 @@ describe("BrowserPage interactions", () => {
     });
     expect(sidebarRefreshButton.textContent).toBe("");
     expect(sidebarRefreshButton).toHaveAttribute("title", "Refresh");
+    const foldersRefreshButton = screen.getByRole("button", {
+      name: "Refresh folders",
+    });
+    expect(foldersRefreshButton.textContent).toBe("");
+    expect(foldersRefreshButton).toHaveAttribute("title", "Refresh folders");
 
     await user.type(screen.getByPlaceholderText("Search buckets"), "zzz");
     expect(await screen.findByText("No matching item.")).toBeInTheDocument();
@@ -2545,6 +2555,32 @@ describe("BrowserPage interactions", () => {
     expect(window.localStorage.getItem("selectedExecutionContextId")).toBe("101");
     expect(window.localStorage.getItem("selectedWorkspace")).toBe("manager");
     expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=101");
+  });
+
+  it("opens a legacy S3 user Browser context in Manager from the sidebar", async () => {
+    const user = userEvent.setup();
+    const legacyUserContext = makeExecutionContext({
+      id: "s3u-21215",
+      kind: "legacy_user",
+      display_name: "Test_USER21215",
+    });
+    setBrowserContext({
+      contexts: [legacyUserContext],
+      selectedContextId: "s3u-21215",
+      selectedContext: legacyUserContext,
+      requiresContextSelection: true,
+      selectorForApi: "s3u-21215",
+      selectedKind: "legacy_user",
+    });
+
+    renderPage({ accountIdForApi: "s3u-21215" });
+
+    const sidebar = await screen.findByTestId("browser-workspace-sidebar");
+    await user.click(await within(sidebar).findByRole("button", { name: "Open in Manager" }));
+
+    expect(window.localStorage.getItem("selectedExecutionContextId")).toBe("s3u-21215");
+    expect(window.localStorage.getItem("selectedWorkspace")).toBe("manager");
+    expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=s3u-21215");
   });
 
   it("marks inaccessible buckets from the visible panel list and keeps them selectable", async () => {
@@ -2703,7 +2739,9 @@ describe("BrowserPage interactions", () => {
       initialEntry: "/browser?bucket=bucket-1",
     });
     await waitFor(() => {
-      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+      expect(
+        getCurrentBucketPanel().getByRole("button", { name: "docs" }),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: "Load more" }));
@@ -2712,7 +2750,7 @@ describe("BrowserPage interactions", () => {
         getOtherBucketsPanel().getByRole("button", { name: /bucket-4/i }),
       ).toBeInTheDocument();
     });
-    expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+    expect(getCurrentBucketPanel().queryByText("bucket-1")).not.toBeInTheDocument();
   });
 
   it("scrolls the buckets panel back to the top when the active bucket changes", async () => {
@@ -2735,7 +2773,9 @@ describe("BrowserPage interactions", () => {
       initialEntry: "/browser?bucket=bucket-1",
     });
     await waitFor(() => {
-      expect(getCurrentBucketPanel().getByText("bucket-1")).toBeInTheDocument();
+      expect(
+        getCurrentBucketPanel().getByRole("button", { name: "docs" }),
+      ).toBeInTheDocument();
     });
 
     scrollToMock.mockClear();

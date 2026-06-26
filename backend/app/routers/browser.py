@@ -108,6 +108,7 @@ from app.services import bucket_config_actions
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.portal_service import PortalService
 router = APIRouter(
     prefix="/browser",
     tags=["browser"],
@@ -291,10 +292,102 @@ def _build_usage_summary_from_stats(
     )
 
 
+def _aggregate_portal_visible_space_usage(
+    portal_service: PortalService,
+    account: S3Account,
+    portal_access: Any,
+    storage_spaces: list[Any],
+) -> tuple[Optional[int], Optional[int]]:
+    total_bytes = 0
+    total_objects = 0
+    has_bytes = False
+    has_objects = False
+    bucket_names: list[str] = []
+
+    for space in storage_spaces:
+        bucket_name = getattr(space, "internal_bucket_name", None) or getattr(space, "id", None)
+        if bucket_name:
+            bucket_names.append(str(bucket_name))
+        used_bytes = getattr(space, "used_bytes", None)
+        object_count = getattr(space, "object_count", None)
+        if used_bytes is not None:
+            total_bytes += int(used_bytes)
+            has_bytes = True
+        if object_count is not None:
+            total_objects += int(object_count)
+            has_objects = True
+
+    if has_bytes:
+        return total_bytes, total_objects if has_objects else None
+
+    allowed_buckets = getattr(account, "_portal_allowed_buckets", None)
+    if allowed_buckets:
+        bucket_names.extend(str(name) for name in allowed_buckets if name)
+
+    seen: set[str] = set()
+    actor = getattr(portal_access, "actor", None)
+    for bucket_name in bucket_names:
+        if not bucket_name or bucket_name in seen:
+            continue
+        seen.add(bucket_name)
+        try:
+            stats = portal_service.get_bucket_stats(actor, portal_access, bucket_name)
+        except RuntimeError:
+            continue
+        used_bytes = getattr(stats, "used_bytes", None)
+        object_count = getattr(stats, "object_count", None)
+        if used_bytes is not None:
+            total_bytes += int(used_bytes)
+            has_bytes = True
+        if object_count is not None:
+            total_objects += int(object_count)
+            has_objects = True
+
+    return total_bytes if has_bytes else None, total_objects if has_objects else None
+
+
+def _build_portal_usage_summary(account: S3Account, db: Session) -> Optional[BrowserUsageSummary]:
+    portal_access = getattr(account, "_portal_browser_access", None)
+    if portal_access is None:
+        return None
+    portal_service = PortalService(db)
+    try:
+        usage = portal_service.get_usage(portal_access.actor, portal_access)
+    except RuntimeError:
+        return None
+    used_bytes = usage.used_bytes
+    object_count = usage.used_objects
+    if used_bytes is None:
+        space_sources = list(usage.storage_spaces)
+        if not space_sources:
+            space_sources = list(getattr(account, "_portal_storage_spaces", None) or [])
+        used_bytes, object_count = _aggregate_portal_visible_space_usage(
+            portal_service,
+            account,
+            portal_access,
+            space_sources,
+        )
+    if used_bytes is None:
+        return None
+    return BrowserUsageSummary(
+        available=True,
+        source="portal",
+        label="Storage Spaces",
+        used_bytes=used_bytes,
+        object_count=object_count,
+        quota_max_size_bytes=usage.quota_max_size_bytes,
+        quota_max_objects=usage.quota_max_objects,
+    )
+
+
 def _build_browser_usage_summary(account: S3Account, service: BrowserService, db: Session) -> BrowserUsageSummary:
     source, label = _usage_summary_source(account)
     if source == "connection":
         return BrowserUsageSummary(available=False, source=source, label=label)
+    if source == "portal":
+        portal_summary = _build_portal_usage_summary(account, db)
+        if portal_summary is not None:
+            return portal_summary
     try:
         buckets = service.list_buckets(account)
     except RuntimeError as exc:
