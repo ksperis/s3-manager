@@ -18,7 +18,6 @@ from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOp
 from app.routers import dependencies
 from app.routers.storage_ops import buckets as storage_ops_router
 from app.routers.storage_ops import summary as storage_ops_summary_router
-from app.services import app_settings_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
 from app.main import app
 
@@ -132,26 +131,14 @@ def test_require_storage_ops_bucket_quota_accepts_privileged_access(monkeypatch)
     assert dependencies.require_storage_ops_bucket_quota(user=user).id == user.id
 
 
-def test_require_storage_ops_enabled_blocks_when_feature_is_disabled(monkeypatch):
-    settings = app_settings_service.load_default_app_settings()
-    settings.general.storage_ops_enabled = False
-    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
-    with pytest.raises(HTTPException) as exc:
-        dependencies.require_storage_ops_enabled()
-    assert exc.value.status_code == 403
-
-
 def test_storage_ops_summary_rejects_without_storage_ops_right(client):
     def deny_storage_ops():
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = deny_storage_ops
     try:
         response = client.get("/api/storage-ops/summary")
         assert response.status_code == 403
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
@@ -226,7 +213,6 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
         ]
 
     monkeypatch.setattr(storage_ops_summary_router, "list_execution_contexts", fake_list_execution_contexts)
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     try:
         response = client.get("/api/storage-ops/summary")
@@ -241,7 +227,6 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
             "total_endpoints": 3,
         }
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
@@ -293,8 +278,6 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -316,7 +299,6 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
         assert "endpoint_name" in first
         assert "bucket_name" in first
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -343,8 +325,6 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         )
 
     monkeypatch.setattr(storage_ops_router, "_compute_storage_ops_listing", fake_compute_listing)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     try:
         response = client.get(
@@ -358,7 +338,6 @@ def test_storage_ops_stream_emits_progress_and_result(client, monkeypatch):
         assert '"processed":1' in response.text
         assert '"total":2' in response.text
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
@@ -367,8 +346,6 @@ def test_storage_ops_stream_hides_unexpected_error_details(client, monkeypatch):
         raise RuntimeError("secret backend failure token=leaked")
 
     monkeypatch.setattr(storage_ops_router, "_compute_storage_ops_listing", fake_compute_listing)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     try:
         response = client.get(
@@ -380,7 +357,6 @@ def test_storage_ops_stream_hides_unexpected_error_details(client, monkeypatch):
         assert "Storage Ops bucket streaming failed" in response.text
         assert "token=leaked" not in response.text
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
 
 
@@ -478,8 +454,6 @@ def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -500,7 +474,6 @@ def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
         assert post_response.status_code == 200
         assert post_response.json() == get_response.json()
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -553,8 +526,6 @@ def test_storage_ops_listing_fanout_runs_in_parallel(client, monkeypatch):
     service = FakeBucketsService()
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: service
     try:
@@ -562,7 +533,6 @@ def test_storage_ops_listing_fanout_runs_in_parallel(client, monkeypatch):
         assert response.status_code == 200
         assert service.max_active >= 2
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -918,8 +888,6 @@ def test_storage_ops_list_and_stream_apply_context_advanced_filters(client, monk
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -940,7 +908,6 @@ def test_storage_ops_list_and_stream_apply_context_advanced_filters(client, monk
         assert stream_payload["total"] == 1
         assert [item["name"] for item in stream_payload["items"]] == ["1::alpha"]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -986,8 +953,6 @@ def test_storage_ops_context_prefilter_skips_non_matching_contexts_for_match_all
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -998,7 +963,6 @@ def test_storage_ops_context_prefilter_skips_non_matching_contexts_for_match_all
         assert [item["name"] for item in payload["items"]] == ["1::bucket-1"]
         assert resolved_contexts == ["1"]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1044,8 +1008,6 @@ def test_storage_ops_context_id_prefilter_skips_non_matching_contexts(client, mo
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1056,7 +1018,6 @@ def test_storage_ops_context_id_prefilter_skips_non_matching_contexts(client, mo
         assert [item["name"] for item in payload["items"]] == ["conn-2::bucket-conn-2"]
         assert resolved_contexts == ["conn-2"]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1107,8 +1068,6 @@ def test_storage_ops_context_prefilter_keeps_other_contexts_for_match_any_mixed_
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1119,7 +1078,6 @@ def test_storage_ops_context_prefilter_keeps_other_contexts_for_match_any_mixed_
         assert {item["name"] for item in payload["items"]} == {"1::alpha", "conn-2::beta"}
         assert resolved_contexts == ["1", "conn-2"]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1182,8 +1140,6 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
     monkeypatch.setattr(storage_ops_router, "_enrich_buckets", fake_enrich_buckets)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1194,7 +1150,6 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
         assert [item["name"] for item in payload["items"]] == ["1::alpha"]
         assert enrich_inputs == [["alpha"]]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1411,8 +1366,6 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
     monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
     monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1442,7 +1395,6 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
 
         assert identity_calls == [22]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1482,8 +1434,6 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1496,7 +1446,6 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
         assert [item["name"] for item in payload["items"]] == ["1::alpha"]
         assert stats_flags == [True]
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1533,8 +1482,6 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1543,7 +1490,6 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
         payload = response.json()
         assert payload["items"][0]["bucket_quota_available"] is True
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1581,8 +1527,6 @@ def test_storage_ops_bucket_listing_marks_quota_unavailable_for_connection_conte
 
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1591,7 +1535,6 @@ def test_storage_ops_bucket_listing_marks_quota_unavailable_for_connection_conte
         payload = response.json()
         assert payload["items"][0]["bucket_quota_available"] is False
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1626,7 +1569,6 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
     monkeypatch.setattr(storage_ops_router, "is_manager_bucket_quota_available", fake_is_manager_bucket_quota_available)
 
     app.dependency_overrides[storage_ops_router.require_storage_ops_bucket_quota] = lambda: user
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     app.dependency_overrides[storage_ops_router.get_audit_logger] = lambda: FakeAuditService()
     try:
@@ -1636,7 +1578,6 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
         )
     finally:
         app.dependency_overrides.pop(storage_ops_router.require_storage_ops_bucket_quota, None)
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
         app.dependency_overrides.pop(storage_ops_router.get_audit_logger, None)
 
@@ -1710,8 +1651,6 @@ def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, mo
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
     monkeypatch.setattr(storage_ops_router.BucketOwnerMetadataService, "enrich_buckets", fake_enrich_buckets)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1724,7 +1663,6 @@ def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, mo
         assert [item["name"] for item in payload["items"]] == ["suspended::bucket-suspended"]
         assert payload["items"][0]["owner_suspended"] is True
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
 
@@ -1767,8 +1705,6 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
     monkeypatch.setattr(storage_ops_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_router, "get_account_context", fake_get_account_context)
     monkeypatch.setattr(storage_ops_router.ConnectionIdentityService, "resolve_rgw_identity", fake_resolve_rgw_identity)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
     try:
@@ -1790,6 +1726,5 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
         assert item["owner_quota_max_size_bytes"] is None
         assert item["owner_used_bytes"] is None
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)

@@ -79,7 +79,7 @@ warnings.
 3. Configure the first storage endpoint from **Admin > Storage Backends**.
 4. Create or import the first account or connection.
 5. Run or wait for the first endpoint healthcheck.
-6. Verify the Browser and Portal feature flags match the intended user rollout.
+6. Verify user roles, account links, connection access, and Portal roles match the intended user rollout.
 7. Open [User troubleshooting](../user/troubleshooting.md) and [Operations: observability](operations-observability.md) so support teams know what to capture.
 
 ## Related pages

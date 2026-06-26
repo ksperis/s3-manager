@@ -22,7 +22,6 @@ import type { PortalSettingsOverride } from "../../api/appSettings";
 import type { PortalAccountSettings } from "../../api/portal";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
@@ -103,8 +102,7 @@ function normalizePortalRole(value?: string | null): PortalAccountRole {
 }
 
 export default function S3AccountsPage() {
-  const { generalSettings } = useGeneralSettings();
-  const portalEnabled = generalSettings.portal_enabled;
+  const portalEnabled = true;
   const [accounts, setS3Accounts] = useState<S3Account[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

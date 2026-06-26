@@ -117,7 +117,7 @@ helm upgrade --install s3-manager helm/s3-manager \
 4. Create or import the first account or connection.
 5. Verify the healthcheck CronJob runs and endpoint status updates.
 6. Verify billing, quota monitoring, and usage-history CronJobs are enabled or intentionally disabled.
-7. Check Browser and Portal feature flags before giving access to users.
+7. Check user roles, account links, connection access, and Portal roles before giving access to users.
 8. Review [Operations: security](operations-security.md) and [Operations: observability](operations-observability.md) before publishing the URL broadly.
 
 ## Related pages

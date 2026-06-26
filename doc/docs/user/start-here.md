@@ -7,7 +7,7 @@ Use this page when you log in for the first time and need to understand where to
 ## Prerequisites
 
 - You can sign in to the UI.
-- Your account has at least one workspace enabled.
+- Your account has at least one workspace available through role, account link, connection access, or entitlement.
 
 ## Steps
 
@@ -62,10 +62,13 @@ If an action is missing, disabled, or returns `AccessDenied`, first check the se
 
 You know which workspace to use and can start from the correct context.
 
-## Limits / feature flags
+## Limits / access
 
 !!! note
-    Workspace visibility depends on role, account links, and feature flags (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`). Portal visibility also requires an explicit `portal_user` or `portal_manager` account role.
+    Workspace visibility depends on role, account links, connection access flags,
+    Portal account roles, Ceph Admin or Storage Ops entitlements, context
+    availability, and endpoint capabilities. IAM and S3 still decide whether
+    the visible action succeeds.
 
 ## Related pages
 

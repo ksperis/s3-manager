@@ -9,7 +9,6 @@ import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
@@ -23,7 +22,6 @@ import { buildUiTagItems, filterSelectorVisibleUiTags } from "../../utils/uiTags
 
 function CephAdminShell() {
   const location = useLocation();
-  const { generalSettings } = useGeneralSettings();
   const {
     endpoints,
     selectedEndpointId,
@@ -57,9 +55,7 @@ function CephAdminShell() {
   const canBrowser =
     endpointSelected &&
     !selectedEndpointAccessLoading &&
-    canAdmin &&
-    generalSettings.browser_enabled &&
-    generalSettings.browser_ceph_admin_enabled;
+    canAdmin;
   const normalizedPath = location.pathname.replace(/\/+$/, "");
   const onCephAdminBrowserRoute = normalizedPath === "/ceph-admin/browser";
   const browserLinkDisabled = !canBrowser || !onCephAdminBrowserRoute;
@@ -93,8 +89,6 @@ function CephAdminShell() {
     const commonHint = resolveCommonEndpointHint();
     if (commonHint) return commonHint;
     if (!selectedEndpointAccess?.can_admin) return "Administrator access is required for this endpoint.";
-    if (!generalSettings.browser_enabled) return "Browser feature is disabled in General settings.";
-    if (!generalSettings.browser_ceph_admin_enabled) return "Ceph Admin Browser is disabled in Browser settings.";
     if (!onCephAdminBrowserRoute) return "Open the bucket from the Buckets list.";
     return undefined;
   })();

@@ -61,16 +61,7 @@ export function RoleRedirect() {
   return <Navigate to={destination} replace />;
 }
 
-export function RequireManagerFeature() {
-  const { generalSettings } = useGeneralSettings();
-  if (!generalSettings.manager_enabled) {
-    return <FeatureDisabledPage feature="Manager" />;
-  }
-  return <Outlet />;
-}
-
 export function RequirePortalAccess() {
-  const { generalSettings } = useGeneralSettings();
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => getStoredUser());
   const [refreshingSession, setRefreshingSession] = useState(() => {
     const storedUser = getStoredUser();
@@ -83,7 +74,7 @@ export function RequirePortalAccess() {
   });
 
   useEffect(() => {
-    if (!generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
+    if (hasPortalWorkspaceAccess(sessionUser)) return;
     if (typeof window === "undefined" || !readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
     let cancelled = false;
     setRefreshingSession(true);
@@ -103,11 +94,8 @@ export function RequirePortalAccess() {
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.portal_enabled, sessionUser]);
+  }, [sessionUser]);
 
-  if (!generalSettings.portal_enabled) {
-    return <FeatureDisabledPage feature="Portal" />;
-  }
   if (hasPortalWorkspaceAccess(sessionUser)) {
     return <Outlet />;
   }
@@ -120,51 +108,21 @@ export function RequirePortalAccess() {
   return <Outlet />;
 }
 
-export function RequireCephAdminFeature() {
-  const { generalSettings } = useGeneralSettings();
+export function RequireCephAdminAccess() {
   const user = getStoredUser();
-  if (!user || !isAdminLikeRole(user.role) || !user.can_access_ceph_admin) {
+  const canAccessCephAdmin = user?.effective_access?.can_access_ceph_admin ?? user?.can_access_ceph_admin;
+  if (!user || !isAdminLikeRole(user.role) || !canAccessCephAdmin) {
     return <Navigate to="/unauthorized" replace />;
-  }
-  if (!generalSettings.ceph_admin_enabled) {
-    return <FeatureDisabledPage feature="Ceph Admin" />;
   }
   return <Outlet />;
 }
 
-export function RequireStorageOpsFeature() {
-  const { generalSettings } = useGeneralSettings();
+export function RequireStorageOpsAccess() {
   const user = getStoredUser();
   const canUseStorageOpsRole = Boolean(user && (isAdminLikeRole(user.role) || user.role === USER_ROLE));
-  if (!user || !canUseStorageOpsRole || !user.can_access_storage_ops) {
+  const canAccessStorageOps = user?.effective_access?.can_access_storage_ops ?? user?.can_access_storage_ops;
+  if (!user || !canUseStorageOpsRole || !canAccessStorageOps) {
     return <Navigate to="/unauthorized" replace />;
-  }
-  if (!generalSettings.storage_ops_enabled) {
-    return <FeatureDisabledPage feature="Storage Ops" />;
-  }
-  return <Outlet />;
-}
-
-export type BrowserSurface = "root" | "manager" | "ceph_admin";
-
-export function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surface: BrowserSurface) {
-  if (!generalSettings.browser_enabled) return false;
-  if (surface === "root") return generalSettings.browser_root_enabled;
-  if (surface === "manager") return generalSettings.browser_manager_enabled;
-  return generalSettings.browser_ceph_admin_enabled;
-}
-
-export function RequireBrowserSurface({ surface }: { surface: BrowserSurface }) {
-  const { generalSettings } = useGeneralSettings();
-  const user = getStoredUser();
-  const portalBrowserRootEnabled =
-    surface === "root" &&
-    generalSettings.browser_enabled &&
-    generalSettings.portal_enabled &&
-    generalSettings.browser_portal_enabled &&
-    hasPortalWorkspaceAccess(user);
-  if (!isBrowserSurfaceEnabled(generalSettings, surface) && !portalBrowserRootEnabled) {
-    return <FeatureDisabledPage feature="Browser" />;
   }
   return <Outlet />;
 }

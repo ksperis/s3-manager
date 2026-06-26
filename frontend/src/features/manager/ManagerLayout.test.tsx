@@ -110,13 +110,6 @@ function buildContext(overrides?: Record<string, unknown>) {
 
 function buildGeneralSettings(overrides?: Record<string, unknown>) {
   return {
-    manager_enabled: true,
-    ceph_admin_enabled: false,
-    storage_ops_enabled: false,
-    browser_enabled: true,
-    browser_root_enabled: true,
-    browser_manager_enabled: true,
-    browser_ceph_admin_enabled: true,
     billing_enabled: false,
     endpoint_status_enabled: false,
     quota_alerts_enabled: false,

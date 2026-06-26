@@ -15,15 +15,6 @@ const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
 const listMinimalGroupsMock = vi.fn();
 const generalSettingsState = {
-  manager_enabled: true,
-  ceph_admin_enabled: false,
-  storage_ops_enabled: false,
-  browser_enabled: true,
-  browser_root_enabled: true,
-  browser_manager_enabled: false,
-  browser_portal_enabled: true,
-  browser_ceph_admin_enabled: true,
-  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -77,8 +68,6 @@ vi.mock("../../api/groups", () => ({
 describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    generalSettingsState.portal_enabled = false;
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
 
     listUsersMock.mockResolvedValue({
@@ -136,7 +125,6 @@ describe("UsersPage modal tabs", () => {
   });
 
   it("renders associations with the shared sectioned summary", async () => {
-    generalSettingsState.portal_enabled = true;
     listUsersMock.mockResolvedValue({
       items: [
         {

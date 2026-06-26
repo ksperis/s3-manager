@@ -17,7 +17,7 @@ Collect backend logs centrally and include:
 ## Frequent failure classes
 
 - `AccessDenied`: storage policy/permission denial.
-- Missing menu/page: feature flag or capability mismatch.
+- Missing menu/page: access, entitlement, operational feature flag, or capability mismatch.
 - Stale metrics/billing/quota history: scheduler or token misconfiguration.
 - Missing quota alert emails: SMTP configuration/user opt-in/global watch mismatch.
 
@@ -25,7 +25,7 @@ Collect backend logs centrally and include:
 
 | User report includes | Operator check |
 |---|---|
-| Workspace, page, and hidden action | Feature flag, role, account link, Manager tool access, and endpoint capability. |
+| Workspace, page, and hidden action | Role, account link, entitlement, Manager tool access, operational feature flag, and endpoint capability. |
 | `AccessDenied` with bucket/key/context | Storage-side IAM/S3 policy for the execution identity and target scope. |
 | Missing or stale metric card | Scheduler/CronJob status, `INTERNAL_CRON_TOKEN`, collection logs, and latest stored snapshot. |
 | Failed upload, download, purge, migration, or bulk apply | Backend logs for the route, audit trail for the action, and upstream S3/RGW error. |

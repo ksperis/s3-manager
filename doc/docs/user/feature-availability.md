@@ -6,7 +6,7 @@ Use this page when a page, action, or menu item is missing or disabled.
 
 s3-manager shows an action only when all required conditions are true:
 
-1. the workspace is enabled;
+1. the UI user can access the workspace from its effective role, account link, or entitlement;
 2. the UI user has the right role or entitlement;
 3. the selected account, connection, endpoint, or Storage Space is allowed;
 4. the backend supports the feature;
@@ -16,27 +16,26 @@ s3-manager shows an action only when all required conditions are true:
 
 | Feature | Where users see it | Main controls |
 |---|---|---|
-| Portal | Workspace selector | `portal_enabled` plus explicit `portal_user` or `portal_manager` account link. |
-| Browser | Workspace selector, Manager, Portal, Ceph Admin | `browser_enabled` plus workspace-specific Browser flags and context access. |
-| Manager | Workspace selector | `manager_enabled` plus account, connection, or legacy S3 user access. |
-| Ceph Admin | Workspace selector | `ceph_admin_enabled`, Ceph-compatible endpoint, and `can_access_ceph_admin`. |
-| Storage Ops | Workspace selector | `storage_ops_enabled` and `can_access_storage_ops`. |
+| Portal | Workspace selector | Explicit `portal_user` or `portal_manager` account link. |
+| Browser | Workspace selector, Manager, Portal, Ceph Admin | Allowed Browser context: account, connection, legacy S3 user, session context, Portal account context, or authorized Ceph Admin endpoint context. |
+| Manager | Workspace selector | Account admin access, connection `access_manager`, legacy S3 user binding, or session account access. |
+| Ceph Admin | Workspace selector | Admin UI role, `can_access_ceph_admin`, Ceph-compatible endpoint, and endpoint admin capability. |
+| Storage Ops | Workspace selector | `can_access_storage_ops` and at least one authorized Manager context. |
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
 | Bucket compare, integrity, purge, migration | Manager tools | Global Manager setting plus per-user or inherited Manager tool access. |
-| Usage, quota, traffic, and billing | Admin, Manager, Portal | Collection jobs, endpoint capabilities, and feature flags. |
+| Usage, quota, traffic, and billing | Admin, Manager, Portal | Collection jobs, endpoint capabilities, and operational feature settings. |
 
 ## What to do first
 
 - Recheck the selected workspace and context.
 - Open [User profile](profile.md) if you expected a private connection or selector tag.
-- Ask an admin whether the feature is globally enabled.
 - Ask an admin whether your UI user or group has the required entitlement.
 - If the action is visible but fails, treat the error as storage-side authorization or backend capability until proven otherwise.
 
 ## You are done when
 
-You can identify whether the missing action is caused by workspace visibility, user entitlement, endpoint capability, feature flag, or IAM/S3 authorization.
+You can identify whether the missing action is caused by workspace visibility, user entitlement, account/context binding, endpoint capability, operational feature flag, or IAM/S3 authorization.
 
 ## Related pages
 

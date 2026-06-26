@@ -78,9 +78,7 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
     )
 
     previous_user_override = app.dependency_overrides.get(dependencies.get_current_account_user)
-    previous_portal_override = app.dependency_overrides.get(dependencies.require_portal_enabled)
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: actor
-    app.dependency_overrides[dependencies.require_portal_enabled] = lambda: None
     try:
         response = client.get("/api/portal/accounts")
     finally:
@@ -88,10 +86,6 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
             app.dependency_overrides[dependencies.get_current_account_user] = previous_user_override
         else:
             app.dependency_overrides.pop(dependencies.get_current_account_user, None)
-        if previous_portal_override is not None:
-            app.dependency_overrides[dependencies.require_portal_enabled] = previous_portal_override
-        else:
-            app.dependency_overrides.pop(dependencies.require_portal_enabled, None)
 
     assert response.status_code == 200, response.text
     payload = response.json()

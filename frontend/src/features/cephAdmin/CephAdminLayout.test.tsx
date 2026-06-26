@@ -10,7 +10,6 @@ import { SELECTOR_TAGS_PREFERENCE_KEY } from "../../utils/selectorTagsPreference
 import CephAdminLayout from "./CephAdminLayout";
 
 const useCephAdminEndpointMock = vi.fn();
-const useGeneralSettingsMock = vi.fn();
 
 let capturedNavSections: SidebarSection[] = [];
 let capturedEndpointSelectProps: { options?: TopbarDropdownOption[]; widthClassName?: string; menuMinWidthClassName?: string } | null = null;
@@ -18,10 +17,6 @@ let capturedEndpointSelectProps: { options?: TopbarDropdownOption[]; widthClassN
 vi.mock("./CephAdminEndpointContext", () => ({
   CephAdminEndpointProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   useCephAdminEndpoint: () => useCephAdminEndpointMock(),
-}));
-
-vi.mock("../../components/GeneralSettingsContext", () => ({
-  useGeneralSettings: () => useGeneralSettingsMock(),
 }));
 
 vi.mock("../../components/Layout", () => ({
@@ -86,14 +81,6 @@ function buildEndpointContext(overrides?: Record<string, unknown>) {
   };
 }
 
-function buildGeneralSettings(overrides?: Record<string, unknown>) {
-  return {
-    browser_enabled: true,
-    browser_ceph_admin_enabled: true,
-    ...overrides,
-  };
-}
-
 function getNavLink(label: string) {
   return capturedNavSections.flatMap((section) => section.links).find((link) => link.label === label);
 }
@@ -104,7 +91,6 @@ describe("CephAdminLayout", () => {
     capturedEndpointSelectProps = null;
     localStorage.clear();
     useCephAdminEndpointMock.mockReset();
-    useGeneralSettingsMock.mockReset();
   });
 
   it("uses endpoint-selection hint when no endpoint is selected", () => {
@@ -116,7 +102,6 @@ describe("CephAdminLayout", () => {
         selectedEndpointAccess: null,
       })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin/buckets"]}>
@@ -133,7 +118,6 @@ describe("CephAdminLayout", () => {
 
   it("uses loading hint while endpoint access is loading", () => {
     useCephAdminEndpointMock.mockReturnValue(buildEndpointContext({ selectedEndpointAccessLoading: true }));
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin/buckets"]}>
@@ -152,7 +136,6 @@ describe("CephAdminLayout", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: false, can_metrics: false, can_accounts: true } })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -169,7 +152,6 @@ describe("CephAdminLayout", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: true, can_metrics: false, can_accounts: true } })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -189,7 +171,6 @@ describe("CephAdminLayout", () => {
         selectedEndpointAccess: { can_admin: false, can_metrics: true, can_accounts: true },
       })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -206,7 +187,6 @@ describe("CephAdminLayout", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: false, can_metrics: true, can_accounts: true } })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -223,7 +203,6 @@ describe("CephAdminLayout", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: true, can_metrics: true, can_accounts: false } })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -240,7 +219,6 @@ describe("CephAdminLayout", () => {
     useCephAdminEndpointMock.mockReturnValue(
       buildEndpointContext({ selectedEndpointAccess: { can_admin: false, can_metrics: true, can_accounts: true } })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>
@@ -254,41 +232,8 @@ describe("CephAdminLayout", () => {
     expect(bucketsLink?.disabledHint).toBe("Administrator access is required for this endpoint.");
   });
 
-  it("shows Browser feature hint when global browser feature is disabled", () => {
-    useCephAdminEndpointMock.mockReturnValue(buildEndpointContext());
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings({ browser_enabled: false }) });
-
-    render(
-      <MemoryRouter initialEntries={["/ceph-admin/buckets"]}>
-        <CephAdminLayout />
-      </MemoryRouter>
-    );
-
-    const browserLink = getNavLink("Browser");
-    expect(browserLink?.disabled).toBe(true);
-    expect(browserLink?.disabledHint).toBe("Browser feature is disabled in General settings.");
-  });
-
-  it("shows Ceph Admin Browser hint when the ceph-admin browser surface is disabled", () => {
-    useCephAdminEndpointMock.mockReturnValue(buildEndpointContext());
-    useGeneralSettingsMock.mockReturnValue({
-      generalSettings: buildGeneralSettings({ browser_ceph_admin_enabled: false }),
-    });
-
-    render(
-      <MemoryRouter initialEntries={["/ceph-admin/buckets"]}>
-        <CephAdminLayout />
-      </MemoryRouter>
-    );
-
-    const browserLink = getNavLink("Browser");
-    expect(browserLink?.disabled).toBe(true);
-    expect(browserLink?.disabledHint).toBe("Ceph Admin Browser is disabled in Browser settings.");
-  });
-
   it("disables Browser outside /ceph-admin/browser and shows the Buckets hint", () => {
     useCephAdminEndpointMock.mockReturnValue(buildEndpointContext());
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin/buckets"]}>
@@ -303,7 +248,6 @@ describe("CephAdminLayout", () => {
 
   it("keeps Browser enabled on /ceph-admin/browser so active styling can be applied", () => {
     useCephAdminEndpointMock.mockReturnValue(buildEndpointContext());
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin/browser"]}>
@@ -349,7 +293,6 @@ describe("CephAdminLayout", () => {
         ],
       })
     );
-    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
 
     render(
       <MemoryRouter initialEntries={["/ceph-admin"]}>

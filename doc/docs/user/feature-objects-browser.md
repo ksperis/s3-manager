@@ -61,12 +61,13 @@ The object list, inspector, or Operations overview shows the expected completed 
 
 ## If you do not see this action
 
-Check the selected object state, current surface, Browser feature flags, and IAM/S3 permissions. Some actions appear only for a file, only for a folder, or only when versioning is available.
+Check the selected object state, current surface, Browser profile, endpoint capability, and IAM/S3 permissions. Some actions appear only for a file, only for a folder, or only when versioning is available.
 
-## Limits / feature flags
+## Limits / access
 
 !!! note
-    Browser availability and operation sets depend on workspace browser flags and endpoint capabilities.
+    Browser availability and operation sets depend on effective context access,
+    Browser profile, endpoint capabilities, and IAM/S3 authorization.
 
 ## Related pages
 

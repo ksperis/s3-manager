@@ -9,7 +9,7 @@ Configuration is split between backend environment variables and UI settings.
 | Required | `DATABASE_URL`, JWT secrets, credential encryption key, `CORS_ORIGINS`, frontend API routing | The app must persist data, protect sessions and stored credentials, and accept requests only from the intended UI origin. |
 | Required | `INTERNAL_CRON_TOKEN` when scheduler or CronJobs are enabled | Internal automation endpoints must not be callable without the shared token. |
 | Recommended | OIDC or LDAP provider settings | Enterprise identity is safer and easier to operate than local-only users. |
-| Recommended | Feature flags for Manager, Portal, Browser, Ceph Admin, Storage Ops, billing, endpoint status, usage history, and quota alerts | Users should see only the surfaces that are intentionally launched. |
+| Recommended | Operational feature flags for billing, endpoint status, usage history, quota alerts, and Manager tools | Optional workflows should be visible only when they are configured and supported. |
 | Recommended | Healthcheck, billing, quota, and usage-history schedules and retention | Operational data should be fresh enough to support troubleshooting and capacity decisions. |
 | Recommended | SMTP settings when quota alerts are enabled | Quota alerts need a deliverable notification path. |
 | Optional | Branding color and login logo | Useful for tenant or lab identity, but not required for safe operation. |
@@ -23,7 +23,7 @@ Key areas:
 - Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC providers, LDAP providers.
 - Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`).
 - CORS: `CORS_ORIGINS`.
-- Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
+- Operational feature force-locks: `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
 - Internal scheduler auth: `INTERNAL_CRON_TOKEN`.
 - Billing, quota monitoring, usage history collection, and healthcheck behavior.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
@@ -52,9 +52,8 @@ Primary model: `backend/app/models/app_settings.py`.
 
 Managed from Admin UI:
 
-- General feature toggles (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
+- General operational feature toggles (`billing_enabled`, `endpoint_status_enabled`).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
-- Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
 - Portal settings (`portal`): IAM key policy, portal user Storage Space creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and account override policy.
 - Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
@@ -63,11 +62,10 @@ On a fresh deployment with no persisted `app_settings.json`, `Endpoint Status`
 and `Usage history` are enabled by default. `Quota alerts` remains disabled
 until explicitly enabled and configured.
 
-The Browser workspace is enabled on root `/browser` and in Portal storage spaces
-(`/portal/storage-spaces/:spaceId`) by default. Manager and Ceph Admin Browser
-integrations remain disabled until explicitly enabled.
-
-`FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
+Workspace visibility is derived from effective access: UI role, account links,
+connection access flags, Portal account roles, Ceph Admin or Storage Ops
+entitlements, and endpoint capabilities. IAM/S3 remains the authority for the
+actual storage action.
 
 The default `portal-manager` IAM group policy grants only
 `s3:ListAllMyBuckets` and `s3:CreateBucket`. Storage Space object access is
@@ -84,8 +82,8 @@ by backend orchestration with account credentials.
 | User-facing symptom | Check here first |
 |---|---|
 | Login fails for LDAP/OIDC users | Auth provider variables, TLS settings, and startup warnings. |
-| Menu or workspace is missing | App settings feature flags, user role, account links, and entitlements. |
-| Browser or Portal files do not open | Browser sub-flags, selected context access, and endpoint capability. |
+| Menu or workspace is missing | User role, account links, connection access flags, entitlements, and endpoint capability. |
+| Browser or Portal files do not open | Selected context access, Portal Storage Space visibility, endpoint capability, and IAM/S3 policy. |
 | `AccessDenied` during an S3 action | IAM/S3 policy and selected execution identity before changing UI flags. |
 | Metrics, billing, quota, or history are stale | Scheduler/CronJob settings, `INTERNAL_CRON_TOKEN`, retention, and endpoint capabilities. |
 | Quota emails do not arrive | Quota notification policy, SMTP non-secret fields, `SMTP_PASSWORD`, and user opt-in. |

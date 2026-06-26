@@ -36,7 +36,7 @@ The relevant configuration section reports the expected state after refresh, and
 
 ## If you do not see this action
 
-Check the selected endpoint capability, your effective Manager access, and the global feature flag for the specific setting.
+Check the selected endpoint capability, your effective Manager access, and the operational setting for the specific bucket feature.
 
 ## Limits / feature flags
 

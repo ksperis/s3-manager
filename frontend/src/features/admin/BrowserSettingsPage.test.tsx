@@ -20,15 +20,6 @@ vi.mock("../../utils/confirm", () => ({
 function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSettings {
   return {
     general: {
-      manager_enabled: true,
-      ceph_admin_enabled: false,
-      storage_ops_enabled: false,
-      browser_enabled: true,
-      browser_root_enabled: true,
-      browser_manager_enabled: true,
-      browser_portal_enabled: true,
-      browser_ceph_admin_enabled: false,
-      portal_enabled: true,
       billing_enabled: false,
       endpoint_status_enabled: false,
       quota_alerts_enabled: false,
@@ -113,34 +104,37 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
 describe("BrowserSettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchAppSettingsMock.mockResolvedValue(buildSettings({ browser_portal_enabled: false }));
-    fetchDefaultAppSettingsMock.mockResolvedValue(buildSettings({ browser_portal_enabled: true }));
+    fetchAppSettingsMock.mockResolvedValue(buildSettings());
+    fetchDefaultAppSettingsMock.mockResolvedValue(buildSettings());
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
   });
 
-  it("saves the Portal Browser workspace toggle", async () => {
+  it("saves the proxy transfer setting", async () => {
     render(<BrowserSettingsPage />);
 
-    const toggle = await screen.findByLabelText("Enable Browser in Portal Storage Spaces");
-    expect(toggle).not.toBeChecked();
+    const toggle = await screen.findByLabelText("Enable proxy mode");
+    expect(toggle).toBeChecked();
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
       expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
     });
-    expect(updateAppSettingsMock.mock.calls[0][0].general.browser_portal_enabled).toBe(true);
+    expect(updateAppSettingsMock.mock.calls[0][0].browser.allow_proxy_transfers).toBe(false);
   });
 
-  it("resets the Portal Browser workspace toggle from defaults", async () => {
+  it("resets browser settings from defaults", async () => {
+    const defaults = buildSettings();
+    defaults.browser.allow_proxy_transfers = false;
+    fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
     render(<BrowserSettingsPage />);
 
-    const toggle = await screen.findByLabelText("Enable Browser in Portal Storage Spaces");
-    expect(toggle).not.toBeChecked();
+    const toggle = await screen.findByLabelText("Enable proxy mode");
+    expect(toggle).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: /reset to defaults/i }));
 
     await waitFor(() => {
-      expect(toggle).toBeChecked();
+      expect(toggle).not.toBeChecked();
     });
   });
 });

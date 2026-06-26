@@ -51,15 +51,6 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 
 function buildGeneralSettings(overrides: Partial<GeneralSettings> = {}): GeneralSettings {
   return {
-    manager_enabled: true,
-    ceph_admin_enabled: false,
-    storage_ops_enabled: false,
-    browser_enabled: true,
-    browser_root_enabled: true,
-    browser_manager_enabled: true,
-    browser_portal_enabled: true,
-    browser_ceph_admin_enabled: true,
-    portal_enabled: false,
     billing_enabled: false,
     endpoint_status_enabled: false,
     quota_alerts_enabled: false,
@@ -300,93 +291,74 @@ describe("AdminDashboard feature summary", () => {
     });
   });
 
-  it("renders exactly two compact feature summary cards with enabled features only", async () => {
+  it("renders the compact operational feature summary with enabled features only", async () => {
     mocks.generalSettings = buildGeneralSettings({
-      portal_enabled: true,
-      ceph_admin_enabled: true,
       billing_enabled: true,
       usage_history_enabled: true,
     });
 
     await renderDashboard();
 
-    expect(screen.getAllByRole("region", { name: /features summary/i })).toHaveLength(2);
+    expect(screen.getAllByRole("region", { name: /features summary/i })).toHaveLength(1);
     expect(screen.queryByText("Configure features")).not.toBeInTheDocument();
 
-    const coreSummary = screen.getByRole("region", { name: "Core features summary" });
-    const extraSummary = screen.getByRole("region", { name: "Extra features summary" });
+    const operationalSummary = screen.getByRole("region", { name: "Operational features summary" });
 
-    expect(within(coreSummary).getByRole("heading", { name: "Core features" })).toBeInTheDocument();
-    expect(within(coreSummary).getByText("4 enabled")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("Manager")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("Browser")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("Portal")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("Ceph Admin")).toBeInTheDocument();
-    expect(within(coreSummary).queryByText("Storage Ops")).not.toBeInTheDocument();
-
-    expect(within(extraSummary).getByRole("heading", { name: "Extra features" })).toBeInTheDocument();
-    expect(within(extraSummary).getByText("2 enabled")).toBeInTheDocument();
-    expect(within(extraSummary).getByText("Billing")).toBeInTheDocument();
-    expect(within(extraSummary).getByText("Usage history")).toBeInTheDocument();
-    expect(within(extraSummary).queryByText("Endpoint Status")).not.toBeInTheDocument();
-    expect(within(extraSummary).queryByText("Quota alerts")).not.toBeInTheDocument();
+    expect(within(operationalSummary).getByRole("heading", { name: "Operational features" })).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("2 enabled")).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("Billing")).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("Usage history")).toBeInTheDocument();
+    expect(within(operationalSummary).queryByText("Endpoint Status")).not.toBeInTheDocument();
+    expect(within(operationalSummary).queryByText("Quota alerts")).not.toBeInTheDocument();
   });
 
-  it("shows compact mass-management markers only for enabled mass-management features", async () => {
+  it("does not render mass-management markers for operational features", async () => {
     mocks.generalSettings = buildGeneralSettings({
-      manager_enabled: false,
-      browser_enabled: false,
-      ceph_admin_enabled: true,
-      storage_ops_enabled: true,
+      billing_enabled: true,
+      endpoint_status_enabled: true,
     });
 
     await renderDashboard();
 
-    const coreSummary = screen.getByRole("region", { name: "Core features summary" });
+    const operationalSummary = screen.getByRole("region", { name: "Operational features summary" });
 
-    expect(within(coreSummary).getByText("Ceph Admin")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("Storage Ops")).toBeInTheDocument();
-    expect(within(coreSummary).getAllByTitle("Mass management")).toHaveLength(2);
-    expect(within(coreSummary).getAllByText("MM")).toHaveLength(2);
+    expect(within(operationalSummary).getByText("Billing")).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("Endpoint Status")).toBeInTheDocument();
+    expect(within(operationalSummary).queryByTitle("Mass management")).not.toBeInTheDocument();
+    expect(within(operationalSummary).queryByText("MM")).not.toBeInTheDocument();
   });
 
   it("shows a muted empty state when a feature group has no enabled features", async () => {
     mocks.generalSettings = buildGeneralSettings({
-      manager_enabled: false,
-      browser_enabled: false,
     });
 
     await renderDashboard();
 
-    const coreSummary = screen.getByRole("region", { name: "Core features summary" });
-    const extraSummary = screen.getByRole("region", { name: "Extra features summary" });
+    const operationalSummary = screen.getByRole("region", { name: "Operational features summary" });
 
-    expect(within(coreSummary).getByText("0 enabled")).toBeInTheDocument();
-    expect(within(coreSummary).getByText("None enabled")).toBeInTheDocument();
-    expect(within(extraSummary).getByText("0 enabled")).toBeInTheDocument();
-    expect(within(extraSummary).getByText("None enabled")).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("0 enabled")).toBeInTheDocument();
+    expect(within(operationalSummary).getByText("None enabled")).toBeInTheDocument();
   });
 
   it("renders feature summaries without feature configuration links or disabled badges", async () => {
+    mocks.generalSettings = buildGeneralSettings({
+      billing_enabled: true,
+    });
+
     await renderDashboard("ui_superadmin");
 
-    const coreSummary = screen.getByRole("region", { name: "Core features summary" });
+    const operationalSummary = screen.getByRole("region", { name: "Operational features summary" });
 
     expect(screen.queryByText("Configure features")).not.toBeInTheDocument();
     expect(screen.queryByText("Superadmin required")).not.toBeInTheDocument();
     expect(screen.queryByText("OFF")).not.toBeInTheDocument();
     expect(screen.queryByText("ON")).not.toBeInTheDocument();
-    ["Manager", "Browser"].forEach((label) => {
-      expect(within(coreSummary).getByText(label).closest("a")).toBeNull();
-    });
+    expect(within(operationalSummary).getByText("Billing").closest("a")).toBeNull();
   });
 
   it("renders the redesigned dashboard sections with real health, metrics, and activity data", async () => {
     mocks.generalSettings = buildGeneralSettings({
       endpoint_status_enabled: true,
-      portal_enabled: true,
-      ceph_admin_enabled: true,
-      storage_ops_enabled: true,
     });
     mocks.fetchAdminSummary.mockResolvedValue({
       assigned_accounts: 124,

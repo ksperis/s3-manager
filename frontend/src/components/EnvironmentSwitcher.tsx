@@ -16,7 +16,7 @@ import {
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
-  resolveAvailableWorkspacesWithFlags,
+  resolveAvailableWorkspaces,
   resolveWorkspaceFromPath,
 } from "../utils/workspaces";
 
@@ -59,7 +59,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   }, []);
 
   const environments = useMemo(() => {
-    const base = resolveAvailableWorkspacesWithFlags(user, generalSettings);
+    const base = resolveAvailableWorkspaces(user, generalSettings);
     const isUiUser = user?.role === "ui_user";
     const isSessionUser = user?.authType === "s3_session";
     if (!isUiUser || isSessionUser) {

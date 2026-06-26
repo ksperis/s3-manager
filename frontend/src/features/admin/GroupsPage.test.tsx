@@ -12,15 +12,6 @@ const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
 
 const generalSettingsState = {
-  manager_enabled: true,
-  ceph_admin_enabled: true,
-  storage_ops_enabled: true,
-  browser_enabled: true,
-  browser_root_enabled: true,
-  browser_manager_enabled: false,
-  browser_portal_enabled: true,
-  browser_ceph_admin_enabled: true,
-  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -71,7 +62,6 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 describe("GroupsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    generalSettingsState.portal_enabled = false;
 
     listGroupsMock.mockResolvedValue({
       items: [],
@@ -98,7 +88,6 @@ describe("GroupsPage", () => {
   });
 
   it("renders association names from group details without waiting for modal resources", async () => {
-    generalSettingsState.portal_enabled = true;
     listGroupsMock.mockResolvedValue({
       items: [
         {

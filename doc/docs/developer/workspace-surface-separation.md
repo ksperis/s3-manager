@@ -18,31 +18,31 @@ execution identity.
   and identity configuration, bucket properties, policies, users, groups, roles,
   lifecycle, replication, notifications, and topics.
 - `/admin` is the platform administration workspace. It owns UI users,
-  endpoints, accounts, global quotas, billing administration, feature flags,
-  audit, health, and governance.
+  endpoints, accounts, global quotas, billing administration, operational
+  feature flags, audit, health, and governance.
 
-## Browser Disablement Matrix
+## Browser Surface Matrix
 
-The Browser is shared across several surfaces, but feature disablement must not
-be treated as a replacement permission model. S3 and IAM remain the authority
-for object and bucket authorization. Browser gates should be used to reduce
-workflow exposure, prevent confusing execution identities, or keep a workspace
-focused on its job.
+The Browser is shared across several surfaces, but surface availability is
+derived from effective access and backend capability. S3 and IAM remain the
+authority for object and bucket authorization. Browser profiles should reduce
+workflow exposure, prevent confusing execution identities, and keep each
+workspace focused on its job.
 
 ### Current Workspace Profiles
 
 | Browser surface or profile | Execution identity | Current gate | Already disabled or restricted today | Decision notes |
 | --- | --- | --- | --- | --- |
-| `/browser` standalone | Selected Browser context: S3 account, S3 connection, legacy S3 user, session context, or Portal account context. | Classic root Browser uses `browser_enabled` and `browser_root_enabled`; Portal account contexts use `browser_enabled`, `portal_enabled`, and `browser_portal_enabled` with `X-S3-Workspace: portal`. User or group `browser_advanced_features_enabled` controls advanced chrome on the root route. | Root Browser is enabled by default. When advanced Browser access is false, `/browser` uses Manager-equivalent compact chrome: no folder panel, no inspector panel, no action bar toggle, no root-only column/layout controls, and no bucket creation shortcut. Portal account contexts use a user-oriented workspace sidebar, display Storage Space names instead of bucket names, and keep the `portal-basic` action profile. | Good default for technical users and Portal users who need a broader file workspace. Portal context must stay read/file-oriented and must not expose account-management features. |
-| `/manager/browser` embedded Browser | Active Manager execution context. | `browser_enabled`, `browser_manager_enabled`, and the selected S3 connection `access_browser` flag when the context is a connection. | Disabled by default. Even when enabled, it uses embedded compact chrome: no folders panel, no inspector panel, no panel toggles, and no Browser-owned bucket management shortcut. | Useful only when object navigation must stay close to Manager context. Keep disabled when Manager should remain a configuration surface only. |
-| `/portal/storage-spaces/:spaceId` locked Browser | Portal IAM credentials resolved for the selected account and Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, and the `portal-basic` profile. | Enabled by default but locked to one active Storage Space. Bucket switching and bucket search are hidden and backend bucket lists are filtered to visible non-archived Storage Spaces. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, details, download, delete, and opening a single folder. Viewer Storage Spaces hide upload, folder creation, and delete actions. The details action routes to the Portal object detail page, not the advanced Browser modal. | This is the current minimal end-user file profile. Archived Storage Spaces must be blocked even if older Portal credentials still have storage-side access. Role-aware UI hiding is only presentation; backend storage permissions remain the real enforcement. |
-| `/ceph-admin/browser` embedded Browser | Endpoint-wide Ceph Admin credentials for the selected Ceph endpoint. | `browser_enabled`, `browser_ceph_admin_enabled`, `ceph_admin_enabled`, admin UI role, endpoint admin access, Ceph provider check, and an explicit risk acknowledgement dialog. | Disabled by default. It uses embedded compact chrome and requires endpoint admin access. The UI warns that operations may execute with an owner identity different from the tenant owner. | Keep disabled for regular object work. Prefer S3 Connections with the expected owner when tenant ownership matters. |
+| `/browser` standalone | Selected Browser context: S3 account, S3 connection, legacy S3 user, session context, or Portal account context. | Effective Browser context access. User or group `browser_advanced_features_enabled` controls advanced chrome on the root route. | When advanced Browser access is false, `/browser` uses Manager-equivalent compact chrome: no folder panel, no inspector panel, no action bar toggle, no root-only column/layout controls, and no bucket creation shortcut. Portal account contexts use a user-oriented workspace sidebar, display Storage Space names instead of bucket names, and keep the `portal-basic` action profile. | Good default for technical users and Portal users who need a broader file workspace. Portal context must stay read/file-oriented and must not expose account-management features. |
+| `/manager/browser` embedded Browser | Active Manager execution context. | Manager context access and the selected S3 connection `access_browser` flag when the context is a connection. | Embedded compact chrome: no folders panel, no inspector panel, no panel toggles, and no Browser-owned bucket management shortcut. | Useful only when object navigation must stay close to Manager context. Keep Manager as the owner of configuration workflows. |
+| `/portal/storage-spaces/:spaceId` locked Browser | Portal IAM credentials resolved for the selected account and Storage Space. | Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, and the `portal-basic` profile. | Locked to one active Storage Space. Bucket switching and bucket search are hidden and backend bucket lists are filtered to visible non-archived Storage Spaces. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, details, download, delete, and opening a single folder. Viewer Storage Spaces hide upload, folder creation, and delete actions. The details action routes to the Portal object detail page, not the advanced Browser modal. | This is the current minimal end-user file profile. Archived Storage Spaces must be blocked even if older Portal credentials still have storage-side access. Role-aware UI hiding is only presentation; backend storage permissions remain the real enforcement. |
+| `/ceph-admin/browser` embedded Browser | Endpoint-wide Ceph Admin credentials for the selected Ceph endpoint. | Admin UI role, Ceph Admin entitlement, endpoint admin access, Ceph provider check, and an explicit risk acknowledgement dialog. | Embedded compact chrome and endpoint admin access. The UI warns that operations may execute with an owner identity different from the tenant owner. | Keep this for authorized cluster operators. Prefer S3 Connections with the expected owner when tenant ownership matters. |
 
 ### Feature Families To Evaluate
 
 | Browser capability family | Why it may be useful to disable by workspace or user | Current implementation and gates | Already disabled today | Possible future decision point |
 | --- | --- | --- | --- | --- |
-| Workspace availability | Some deployments need Browser only in Portal or only for operators. | Global `browser_enabled` plus per-surface flags: `browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`. | Manager and Ceph Admin Browser are disabled by default; root Browser and Portal Browser are enabled by default. | Decide whether defaults should differ by deployment profile, for example end-user-only, operator-only, or lab/demo. |
+| Workspace availability | Users should see workspaces only when they have useful access. | Effective UI role, account links, connection access flags, Portal roles, Ceph Admin or Storage Ops entitlements, context availability, and endpoint capabilities. | Workspaces without any available context or entitlement are hidden or redirect to authorization errors. | Add new availability inputs only when they represent real access or backend capability. |
 | Advanced Browser chrome | Panels, layout persistence, action bar, column controls, and bucket shortcuts can make a simple file workflow look like an operator console. | Root route checks effective `browser_advanced_features_enabled` from the user or any UI group. Embedded Browser sets `allowFoldersPanel`, `allowInspectorPanel`, and `showPanelToggles` to false. | Disabled for embedded Manager, Portal, and Ceph Admin Browser. Disabled on `/browser` for users/groups without advanced Browser access. | Add more granular admin toggles only if compact/full is too coarse. |
 | Bucket switching and bucket creation | Bucket selection and creation expose storage topology and can blur Portal Storage Space boundaries. | Portal passes `lockedBucketName`; bucket creation requires full root Browser, non-embedded path, non-Portal profile, and advanced root access. | Portal cannot switch buckets. Embedded surfaces and non-advanced root users do not get the Browser bucket creation shortcut. | Consider a separate bucket-management toggle if root Browser should browse existing buckets but never create new ones. |
 | Search options and object-list refinements | Recursive, exact, case-sensitive, type, and storage-class search can be noisy or expensive for simple workspaces. | Advanced search menu is hidden by the `portal-basic` profile. Full profiles expose it from the object search field. | Disabled in Portal Browser. | Consider per-user or per-workspace limits for recursive search on large buckets or cost-sensitive endpoints. |
@@ -79,8 +79,8 @@ placeholder.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   `portal-basic` action profile and `X-S3-Workspace: portal`. Portal users may
-  also access root `/browser` through Portal account contexts when the Portal
-  Browser feature flag is enabled.
+  also access root `/browser` through Portal account contexts when their Portal
+  account link grants access.
 - Do not use Portal as a shortcut to Manager configuration.
 - Do not expose policy documents, principals, ARNs, advanced ACLs, object
   diagnostics, bucket defaults, lifecycle, CORS, replication, or versioning in

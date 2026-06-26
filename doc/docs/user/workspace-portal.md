@@ -7,9 +7,6 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 
 ## Prerequisites
 
-- The global `portal_enabled` setting is enabled.
-- The global `browser_enabled` and `browser_portal_enabled` settings are
-  enabled to browse files inside a Storage Space.
 - Your UI user is explicitly linked to the account with Portal access.
 - The account is backed by a storage endpoint configured by the platform team.
 
@@ -47,7 +44,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 - **Private** spaces are visible to their owner and Portal managers. **Shared** spaces use Viewer, Editor, and Owner grants.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
-- `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
+- `/browser` can also run with a Portal account context. It still uses Portal wording and permissions instead of account-management controls.
 - Portal roles are translated into storage-side permissions; they do not replace IAM or S3 authorization.
 
 ## Expected result
@@ -55,7 +52,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 Portal actions stay user-oriented and use the storage permissions configured by
 the platform as the source of truth.
 
-## Limits / feature flags
+## Limits / access
 
 !!! note
     Portal roles are independent from Manager access. Portal access does not
@@ -63,10 +60,11 @@ the platform as the source of truth.
     administration rights.
 
 !!! note
-    Portal requires `portal_enabled` and an explicit account link. File browsing
-    inside Storage Spaces also requires `browser_enabled` and
-    `browser_portal_enabled`. Advanced object inspection belongs in `/browser`,
-    not inside Portal.
+    Portal requires an explicit account link with a Portal role. File browsing
+    inside Storage Spaces uses the locked Portal Browser profile and remains
+    limited by Storage Space visibility, Portal role, endpoint capability, and
+    IAM/S3 policy. Advanced object inspection belongs in `/browser`, not inside
+    Portal.
 
 ## Related pages
 

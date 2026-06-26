@@ -109,8 +109,6 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
 
     monkeypatch.setattr(storage_ops_buckets_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_buckets_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: service
@@ -131,7 +129,6 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
         assert storage_ops_after_mutation.status_code == 200, storage_ops_after_mutation.text
         assert service.list_calls == 2
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(manager_buckets_router.get_account_context, None)
         app.dependency_overrides.pop(manager_buckets_router.get_buckets_service, None)
@@ -162,8 +159,6 @@ def test_storage_ops_bucket_listing_cache_refresh_endpoint_invalidates_shared_ca
 
     monkeypatch.setattr(storage_ops_buckets_router, "list_execution_contexts", fake_list_execution_contexts)
     monkeypatch.setattr(storage_ops_buckets_router, "get_account_context", fake_get_account_context)
-
-    app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[dependencies.get_current_storage_ops_admin] = _admin_user
     app.dependency_overrides[storage_ops_buckets_router.get_buckets_service] = lambda: service
     try:
@@ -181,7 +176,6 @@ def test_storage_ops_bucket_listing_cache_refresh_endpoint_invalidates_shared_ca
         assert after_refresh.status_code == 200, after_refresh.text
         assert service.list_calls == 2
     finally:
-        app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
         app.dependency_overrides.pop(storage_ops_buckets_router.get_buckets_service, None)
         invalidate_bucket_listing_cache()

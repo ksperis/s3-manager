@@ -28,7 +28,7 @@ You can name the workspace you need, select the right context, and complete a sm
 
 ## If something is missing
 
-Missing actions usually mean one of four things: the selected context is wrong, the feature flag is disabled, the backend does not support the feature, or IAM/S3 denies the operation.
+Missing actions usually mean one of four things: the selected context is wrong, an operational feature is disabled, the backend does not support the feature, or IAM/S3 denies the operation.
 
 ## Related pages
 

@@ -140,7 +140,10 @@ function canAccessStorageOps(user: SessionUser | null): boolean {
   return Boolean(getEffectiveAccess(user)?.can_access_storage_ops ?? user?.can_access_storage_ops);
 }
 
-function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
+export function resolveAvailableWorkspaces(
+  user: SessionUser | null,
+  _generalSettings?: GeneralSettings
+): WorkspaceOption[] {
   if (!user || !user.role) return [];
   const links = getAccountLinks(user);
   const hasPortalAccess = hasPortalWorkspaceAccess(user);
@@ -192,57 +195,21 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
   });
 }
 
-export function resolveAvailableWorkspacesWithFlags(
-  user: SessionUser | null,
-  generalSettings: GeneralSettings
-): WorkspaceOption[] {
-  const filtered = resolveAvailableWorkspaces(user).filter((workspace) => {
-    if (workspace.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
-    if (workspace.id === "storage-ops") return generalSettings.storage_ops_enabled;
-    if (workspace.id === "portal") return generalSettings.portal_enabled;
-    if (workspace.id === "manager") {
-      if (!generalSettings.manager_enabled) return false;
-      if (user?.role !== USER_ROLE || user?.authType === "s3_session") return true;
-      if (getAccountLinks(user).some((link) => Boolean(link.account_admin))) return true;
-      const connectionDetails = getConnectionDetails(user);
-      const hasIamConnections = connectionDetails.length > 0
-        ? connectionDetails.some((connection) =>
-            connection.access_manager === true
-          )
-        : getConnectionIds(user).length > 0;
-      if (hasIamConnections) return true;
-      if (getS3UserDetails(user).length || getS3UserIds(user).length) return true;
-      return false;
-    }
-    if (workspace.id === "browser") {
-      const portalBrowserEnabled =
-        generalSettings.portal_enabled &&
-        generalSettings.browser_portal_enabled &&
-        hasPortalWorkspaceAccess(user);
-      return generalSettings.browser_enabled && (generalSettings.browser_root_enabled || portalBrowserEnabled);
-    }
-    return true;
-  });
-  return filtered;
-}
-
 export function resolveWorkspaceFromPath(pathname: string, options: WorkspaceOption[]): WorkspaceOption | null {
   const segment = pathname.split("/")[1] || "";
   const active = options.find((option) => option.id === segment);
   return active ?? null;
 }
 
-export function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralSettings): string {
+export function resolveRoleHomePath(user: SessionUser | null, _generalSettings: GeneralSettings): string {
   if (!user || !user.role) return "/login";
   if (isAdminLikeRole(user.role)) return "/admin";
   if (user.role !== USER_ROLE) return "/unauthorized";
   if (user.authType === "s3_session") {
     const canManager = user.capabilities?.can_manage_iam !== false;
     const canBrowser = user.capabilities?.access_browser !== false;
-    if (generalSettings.manager_enabled && canManager) return "/manager";
-    if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && canBrowser) {
-      return "/browser";
-    }
+    if (canManager) return "/manager";
+    if (canBrowser) return "/browser";
     return "/unauthorized";
   }
   const links = getAccountLinks(user);
@@ -271,18 +238,10 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     hasManagerConnectionAccess ||
     hasS3UserAccess;
 
-  if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
-  if (generalSettings.storage_ops_enabled && canAccessStorageOps(user)) return "/storage-ops";
-  if (generalSettings.portal_enabled && hasPortalAccess) return "/portal";
-  if (
-    generalSettings.browser_enabled &&
-    (
-      (generalSettings.browser_root_enabled && hasBrowserAccess) ||
-      (generalSettings.portal_enabled && generalSettings.browser_portal_enabled && hasPortalAccess)
-    )
-  ) {
-    return "/browser";
-  }
+  if (hasManagerAccess) return "/manager";
+  if (canAccessStorageOps(user)) return "/storage-ops";
+  if (hasPortalAccess) return "/portal";
+  if (hasBrowserAccess || hasPortalAccess) return "/browser";
   return "/unauthorized";
 }
 
@@ -291,7 +250,7 @@ export function resolvePostLoginPath(user: SessionUser | null, generalSettings: 
   if (fallbackPath === "/login" || fallbackPath === "/unauthorized") {
     return fallbackPath;
   }
-  const availableWorkspaces = resolveAvailableWorkspacesWithFlags(user, generalSettings);
+  const availableWorkspaces = resolveAvailableWorkspaces(user);
   const preferredWorkspaceId = readStoredWorkspaceId();
   if (preferredWorkspaceId) {
     const preferred = availableWorkspaces.find((workspace) => workspace.id === preferredWorkspaceId);

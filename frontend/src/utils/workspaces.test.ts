@@ -1,18 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { GeneralSettings } from "../api/appSettings";
 import type { SessionUser } from "./workspaces";
-import { resolveAvailableWorkspacesWithFlags, resolvePostLoginPath } from "./workspaces";
+import { resolveAvailableWorkspaces, resolvePostLoginPath } from "./workspaces";
 
 const baseSettings: GeneralSettings = {
-  manager_enabled: true,
-  ceph_admin_enabled: true,
-  storage_ops_enabled: false,
-  browser_enabled: true,
-  browser_root_enabled: true,
-  browser_manager_enabled: false,
-  browser_portal_enabled: false,
-  browser_ceph_admin_enabled: true,
-  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
   quota_alerts_enabled: false,
@@ -44,43 +35,32 @@ const superAdminUser: SessionUser = {
   can_access_storage_ops: true,
 };
 
-describe("resolveAvailableWorkspacesWithFlags", () => {
+describe("resolveAvailableWorkspaces", () => {
   afterEach(() => {
     window.localStorage.clear();
   });
 
   it("returns English workspace labels", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
+    const workspaces = resolveAvailableWorkspaces(adminUser, {
       ...baseSettings,
-      storage_ops_enabled: true,
     });
 
     expect(workspaces.find((workspace) => workspace.id === "admin")?.label).toBe("Admin (platform)");
     expect(workspaces.find((workspace) => workspace.id === "browser")?.label).toBe("Browser (objects)");
   });
 
-  it("hides Storage Ops for admin-like users when feature flag is disabled", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
+  it("shows Storage Ops for admin-like users with dedicated permission", () => {
+    const workspaces = resolveAvailableWorkspaces(adminUser, {
       ...baseSettings,
-      storage_ops_enabled: false,
-    });
-    expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
-  });
-
-  it("shows Storage Ops for admin-like users when feature flag is enabled", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
-      ...baseSettings,
-      storage_ops_enabled: true,
     });
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(true);
   });
 
   it("hides Storage Ops for admin-like users without dedicated permission", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(
+    const workspaces = resolveAvailableWorkspaces(
       { ...adminUser, can_access_storage_ops: false },
       {
         ...baseSettings,
-        storage_ops_enabled: true,
       }
     );
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
@@ -94,14 +74,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       can_access_storage_ops: false,
       account_links: [{ account_id: 12, account_admin: true }],
     };
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      storage_ops_enabled: true,
     });
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
   });
 
-  it("exposes Storage Ops to standard users with dedicated permission when feature is enabled", () => {
+  it("exposes Storage Ops to standard users with dedicated permission", () => {
     const user: SessionUser = {
       id: 6,
       email: "ops-user@example.com",
@@ -109,14 +88,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       can_access_storage_ops: true,
       account_links: [{ account_id: 24, account_admin: false }],
     };
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      storage_ops_enabled: true,
     });
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(true);
   });
 
-  it("exposes Portal only for explicit portal account roles when feature is enabled", () => {
+  it("exposes Portal only for explicit portal account roles", () => {
     const user: SessionUser = {
       id: 7,
       email: "portal-user@example.com",
@@ -124,9 +102,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      portal_enabled: true,
     });
 
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
@@ -159,10 +136,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       },
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      portal_enabled: true,
-      storage_ops_enabled: true,
     });
 
     expect(workspaces.some((workspace) => workspace.id === "manager")).toBe(true);
@@ -196,12 +171,12 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       },
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, baseSettings);
+    const workspaces = resolveAvailableWorkspaces(user, baseSettings);
 
     expect(workspaces.some((workspace) => workspace.id === "browser")).toBe(true);
   });
 
-  it("exposes Portal for portal managers when feature is enabled", () => {
+  it("exposes Portal for portal managers", () => {
     const user: SessionUser = {
       id: 9,
       email: "portal-manager@example.com",
@@ -209,9 +184,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       account_links: [{ account_id: 24, account_admin: false, account_role: "portal_manager" }],
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      portal_enabled: true,
     });
 
     expect(workspaces.find((workspace) => workspace.id === "portal")).toMatchObject({
@@ -220,7 +194,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     });
   });
 
-  it("exposes Browser to Portal users when Portal Browser is enabled without classic Browser access", () => {
+  it("exposes Browser to Portal users through Portal account access", () => {
     const user: SessionUser = {
       id: 15,
       email: "portal-browser@example.com",
@@ -232,11 +206,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       s3_user_details: [],
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      browser_root_enabled: false,
-      portal_enabled: true,
-      browser_portal_enabled: true,
     });
 
     expect(workspaces.find((workspace) => workspace.id === "browser")).toMatchObject({
@@ -246,14 +217,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
   });
 
   it("exposes Portal for admin users with an explicit portal account role", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(
+    const workspaces = resolveAvailableWorkspaces(
       {
         ...adminUser,
         account_links: [{ account_id: 24, account_admin: true, account_role: "portal_manager" }],
       },
       {
         ...baseSettings,
-        portal_enabled: true,
       }
     );
 
@@ -264,14 +234,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
   });
 
   it("exposes Portal for superadmin users with an explicit portal account role", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(
+    const workspaces = resolveAvailableWorkspaces(
       {
         ...superAdminUser,
         account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
       },
       {
         ...baseSettings,
-        portal_enabled: true,
       }
     );
 
@@ -279,32 +248,15 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
   });
 
   it("does not expose Portal for admin users without an explicit portal account role", () => {
-    const workspaces = resolveAvailableWorkspacesWithFlags(
+    const workspaces = resolveAvailableWorkspaces(
       {
         ...adminUser,
         account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
       },
       {
         ...baseSettings,
-        portal_enabled: true,
       }
     );
-
-    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
-  });
-
-  it("does not expose Portal when the feature flag is disabled", () => {
-    const user: SessionUser = {
-      id: 10,
-      email: "portal-disabled@example.com",
-      role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
-    };
-
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
-      ...baseSettings,
-      portal_enabled: false,
-    });
 
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
   });
@@ -317,9 +269,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      portal_enabled: true,
     });
 
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
@@ -333,9 +284,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       account_links: [{ account_id: 24, account_admin: true }],
     };
 
-    const workspaces = resolveAvailableWorkspacesWithFlags(user, {
+    const workspaces = resolveAvailableWorkspaces(user, {
       ...baseSettings,
-      portal_enabled: true,
     });
 
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(false);
@@ -349,6 +299,6 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
     };
 
-    expect(resolvePostLoginPath(user, { ...baseSettings, portal_enabled: true })).toBe("/portal");
+    expect(resolvePostLoginPath(user, baseSettings)).toBe("/portal");
   });
 });

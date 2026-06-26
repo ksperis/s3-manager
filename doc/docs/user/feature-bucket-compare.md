@@ -43,7 +43,8 @@ Check `bucket_compare_enabled`, your Manager tool access, and whether the select
 ## Limits / feature flags
 
 !!! note
-    Tool visibility depends on the global feature flag, per-user Manager tool access, and context requirements.
+    Tool visibility depends on `bucket_compare_enabled`, per-user Manager tool
+    access, and context requirements.
 
 ## Related pages
 

@@ -23,7 +23,6 @@ function expectBefore(first: Element, second: Element) {
 vi.mock("../../components/GeneralSettingsContext", () => ({
   useGeneralSettings: () => ({
     generalSettings: {
-      ceph_admin_enabled: true,
     },
   }),
 }));

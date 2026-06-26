@@ -409,8 +409,6 @@ def test_ceph_admin_bucket_query_endpoint_matches_get_for_same_payload(client):
             ],
         }
     )
-
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
     try:
         get_response = client.get(
@@ -430,7 +428,6 @@ def test_ceph_admin_bucket_query_endpoint_matches_get_for_same_payload(client):
         assert post_response.status_code == 200
         assert post_response.json() == get_response.json()
     finally:
-        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 
@@ -444,13 +441,10 @@ def test_ceph_admin_get_bucket_versioning_returns_status(client, monkeypatch):
         return "Suspended"
 
     monkeypatch.setattr(BucketsService, "get_bucket_versioning_status", fake_get_versioning)
-
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
     try:
         response = client.get("/api/ceph-admin/endpoints/19/buckets/demo-bucket/versioning")
     finally:
-        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
     assert response.status_code == 200, response.text
@@ -472,13 +466,10 @@ def test_ceph_admin_get_cors_uses_dedicated_cors_api(client, monkeypatch):
 
     monkeypatch.setattr(BucketsService, "get_bucket_cors", fake_get_cors)
     monkeypatch.setattr(BucketsService, "get_bucket_properties", fail_get_properties)
-
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
     try:
         response = client.get("/api/ceph-admin/endpoints/20/buckets/demo-bucket/cors")
     finally:
-        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
     assert response.status_code == 200, response.text
@@ -505,8 +496,6 @@ def test_ceph_admin_bucket_query_endpoint_accepts_large_exact_name_list(client):
             ],
         }
     )
-
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
     try:
         response = client.post(
@@ -522,7 +511,6 @@ def test_ceph_admin_bucket_query_endpoint_accepts_large_exact_name_list(client):
         payload = response.json()
         assert [item["name"] for item in payload["items"]] == ["bucket-a", "bucket-c"]
     finally:
-        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 
@@ -560,8 +548,6 @@ def test_ceph_admin_bucket_listing_cache_can_be_invalidated_per_endpoint():
 def test_ceph_admin_bucket_listing_cache_refresh_endpoint_invalidates_endpoint_cache(client):
     payload = [{"name": "bucket-a", "owner": "owner-a"}, {"name": "bucket-b", "owner": "owner-b"}]
     ctx, rgw_admin = _build_ctx(endpoint_id=43, payload=payload)
-
-    app.dependency_overrides[dependencies.require_ceph_admin_enabled] = lambda: None
     app.dependency_overrides[ceph_admin_dependencies.get_ceph_admin_context] = lambda: ctx
     try:
         first = client.get("/api/ceph-admin/endpoints/43/buckets", params={"with_stats": "false"})
@@ -578,7 +564,6 @@ def test_ceph_admin_bucket_listing_cache_refresh_endpoint_invalidates_endpoint_c
         assert after_refresh.status_code == 200, after_refresh.text
         assert rgw_admin.get_all_buckets_calls == 2
     finally:
-        app.dependency_overrides.pop(dependencies.require_ceph_admin_enabled, None)
         app.dependency_overrides.pop(ceph_admin_dependencies.get_ceph_admin_context, None)
 
 

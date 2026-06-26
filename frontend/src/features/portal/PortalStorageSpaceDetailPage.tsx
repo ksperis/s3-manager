@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { updatePortalStorageSpace, type PortalStorageSpaceVisibility } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
@@ -75,7 +74,6 @@ export default function PortalStorageSpaceDetailPage() {
   const { t } = useI18n();
   const { spaceId } = useParams();
   const navigate = useNavigate();
-  const { generalSettings } = useGeneralSettings();
   const [message, setMessage] = useState<string | null>(null);
   const [metadataName, setMetadataName] = useState("");
   const [metadataDescription, setMetadataDescription] = useState("");
@@ -171,8 +169,6 @@ export default function PortalStorageSpaceDetailPage() {
     return <PortalPageState>{t({ en: "Storage Space not available.", fr: "Espace de stockage indisponible.", de: "Speicherbereich nicht verfügbar." })}</PortalPageState>;
   }
 
-  const browserAvailable =
-    Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
   const isArchived = space.status === "Archived";
   const canRename = space.role === "Owner" && space.nameEditable;
   const canModifyObjects = space.role === "Owner" || space.role === "Editor";
@@ -215,7 +211,7 @@ export default function PortalStorageSpaceDetailPage() {
         <PageBanner tone="warning">
           {t({ en: "This Storage Space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace de stockage est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Speicherbereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}
         </PageBanner>
-      ) : browserAvailable ? (
+      ) : (
         <div className="min-h-[520px] h-[min(72vh,760px)]">
           <BrowserEmbed
             accountIdForApi={accountIdForApi}
@@ -249,10 +245,6 @@ export default function PortalStorageSpaceDetailPage() {
             }}
           />
         </div>
-      ) : (
-        <PageBanner tone="warning">
-          {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour ce workspace.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
-        </PageBanner>
       )}
 
       {space.role === "Owner" ? (

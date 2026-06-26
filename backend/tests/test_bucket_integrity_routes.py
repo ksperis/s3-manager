@@ -109,7 +109,6 @@ def test_manager_integrity_route_streams_progress_and_result(monkeypatch):
             return _result()
 
     previous_overrides = app.dependency_overrides.copy()
-    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_integrity.require_bucket_integrity_check_enabled] = lambda: None
     app.dependency_overrides[manager_integrity.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
@@ -143,7 +142,6 @@ def test_manager_integrity_route_returns_403_when_flag_disabled(monkeypatch):
     monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
 
     previous_overrides = app.dependency_overrides.copy()
-    app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_integrity.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
         _manager_capabilities=SimpleNamespace(can_manage_buckets=True),

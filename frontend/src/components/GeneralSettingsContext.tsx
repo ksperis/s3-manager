@@ -7,15 +7,6 @@ import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
 import { CLIENT_STORAGE_KEYS, readClientStorage } from "../utils/clientStorage";
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
-  manager_enabled: true,
-  ceph_admin_enabled: false,
-  storage_ops_enabled: false,
-  browser_enabled: true,
-  browser_root_enabled: true,
-  browser_manager_enabled: false,
-  browser_portal_enabled: true,
-  browser_ceph_admin_enabled: false,
-  portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: true,
   quota_alerts_enabled: false,

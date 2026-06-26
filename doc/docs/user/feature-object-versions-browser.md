@@ -37,10 +37,12 @@ The versions tab shows the expected latest version, older versions, and delete m
 
 Check bucket versioning, endpoint capability, the selected object state, and whether your credentials can list versions.
 
-## Limits / feature flags
+## Limits / access
 
 !!! note
-    Browser availability depends on workspace browser flags and endpoint capabilities. The `Versions` tab is only useful when the target bucket has S3 versioning enabled.
+    Browser availability depends on effective context access and endpoint
+    capabilities. The `Versions` tab is only useful when the target bucket has
+    S3 versioning enabled.
 
 ## Related pages
 

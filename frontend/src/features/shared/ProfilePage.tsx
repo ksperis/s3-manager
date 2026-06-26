@@ -38,7 +38,7 @@ import {
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
-  resolveAvailableWorkspacesWithFlags,
+  resolveAvailableWorkspaces,
 } from "../../utils/workspaces";
 import {
   readSelectorTagsPreference,
@@ -238,7 +238,7 @@ export default function ProfilePage({
     Boolean(showCreateConnectionModal || editingConnectionId != null)
   );
   const availableWorkspaces = useMemo(
-    () => resolveAvailableWorkspacesWithFlags(storedUser, generalSettings),
+    () => resolveAvailableWorkspaces(storedUser, generalSettings),
     [generalSettings, storedUser]
   );
   const [preferredWorkspace, setPreferredWorkspace] = useState<WorkspaceId | null>(() => readStoredWorkspaceId());

@@ -19,7 +19,7 @@ Use this page when you manage storage access, bucket configuration, or operation
 ## A good first workflow
 
 1. Open **Admin** and confirm endpoint health.
-2. Confirm that the target UI user, account, and feature flags are configured.
+2. Confirm that the target UI user, account link, entitlement, and operational feature settings are configured.
 3. Open **Manager** and select the account context that will execute the action.
 4. Create or inspect a bucket, then validate object-level access in **Browser**.
 5. Review audit and usage pages before handing the workflow to end users.
@@ -30,7 +30,7 @@ You can explain which workspace owns the task, which identity executes the actio
 
 ## If something is unavailable
 
-Check [feature availability](feature-availability.md) before changing permissions. A hidden action may be caused by a disabled feature flag, missing Manager tool access, endpoint capability, or storage-side denial.
+Check [feature availability](feature-availability.md) before changing permissions. A hidden action may be caused by a disabled operational feature, missing Manager tool access, endpoint capability, or storage-side denial.
 
 ## Related pages
 

@@ -27,12 +27,12 @@ Use this page when your main goal is object access, limited bucket actions, or d
 
 You can complete daily storage tasks without navigating admin-only areas.
 
-## Limits / feature flags
+## Limits / access
 
 !!! note
     Access depends on role, account links, connection permissions, explicit
-    Portal account roles, and flags like `browser_root_enabled`,
-    `manager_enabled`, and `portal_enabled`.
+    Portal account roles, context availability, endpoint capabilities, and
+    IAM/S3 permissions.
 
 ## Related pages
 

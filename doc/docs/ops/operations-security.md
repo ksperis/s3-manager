@@ -7,7 +7,7 @@
 - Keep `CORS_ORIGINS` explicit and enable secure refresh cookies outside local development.
 - Expose internal scheduler/API automation paths only on trusted networks.
 - Store LDAP bind passwords, SMTP password, storage credentials, and registry tokens in a secret manager.
-- Enable only the workspaces and feature flags that are ready for users.
+- Grant only the workspace roles, entitlements, account links, and operational features that are ready for users.
 - Configure central logs and retain audit events for user-impacting actions.
 - Run the documented CI or local security scans before publishing images.
 
