@@ -21,6 +21,17 @@ Collect backend logs centrally and include:
 - Stale metrics/billing/quota history: scheduler or token misconfiguration.
 - Missing quota alert emails: SMTP configuration/user opt-in/global watch mismatch.
 
+## From user report to operator check
+
+| User report includes | Operator check |
+|---|---|
+| Workspace, page, and hidden action | Feature flag, role, account link, Manager tool access, and endpoint capability. |
+| `AccessDenied` with bucket/key/context | Storage-side IAM/S3 policy for the execution identity and target scope. |
+| Missing or stale metric card | Scheduler/CronJob status, `INTERNAL_CRON_TOKEN`, collection logs, and latest stored snapshot. |
+| Failed upload, download, purge, migration, or bulk apply | Backend logs for the route, audit trail for the action, and upstream S3/RGW error. |
+| Endpoint status warning | Healthcheck job status, endpoint URL, TLS verification, and recent incidents. |
+| Missing quota email | Quota monitor job, SMTP settings, user opt-in, and notification threshold. |
+
 ## Related pages
 
 - [Operations: healthchecks](operations-healthchecks.md)

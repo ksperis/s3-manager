@@ -12,6 +12,15 @@ S3_MANAGER_TAG=latest docker compose up
 
 `latest` resolves to the latest stable release published from a Git tag.
 
+## Which image tag should I use?
+
+| Use case | Tag |
+|---|---|
+| Quick stable validation | `latest` |
+| Reproducible validation | a plain semver tag such as `0.2.0` |
+| Internal rolling lab | `dev` from the internal GitLab registry |
+| Debugging a specific internal build | `dev-<short-sha>` from the internal GitLab registry |
+
 ## Build from source
 
 From repository root:
@@ -63,9 +72,20 @@ or StartTLS for non-lab deployments. `TLS_VERIFY=false`,
 `ALLOW_INSECURE=true`, and `ALLOW_EMAIL_LINKING=true` emit startup security
 warnings.
 
+## After deploy checklist
+
+1. Open the frontend and sign in.
+2. Set strong JWT, credential encryption, scheduler, and admin secrets in `.env`.
+3. Configure the first storage endpoint from **Admin > Storage Backends**.
+4. Create or import the first account or connection.
+5. Run or wait for the first endpoint healthcheck.
+6. Verify the Browser and Portal feature flags match the intended user rollout.
+7. Open [User troubleshooting](../user/troubleshooting.md) and [Operations: observability](operations-observability.md) so support teams know what to capture.
+
 ## Related pages
 
 - [Configuration](configuration.md)
 - [Operations: healthchecks](operations-healthchecks.md)
 - [Operations: billing](operations-billing.md)
 - [Operations: quota monitoring and history](operations-quota-monitoring.md)
+- [Operations: security](operations-security.md)

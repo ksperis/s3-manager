@@ -63,6 +63,16 @@ Tag conventions:
 - stable minor series alias: `0.2` for the latest `0.2.x` release
 - Git release tag: `v0.2.0`
 
+## Which image tag should I use?
+
+| Use case | Tag |
+|---|---|
+| Stable production-like deployment | plain semver such as `0.2.0` |
+| Track the latest stable release | `latest` |
+| Stay on the latest patch of a minor line | minor alias such as `0.2` |
+| Internal lab validation | `dev` from the GitLab Container Registry |
+| Reproduce one internal build | `dev-<short-sha>` from the GitLab Container Registry |
+
 Stable/public examples:
 
 ```bash
@@ -98,6 +108,17 @@ helm upgrade --install s3-manager helm/s3-manager \
   --set image.frontend.repository=<gitlab-registry>/<project>/frontend \
   --set image.frontend.tag=dev
 ```
+
+## After deploy checklist
+
+1. Confirm backend, frontend, and scheduler pods are running.
+2. Confirm secrets are injected from Kubernetes Secrets or an external secret manager.
+3. Open the frontend, sign in, and configure the first storage endpoint.
+4. Create or import the first account or connection.
+5. Verify the healthcheck CronJob runs and endpoint status updates.
+6. Verify billing, quota monitoring, and usage-history CronJobs are enabled or intentionally disabled.
+7. Check Browser and Portal feature flags before giving access to users.
+8. Review [Operations: security](operations-security.md) and [Operations: observability](operations-observability.md) before publishing the URL broadly.
 
 ## Related pages
 

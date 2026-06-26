@@ -1,5 +1,16 @@
 # Operations: Security
 
+## Production hardening checklist
+
+- Use OIDC or LDAP over verified TLS for real users.
+- Set strong JWT, refresh-cookie, credential-encryption, and scheduler secrets.
+- Keep `CORS_ORIGINS` explicit and enable secure refresh cookies outside local development.
+- Expose internal scheduler/API automation paths only on trusted networks.
+- Store LDAP bind passwords, SMTP password, storage credentials, and registry tokens in a secret manager.
+- Enable only the workspaces and feature flags that are ready for users.
+- Configure central logs and retain audit events for user-impacting actions.
+- Run the documented CI or local security scans before publishing images.
+
 ## Authentication and access
 
 - Prefer enterprise OIDC.
@@ -90,5 +101,6 @@ Secret detection is managed by the GitLab analyzer template in CI. To validate i
 
 ## Related pages
 
+- [Configuration](configuration.md)
 - [Operations: observability](operations-observability.md)
 - [Developer: principles](../developer/principles.md)

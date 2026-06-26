@@ -2,6 +2,18 @@
 
 Configuration is split between backend environment variables and UI settings.
 
+## Configuration checklist
+
+| Priority | Configure | Why |
+|---|---|---|
+| Required | `DATABASE_URL`, JWT secrets, credential encryption key, `CORS_ORIGINS`, frontend API routing | The app must persist data, protect sessions and stored credentials, and accept requests only from the intended UI origin. |
+| Required | `INTERNAL_CRON_TOKEN` when scheduler or CronJobs are enabled | Internal automation endpoints must not be callable without the shared token. |
+| Recommended | OIDC or LDAP provider settings | Enterprise identity is safer and easier to operate than local-only users. |
+| Recommended | Feature flags for Manager, Portal, Browser, Ceph Admin, Storage Ops, billing, endpoint status, usage history, and quota alerts | Users should see only the surfaces that are intentionally launched. |
+| Recommended | Healthcheck, billing, quota, and usage-history schedules and retention | Operational data should be fresh enough to support troubleshooting and capacity decisions. |
+| Recommended | SMTP settings when quota alerts are enabled | Quota alerts need a deliverable notification path. |
+| Optional | Branding color and login logo | Useful for tenant or lab identity, but not required for safe operation. |
+
 ## Backend runtime settings
 
 Primary source of truth: `backend/app/core/config.py`.
@@ -66,6 +78,17 @@ by backend orchestration with account credentials.
 
 - `VITE_API_URL` for API base URL in frontend build/runtime.
 - In container deployments, route `/api` to backend via reverse proxy/ingress.
+
+## From user error to configuration area
+
+| User-facing symptom | Check here first |
+|---|---|
+| Login fails for LDAP/OIDC users | Auth provider variables, TLS settings, and startup warnings. |
+| Menu or workspace is missing | App settings feature flags, user role, account links, and entitlements. |
+| Browser or Portal files do not open | Browser sub-flags, selected context access, and endpoint capability. |
+| `AccessDenied` during an S3 action | IAM/S3 policy and selected execution identity before changing UI flags. |
+| Metrics, billing, quota, or history are stale | Scheduler/CronJob settings, `INTERNAL_CRON_TOKEN`, retention, and endpoint capabilities. |
+| Quota emails do not arrive | Quota notification policy, SMTP non-secret fields, `SMTP_PASSWORD`, and user opt-in. |
 
 ## Branding
 
