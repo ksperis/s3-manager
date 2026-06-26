@@ -1,15 +1,17 @@
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, waitFor } from "@testing-library/react";
+import { useEffect, type ReactNode } from "react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS } from "../../components/topbarControlWidths";
-import BrowserLayout from "./BrowserLayout";
+import type { SidebarBodyRenderArgs } from "../../components/Sidebar";
+import BrowserLayout, { useBrowserSidebarSlot } from "./BrowserLayout";
 
 const useBrowserContextMock = vi.fn();
 let capturedLayoutProps: {
   headerTitle?: string;
   hideSidebar?: boolean;
+  renderSidebarBody?: (args: SidebarBodyRenderArgs) => ReactNode;
   topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
 } = {};
 let capturedSelectorProps: {
@@ -33,6 +35,7 @@ vi.mock("../../components/Layout", () => ({
   default: (props: {
     headerTitle?: string;
     hideSidebar?: boolean;
+    renderSidebarBody?: (args: SidebarBodyRenderArgs) => ReactNode;
     topbarControlDescriptors?: Array<{ id: string; renderControl: (mode: "icon" | "icon_label") => ReactNode }>;
     children?: ReactNode;
   }) => {
@@ -42,6 +45,11 @@ vi.mock("../../components/Layout", () => ({
         {props.topbarControlDescriptors?.map((descriptor) => (
           <div key={descriptor.id}>{descriptor.renderControl("icon_label")}</div>
         ))}
+        {props.renderSidebarBody?.({
+          compact: false,
+          variant: "desktop",
+          closeMobile: vi.fn(),
+        })}
         {props.children}
       </div>
     );
@@ -79,6 +87,19 @@ function buildBrowserContext(overrides?: Record<string, unknown>) {
   };
 }
 
+function BrowserSidebarSlotConsumer() {
+  const { setSidebarBody } = useBrowserSidebarSlot();
+  useEffect(() => {
+    setSidebarBody(({ compact }) => (
+      <div>{compact ? "Compact browser sidebar" : "Browser sidebar body"}</div>
+    ));
+    return () => {
+      setSidebarBody(null);
+    };
+  }, [setSidebarBody]);
+  return <div>Browser page content</div>;
+}
+
 describe("BrowserLayout", () => {
   beforeEach(() => {
     capturedLayoutProps = {};
@@ -86,17 +107,25 @@ describe("BrowserLayout", () => {
     useBrowserContextMock.mockReset();
   });
 
-  it("keeps Browser on the shared topbar shell without a sidebar", () => {
+  it("keeps Browser on the shared topbar shell with a custom sidebar slot", async () => {
     useBrowserContextMock.mockReturnValue(buildBrowserContext());
 
     render(
       <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserLayout />
+        <Routes>
+          <Route path="/browser" element={<BrowserLayout />}>
+            <Route index element={<BrowserSidebarSlotConsumer />} />
+          </Route>
+        </Routes>
       </MemoryRouter>
     );
 
     expect(capturedLayoutProps.headerTitle).toBe("Browser");
-    expect(capturedLayoutProps.hideSidebar).toBe(true);
+    await waitFor(() => {
+      expect(capturedLayoutProps.hideSidebar).toBe(false);
+    });
+    expect(capturedLayoutProps.renderSidebarBody).toBeDefined();
+    expect(screen.getByText("Browser sidebar body")).toBeInTheDocument();
     expect(capturedLayoutProps.topbarControlDescriptors?.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(screen.getByRole("button", { name: "Browser account selector" })).toBeInTheDocument();
     expect(capturedSelectorProps).toEqual(

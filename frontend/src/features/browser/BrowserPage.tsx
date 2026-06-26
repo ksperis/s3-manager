@@ -111,6 +111,10 @@ import {
   abortMultipartUpload,
 } from "../../api/browser";
 import { useBrowserContext } from "./BrowserContext";
+import {
+  useBrowserSidebarSlot,
+  type BrowserSidebarBodyRenderer,
+} from "./BrowserLayout";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserFoldersPanel from "./BrowserFoldersPanel";
 import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
@@ -877,6 +881,7 @@ export default function BrowserPage({
   transferReporter,
 }: BrowserPageProps = {}) {
   const browserContext = useBrowserContext();
+  const { setSidebarBody } = useBrowserSidebarSlot();
   const selectedContext = browserContext.selectedContext;
   const workspaceSurface =
     workspaceSurfaceOverride ??
@@ -936,8 +941,6 @@ export default function BrowserPage({
   const [bucketAccessByName, setBucketAccessByName] = useState<
     Record<string, BucketAccessEntry>
   >({});
-  const [workspaceSidebarCollapsed, setWorkspaceSidebarCollapsed] =
-    useState(false);
   const [usageSummary, setUsageSummary] =
     useState<BrowserUsageSummary | null>(null);
   const [usageSummaryLoading, setUsageSummaryLoading] = useState(false);
@@ -6266,7 +6269,7 @@ export default function BrowserPage({
     setAbortingMultipartUploadIds(new Set());
   }, [bucketName, hasS3AccountContext]);
 
-  const openCreateBucketDialog = () => {
+  const openCreateBucketDialog = useCallback(() => {
     if (!bucketManagementEnabled) return;
     setShowBucketMenu(false);
     setBucketFilter("");
@@ -6275,7 +6278,79 @@ export default function BrowserPage({
     setCreateBucketInitialSignature(stableSignature({ createBucketNameValue: "", createBucketVersioning: false }));
     setCreateBucketError(null);
     setShowCreateBucketModal(true);
-  };
+  }, [bucketManagementEnabled]);
+
+  const renderWorkspaceSidebarBody = useCallback<BrowserSidebarBodyRenderer>(
+    ({ compact, variant, closeMobile }) => (
+      <BrowserWorkspaceSidebar
+        compact={compact}
+        variant={variant}
+        closeMobile={closeMobile}
+        isPortalContext={isPortalBrowserSurface}
+        rows={workspaceSidebarRows}
+        activeBucketName={bucketName}
+        bucketFilter={bucketFilter}
+        loadingBuckets={loadingBuckets}
+        bucketError={bucketError}
+        bucketManagementEnabled={bucketManagementEnabled}
+        canLoadMore={canLoadMoreBucketResults}
+        bucketMenuLoadingMore={bucketMenuLoadingMore}
+        bucketMenuTotal={bucketMenuTotal}
+        bucketTotalCount={bucketTotalCount}
+        usageSummary={usageSummary}
+        usageLoading={usageSummaryLoading}
+        usageError={usageSummaryError}
+        panelViewportRef={
+          variant === "desktop" ? bucketPanelViewportRef : undefined
+        }
+        loadMoreSentinelRef={
+          variant === "desktop" ? bucketPanelLoadMoreSentinelRef : undefined
+        }
+        onBucketFilterChange={setBucketFilter}
+        onRetryBuckets={() => void refreshBucketList()}
+        onCreateBucket={openCreateBucketDialog}
+        onSelectBucket={handleBucketChange}
+        onLoadMore={handleBucketMenuLoadMore}
+        onOpenUsageMetrics={
+          isPortalBrowserSurface ? handleOpenUsageMetrics : undefined
+        }
+      />
+    ),
+    [
+      bucketError,
+      bucketFilter,
+      bucketManagementEnabled,
+      bucketMenuLoadingMore,
+      bucketMenuTotal,
+      bucketName,
+      bucketPanelLoadMoreSentinelRef,
+      bucketPanelViewportRef,
+      bucketTotalCount,
+      canLoadMoreBucketResults,
+      handleBucketChange,
+      handleBucketMenuLoadMore,
+      handleOpenUsageMetrics,
+      isPortalBrowserSurface,
+      loadingBuckets,
+      openCreateBucketDialog,
+      refreshBucketList,
+      usageSummary,
+      usageSummaryError,
+      usageSummaryLoading,
+      workspaceSidebarRows,
+    ],
+  );
+
+  useLayoutEffect(() => {
+    if (!showWorkspaceSidebar) {
+      setSidebarBody(null);
+      return;
+    }
+    setSidebarBody(renderWorkspaceSidebarBody);
+    return () => {
+      setSidebarBody(null);
+    };
+  }, [renderWorkspaceSidebarBody, setSidebarBody, showWorkspaceSidebar]);
 
   const closeCreateBucketDialog = () => {
     if (createBucketLoading) return;
@@ -12466,36 +12541,6 @@ export default function BrowserPage({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-        {showWorkspaceSidebar && (
-          <BrowserWorkspaceSidebar
-            collapsed={workspaceSidebarCollapsed}
-            isPortalContext={isPortalBrowserSurface}
-            rows={workspaceSidebarRows}
-            activeBucketName={bucketName}
-            bucketFilter={bucketFilter}
-            loadingBuckets={loadingBuckets}
-            bucketError={bucketError}
-            bucketManagementEnabled={bucketManagementEnabled}
-            canLoadMore={canLoadMoreBucketResults}
-            bucketMenuLoadingMore={bucketMenuLoadingMore}
-            bucketMenuTotal={bucketMenuTotal}
-            bucketTotalCount={bucketTotalCount}
-            usageSummary={usageSummary}
-            usageLoading={usageSummaryLoading}
-            usageError={usageSummaryError}
-            panelViewportRef={bucketPanelViewportRef}
-            loadMoreSentinelRef={bucketPanelLoadMoreSentinelRef}
-            onToggleCollapsed={() => setWorkspaceSidebarCollapsed((prev) => !prev)}
-            onBucketFilterChange={setBucketFilter}
-            onRetryBuckets={() => void refreshBucketList()}
-            onCreateBucket={openCreateBucketDialog}
-            onSelectBucket={handleBucketChange}
-            onLoadMore={handleBucketMenuLoadMore}
-            onOpenUsageMetrics={
-              isPortalBrowserSurface ? handleOpenUsageMetrics : undefined
-            }
-          />
-        )}
         <div className={browserShellClasses}>
         <div className={browserChromeShellClasses}>
           <div className="flex flex-col gap-2.5">

@@ -2,9 +2,10 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
+import type { SidebarBodyRenderArgs } from "../../components/Sidebar";
 import TopbarContextAccountSelector, {
   type ContextAccessMode,
 } from "../../components/TopbarContextAccountSelector";
@@ -19,6 +20,20 @@ import {
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
 } from "../../components/topbarControlWidths";
 
+export type BrowserSidebarBodyRenderer = (args: SidebarBodyRenderArgs) => ReactNode;
+
+type BrowserSidebarSlotContextValue = {
+  setSidebarBody: (renderer: BrowserSidebarBodyRenderer | null) => void;
+};
+
+const BrowserSidebarSlotContext = createContext<BrowserSidebarSlotContextValue>({
+  setSidebarBody: () => undefined,
+});
+
+export function useBrowserSidebarSlot(): BrowserSidebarSlotContextValue {
+  return useContext(BrowserSidebarSlotContext);
+}
+
 function BrowserShell() {
   const {
     contexts,
@@ -29,6 +44,7 @@ function BrowserShell() {
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
+  const [sidebarBody, setSidebarBodyState] = useState<BrowserSidebarBodyRenderer | null>(null);
   const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
   const showSelector = requiresContextSelection && visibleContexts.length > 1;
@@ -77,6 +93,13 @@ function BrowserShell() {
     if (value === selectedContextId) return;
     setSelectedContextId(value);
   };
+  const setSidebarBody = useCallback((renderer: BrowserSidebarBodyRenderer | null) => {
+    setSidebarBodyState(() => renderer);
+  }, []);
+  const sidebarSlotValue = useMemo(
+    () => ({ setSidebarBody }),
+    [setSidebarBody],
+  );
 
   const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
     if (mode === "icon") {
@@ -127,6 +150,7 @@ function BrowserShell() {
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
             widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
+            icon={<AccountControlIcon className="h-4 w-4" />}
             triggerMode={mode}
           />
         ) : (
@@ -136,17 +160,21 @@ function BrowserShell() {
   ];
 
   return (
-    <Layout
-      headerTitle="Browser"
-      hideHeader
-      hideSidebar
-      topbarControlDescriptors={topbarControlDescriptors}
-      mainClassName="pb-0"
-      disableMainScroll
-      fullHeight
-    >
-      <Outlet key={`${selectedContextId ?? "none"}`} />
-    </Layout>
+    <BrowserSidebarSlotContext.Provider value={sidebarSlotValue}>
+      <Layout
+        headerTitle="Browser"
+        sidebarTitle="Browser"
+        hideHeader
+        hideSidebar={!sidebarBody}
+        renderSidebarBody={sidebarBody ?? undefined}
+        topbarControlDescriptors={topbarControlDescriptors}
+        mainClassName="pb-0"
+        disableMainScroll
+        fullHeight
+      >
+        <Outlet key={`${selectedContextId ?? "none"}`} />
+      </Layout>
+    </BrowserSidebarSlotContext.Provider>
   );
 }
 

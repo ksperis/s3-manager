@@ -28,12 +28,19 @@ export type SidebarSection = {
   collapsible?: boolean;
 };
 
+export type SidebarBodyRenderArgs = {
+  compact: boolean;
+  variant: "desktop" | "mobile";
+  closeMobile: () => void;
+};
+
 type SidebarProps = {
   title?: string;
   sections?: SidebarSection[];
   links?: SidebarLink[];
   headerAction?: ReactNode;
   footer?: ReactNode;
+  renderSidebarBody?: (args: SidebarBodyRenderArgs) => ReactNode;
   variant?: "desktop" | "mobile";
   className?: string;
   onNavigate?: () => void;
@@ -51,6 +58,7 @@ export default function Sidebar({
   links = [],
   headerAction,
   footer,
+  renderSidebarBody,
   variant = "desktop",
   className,
   onNavigate,
@@ -147,6 +155,13 @@ export default function Sidebar({
           width: `${compact ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_DEFAULT_WIDTH}px`,
         }
       : undefined;
+  const customBody = renderSidebarBody
+    ? renderSidebarBody({
+        compact,
+        variant,
+        closeMobile: onNavigate ?? (() => undefined),
+      })
+    : null;
 
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
@@ -156,102 +171,108 @@ export default function Sidebar({
         </span>
         {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
       </div>
-      <nav
-        ref={navRef}
-        className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${compact ? "gap-1.5 px-2 py-3" : "gap-2 px-2.5 py-3"}`}
-        onScroll={handleNavScroll}
-        aria-label={`${title} navigation`}
-      >
-        {!compact && headerAction ? <div className="pb-1">{headerAction}</div> : null}
-        {effectiveSections.map((section, index) => {
-          const collapsible = isSectionCollapsible(section);
-          const isCollapsed = compact ? false : collapsedSections[section.label];
-          const showSeparator = index < effectiveSections.length - 1;
-          return (
-            <section
-              key={section.label}
-              className={`${showSeparator && !compact ? "border-b border-[color:var(--shell-border-soft)] pb-3" : ""} space-y-1.5`}
-            >
-              {compact ? (
-                <div className="mx-auto my-1 h-px w-5 rounded-full bg-[var(--shell-border)]" />
-              ) : collapsible ? (
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.label, collapsible)}
-                  className="shell-section-label flex h-5 w-full items-center justify-between rounded-md px-2 text-[10px] font-semibold uppercase transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+      {customBody ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{customBody}</div>
+      ) : (
+        <>
+          <nav
+            ref={navRef}
+            className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${compact ? "gap-1.5 px-2 py-3" : "gap-2 px-2.5 py-3"}`}
+            onScroll={handleNavScroll}
+            aria-label={`${title} navigation`}
+          >
+            {!compact && headerAction ? <div className="pb-1">{headerAction}</div> : null}
+            {effectiveSections.map((section, index) => {
+              const collapsible = isSectionCollapsible(section);
+              const isCollapsed = compact ? false : collapsedSections[section.label];
+              const showSeparator = index < effectiveSections.length - 1;
+              return (
+                <section
+                  key={section.label}
+                  className={`${showSeparator && !compact ? "border-b border-[color:var(--shell-border-soft)] pb-3" : ""} space-y-1.5`}
                 >
-                  <span>{section.label}</span>
-                  <SidebarChevronIcon className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
-                </button>
-              ) : (
-                <div className="shell-section-label px-2 text-[10px] font-semibold uppercase">
-                  {section.label}
-                </div>
-              )}
-              {!isCollapsed && (
-                <ul className="space-y-px">
-                  {section.links.map((link) => (
-                    <li key={link.to}>
-                      {link.disabled ? (
-                        <div
-                          className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
-                          aria-disabled="true"
-                          aria-label={compact ? link.label : undefined}
-                          title={link.disabledHint ?? DEFAULT_DISABLED_HINT}
-                        >
-                          <div className={`flex min-w-0 items-center ${compact ? "" : "gap-1.5"}`}>
-                            <span className={`shell-icon-muted shrink-0 ${iconClasses}`}>
-                              {link.icon ?? resolveSidebarLinkIcon(link)}
-                            </span>
-                            {!compact && <span className="truncate">{link.label}</span>}
-                          </div>
-                          {!compact && link.badge && (
-                            <span className={`${badgeClasses} ${inactiveBadgeClasses}`}>{link.badge}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <NavLink
-                          to={link.to}
-                          end={link.end}
-                          onClick={onNavigate}
-                          aria-label={compact ? link.label : undefined}
-                          title={compact ? link.label : undefined}
-                          className={({ isActive }) =>
-                            [baseLinkClasses, isActive ? activeLinkClasses : inactiveLinkClasses].join(" ")
-                          }
-                        >
-                          {({ isActive }) => (
-                            <>
+                  {compact ? (
+                    <div className="mx-auto my-1 h-px w-5 rounded-full bg-[var(--shell-border)]" />
+                  ) : collapsible ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(section.label, collapsible)}
+                      className="shell-section-label flex h-5 w-full items-center justify-between rounded-md px-2 text-[10px] font-semibold uppercase transition hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)]"
+                    >
+                      <span>{section.label}</span>
+                      <SidebarChevronIcon className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
+                    </button>
+                  ) : (
+                    <div className="shell-section-label px-2 text-[10px] font-semibold uppercase">
+                      {section.label}
+                    </div>
+                  )}
+                  {!isCollapsed && (
+                    <ul className="space-y-px">
+                      {section.links.map((link) => (
+                        <li key={link.to}>
+                          {link.disabled ? (
+                            <div
+                              className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
+                              aria-disabled="true"
+                              aria-label={compact ? link.label : undefined}
+                              title={link.disabledHint ?? DEFAULT_DISABLED_HINT}
+                            >
                               <div className={`flex min-w-0 items-center ${compact ? "" : "gap-1.5"}`}>
-                                <span
-                                  className={`shrink-0 ${
-                                    isActive
-                                      ? "text-[var(--shell-selected-text)]"
-                                      : "shell-icon-muted group-hover:text-[var(--shell-icon)]"
-                                  } ${iconClasses}`}
-                                >
+                                <span className={`shell-icon-muted shrink-0 ${iconClasses}`}>
                                   {link.icon ?? resolveSidebarLinkIcon(link)}
                                 </span>
                                 {!compact && <span className="truncate">{link.label}</span>}
                               </div>
                               {!compact && link.badge && (
-                                <span className={`${badgeClasses} ${isActive ? activeBadgeClasses : inactiveBadgeClasses}`}>
-                                  {link.badge}
-                                </span>
+                                <span className={`${badgeClasses} ${inactiveBadgeClasses}`}>{link.badge}</span>
                               )}
-                            </>
+                            </div>
+                          ) : (
+                            <NavLink
+                              to={link.to}
+                              end={link.end}
+                              onClick={onNavigate}
+                              aria-label={compact ? link.label : undefined}
+                              title={compact ? link.label : undefined}
+                              className={({ isActive }) =>
+                                [baseLinkClasses, isActive ? activeLinkClasses : inactiveLinkClasses].join(" ")
+                              }
+                            >
+                              {({ isActive }) => (
+                                <>
+                                  <div className={`flex min-w-0 items-center ${compact ? "" : "gap-1.5"}`}>
+                                    <span
+                                      className={`shrink-0 ${
+                                        isActive
+                                          ? "text-[var(--shell-selected-text)]"
+                                          : "shell-icon-muted group-hover:text-[var(--shell-icon)]"
+                                      } ${iconClasses}`}
+                                    >
+                                      {link.icon ?? resolveSidebarLinkIcon(link)}
+                                    </span>
+                                    {!compact && <span className="truncate">{link.label}</span>}
+                                  </div>
+                                  {!compact && link.badge && (
+                                    <span className={`${badgeClasses} ${isActive ? activeBadgeClasses : inactiveBadgeClasses}`}>
+                                      {link.badge}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </NavLink>
                           )}
-                        </NavLink>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          );
-        })}
-      </nav>
-      {footer ? <div className={`shrink-0 overflow-hidden border-t border-[color:var(--shell-border)] text-[var(--shell-text)] ${compact ? "p-2" : "p-3"}`}>{footer}</div> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </nav>
+          {footer ? <div className={`shrink-0 overflow-hidden border-t border-[color:var(--shell-border)] text-[var(--shell-text)] ${compact ? "p-2" : "p-3"}`}>{footer}</div> : null}
+        </>
+      )}
       {variant === "desktop" && onCollapseToggle ? (
         <div className={`shrink-0 border-t border-[color:var(--shell-border)] ${compact ? "p-2" : "p-2.5"}`}>
           <button

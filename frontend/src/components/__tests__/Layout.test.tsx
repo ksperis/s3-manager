@@ -134,6 +134,58 @@ describe("Layout", () => {
     expect(within(desktopSidebar).getByText("Quick action")).toBeInTheDocument();
   });
 
+  it("uses shared sidebar chrome for a custom workspace body on desktop and mobile", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/browser"]}>
+        <Routes>
+          <Route
+            path="/browser"
+            element={
+              <Layout
+                headerTitle="Browser"
+                sidebarTitle="Browser"
+                renderSidebarBody={({ compact, variant, closeMobile }) => (
+                  <button type="button" onClick={closeMobile}>
+                    {variant} {compact ? "compact" : "expanded"} browser body
+                  </button>
+                )}
+              >
+                <div>Browser content</div>
+              </Layout>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const desktopSidebar = getDesktopSidebar(container);
+    expect(within(desktopSidebar).getByText("S3 Manager")).toBeInTheDocument();
+    expect(
+      within(desktopSidebar).getByRole("button", {
+        name: "desktop expanded browser body",
+      }),
+    ).toBeInTheDocument();
+    expect(within(desktopSidebar).queryByRole("navigation")).not.toBeInTheDocument();
+
+    fireEvent.click(within(desktopSidebar).getByRole("button", { name: "Collapse sidebar" }));
+    expect(
+      within(desktopSidebar).getByRole("button", {
+        name: "desktop compact browser body",
+      }),
+    ).toBeInTheDocument();
+
+    const mobileSidebar = getMobileSidebar(container);
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(mobileSidebar).toHaveClass("translate-x-0");
+    expect(within(mobileSidebar).getByText("S3 Manager")).toBeInTheDocument();
+    fireEvent.click(
+      within(mobileSidebar).getByRole("button", {
+        name: "mobile expanded browser body",
+      }),
+    );
+    expect(mobileSidebar).toHaveClass("-translate-x-full");
+  });
+
   it("keeps the mobile drawer behavior unchanged and without a resize handle", () => {
     const { container } = renderLayout();
     const mobileSidebar = getMobileSidebar(container);

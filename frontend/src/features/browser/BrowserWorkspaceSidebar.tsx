@@ -3,12 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { RefObject } from "react";
-import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "../../components/sidebarSizing";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
 } from "../../components/toolbarControlClasses";
-import { cx, uiCardMutedClass } from "../../components/ui/styles";
+import { cx } from "../../components/ui/styles";
 import type { BrowserBucket, BrowserUsageSummary } from "../../api/browser";
 import { formatBytes } from "../../utils/format";
 import {
@@ -26,7 +25,8 @@ export type BrowserWorkspaceSidebarBucketRow = {
 };
 
 type BrowserWorkspaceSidebarProps = {
-  collapsed: boolean;
+  compact: boolean;
+  variant: "desktop" | "mobile";
   isPortalContext: boolean;
   rows: BrowserWorkspaceSidebarBucketRow[];
   activeBucketName: string;
@@ -41,9 +41,9 @@ type BrowserWorkspaceSidebarProps = {
   usageSummary: BrowserUsageSummary | null;
   usageLoading: boolean;
   usageError: string | null;
-  panelViewportRef: RefObject<HTMLDivElement | null>;
-  loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
-  onToggleCollapsed: () => void;
+  panelViewportRef?: RefObject<HTMLDivElement | null>;
+  loadMoreSentinelRef?: RefObject<HTMLDivElement | null>;
+  closeMobile: () => void;
   onBucketFilterChange: (value: string) => void;
   onRetryBuckets: () => void;
   onCreateBucket: () => void;
@@ -87,7 +87,8 @@ function formatUsagePercent(summary: BrowserUsageSummary): number | null {
 }
 
 export default function BrowserWorkspaceSidebar({
-  collapsed,
+  compact,
+  variant,
   isPortalContext,
   rows,
   activeBucketName,
@@ -104,7 +105,7 @@ export default function BrowserWorkspaceSidebar({
   usageError,
   panelViewportRef,
   loadMoreSentinelRef,
-  onToggleCollapsed,
+  closeMobile,
   onBucketFilterChange,
   onRetryBuckets,
   onCreateBucket,
@@ -117,8 +118,12 @@ export default function BrowserWorkspaceSidebar({
   const hasUsageGauge =
     usageSummary?.available === true && usageSummary.used_bytes != null;
   const usagePercent = usageSummary ? formatUsagePercent(usageSummary) : null;
-  const usageLabel = usageSummary?.label || (isPortalContext ? "Storage Spaces" : "Account");
-  const width = collapsed ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_DEFAULT_WIDTH;
+  const usageUsedLabel =
+    usageSummary?.used_bytes == null ? null : formatBytes(usageSummary.used_bytes);
+  const usageQuotaLabel =
+    usageSummary?.quota_max_size_bytes != null && usageSummary.quota_max_size_bytes > 0
+      ? formatBytes(usageSummary.quota_max_size_bytes)
+      : null;
   const totalLabel = bucketTotalCount === 1 ? "1 item" : `${bucketTotalCount} items`;
   const filteredLabel =
     bucketFilter.trim().length > 0 && bucketMenuTotal !== bucketTotalCount
@@ -126,36 +131,24 @@ export default function BrowserWorkspaceSidebar({
       : totalLabel;
 
   return (
-    <aside
-      className="shell-sidebar relative flex h-full shrink-0 flex-col overflow-hidden rounded-lg border border-[color:var(--shell-border)] transition-[width] duration-200 ease-out"
-      style={{ width }}
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
       aria-label={title}
       data-testid="browser-workspace-sidebar"
     >
-      <div className={`flex h-12 shrink-0 items-center border-b border-[color:var(--shell-border-soft)] ${collapsed ? "justify-center px-2" : "gap-2 px-3"}`}>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
-          <BucketCollectionIcon className="h-4 w-4" />
-        </span>
-        {!collapsed && (
+      {!compact && (
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--shell-border-soft)] px-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <BucketCollectionIcon className="h-4 w-4" />
+          </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold text-[var(--shell-text)]">{title}</p>
             <p className="truncate text-[11px] font-medium text-[var(--shell-muted-text)]">{filteredLabel}</p>
           </div>
-        )}
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--shell-muted-text)] transition hover:bg-[var(--shell-hover-bg)] hover:text-[var(--shell-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          onClick={onToggleCollapsed}
-          aria-label={collapsed ? "Expand workspace sidebar" : "Collapse workspace sidebar"}
-          title={collapsed ? "Expand" : "Collapse"}
-        >
-          <span aria-hidden="true" className="text-sm font-semibold">
-            {collapsed ? ">" : "<"}
-          </span>
-        </button>
-      </div>
+        </div>
+      )}
 
-      {!collapsed && (
+      {!compact && (
         <div className="shrink-0 space-y-2 border-b border-[color:var(--shell-border-soft)] px-3 py-3">
           <label className="block">
             <span className="sr-only">{searchPlaceholder}</span>
@@ -174,7 +167,7 @@ export default function BrowserWorkspaceSidebar({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className={toolbarCompactButtonClasses}
+              className={cx(toolbarCompactButtonClasses, "inline-flex items-center gap-1.5")}
               onClick={onRetryBuckets}
               disabled={loadingBuckets}
               aria-label={`Refresh ${title.toLowerCase()}`}
@@ -197,7 +190,7 @@ export default function BrowserWorkspaceSidebar({
 
       <div
         ref={panelViewportRef}
-        className={`shell-sidebar-scroll min-h-0 flex-1 overflow-y-auto ${collapsed ? "px-2 py-2" : "px-2.5 py-3"}`}
+        className={`shell-sidebar-scroll min-h-0 flex-1 overflow-y-auto ${compact ? "px-2 py-2" : "px-2.5 py-3"}`}
       >
         <div className="space-y-1.5">
           {rows.map(({ bucket, access }) => {
@@ -209,7 +202,7 @@ export default function BrowserWorkspaceSidebar({
                 : isPortalContext
                   ? displayName
                   : bucket.name;
-            const rowClasses = collapsed
+            const rowClasses = compact
               ? `relative flex h-9 w-full items-center justify-center rounded-md transition ${
                   isActive ? "shell-sidebar-item-active" : "shell-sidebar-item"
                 }`
@@ -223,13 +216,18 @@ export default function BrowserWorkspaceSidebar({
                 key={bucket.name}
                 type="button"
                 className={rowClasses}
-                onClick={() => onSelectBucket(bucket.name)}
+                onClick={() => {
+                  onSelectBucket(bucket.name);
+                  if (variant === "mobile") {
+                    closeMobile();
+                  }
+                }}
                 title={rowTitle}
                 aria-current={isActive ? "page" : undefined}
                 data-bucket-panel-name={bucket.name}
               >
                 <BucketIcon className="h-4 w-4 shrink-0" />
-                {!collapsed && (
+                {!compact && (
                   <>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{displayName}</span>
@@ -255,15 +253,15 @@ export default function BrowserWorkspaceSidebar({
               </button>
             );
           })}
-          {loadingBuckets && rows.length === 0 && !collapsed && (
+          {loadingBuckets && rows.length === 0 && !compact && (
             <p className="px-2 py-2 ui-caption text-[var(--shell-muted-text)]">Loading...</p>
           )}
-          {!loadingBuckets && rows.length === 0 && !collapsed && (
+          {!loadingBuckets && rows.length === 0 && !compact && (
             <p className="px-2 py-2 ui-caption text-[var(--shell-muted-text)]">
               {bucketFilter.trim() ? "No matching item." : `No ${title.toLowerCase()} available.`}
             </p>
           )}
-          {canLoadMore && !collapsed && (
+          {canLoadMore && !compact && (
             <button
               type="button"
               className={cx(toolbarCompactButtonClasses, "mx-1 mt-2 w-[calc(100%-0.5rem)] justify-center")}
@@ -273,61 +271,63 @@ export default function BrowserWorkspaceSidebar({
               {bucketMenuLoadingMore ? "Loading..." : "Load more"}
             </button>
           )}
-          <div ref={loadMoreSentinelRef} aria-hidden="true" className="h-1" />
+          {loadMoreSentinelRef && <div ref={loadMoreSentinelRef} aria-hidden="true" className="h-1" />}
         </div>
       </div>
 
-      <div className={`sticky bottom-0 shrink-0 border-t border-[color:var(--shell-border-soft)] bg-[var(--shell-bg)] ${collapsed ? "px-2 py-2" : "space-y-2 px-3 py-3"}`}>
+      <div className={`sticky bottom-0 shrink-0 border-t border-[color:var(--shell-border-soft)] bg-[var(--shell-bg)] ${compact ? "px-2 py-2" : "space-y-2 px-3 py-3"}`}>
         {onOpenUsageMetrics && (
           <button
             type="button"
-            className={collapsed ? "flex h-9 w-full items-center justify-center rounded-md shell-sidebar-item" : cx(toolbarCompactButtonClasses, "w-full justify-center")}
+            className={
+              compact
+                ? "flex h-9 w-full items-center justify-center rounded-md shell-sidebar-item"
+                : cx(toolbarCompactButtonClasses, "inline-flex w-full items-center justify-center gap-2")
+            }
             onClick={onOpenUsageMetrics}
             aria-label="Usage & Metrics"
             title="Usage & Metrics"
           >
             <SlidersIcon className="h-3.5 w-3.5" />
-            {!collapsed && <span>Usage & Metrics</span>}
+            {!compact && <span>Usage & Metrics</span>}
           </button>
         )}
-        {!collapsed && usageLoading && (
+        {!compact && usageLoading && (
           <p className="ui-caption text-[var(--shell-muted-text)]">Loading usage...</p>
         )}
-        {!collapsed && usageError && (
+        {!compact && usageError && (
           <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">{usageError}</p>
         )}
-        {!collapsed && hasUsageGauge && usageSummary && (
-          <div className={cx(uiCardMutedClass, "rounded-lg p-3 shadow-none")}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{usageLabel}</p>
-                <p className="mt-1 truncate ui-body font-semibold text-slate-900 dark:text-slate-100">
-                  {formatBytes(usageSummary.used_bytes ?? 0)}
-                </p>
-              </div>
-              {usageSummary.object_count != null && (
-                <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  {usageSummary.object_count.toLocaleString()} objects
-                </span>
-              )}
-            </div>
+        {!compact && hasUsageGauge && usageSummary && (
+          <div className="space-y-2" aria-label="Usage summary">
             {usagePercent != null && (
-              <div className="mt-3">
-                <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${usagePercent}%` }}
-                  />
-                </div>
-                <div className="mt-1 flex items-center justify-between gap-2 ui-caption text-slate-500 dark:text-slate-400">
-                  <span>{usagePercent.toFixed(0)}%</span>
-                  <span>{formatBytes(usageSummary.quota_max_size_bytes ?? 0)}</span>
-                </div>
+              <div
+                className="h-2 overflow-hidden rounded-full bg-slate-200 shadow-inner dark:bg-slate-800"
+                role="meter"
+                aria-label="Storage usage"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(usagePercent)}
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${usagePercent}%` }}
+                />
               </div>
             )}
+            <p className="truncate text-[13px] font-medium text-[var(--shell-text)]">
+              <span className="text-[var(--shell-muted-text)]">Usage: </span>
+              <span className="font-semibold">{usageUsedLabel}</span>
+              {usageQuotaLabel && (
+                <>
+                  <span className="text-[var(--shell-muted-text)]"> of </span>
+                  <span className="font-semibold">{usageQuotaLabel}</span>
+                </>
+              )}
+            </p>
           </div>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

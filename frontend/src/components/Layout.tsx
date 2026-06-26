@@ -6,7 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
-import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
+import Sidebar, { SidebarLink, SidebarSection, type SidebarBodyRenderArgs } from "./Sidebar";
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
@@ -29,6 +29,7 @@ type LayoutProps = {
   topbarAction?: ReactNode;
   sidebarAction?: ReactNode;
   sidebarFooter?: ReactNode;
+  renderSidebarBody?: (args: SidebarBodyRenderArgs) => ReactNode;
   hideSidebar?: boolean;
   mainClassName?: string;
   disableMainScroll?: boolean;
@@ -57,6 +58,7 @@ export default function Layout({
   topbarAction,
   sidebarAction,
   sidebarFooter,
+  renderSidebarBody,
   hideSidebar = false,
   mainClassName,
   disableMainScroll = false,
@@ -132,6 +134,7 @@ export default function Layout({
           links={navLinks}
           headerAction={sidebarAction}
           footer={sidebarFooter}
+          renderSidebarBody={renderSidebarBody}
           compact={desktopSidebarCompact}
           onCollapseToggle={handleDesktopSidebarCollapseToggle}
         />
@@ -182,6 +185,7 @@ export default function Layout({
                   links={navLinks}
                   headerAction={sidebarAction}
                   footer={sidebarFooter}
+                  renderSidebarBody={renderSidebarBody}
                   onNavigate={() => setMobileSidebarOpen(false)}
                 />
               </div>

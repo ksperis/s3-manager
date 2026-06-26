@@ -2,7 +2,15 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ExecutionContext } from "../api/executionContexts";
 import { formatAccountLabel } from "../features/shared/storageEndpointLabel";
 import UiTagBadgeList from "./UiTagBadgeList";
@@ -64,6 +72,7 @@ type TopbarContextAccountSelectorProps = {
   widthClassName?: string;
   searchThreshold?: number;
   openInPortal?: boolean;
+  icon?: ReactNode;
   triggerMode?: "icon" | "icon_label";
   showTriggerTags?: boolean;
 };
@@ -79,6 +88,7 @@ export default function TopbarContextAccountSelector({
   widthClassName = TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
   searchThreshold = 6,
   openInPortal = true,
+  icon,
   triggerMode = "icon_label",
   showTriggerTags = true,
 }: TopbarContextAccountSelectorProps) {
@@ -353,6 +363,7 @@ export default function TopbarContextAccountSelector({
         mode={triggerMode}
         label="Account"
         value={selectedLabel}
+        icon={icon}
         open={menuOpen}
         ariaLabel="Select context account"
         title={identityLabel ?? undefined}

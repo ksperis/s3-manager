@@ -151,6 +151,43 @@ describe("Sidebar", () => {
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps shared chrome and collapse controls around a custom body", () => {
+    const onCollapseToggle = vi.fn();
+    const onNavigate = vi.fn();
+    render(
+      <MemoryRouter>
+        <Sidebar
+          onCollapseToggle={onCollapseToggle}
+          onNavigate={onNavigate}
+          renderSidebarBody={({ compact, variant, closeMobile }) => (
+            <button type="button" onClick={closeMobile}>
+              {variant} {compact ? "compact" : "expanded"} browser body
+            </button>
+          )}
+          sections={[
+            {
+              label: "Overview",
+              links: [{ to: "/manager/metrics", label: "Metrics" }],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "desktop expanded browser body" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Metrics" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "desktop expanded browser body" }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(onCollapseToggle).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the brand header but keeps workspace selectors out of the sidebar", () => {
     render(
       <MemoryRouter>

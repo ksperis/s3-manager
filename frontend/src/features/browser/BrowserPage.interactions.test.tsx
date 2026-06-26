@@ -10,7 +10,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ComponentProps } from "react";
+import {
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
@@ -59,6 +64,19 @@ const getBucketLoggingMock = vi.fn();
 const getBucketWebsiteMock = vi.fn();
 const fetchMock = vi.fn();
 
+type TestBrowserSidebarRenderer = (args: {
+  compact: boolean;
+  variant: "desktop" | "mobile";
+  closeMobile: () => void;
+}) => ReactNode;
+
+const browserLayoutSlotMock = vi.hoisted(() => ({
+  setSidebarRendererForTest: null as
+    | ((renderer: TestBrowserSidebarRenderer | null) => void)
+    | null,
+  closeMobile: vi.fn(),
+}));
+
 vi.mock("react-router-dom", async () => {
   const actual =
     await vi.importActual<typeof import("react-router-dom")>(
@@ -69,6 +87,14 @@ vi.mock("react-router-dom", async () => {
     unstable_usePrompt: () => {},
   };
 });
+
+vi.mock("./BrowserLayout", () => ({
+  useBrowserSidebarSlot: () => ({
+    setSidebarBody: (renderer: TestBrowserSidebarRenderer | null) => {
+      browserLayoutSlotMock.setSidebarRendererForTest?.(renderer);
+    },
+  }),
+}));
 
 vi.mock("./BrowserContext", () => ({
   useBrowserContext: () => ({
@@ -156,19 +182,33 @@ vi.mock("../../api/buckets", async () => {
   };
 });
 
-function renderPage({
-  defaultShowInspector = false,
-  defaultShowFolders = false,
-  initialEntry = "/browser",
-  allowInspectorPanel = true,
-  allowFoldersPanel = true,
-  accountIdForApi,
-  workspaceSurface,
-  actionProfile,
-  lockedBucketName,
-  lockedBucketLabel,
-  onOpenObjectDetailsRoute,
-}: {
+function BrowserSidebarTestHost({ children }: { children: ReactNode }) {
+  const [renderer, setRenderer] =
+    useState<TestBrowserSidebarRenderer | null>(null);
+  browserLayoutSlotMock.setSidebarRendererForTest = (nextRenderer) => {
+    setRenderer(() => nextRenderer);
+  };
+  useEffect(
+    () => () => {
+      browserLayoutSlotMock.setSidebarRendererForTest = null;
+    },
+    [],
+  );
+  return (
+    <>
+      {renderer
+        ? renderer({
+            compact: false,
+            variant: "desktop",
+            closeMobile: browserLayoutSlotMock.closeMobile,
+          })
+        : null}
+      {children}
+    </>
+  );
+}
+
+type RenderPageOptions = {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
   initialEntry?: string;
@@ -180,23 +220,43 @@ function renderPage({
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
-} = {}) {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <BrowserPage
-        accountIdForApi={accountIdForApi}
-        defaultShowInspector={defaultShowInspector}
-        defaultShowFolders={defaultShowFolders}
-        allowInspectorPanel={allowInspectorPanel}
-        allowFoldersPanel={allowFoldersPanel}
-        workspaceSurface={workspaceSurface}
-        actionProfile={actionProfile}
-        lockedBucketName={lockedBucketName}
-        lockedBucketLabel={lockedBucketLabel}
-        onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
-      />
-    </MemoryRouter>,
+};
+
+function renderPageElement({
+  defaultShowInspector = false,
+  defaultShowFolders = false,
+  initialEntry = "/browser",
+  allowInspectorPanel = true,
+  allowFoldersPanel = true,
+  accountIdForApi,
+  workspaceSurface,
+  actionProfile,
+  lockedBucketName,
+  lockedBucketLabel,
+  onOpenObjectDetailsRoute,
+}: RenderPageOptions = {}) {
+  return (
+    <BrowserSidebarTestHost>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <BrowserPage
+          accountIdForApi={accountIdForApi}
+          defaultShowInspector={defaultShowInspector}
+          defaultShowFolders={defaultShowFolders}
+          allowInspectorPanel={allowInspectorPanel}
+          allowFoldersPanel={allowFoldersPanel}
+          workspaceSurface={workspaceSurface}
+          actionProfile={actionProfile}
+          lockedBucketName={lockedBucketName}
+          lockedBucketLabel={lockedBucketLabel}
+          onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
+        />
+      </MemoryRouter>
+    </BrowserSidebarTestHost>
   );
+}
+
+function renderPage(options: RenderPageOptions = {}) {
+  return render(renderPageElement(options));
 }
 
 function renderEmbeddedPage({
@@ -438,6 +498,7 @@ describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    browserLayoutSlotMock.setSidebarRendererForTest = null;
     createObjectUrlMock.mockReturnValue("blob:preview-url");
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
@@ -2329,6 +2390,29 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("renders account usage as a compact workspace sidebar gauge", async () => {
+    fetchBrowserUsageSummaryMock.mockResolvedValue({
+      available: true,
+      label: "Account",
+      used_bytes: 512 * 1024 * 1024,
+      object_count: 1234,
+      quota_max_size_bytes: 2 * 1024 * 1024 * 1024,
+      quota_max_objects: null,
+    });
+
+    renderPage();
+
+    const sidebar = await screen.findByTestId("browser-workspace-sidebar");
+    const meter = await within(sidebar).findByRole("meter", {
+      name: "Storage usage",
+    });
+    expect(meter).toHaveAttribute("aria-valuenow", "25");
+    expect(within(sidebar).getByText("Usage:")).toBeInTheDocument();
+    expect(within(sidebar).getByText("512 MB")).toBeInTheDocument();
+    expect(within(sidebar).getByText("2.0 GB")).toBeInTheDocument();
+    expect(within(sidebar).queryByText(/objects/i)).not.toBeInTheDocument();
+  });
+
   it("marks inaccessible buckets from the visible panel list and keeps them selectable", async () => {
     const user = userEvent.setup();
     searchBrowserBucketsMock.mockResolvedValue({
@@ -3521,11 +3605,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     const menu = await openContextMoreMenu(user);
@@ -3572,11 +3652,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -3718,11 +3794,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await user.dblClick(await findRowByLabel("docs"));
     await findRowByLabel("readme.txt");
@@ -4002,9 +4074,7 @@ describe("BrowserPage interactions", () => {
     await copyOrCutSelection(user, ["a.txt", "b.txt"], "Cut");
 
     view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" defaultShowInspector />
-      </MemoryRouter>,
+      renderPageElement({ accountIdForApi: "acc-2", defaultShowInspector: true }),
     );
 
     await user.dblClick(await findRowByLabel("docs"));
@@ -4091,11 +4161,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Cut");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -4132,11 +4198,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Cut");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -4167,11 +4229,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "docs", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);
@@ -4220,11 +4278,7 @@ describe("BrowserPage interactions", () => {
 
     await copyOrCutItem(user, "a.txt", "Copy");
 
-    view.rerender(
-      <MemoryRouter initialEntries={["/browser"]}>
-        <BrowserPage accountIdForApi="acc-2" />
-      </MemoryRouter>,
-    );
+    view.rerender(renderPageElement({ accountIdForApi: "acc-2" }));
 
     await findRowByLabel("a.txt");
     await pasteFromCurrentPath(user);

@@ -179,4 +179,23 @@ describe("TopbarContextAccountSelector", () => {
     expect(within(listbox).queryByText("team-a")).not.toBeInTheDocument();
     expect(within(listbox).queryByText("prod")).not.toBeInTheDocument();
   });
+
+  it("keeps the account icon visible in compact trigger mode", () => {
+    render(
+      <TopbarContextAccountSelector
+        contexts={[makeContext({ id: "acc-1", display_name: "Alpha" })]}
+        selectedContextId="acc-1"
+        onContextChange={() => undefined}
+        selectedLabel="Alpha"
+        identityLabel={null}
+        defaultEndpointId={null}
+        defaultEndpointName="Default"
+        triggerMode="icon"
+        icon={<svg data-testid="account-trigger-icon" aria-hidden="true" />}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Select context account" });
+    expect(within(trigger).getByTestId("account-trigger-icon")).toBeInTheDocument();
+  });
 });

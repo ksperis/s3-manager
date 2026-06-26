@@ -26,7 +26,7 @@ const ROUTE_CASES: Array<{
     scenarioId: "workspace-browser",
     workspace: "browser-portal",
     route: "/browser?bucket=rgw-portal-genomics-2026",
-    waitFor: "text=Storage Spaces",
+    waitFor: "main button:has-text('genomics-2026')",
     selectedExecutionContextId: "101",
     expectPortalBrowser: true,
     runScenarioWaitActions: false,
@@ -243,14 +243,52 @@ async function expectBrowserNormalUsageHidden(page: Page) {
   await expect(page.getByText("Loading usage...", { exact: true })).toHaveCount(0);
 }
 
-async function expectPortalBrowserSidebar(page: Page) {
-  await expect(page.getByText("Storage Spaces", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("genomics-2026", { exact: true }).first()).toBeVisible();
+async function expectBrowserSidebarShell(page: Page, viewportName: string) {
+  if (viewportName === "desktop") {
+    const sidebar = page.locator("aside[data-sidebar-variant='desktop']");
+    await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    const geometry = await sidebar.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        top: rect.top,
+        height: rect.height,
+        viewportHeight: window.innerHeight,
+      };
+    });
+    expect(Math.abs(geometry.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.height - geometry.viewportHeight)).toBeLessThanOrEqual(2);
+    return;
+  }
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const sidebar = page.locator("aside[data-sidebar-variant='mobile']");
+  await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sidebar).toHaveClass(/-translate-x-full/);
+}
+
+async function expectPortalBrowserSidebar(page: Page, viewportName: string) {
+  let openedMobileDrawer = false;
+  const sidebar =
+    viewportName === "desktop"
+      ? page.locator("aside[data-sidebar-variant='desktop']")
+      : page.locator("aside[data-sidebar-variant='mobile']");
+  if (viewportName !== "desktop") {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    openedMobileDrawer = true;
+  }
+  await expect(sidebar.getByText("Storage Spaces", { exact: true }).first()).toBeVisible();
+  await expect(sidebar.getByText("genomics-2026", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("rgw-portal-genomics-2026", { exact: false })).toHaveCount(0);
   await expect(page.getByText("rgw-portal-photos", { exact: false })).toHaveCount(0);
   await expect(page.getByText("rgw-portal-datasets", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("Usage & Metrics", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(/8\.3\s*TB/).first()).toBeVisible();
+  await expect(sidebar.getByText("Usage & Metrics", { exact: true }).first()).toBeVisible();
+  await expect(sidebar.getByText(/8\.3\s*TB/).first()).toBeVisible();
+  if (openedMobileDrawer) {
+    await page.keyboard.press("Escape");
+    await expect(sidebar).toHaveClass(/-translate-x-full/);
+  }
 }
 
 async function expectManagerKpiQuotaMeters(page: Page) {
@@ -349,8 +387,11 @@ test.describe("Workspace visual QA", () => {
           if (routeCase.expectNormalBrowserUsageHidden) {
             await expectBrowserNormalUsageHidden(page);
           }
+          if (routeCase.workspace === "browser" || routeCase.workspace === "browser-portal") {
+            await expectBrowserSidebarShell(page, viewport.name);
+          }
           if (routeCase.expectPortalBrowser) {
-            await expectPortalBrowserSidebar(page);
+            await expectPortalBrowserSidebar(page, viewport.name);
           }
 
           mockRegistry.assertNoUnmatched();

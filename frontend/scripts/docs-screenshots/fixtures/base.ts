@@ -1165,8 +1165,33 @@ function isPortalBrowserRequest(url: URL): boolean {
   return url.searchParams.get("account_id") === "101";
 }
 
+function browserBucketMatchesSearch(
+  bucket: {
+    name: string;
+    display_name?: string | null;
+    workspace_label?: string | null;
+    internal_bucket_name?: string | null;
+  },
+  search: string,
+): boolean {
+  if (!search) return true;
+  const haystack = [
+    bucket.name,
+    bucket.display_name,
+    bucket.workspace_label,
+    bucket.internal_bucket_name,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(search);
+}
+
 function browserBucketsForRequest(url: URL) {
-  return isPortalBrowserRequest(url) ? PORTAL_BROWSER_BUCKETS : BROWSER_BUCKETS;
+  const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
+  return (isPortalBrowserRequest(url) ? PORTAL_BROWSER_BUCKETS : BROWSER_BUCKETS).filter((bucket) =>
+    browserBucketMatchesSearch(bucket, search),
+  );
 }
 
 function browserFixtureBucketName(bucketName: string): string {
