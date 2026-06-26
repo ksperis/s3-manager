@@ -35,6 +35,8 @@ class FakeRGWAdmin:
         self.deleted_users: list[str] = []
         self.deleted_keys: list[str] = []
         self.quota_by_uid: dict[str, tuple[Optional[int], Optional[int]]] = {}
+        self.bucket_payloads_by_uid: dict[str, dict] = {}
+        self.bucket_list_calls: list[dict[str, object]] = []
 
     def _extract_keys(self, data):  # noqa: ANN001
         return RGWAdminClient._extract_keys(self, data)
@@ -110,6 +112,10 @@ class FakeRGWAdmin:
             raise RGWAdminError("tenant not supported in fake")
         return self.quota_by_uid.get(uid, (None, None))
 
+    def get_all_buckets(self, account_id: Optional[str] = None, uid: Optional[str] = None, with_stats: bool = False):
+        self.bucket_list_calls.append({"account_id": account_id, "uid": uid, "with_stats": with_stats})
+        return self.bucket_payloads_by_uid.get(uid or "", {"buckets": []})
+
     def delete_user(self, uid: str, tenant: Optional[str] = None):
         if tenant is not None:
             raise RGWAdminError("tenant not supported in fake")
@@ -119,7 +125,13 @@ class FakeRGWAdmin:
         self.remote_users.pop(uid, None)
 
 
-def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
+def _seed_ceph_endpoint(db_session, *, metrics_enabled: bool = False) -> StorageEndpoint:
+    metrics_config = (
+        "  metrics:\n"
+        "    enabled: true\n"
+        if metrics_enabled
+        else ""
+    )
     endpoint = StorageEndpoint(
         name="ceph-users",
         endpoint_url="https://ceph-users.example.test",
@@ -130,6 +142,7 @@ def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
             "features:\n"
             "  admin:\n"
             "    enabled: true\n"
+            f"{metrics_config}"
         ),
         is_default=True,
         is_editable=True,
@@ -229,6 +242,37 @@ def _seed_local_user(
     db_session.commit()
     db_session.refresh(row)
     return row
+
+
+def test_get_user_usage_aggregates_live_bucket_stats(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session, metrics_enabled=True)
+    s3_user = _seed_local_user(db_session, name="Usage User", uid="usage-user", endpoint_id=endpoint.id)
+    fake = FakeRGWAdmin()
+    fake.bucket_payloads_by_uid["usage-user"] = {
+        "buckets": [
+            {"name": "alpha", "usage": {"rgw.main": {"size_actual": 20, "num_objects": 2}}},
+            {"name": "beta", "usage": {"total_bytes": 30, "total_objects": 3}},
+        ]
+    }
+    service = _build_service(db_session, monkeypatch, fake)
+
+    assert service.get_user_usage(s3_user) == (50, 5, 2)
+    assert fake.bucket_list_calls == [{"account_id": None, "uid": "usage-user", "with_stats": True}]
+
+
+def test_get_user_usage_hides_when_endpoint_metrics_are_disabled(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    s3_user = _seed_local_user(db_session, name="No Metrics User", uid="no-metrics-user", endpoint_id=endpoint.id)
+    fake = FakeRGWAdmin()
+    fake.bucket_payloads_by_uid["no-metrics-user"] = {
+        "buckets": [
+            {"name": "alpha", "usage": {"total_bytes": 30, "total_objects": 3}},
+        ]
+    }
+    service = _build_service(db_session, monkeypatch, fake)
+
+    assert service.get_user_usage(s3_user) == (None, None, None)
+    assert fake.bucket_list_calls == []
 
 
 def test_create_user_persists_credentials(db_session, monkeypatch):

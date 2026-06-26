@@ -1,82 +1,16 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime, timezone
-from types import SimpleNamespace
-
-from app.db import S3Account
+from app.db import S3Account, S3User
 from app.main import app
-from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
 from app.models.browser import BrowserBucket, PaginatedBrowserBucketsResponse
-from app.models.portal import PortalUsage
 from app.routers import browser as browser_router
 from app.routers import dependencies
-from app.services.bucket_usage_stats_service import BucketUsageStatsService
 
 
 def _account() -> S3Account:
     account = S3Account(name="browser-search-endpoint-test")
     account.id = 77
     return account
-
-
-def _usage_snapshot(bucket_name: str, *, scope_id: str = "77", bytes_value: int = 10) -> BucketUsageStatsSnapshot:
-    return BucketUsageStatsSnapshot(
-        scope_kind="manager",
-        scope_id=scope_id,
-        scope_name="Browser Search Test",
-        bucket_name=bucket_name,
-        scan_mode="versions",
-        version_listing_available=True,
-        object_version_count=1,
-        current_version_count=1,
-        noncurrent_version_count=0,
-        delete_marker_count=0,
-        total_bytes=bytes_value,
-        current_bytes=bytes_value,
-        noncurrent_bytes=0,
-        data_type_distribution=[
-            BucketUsageStatsDistributionEntry(
-                key="documents",
-                label="Documents",
-                count=1,
-                bytes=bytes_value,
-                ratio_count=1,
-                ratio_bytes=1,
-            )
-        ],
-        storage_class_distribution=[
-            BucketUsageStatsDistributionEntry(
-                key="STANDARD",
-                label="STANDARD",
-                count=1,
-                bytes=bytes_value,
-                ratio_count=1,
-                ratio_bytes=1,
-            )
-        ],
-        size_distribution=[],
-        age_distribution=[],
-        current_vs_noncurrent=[
-            BucketUsageStatsDistributionEntry(
-                key="current",
-                label="Current versions",
-                count=1,
-                bytes=bytes_value,
-                ratio_count=1,
-                ratio_bytes=1,
-            ),
-            BucketUsageStatsDistributionEntry(
-                key="noncurrent",
-                label="Non-current versions",
-                count=0,
-                bytes=0,
-                ratio_count=0,
-                ratio_bytes=0,
-            ),
-        ],
-        warnings=[],
-        calculated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-    )
 
 
 def test_browser_bucket_search_endpoint_contract(client):
@@ -222,16 +156,24 @@ def test_browser_bucket_search_endpoint_maps_service_error(client):
     assert "bucket search failed" in response.json()["detail"]
 
 
-def test_browser_usage_summary_aggregates_complete_account_snapshots(client, db_session):
-    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("alpha", bytes_value=20))
-    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("beta", bytes_value=30))
+def test_browser_usage_summary_uses_live_account_usage(client, db_session, monkeypatch):
+    account = _account()
 
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            return [BrowserBucket(name="alpha"), BrowserBucket(name="beta")]
+    class FakeS3AccountsService:
+        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+            assert db is db_session
+            assert allow_missing_admin is True
 
-    app.dependency_overrides[dependencies.get_account_context] = _account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
+        def get_account_usage(self, received):  # noqa: ANN001
+            assert received is account
+            return 50, 2, 2
+
+        def get_account_quota(self, received):  # noqa: ANN001
+            assert received is account
+            return 2.0, 200
+
+    monkeypatch.setattr(browser_router, "S3AccountsService", FakeS3AccountsService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
 
     response = client.get("/api/browser/usage-summary")
 
@@ -242,166 +184,28 @@ def test_browser_usage_summary_aggregates_complete_account_snapshots(client, db_
         "label": "Account",
         "used_bytes": 50,
         "object_count": 2,
+        "quota_max_size_bytes": 2 * 1024**3,
+        "quota_max_objects": 200,
     }
 
 
-def test_browser_usage_summary_uses_account_snapshots_when_bucket_listing_is_denied(client, db_session):
-    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("alpha", bytes_value=20))
-    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("beta", bytes_value=30))
+def test_browser_usage_summary_hides_account_when_live_usage_is_unavailable(client, db_session, monkeypatch):
+    account = _account()
 
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            raise RuntimeError("Unable to list buckets: AccessDenied")
-
-    app.dependency_overrides[dependencies.get_account_context] = _account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
-
-    response = client.get("/api/browser/usage-summary")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "available": True,
-        "source": "account",
-        "label": "Account",
-        "used_bytes": 50,
-        "object_count": 2,
-    }
-
-
-def test_browser_usage_summary_uses_s3_user_snapshots_when_bucket_listing_is_denied(client, db_session):
-    account = S3Account(name="browser-s3-user-summary")
-    account.id = 77
-    account.s3_user_id = 12
-    BucketUsageStatsService().upsert_snapshot(
-        db_session,
-        _usage_snapshot("s3-user-bucket", scope_id="s3u-12", bytes_value=40),
-    )
-
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            raise RuntimeError("Unable to list buckets: AccessDenied")
-
-    app.dependency_overrides[dependencies.get_account_context] = lambda: account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
-
-    response = client.get("/api/browser/usage-summary")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "available": True,
-        "source": "s3_user",
-        "label": "S3 User",
-        "used_bytes": 40,
-        "object_count": 1,
-    }
-
-
-def test_browser_usage_summary_uses_portal_account_usage(client, db_session, monkeypatch):
-    account = S3Account(name="portal-browser-summary")
-    account.id = 77
-    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
-    account._portal_browser_access = SimpleNamespace(actor=object())  # type: ignore[attr-defined]
-
-    class FakePortalService:
-        def __init__(self, db):  # noqa: ANN001
+    class FakeS3AccountsService:
+        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
             assert db is db_session
+            assert allow_missing_admin is True
 
-        def get_usage(self, actor, access):  # noqa: ANN001
-            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
-            assert access is account._portal_browser_access  # type: ignore[attr-defined]
-            return PortalUsage(
-                used_bytes=900,
-                used_objects=90,
-                quota_max_size_bytes=1_000,
-                quota_max_objects=100,
-            )
+        def get_account_usage(self, received):  # noqa: ANN001
+            assert received is account
+            return None, None, None
 
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            raise AssertionError("portal account usage should not depend on storage-space rows")
+        def get_account_quota(self, received):  # noqa: ANN001
+            raise AssertionError("quota should not be fetched when live usage is unavailable")
 
-    monkeypatch.setattr(browser_router, "PortalService", FakePortalService)
+    monkeypatch.setattr(browser_router, "S3AccountsService", FakeS3AccountsService)
     app.dependency_overrides[dependencies.get_account_context] = lambda: account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
-
-    response = client.get("/api/browser/usage-summary")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "available": True,
-        "source": "portal",
-        "label": "Storage Spaces",
-        "used_bytes": 900,
-        "object_count": 90,
-        "quota_max_size_bytes": 1_000,
-        "quota_max_objects": 100,
-    }
-
-
-def test_browser_usage_summary_uses_visible_portal_storage_space_stats(client, db_session, monkeypatch):
-    account = S3Account(name="portal-browser-summary")
-    account.id = 77
-    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
-    account._portal_browser_access = SimpleNamespace(actor=object())  # type: ignore[attr-defined]
-    account._portal_storage_spaces = [  # type: ignore[attr-defined]
-        SimpleNamespace(id="space-a", internal_bucket_name="bucket-a"),
-        SimpleNamespace(id="space-b", internal_bucket_name="bucket-b"),
-    ]
-
-    class FakePortalService:
-        def __init__(self, db):  # noqa: ANN001
-            assert db is db_session
-
-        def get_usage(self, actor, access):  # noqa: ANN001
-            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
-            assert access is account._portal_browser_access  # type: ignore[attr-defined]
-            return PortalUsage(
-                used_bytes=None,
-                used_objects=None,
-                quota_max_size_bytes=1_000,
-                quota_max_objects=100,
-            )
-
-        def get_bucket_stats(self, actor, access, bucket_name):  # noqa: ANN001
-            assert actor is account._portal_browser_access.actor  # type: ignore[attr-defined]
-            assert access is account._portal_browser_access  # type: ignore[attr-defined]
-            payload = {
-                "bucket-a": SimpleNamespace(used_bytes=400, object_count=40),
-                "bucket-b": SimpleNamespace(used_bytes=500, object_count=50),
-            }
-            return payload[bucket_name]
-
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            raise AssertionError("portal account usage should not depend on storage-space rows")
-
-    monkeypatch.setattr(browser_router, "PortalService", FakePortalService)
-    app.dependency_overrides[dependencies.get_account_context] = lambda: account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
-
-    response = client.get("/api/browser/usage-summary")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "available": True,
-        "source": "portal",
-        "label": "Storage Spaces",
-        "used_bytes": 900,
-        "object_count": 90,
-        "quota_max_size_bytes": 1_000,
-        "quota_max_objects": 100,
-    }
-
-
-def test_browser_usage_summary_hides_partial_account_snapshots(client, db_session):
-    BucketUsageStatsService().upsert_snapshot(db_session, _usage_snapshot("alpha", bytes_value=20))
-
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            return [BrowserBucket(name="alpha"), BrowserBucket(name="beta")]
-
-    app.dependency_overrides[dependencies.get_account_context] = _account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
 
     response = client.get("/api/browser/usage-summary")
 
@@ -413,17 +217,159 @@ def test_browser_usage_summary_hides_partial_account_snapshots(client, db_sessio
     }
 
 
+def test_browser_usage_summary_uses_live_s3_user_usage(client, db_session, monkeypatch):
+    s3_user = S3User(
+        name="browser-s3-user-summary",
+        rgw_user_uid="browser-summary-user",
+        rgw_access_key="access",
+        rgw_secret_key="secret",
+    )
+    db_session.add(s3_user)
+    db_session.flush()
+    account = S3Account(name="browser-s3-user-summary")
+    account.id = -(100_000 + s3_user.id)
+    account.s3_user_id = s3_user.id
+
+    class FakeS3UsersService:
+        def __init__(self, db):  # noqa: ANN001
+            assert db is db_session
+
+        def get_user_usage(self, received):  # noqa: ANN001
+            assert received.id == s3_user.id
+            return 40, 4, 1
+
+        def get_user_quota(self, received):  # noqa: ANN001
+            assert received.id == s3_user.id
+            return 1.0, 100
+
+    monkeypatch.setattr(browser_router, "S3UsersService", FakeS3UsersService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "s3_user",
+        "label": "S3 User",
+        "used_bytes": 40,
+        "object_count": 4,
+        "quota_max_size_bytes": 1024**3,
+        "quota_max_objects": 100,
+    }
+
+
+def test_browser_usage_summary_hides_s3_user_when_live_usage_is_unavailable(client, db_session, monkeypatch):
+    s3_user = S3User(
+        name="browser-s3-user-summary-empty",
+        rgw_user_uid="browser-summary-user-empty",
+        rgw_access_key="access",
+        rgw_secret_key="secret",
+    )
+    db_session.add(s3_user)
+    db_session.flush()
+    account = S3Account(name="browser-s3-user-summary-empty")
+    account.id = -(100_000 + s3_user.id)
+    account.s3_user_id = s3_user.id
+
+    class FakeS3UsersService:
+        def __init__(self, db):  # noqa: ANN001
+            assert db is db_session
+
+        def get_user_usage(self, received):  # noqa: ANN001
+            assert received.id == s3_user.id
+            return None, None, None
+
+        def get_user_quota(self, received):  # noqa: ANN001
+            raise AssertionError("quota should not be fetched when live usage is unavailable")
+
+    monkeypatch.setattr(browser_router, "S3UsersService", FakeS3UsersService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": False,
+        "source": "s3_user",
+        "label": "S3 User",
+    }
+
+
+def test_browser_usage_summary_uses_live_account_usage_for_portal_context(client, db_session, monkeypatch):
+    account = S3Account(name="portal-browser-summary")
+    account.id = 77
+    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
+
+    class FakeS3AccountsService:
+        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+            assert db is db_session
+            assert allow_missing_admin is True
+
+        def get_account_usage(self, received):  # noqa: ANN001
+            assert received is account
+            return 900, 90, 4
+
+        def get_account_quota(self, received):  # noqa: ANN001
+            assert received is account
+            return 5.0, 500
+
+    monkeypatch.setattr(browser_router, "S3AccountsService", FakeS3AccountsService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "source": "portal",
+        "label": "Storage Spaces",
+        "used_bytes": 900,
+        "object_count": 90,
+        "quota_max_size_bytes": 5 * 1024**3,
+        "quota_max_objects": 500,
+    }
+
+
+def test_browser_usage_summary_does_not_fallback_to_portal_storage_space_rows(client, db_session, monkeypatch):
+    account = S3Account(name="portal-browser-summary")
+    account.id = 77
+    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
+    account._portal_storage_spaces = [  # type: ignore[attr-defined]
+        BrowserBucket(name="space-a", display_name="Space A", used_bytes=900, object_count=90),
+    ]
+
+    class FakeS3AccountsService:
+        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+            assert db is db_session
+            assert allow_missing_admin is True
+
+        def get_account_usage(self, received):  # noqa: ANN001
+            assert received is account
+            return None, None, None
+
+        def get_account_quota(self, received):  # noqa: ANN001
+            raise AssertionError("quota should not be fetched when live usage is unavailable")
+
+    monkeypatch.setattr(browser_router, "S3AccountsService", FakeS3AccountsService)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+
+    response = client.get("/api/browser/usage-summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": False,
+        "source": "portal",
+        "label": "Storage Spaces",
+    }
+
+
 def test_browser_usage_summary_hides_connection_usage_without_bucket_listing(client):
     account = S3Account(name="browser-connection")
     account.id = 77
     account.s3_connection_id = 9
 
-    class FakeService:
-        def list_buckets(self, account):  # noqa: ANN001
-            raise AssertionError("connection usage summary should not list buckets")
-
     app.dependency_overrides[dependencies.get_account_context] = lambda: account
-    app.dependency_overrides[browser_router.get_browser_service] = lambda: FakeService()
 
     response = client.get("/api/browser/usage-summary")
 

@@ -248,6 +248,9 @@ class S3AccountsService:
             bucket_count,
         )
 
+    def get_account_usage(self, account: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        return self._account_usage(account)
+
     def _account_quota(
         self,
         acc: S3Account,

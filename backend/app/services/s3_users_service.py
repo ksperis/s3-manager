@@ -34,10 +34,12 @@ from app.models.s3_user import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
+from app.utils.rgw import extract_bucket_list
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_user_ordering import s3_user_name_order_by
+from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +149,40 @@ class S3UsersService:
         except RuntimeError as exc:
             logger.warning("Unable to list buckets for user %s: %s", s3_user.rgw_user_uid, exc)
             return None
+
+    def _user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        try:
+            endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)
+            if not resolve_feature_flags(endpoint).metrics_enabled:
+                return None, None, None
+            admin = self._admin_for_endpoint(endpoint)
+            payload = admin.get_all_buckets(uid=s3_user.rgw_user_uid, with_stats=True)
+        except (RGWAdminError, ValueError) as exc:
+            logger.warning("Unable to list buckets with stats for user %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None, None
+        buckets = extract_bucket_list(payload)
+        bucket_count = len(buckets)
+        total_bytes = 0
+        total_objects = 0
+        has_bytes = False
+        has_objects = False
+        for bucket in buckets:
+            usage = bucket.get("usage") if isinstance(bucket, dict) else None
+            usage_bytes, usage_objects = extract_usage_stats(usage)
+            if usage_bytes is not None:
+                total_bytes += usage_bytes
+                has_bytes = True
+            if usage_objects is not None:
+                total_objects += usage_objects
+                has_objects = True
+        return (
+            total_bytes if has_bytes else None,
+            total_objects if has_objects else None,
+            bucket_count,
+        )
+
+    def get_user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        return self._user_usage(s3_user)
 
     def _user_quota(
         self,
