@@ -109,6 +109,26 @@ def _linked_group_details(db: Session, connection_id: int) -> tuple[list[int], l
     return group_ids_by_connection.get(connection_id, []), group_details_by_connection.get(connection_id, [])
 
 
+def _sync_group_links(db: Session, conn: S3Connection, group_ids: list[int]) -> None:
+    cleaned_ids = sorted({int(group_id) for group_id in group_ids if group_id is not None})
+    if cleaned_ids:
+        found = {row[0] for row in db.query(UiGroup.id).filter(UiGroup.id.in_(cleaned_ids)).all()}
+        missing = set(cleaned_ids) - found
+        if missing:
+            missing_str = ", ".join(str(mid) for mid in sorted(missing))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"UI groups not found: {missing_str}")
+    existing = db.query(UiGroupS3Connection).filter(UiGroupS3Connection.s3_connection_id == conn.id).all()
+    existing_ids = {link.group_id for link in existing}
+    desired_ids = set(cleaned_ids)
+    for group_id in existing_ids - desired_ids:
+        db.query(UiGroupS3Connection).filter(
+            UiGroupS3Connection.s3_connection_id == conn.id,
+            UiGroupS3Connection.group_id == group_id,
+        ).delete(synchronize_session=False)
+    for group_id in desired_ids - existing_ids:
+        db.add(UiGroupS3Connection(group_id=group_id, s3_connection_id=conn.id))
+
+
 def _parse_capabilities(value: Optional[str]) -> dict:
     return parse_s3_connection_capabilities(value)
 
@@ -495,6 +515,8 @@ def update_s3_connection(
         conn.credential_owner_identifier = payload.credential_owner_identifier
     if "tags" in payload_data:
         tags_service.replace_connection_tags(conn, payload.tags)
+    if payload.group_ids is not None:
+        _sync_group_links(db, conn, payload.group_ids)
     if should_probe_iam:
         _refresh_detected_capabilities(conn)
     conn.updated_at = utcnow()

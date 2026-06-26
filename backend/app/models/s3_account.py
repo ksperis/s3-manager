@@ -83,6 +83,8 @@ class S3AccountUpdate(BaseModel):
     quota_max_objects: Optional[int] = None
     user_ids: Optional[list[int]] = None
     user_links: Optional[list[AccountUserLink]] = None
+    group_ids: Optional[list[int]] = None
+    group_links: Optional[list[AccountGroupLink]] = None
     name: Optional[str] = None
     email: Optional[str] = None
     storage_endpoint_id: Optional[int] = None

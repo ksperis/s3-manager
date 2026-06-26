@@ -72,6 +72,7 @@ export type CreateS3ConnectionPayload = {
 
 export type UpdateS3ConnectionPayload = {
   name?: string | null;
+  group_ids?: number[] | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;

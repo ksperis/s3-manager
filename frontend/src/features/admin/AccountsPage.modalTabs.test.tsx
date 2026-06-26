@@ -15,6 +15,7 @@ const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
+const listMinimalGroupsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 let portalEnabled = false;
 
@@ -115,6 +116,10 @@ vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
 }));
 
+vi.mock("../../api/groups", () => ({
+  listMinimalGroups: () => listMinimalGroupsMock(),
+}));
+
 vi.mock("../../api/tags", () => ({
   listAdminTagDefinitions: (domain: unknown) => listAdminTagDefinitionsMock(domain),
   listPrivateConnectionTagDefinitions: vi.fn(),
@@ -181,6 +186,10 @@ describe("AccountsPage modal tabs", () => {
     listMinimalUsersMock.mockResolvedValue([
       { id: 7, email: "ui7@example.com" },
       { id: 8, email: "ui8@example.com" },
+    ]);
+    listMinimalGroupsMock.mockResolvedValue([
+      { id: 31, name: "Research Group" },
+      { id: 32, name: "Archive Group" },
     ]);
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(501, "gold", "amber"), makeTag(502, "prod")]);
 
@@ -318,6 +327,42 @@ describe("AccountsPage modal tabs", () => {
             account_role: "portal_none",
           }),
         ]),
+      })
+    );
+  });
+
+  it("submits direct UI group links from the account edit tab", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI groups" }));
+
+    expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Research Group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    expect(screen.getByText("Research Group")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe(1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        group_links: [
+          expect.objectContaining({
+            group_id: 31,
+            group_name: "Research Group",
+            account_admin: false,
+            account_role: "portal_none",
+          }),
+        ],
       })
     );
   });

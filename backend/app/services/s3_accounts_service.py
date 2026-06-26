@@ -1049,6 +1049,46 @@ class S3AccountsService:
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
+        if payload.group_links is not None or payload.group_ids is not None:
+            desired_links: dict[int, AccountGroupLink] = {}
+            if payload.group_links is not None:
+                for link in payload.group_links:
+                    group_id = int(link.group_id)
+                    if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
+                        raise ValueError("Invalid account role")
+                    desired_links[group_id] = AccountGroupLink(
+                        group_id=group_id,
+                        account_admin=bool(link.account_admin),
+                        account_role=link.account_role or AccountRole.PORTAL_NONE.value,
+                    )
+            elif payload.group_ids is not None:
+                desired_links = {
+                    int(group_id): AccountGroupLink(group_id=int(group_id))
+                    for group_id in payload.group_ids
+                    if group_id is not None
+                }
+
+            desired_ids = set(desired_links)
+            if desired_ids:
+                found = {row[0] for row in self.db.query(UiGroup.id).filter(UiGroup.id.in_(desired_ids)).all()}
+                missing = desired_ids - found
+                if missing:
+                    missing_str = ", ".join(str(mid) for mid in sorted(missing))
+                    raise ValueError(f"UI groups not found: {missing_str}")
+
+            existing_links = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
+            existing_by_group = {link.group_id: link for link in existing_links}
+            for group_id in set(existing_by_group) - desired_ids:
+                self.db.delete(existing_by_group[group_id])
+            for group_id, link in desired_links.items():
+                db_link = existing_by_group.get(group_id)
+                if db_link is None:
+                    db_link = UiGroupS3Account(group_id=group_id, account_id=account.id)
+                db_link.account_admin = bool(link.account_admin)
+                db_link.account_role = link.account_role or AccountRole.PORTAL_NONE.value
+                db_link.updated_at = utcnow()
+                self.db.add(db_link)
+
         self.db.add(account)
         self.db.commit()
         self.db.refresh(account)

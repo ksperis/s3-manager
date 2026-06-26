@@ -141,3 +141,22 @@ def test_admin_s3_connections_search_matches_direct_group_links(client, db_sessi
     assert [item["name"] for item in payload["items"]] == ["group-linked-connection"]
     assert payload["items"][0]["group_ids"] == [group.id]
     assert payload["items"][0]["group_details"] == [{"id": group.id, "name": "Connection Operators"}]
+
+
+def test_admin_s3_connections_update_replaces_direct_group_links(client, db_session):
+    connection = _seed_connection(db_session, name="group-edit-connection", is_shared=True)
+    old_group = UiGroup(name="Old Connection Group")
+    new_group = UiGroup(name="New Connection Group")
+    db_session.add_all([old_group, new_group])
+    db_session.flush()
+    db_session.add(UiGroupS3Connection(group_id=old_group.id, s3_connection_id=connection.id))
+    db_session.commit()
+
+    response = client.put(f"/api/admin/s3-connections/{connection.id}", json={"group_ids": [new_group.id]})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["group_ids"] == [new_group.id]
+    assert payload["group_details"] == [{"id": new_group.id, "name": "New Connection Group"}]
+    rows = db_session.query(UiGroupS3Connection).filter(UiGroupS3Connection.s3_connection_id == connection.id).all()
+    assert [row.group_id for row in rows] == [new_group.id]

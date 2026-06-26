@@ -61,6 +61,7 @@ class S3UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     user_ids: Optional[list[int]] = None
+    group_ids: Optional[list[int]] = None
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None

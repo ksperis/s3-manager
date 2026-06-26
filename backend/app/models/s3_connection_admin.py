@@ -82,6 +82,7 @@ class S3ConnectionAdminUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: Optional[str] = None
+    group_ids: Optional[list[int]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_active: Optional[bool] = None

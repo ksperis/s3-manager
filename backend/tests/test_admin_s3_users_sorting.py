@@ -121,3 +121,22 @@ def test_admin_s3_users_search_and_detail_include_direct_group_links(client, db_
     detail_payload = detail.json()
     assert detail_payload["group_ids"] == [group.id]
     assert detail_payload["group_details"] == [{"id": group.id, "name": "Ops Readers"}]
+
+
+def test_admin_s3_users_update_replaces_direct_group_links(client, db_session):
+    s3_user = _seed_s3_user(db_session, name="group-edit-user", uid="uid-group-edit")
+    old_group = UiGroup(name="Old User Group")
+    new_group = UiGroup(name="New User Group")
+    db_session.add_all([old_group, new_group])
+    db_session.flush()
+    db_session.add(UiGroupS3User(group_id=old_group.id, s3_user_id=s3_user.id))
+    db_session.commit()
+
+    response = client.put(f"/api/admin/s3-users/{s3_user.id}", json={"group_ids": [new_group.id]})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["group_ids"] == [new_group.id]
+    assert payload["group_details"] == [{"id": new_group.id, "name": "New User Group"}]
+    rows = db_session.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).all()
+    assert [row.group_id for row in rows] == [new_group.id]

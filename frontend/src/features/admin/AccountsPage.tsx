@@ -22,6 +22,7 @@ import {
 import type { PortalSettingsOverride } from "../../api/appSettings";
 import type { PortalAccountSettings } from "../../api/portal";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
@@ -52,7 +53,7 @@ import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users" | "privileged" | "portal";
+type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
@@ -144,6 +145,9 @@ export default function S3AccountsPage() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersLoaded, setUsersLoaded] = useState(false);
+  const [groups, setGroups] = useState<UiGroupSummary[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [endpointsLoaded, setEndpointsLoaded] = useState(false);
@@ -159,6 +163,7 @@ export default function S3AccountsPage() {
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
+    group_links: [] as AccountGroupLink[],
     allow_manager_bucket_quota: false,
   });
   const [editInitialSignature, setEditInitialSignature] = useState("");
@@ -187,9 +192,13 @@ export default function S3AccountsPage() {
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
   const [showUserPanel, setShowUserPanel] = useState(false);
+  const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [userSelections, setUserSelections] = useState<number[]>([]);
+  const [groupSelections, setGroupSelections] = useState<number[]>([]);
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
+  const [groupAdminChoice, setGroupAdminChoice] = useState<Record<number, boolean>>({});
   const MAX_LINK_OPTIONS = 10;
   const currentUser = useMemo(() => {
     return readStoredUser() as { role?: string | null } | null;
@@ -217,6 +226,7 @@ export default function S3AccountsPage() {
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
+  const showGroupsTab = editTab === "groups";
   const showPrivilegedTab = editTab === "privileged";
   const showPortalTab = portalEnabled && editTab === "portal";
   const hasPortalManagerOverrides = useMemo(() => {
@@ -278,6 +288,11 @@ export default function S3AccountsPage() {
   const toggleUserSelection = (userId: number) => {
     setUserSelections((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+  const toggleGroupSelection = (groupId: number) => {
+    setGroupSelections((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
     );
   };
 
@@ -406,6 +421,11 @@ export default function S3AccountsPage() {
     users.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [users]);
+  const groupLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    groups.forEach((group) => map.set(group.id, group.name));
+    return map;
+  }, [groups]);
   const assignedUsers = useMemo(() => {
     return editForm.user_links.map((link) => ({
       id: link.user_id,
@@ -414,6 +434,14 @@ export default function S3AccountsPage() {
       account_role: normalizePortalRole(link.account_role),
     }));
   }, [editForm.user_links, userLabelById]);
+  const assignedGroups = useMemo(() => {
+    return editForm.group_links.map((link) => ({
+      id: link.group_id,
+      label: link.group_name ?? groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`,
+      account_admin: Boolean(link.account_admin),
+      account_role: normalizePortalRole(link.account_role),
+    }));
+  }, [editForm.group_links, groupLabelById]);
   const availableUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
     const selectedIds = new Set(editForm.user_links.map((link) => link.user_id));
@@ -421,9 +449,20 @@ export default function S3AccountsPage() {
       (u) => !selectedIds.has(u.id) && (!query || u.label.toLowerCase().includes(query))
     );
   }, [editForm.user_links, userOptions, userSearch]);
+  const availableGroups = useMemo(() => {
+    const query = groupSearch.trim().toLowerCase();
+    const selectedIds = new Set(editForm.group_links.map((link) => link.group_id));
+    return groups.filter(
+      (group) => !selectedIds.has(group.id) && (!query || group.name.toLowerCase().includes(query))
+    );
+  }, [editForm.group_links, groupSearch, groups]);
   const visibleAvailableUsers = useMemo(
     () => availableUsers.slice(0, MAX_LINK_OPTIONS),
     [availableUsers]
+  );
+  const visibleAvailableGroups = useMemo(
+    () => availableGroups.slice(0, MAX_LINK_OPTIONS),
+    [availableGroups]
   );
 
   useEffect(() => {
@@ -580,6 +619,20 @@ export default function S3AccountsPage() {
       setLoadingUsers(false);
     }
   }, [loadingUsers, usersLoaded]);
+
+  const loadGroupsIfNeeded = useCallback(async () => {
+    if (groupsLoaded || loadingGroups) return;
+    setLoadingGroups(true);
+    try {
+      const data = await listMinimalGroups();
+      setGroups(data);
+      setGroupsLoaded(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingGroups(false);
+    }
+  }, [groupsLoaded, loadingGroups]);
 
   const loadEndpointsIfNeeded = useCallback(async () => {
     if (endpointsLoaded || loadingEndpoints) return;
@@ -851,8 +904,12 @@ export default function S3AccountsPage() {
     setEditingS3Account(null);
     setEditTab("general");
     setUserSearch("");
+    setGroupSearch("");
     setShowUserPanel(false);
+    setShowGroupPanel(false);
     setUserSelections([]);
+    setGroupSelections([]);
+    setGroupAdminChoice({});
     setEditInitialSignature("");
     setPortalInitialSignature("");
   };
@@ -908,7 +965,9 @@ export default function S3AccountsPage() {
     setActionError(null);
     setActionMessage(null);
     setUserAdminChoice({});
+    setGroupAdminChoice({});
     void loadUsersIfNeeded();
+    void loadGroupsIfNeeded();
     void loadEndpointsIfNeeded();
     const detail = await loadAccountDetail(account);
     if (!detail) return;
@@ -926,13 +985,23 @@ export default function S3AccountsPage() {
           account_role: normalizePortalRole(link.account_role),
           user_email: link.user_email ?? undefined,
         })) ?? [],
+      group_links:
+        detail.group_links?.map((link) => ({
+          group_id: link.group_id,
+          group_name: link.group_name ?? undefined,
+          account_admin: Boolean(link.account_admin),
+          account_role: normalizePortalRole(link.account_role),
+        })) ?? [],
     };
     setEditingS3Account(detail);
     setEditForm(nextEditForm);
     setEditInitialSignature(stableSignature({ editForm: { ...nextEditForm, tags: normalizeUiTags(nextEditForm.tags) } }));
     setUserSearch("");
+    setGroupSearch("");
     setShowUserPanel(false);
+    setShowGroupPanel(false);
     setUserSelections([]);
+    setGroupSelections([]);
     setEditTab("general");
   };
 
@@ -949,6 +1018,7 @@ export default function S3AccountsPage() {
     try {
       const payload = {
         user_links: editForm.user_links,
+        group_links: editForm.group_links,
         tags: normalizeUiTags(editForm.tags),
         ...(canManagePrivilegedTargets
           ? { allow_manager_bucket_quota: editForm.allow_manager_bucket_quota }
@@ -1511,6 +1581,20 @@ export default function S3AccountsPage() {
               >
                 Linked UI users
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadGroupsIfNeeded();
+                  setEditTab("groups");
+                }}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "groups"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Linked UI groups
+              </button>
               {canManagePrivilegedTargets && (
                 <button
                   type="button"
@@ -1823,6 +1907,229 @@ export default function S3AccountsPage() {
                               setShowUserPanel(false);
                               setUserSelections([]);
                               setUserSearch("");
+                            }}
+                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          >
+                            Add selected
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {showGroupsTab && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {assignedGroups.length} linked{loadingGroups ? " · loading..." : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!showGroupPanel) {
+                          void loadGroupsIfNeeded();
+                        }
+                        setShowGroupPanel((prev) => !prev);
+                      }}
+                      className={tableActionButtonClasses}
+                    >
+                      {showGroupPanel ? "Close" : "Add UI groups"}
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                    <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr>
+                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Group
+                          </th>
+                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Admin
+                          </th>
+                          {portalEnabled && (
+                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Portal role
+                            </th>
+                          )}
+                          <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {assignedGroups.length === 0 ? (
+                          <tr>
+                            <td colSpan={portalEnabled ? 4 : 3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              No linked groups yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          assignedGroups.map((group) => (
+                            <tr key={group.id}>
+                              <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{group.label}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={group.account_admin}
+                                    onChange={(e) =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        group_links: prev.group_links.map((link) =>
+                                          link.group_id === group.id ? { ...link, account_admin: e.target.checked } : link
+                                        ),
+                                      }))
+                                    }
+                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  Admin
+                                </label>
+                              </td>
+                              {portalEnabled && (
+                                <td className="px-3 py-2">
+                                  <select
+                                    value={group.account_role}
+                                    onChange={(e) =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        group_links: prev.group_links.map((link) =>
+                                          link.group_id === group.id
+                                            ? { ...link, account_role: normalizePortalRole(e.target.value) }
+                                            : link
+                                        ),
+                                      }))
+                                    }
+                                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    {PORTAL_ROLE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              )}
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      group_links: prev.group_links.filter((link) => link.group_id !== group.id),
+                                    }))
+                                  }
+                                  className={tableDeleteActionClasses}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {showGroupPanel && (
+                    <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={groupSearch}
+                          onChange={(e) => setGroupSearch(e.target.value)}
+                          placeholder="Search..."
+                          className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                        {availableGroups.length === 0 && (
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                        )}
+                        {visibleAvailableGroups.map((group) => {
+                          const isSelected = groupSelections.includes(group.id);
+                          const adminChecked = groupAdminChoice[group.id] ?? false;
+                          return (
+                            <div
+                              key={group.id}
+                              className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+                                isSelected
+                                  ? "bg-slate-50 dark:bg-slate-800/60"
+                                  : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                              }`}
+                            >
+                              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleGroupSelection(group.id)}
+                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                <span>{group.name}</span>
+                              </label>
+                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(adminChecked)}
+                                  onChange={(e) =>
+                                    setGroupAdminChoice((prev) => ({
+                                      ...prev,
+                                      [group.id]: e.target.checked,
+                                    }))
+                                  }
+                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Admin
+                              </label>
+                            </div>
+                          );
+                        })}
+                        {availableGroups.length > MAX_LINK_OPTIONS && (
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">
+                          {groupSelections.length} selected
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowGroupPanel(false);
+                              setGroupSelections([]);
+                              setGroupSearch("");
+                            }}
+                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={groupSelections.length === 0}
+                            onClick={() => {
+                              if (groupSelections.length === 0) return;
+                              const toAdd = groupSelections.map((id) => ({
+                                group_id: id,
+                                group_name: groupLabelById.get(id) ?? undefined,
+                                account_admin: groupAdminChoice[id] ?? false,
+                                account_role: "portal_none" as PortalAccountRole,
+                              }));
+                              setEditForm((prev) => ({
+                                ...prev,
+                                group_links: [...prev.group_links, ...toAdd],
+                              }));
+                              setShowGroupPanel(false);
+                              setGroupSelections([]);
+                              setGroupSearch("");
                             }}
                             className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >

@@ -15,6 +15,7 @@ import {
   updateS3User,
   type UpdateS3UserPayload,
 } from "../../api/s3Users";
+import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import ListToolbar from "../../components/ListToolbar";
@@ -41,7 +42,7 @@ import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
 type SortField = "name" | "uid";
-type EditTab = "general" | "users" | "privileged";
+type EditTab = "general" | "users" | "groups" | "privileged";
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -57,6 +58,9 @@ export default function S3UsersPage() {
   const [users, setUsers] = useState<S3User[]>([]);
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
   const [portalUsersLoaded, setPortalUsersLoaded] = useState(false);
+  const [uiGroups, setUiGroups] = useState<UiGroupSummary[]>([]);
+  const [uiGroupsLoaded, setUiGroupsLoaded] = useState(false);
+  const [uiGroupsLoading, setUiGroupsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -105,6 +109,7 @@ export default function S3UsersPage() {
     email: "",
     tags: [] as UiTagDefinition[],
     user_ids: [] as number[],
+    group_ids: [] as number[],
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
@@ -117,8 +122,11 @@ export default function S3UsersPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editTab, setEditTab] = useState<EditTab>("general");
   const [portalUserSearch, setPortalUserSearch] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
   const [showEditPortalUserPanel, setShowEditPortalUserPanel] = useState(false);
+  const [showEditGroupPanel, setShowEditGroupPanel] = useState(false);
   const [editPortalUserSelections, setEditPortalUserSelections] = useState<number[]>([]);
+  const [editGroupSelections, setEditGroupSelections] = useState<number[]>([]);
   const handleFilterChange = (value: string) => {
     setFilter(value);
     setPage(1);
@@ -167,6 +175,7 @@ export default function S3UsersPage() {
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
   const showEditGeneralTab = editTab === "general";
   const showEditUsersTab = editTab === "users";
+  const showEditGroupsTab = editTab === "groups";
   const currentUser = useMemo(() => readStoredUser(), []);
   const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const showEditPrivilegedTab = canManagePrivilegedTargets && editTab === "privileged";
@@ -256,6 +265,20 @@ export default function S3UsersPage() {
     }
   }, [portalUsersLoaded]);
 
+  const loadGroupsIfNeeded = useCallback(async () => {
+    if (uiGroupsLoaded || uiGroupsLoading) return;
+    setUiGroupsLoading(true);
+    try {
+      const data = await listMinimalGroups();
+      setUiGroups(data);
+      setUiGroupsLoaded(true);
+    } catch {
+      setUiGroups([]);
+    } finally {
+      setUiGroupsLoading(false);
+    }
+  }, [uiGroupsLoaded, uiGroupsLoading]);
+
   const loadEndpointsIfNeeded = useCallback(async () => {
     if (endpointsLoaded || loadingEndpoints) return;
     setLoadingEndpoints(true);
@@ -305,6 +328,11 @@ export default function S3UsersPage() {
     portalUsers.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [portalUsers]);
+  const groupLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    uiGroups.forEach((group) => map.set(group.id, group.name));
+    return map;
+  }, [uiGroups]);
   const renderUserAssociations = (user: S3User) => {
     const userItems: AssociationChipItem[] = (user.user_ids ?? []).map((id) => ({
       id,
@@ -331,9 +359,19 @@ export default function S3UsersPage() {
       (opt) => !editForm.user_ids.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
   }, [portalUserOptions, editForm.user_ids, portalUserSearch]);
+  const availableGroups = useMemo(() => {
+    const query = groupSearch.trim().toLowerCase();
+    return uiGroups.filter(
+      (group) => !editForm.group_ids.includes(group.id) && (!query || group.name.toLowerCase().includes(query))
+    );
+  }, [editForm.group_ids, groupSearch, uiGroups]);
   const visiblePortalUsers = useMemo(
     () => availablePortalUsers.slice(0, MAX_LINK_OPTIONS),
     [availablePortalUsers]
+  );
+  const visibleGroups = useMemo(
+    () => availableGroups.slice(0, MAX_LINK_OPTIONS),
+    [availableGroups]
   );
   const cephEndpoints = useMemo(() => storageEndpoints.filter((ep) => ep.provider === "ceph"), [storageEndpoints]);
   const adminCephEndpoints = useMemo(
@@ -390,6 +428,11 @@ export default function S3UsersPage() {
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
+  const toggleEditGroupSelection = (groupId: number) => {
+    setEditGroupSelections((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
 
   const loadEditQuota = async (userId: number) => {
     try {
@@ -414,6 +457,7 @@ export default function S3UsersPage() {
 
   const openEditModal = (user: S3User) => {
     void loadPortalUsersIfNeeded();
+    void loadGroupsIfNeeded();
     void loadEndpointsIfNeeded();
     const quota = resolveQuotaForEdit(user.quota_max_size_gb);
     const nextEditForm = {
@@ -421,6 +465,7 @@ export default function S3UsersPage() {
       email: user.email ?? "",
       tags: normalizeUiTags(user.tags),
       user_ids: user.user_ids ?? [],
+      group_ids: user.group_ids ?? [],
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
@@ -434,8 +479,11 @@ export default function S3UsersPage() {
     setEditError(null);
     setEditTab("general");
     setPortalUserSearch("");
+    setGroupSearch("");
     setShowEditPortalUserPanel(false);
+    setShowEditGroupPanel(false);
     setEditPortalUserSelections([]);
+    setEditGroupSelections([]);
     if (user.quota_max_size_gb == null && user.quota_max_objects == null) {
       void loadEditQuota(user.id);
     }
@@ -456,6 +504,7 @@ export default function S3UsersPage() {
         email: editForm.email || undefined,
         tags: normalizeUiTags(editForm.tags),
         user_ids: editForm.user_ids,
+        group_ids: editForm.group_ids,
       };
       if (canManagePrivilegedTargets) {
         payload.allow_manager_bucket_quota = editForm.allow_manager_bucket_quota;
@@ -629,8 +678,11 @@ export default function S3UsersPage() {
     setEditingUser(null);
     setEditTab("general");
     setPortalUserSearch("");
+    setGroupSearch("");
     setShowEditPortalUserPanel(false);
+    setShowEditGroupPanel(false);
     setEditPortalUserSelections([]);
+    setEditGroupSelections([]);
     setEditInitialSignature("");
   };
   const editCurrentSignature = useMemo(
@@ -1119,6 +1171,20 @@ export default function S3UsersPage() {
               >
                 Linked UI users
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadGroupsIfNeeded();
+                  setEditTab("groups");
+                }}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "groups"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Linked UI groups
+              </button>
               {canManagePrivilegedTargets && (
                 <button
                   type="button"
@@ -1382,6 +1448,161 @@ export default function S3UsersPage() {
                             setEditPortalUserSelections([]);
                             setPortalUserSearch("");
                             setShowEditPortalUserPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showEditGroupsTab && (
+              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      {editForm.group_ids.length} linked{uiGroupsLoading ? " · loading..." : ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showEditGroupPanel) {
+                        void loadGroupsIfNeeded();
+                      }
+                      setShowEditGroupPanel((prev) => !prev);
+                    }}
+                    className={tableActionButtonClasses}
+                  >
+                    {showEditGroupPanel ? "Close" : "Add UI groups"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Group
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {editForm.group_ids.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No linked groups yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        editForm.group_ids.map((id) => (
+                          <tr key={id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                              {groupLabelById.get(id) ?? `Group #${id}`}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    group_ids: prev.group_ids.filter((groupId) => groupId !== id),
+                                  }))
+                                }
+                                className={tableDeleteActionClasses}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {showEditGroupPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={groupSearch}
+                        onChange={(e) => setGroupSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                      {availableGroups.length === 0 && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      )}
+                      {visibleGroups.map((group) => {
+                        const isSelected = editGroupSelections.includes(group.id);
+                        return (
+                          <div
+                            key={group.id}
+                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleEditGroupSelection(group.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{group.name}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {availableGroups.length > MAX_LINK_OPTIONS && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {editGroupSelections.length} selected
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEditGroupPanel(false);
+                            setEditGroupSelections([]);
+                            setGroupSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={editGroupSelections.length === 0}
+                          onClick={() => {
+                            if (editGroupSelections.length === 0) return;
+                            setEditForm((prev) => ({
+                              ...prev,
+                              group_ids: [...prev.group_ids, ...editGroupSelections],
+                            }));
+                            setEditGroupSelections([]);
+                            setGroupSearch("");
+                            setShowEditGroupPanel(false);
                           }}
                           className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >

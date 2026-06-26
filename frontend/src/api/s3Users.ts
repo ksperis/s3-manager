@@ -62,6 +62,7 @@ export type UpdateS3UserPayload = {
   name?: string | null;
   email?: string | null;
   user_ids?: number[] | null;
+  group_ids?: number[] | null;
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;

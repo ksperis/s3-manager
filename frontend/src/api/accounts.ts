@@ -123,6 +123,8 @@ export type UpdateS3AccountPayload = {
   quota_max_objects?: number | null;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;
+  group_ids?: number[] | null;
+  group_links?: AccountGroupLink[] | null;
   name?: string | null;
   email?: string | null;
   storage_endpoint_id?: number | null;

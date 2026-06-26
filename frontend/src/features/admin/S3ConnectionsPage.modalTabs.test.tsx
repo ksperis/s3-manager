@@ -13,6 +13,7 @@ const upsertS3ConnectionUserMock = vi.fn();
 const removeS3ConnectionUserMock = vi.fn();
 
 const listMinimalUsersMock = vi.fn();
+const listMinimalGroupsMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
@@ -41,6 +42,10 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 
 vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
+}));
+
+vi.mock("../../api/groups", () => ({
+  listMinimalGroups: () => listMinimalGroupsMock(),
 }));
 
 vi.mock("../../api/storageEndpoints", () => ({
@@ -87,6 +92,10 @@ describe("S3ConnectionsPage modal tabs", () => {
       { id: 12, email: "u12@example.com" },
       { id: 13, email: "u13@example.com" },
       { id: 99, email: "owner@example.com" },
+    ]);
+    listMinimalGroupsMock.mockResolvedValue([
+      { id: 31, name: "Storage Operators" },
+      { id: 32, name: "Data Readers" },
     ]);
 
     listStorageEndpointsMock.mockResolvedValue([]);
@@ -180,6 +189,37 @@ describe("S3ConnectionsPage modal tabs", () => {
     );
     expect(upsertS3ConnectionUserMock).toHaveBeenCalledWith(1, { user_id: 13 });
     expect(removeS3ConnectionUserMock).toHaveBeenCalledWith(1, 12);
+  });
+
+  it("keeps linked UI group selections across tabs and submits group_ids", async () => {
+    render(<S3ConnectionsPage />);
+
+    await screen.findByText("connection-1");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI groups" }));
+    expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Storage Operators" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "Linked UI groups" }));
+    expect(screen.getByText("Storage Operators")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalled();
+    });
+
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        group_ids: [31],
+      })
+    );
   });
 
   it("keeps users tab actions enabled for shared-only admin connections", async () => {

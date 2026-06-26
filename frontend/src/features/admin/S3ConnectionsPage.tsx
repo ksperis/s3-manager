@@ -30,6 +30,7 @@ import {
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
+import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { extractApiError } from "../../utils/apiError";
@@ -45,7 +46,7 @@ const credentialOwnerTypeOptions = [
   { value: "account_user", label: "Account user" },
   { value: "s3_user", label: "S3 user" },
 ];
-type EditTab = "general" | "users";
+type EditTab = "general" | "users" | "groups";
 
 const createEmptyConnectionForm = () => ({
   name: "",
@@ -73,6 +74,7 @@ export default function S3ConnectionsPage() {
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
+  const [uiGroups, setUiGroups] = useState<UiGroupSummary[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -108,9 +110,13 @@ export default function S3ConnectionsPage() {
   const [editInitialSignature, setEditInitialSignature] = useState("");
   const [editTab, setEditTab] = useState<EditTab>("general");
   const [editLinkedUserIds, setEditLinkedUserIds] = useState<number[]>([]);
+  const [editLinkedGroupIds, setEditLinkedGroupIds] = useState<number[]>([]);
   const [editUserSearch, setEditUserSearch] = useState("");
+  const [editGroupSearch, setEditGroupSearch] = useState("");
   const [showEditUserPanel, setShowEditUserPanel] = useState(false);
+  const [showEditGroupPanel, setShowEditGroupPanel] = useState(false);
   const [editUserSelections, setEditUserSelections] = useState<number[]>([]);
+  const [editGroupSelections, setEditGroupSelections] = useState<number[]>([]);
   const maxLinkOptions = 10;
 
   const [deleteTarget, setDeleteTarget] = useState<S3ConnectionAdminItem | null>(null);
@@ -130,6 +136,7 @@ export default function S3ConnectionsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const showEditGeneralTab = editTab === "general";
   const showEditUsersTab = editTab === "users";
+  const showEditGroupsTab = editTab === "groups";
   const {
     catalog: adminTagCatalog,
     loading: adminTagCatalogLoading,
@@ -148,9 +155,13 @@ export default function S3ConnectionsPage() {
   const resetEditUsersState = useCallback(() => {
     setEditTab("general");
     setEditLinkedUserIds([]);
+    setEditLinkedGroupIds([]);
     setEditUserSearch("");
+    setEditGroupSearch("");
     setShowEditUserPanel(false);
+    setShowEditGroupPanel(false);
     setEditUserSelections([]);
+    setEditGroupSelections([]);
   }, []);
   const closeEditModal = useCallback(() => {
     setEditing(null);
@@ -251,6 +262,18 @@ export default function S3ConnectionsPage() {
     loadPortalUsers();
   }, []);
 
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const data = await listMinimalGroups();
+        setUiGroups(data);
+      } catch {
+        setUiGroups([]);
+      }
+    };
+    loadGroups();
+  }, []);
+
   const createHasPreset = createEndpointMode === "preset";
   const editHasPreset = editEndpointMode === "preset";
 
@@ -310,6 +333,11 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
+  const groupLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    uiGroups.forEach((group) => map.set(group.id, group.name));
+    return map;
+  }, [uiGroups]);
   const renderConnectionAssociations = (connection: S3ConnectionAdminItem) => {
     const userItems: AssociationChipItem[] = (connection.user_ids ?? []).map((id) => ({
       id,
@@ -338,6 +366,14 @@ export default function S3ConnectionsPage() {
       })),
     [editLinkedUserIds, portalUserLabelById]
   );
+  const linkedEditGroups = useMemo(
+    () =>
+      editLinkedGroupIds.map((id) => ({
+        id,
+        label: groupLabelById.get(id) ?? `Group #${id}`,
+      })),
+    [editLinkedGroupIds, groupLabelById]
+  );
   const availableEditUsers = useMemo(() => {
     const query = editUserSearch.trim().toLowerCase();
     const selectedIds = new Set(editLinkedUserIds);
@@ -346,7 +382,15 @@ export default function S3ConnectionsPage() {
       .filter((user) => !query || user.email.toLowerCase().includes(query))
       .map((user) => ({ id: user.id, label: user.email }));
   }, [editLinkedUserIds, editUserSearch, portalUsers]);
+  const availableEditGroups = useMemo(() => {
+    const query = editGroupSearch.trim().toLowerCase();
+    const selectedIds = new Set(editLinkedGroupIds);
+    return uiGroups
+      .filter((group) => !selectedIds.has(group.id))
+      .filter((group) => !query || group.name.toLowerCase().includes(query));
+  }, [editGroupSearch, editLinkedGroupIds, uiGroups]);
   const visibleAvailableEditUsers = useMemo(() => availableEditUsers.slice(0, maxLinkOptions), [availableEditUsers, maxLinkOptions]);
+  const visibleAvailableEditGroups = useMemo(() => availableEditGroups.slice(0, maxLinkOptions), [availableEditGroups, maxLinkOptions]);
   const editCredentialOwnerTypeOptions = useMemo(() => {
     const currentValue = editForm.credential_owner_type.trim();
     if (!currentValue) return credentialOwnerTypeOptions;
@@ -375,8 +419,9 @@ export default function S3ConnectionsPage() {
         form: { ...editForm, tags: normalizeUiTags(editForm.tags) },
         credentials: editCredentials,
         linkedUserIds: normalizeLinkedUserIds(editLinkedUserIds),
+        linkedGroupIds: normalizeLinkedUserIds(editLinkedGroupIds),
       }),
-    [editCredentials, editEndpointMode, editEndpointPresetId, editForm, editLinkedUserIds, normalizeLinkedUserIds]
+    [editCredentials, editEndpointMode, editEndpointPresetId, editForm, editLinkedGroupIds, editLinkedUserIds, normalizeLinkedUserIds]
   );
   const editCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: Boolean(editing && editInitialSignature && editCurrentSignature !== editInitialSignature),
@@ -468,6 +513,11 @@ export default function S3ConnectionsPage() {
   const toggleEditUserSelection = (userId: number) => {
     setEditUserSelections((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   };
+  const toggleEditGroupSelection = (groupId: number) => {
+    setEditGroupSelections((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    );
+  };
   const loadAllSelectableFilteredIds = useCallback(async () => {
     if (allFilteredSelectableIdsKey === selectionQueryKey && allFilteredSelectableIds) {
       return allFilteredSelectableIds;
@@ -533,15 +583,20 @@ export default function S3ConnectionsPage() {
       verify_tls: conn.verify_tls !== false,
     };
     const nextLinkedUserIds = normalizeLinkedUserIds(conn.user_ids);
+    const nextLinkedGroupIds = normalizeLinkedUserIds(conn.group_ids);
     setEditing(conn);
     setEditEndpointMode(nextEndpointMode);
     setEditEndpointPresetId(nextEndpointPresetId);
     setEditForm(nextForm);
     setEditTab("general");
     setEditLinkedUserIds(nextLinkedUserIds);
+    setEditLinkedGroupIds(nextLinkedGroupIds);
     setEditUserSearch("");
+    setEditGroupSearch("");
     setShowEditUserPanel(false);
+    setShowEditGroupPanel(false);
     setEditUserSelections([]);
+    setEditGroupSelections([]);
     setEditCredentials({ access_key_id: "", secret_access_key: "" });
     setEditInitialSignature(
       stableSignature({
@@ -550,6 +605,7 @@ export default function S3ConnectionsPage() {
         form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) },
         credentials: { access_key_id: "", secret_access_key: "" },
         linkedUserIds: nextLinkedUserIds,
+        linkedGroupIds: nextLinkedGroupIds,
       })
     );
     setEditError(null);
@@ -647,6 +703,7 @@ export default function S3ConnectionsPage() {
     setEditError(null);
     try {
       const connectionId = editing.id;
+      const targetGroupIds = normalizeLinkedUserIds(editLinkedGroupIds);
       if (accessKeyId && secretAccessKey) {
         await rotateAdminS3ConnectionCredentials(connectionId, {
           access_key_id: accessKeyId,
@@ -667,6 +724,7 @@ export default function S3ConnectionsPage() {
           };
       await updateAdminS3Connection(connectionId, {
         name: editForm.name || undefined,
+        group_ids: targetGroupIds,
         tags: normalizeUiTags(editForm.tags),
         access_manager: editForm.access_manager,
         access_browser: editForm.access_browser,
@@ -1199,6 +1257,17 @@ export default function S3ConnectionsPage() {
               >
                 Linked UI users
               </button>
+              <button
+                type="button"
+                onClick={() => setEditTab("groups")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "groups"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Linked UI groups
+              </button>
             </div>
 
             {showEditGeneralTab && (
@@ -1469,6 +1538,144 @@ export default function S3ConnectionsPage() {
                             setEditUserSelections([]);
                             setEditUserSearch("");
                             setShowEditUserPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showEditGroupsTab && (
+              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      {linkedEditGroups.length} linked
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditGroupPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                  >
+                    {showEditGroupPanel ? "Close" : "Add UI groups"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Group
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {linkedEditGroups.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No linked groups yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        linkedEditGroups.map((group) => (
+                          <tr key={group.id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{group.label}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setEditLinkedGroupIds((prev) => prev.filter((id) => id !== group.id))}
+                                className={tableDeleteActionClasses}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {showEditGroupPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={editGroupSearch}
+                        onChange={(e) => setEditGroupSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                      {availableEditGroups.length === 0 && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      )}
+                      {visibleAvailableEditGroups.map((group) => {
+                        const isSelected = editGroupSelections.includes(group.id);
+                        return (
+                          <div
+                            key={group.id}
+                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleEditGroupSelection(group.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{group.name}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {availableEditGroups.length > maxLinkOptions && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {maxLinkOptions} matches. Refine your search to see more.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">{editGroupSelections.length} selected</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEditGroupPanel(false);
+                            setEditGroupSelections([]);
+                            setEditGroupSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={editGroupSelections.length === 0}
+                          onClick={() => {
+                            if (editGroupSelections.length === 0) return;
+                            setEditLinkedGroupIds((prev) => normalizeLinkedUserIds([...prev, ...editGroupSelections]));
+                            setEditGroupSelections([]);
+                            setEditGroupSearch("");
+                            setShowEditGroupPanel(false);
                           }}
                           className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >

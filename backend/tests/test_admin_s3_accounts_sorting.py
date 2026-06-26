@@ -119,3 +119,49 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
             "account_role": AccountRole.PORTAL_USER.value,
         }
     ]
+
+
+def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
+    account = _seed_account(db_session, name="group-edit-account", rgw_account_id="RGW-GROUP-EDIT")
+    old_group = UiGroup(name="Old Account Group")
+    new_group = UiGroup(name="New Account Group")
+    db_session.add_all([old_group, new_group])
+    db_session.flush()
+    db_session.add(
+        UiGroupS3Account(
+            account_id=account.id,
+            group_id=old_group.id,
+            account_admin=True,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+
+    response = client.put(
+        f"/api/admin/accounts/{account.id}",
+        json={
+            "group_links": [
+                {
+                    "group_id": new_group.id,
+                    "account_admin": False,
+                    "account_role": AccountRole.PORTAL_MANAGER.value,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["group_ids"] == [new_group.id]
+    assert payload["group_links"] == [
+        {
+            "group_id": new_group.id,
+            "group_name": "New Account Group",
+            "account_admin": False,
+            "account_role": AccountRole.PORTAL_MANAGER.value,
+        }
+    ]
+    rows = db_session.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
+    assert [(row.group_id, row.account_admin, row.account_role) for row in rows] == [
+        (new_group.id, False, AccountRole.PORTAL_MANAGER.value)
+    ]

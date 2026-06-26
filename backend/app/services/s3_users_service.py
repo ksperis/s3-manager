@@ -768,6 +768,8 @@ class S3UsersService:
                 s3_user.storage_endpoint_id = endpoint.id
         if payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
+        if payload.group_ids is not None:
+            self._ensure_group_links(s3_user, payload.group_ids)
         if payload.tags is not None:
             self.tags.replace_s3_user_tags(s3_user, payload.tags)
         if payload.allow_manager_bucket_quota is not None:
@@ -815,6 +817,25 @@ class S3UsersService:
             allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
         )
+
+    def _ensure_group_links(self, s3_user: S3UserModel, group_ids: list[int]) -> None:
+        desired_ids = sorted({int(group_id) for group_id in group_ids if group_id is not None})
+        if desired_ids:
+            found = {row[0] for row in self.db.query(UiGroup.id).filter(UiGroup.id.in_(desired_ids)).all()}
+            missing = set(desired_ids) - found
+            if missing:
+                missing_str = ", ".join(str(mid) for mid in sorted(missing))
+                raise ValueError(f"UI groups not found: {missing_str}")
+        existing = self.db.query(UiGroupS3User).filter(UiGroupS3User.s3_user_id == s3_user.id).all()
+        existing_ids = {link.group_id for link in existing}
+        desired_set = set(desired_ids)
+        for group_id in existing_ids - desired_set:
+            self.db.query(UiGroupS3User).filter(
+                UiGroupS3User.s3_user_id == s3_user.id,
+                UiGroupS3User.group_id == group_id,
+            ).delete(synchronize_session=False)
+        for group_id in desired_set - existing_ids:
+            self.db.add(UiGroupS3User(group_id=group_id, s3_user_id=s3_user.id))
 
     def rotate_keys(self, user_id: int) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)

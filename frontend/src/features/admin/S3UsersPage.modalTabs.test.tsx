@@ -14,6 +14,7 @@ const deleteS3UserMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
+const listMinimalGroupsMock = vi.fn();
 const listAdminTagDefinitionsMock = vi.fn();
 
 const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
@@ -48,6 +49,10 @@ vi.mock("../../api/storageEndpoints", () => ({
 
 vi.mock("../../api/users", () => ({
   listMinimalUsers: () => listMinimalUsersMock(),
+}));
+
+vi.mock("../../api/groups", () => ({
+  listMinimalGroups: () => listMinimalGroupsMock(),
 }));
 
 vi.mock("../../api/tags", () => ({
@@ -110,6 +115,7 @@ describe("S3UsersPage modal tabs", () => {
     });
 
     listMinimalUsersMock.mockResolvedValue([{ id: 33, email: "ui33@example.com" }]);
+    listMinimalGroupsMock.mockResolvedValue([{ id: 31, name: "Storage Group" }]);
     listAdminTagDefinitionsMock.mockResolvedValue([makeTag(601, "legacy"), makeTag(602, "prod")]);
 
     getS3UserMock.mockResolvedValue({
@@ -296,6 +302,42 @@ describe("S3UsersPage modal tabs", () => {
       expect.objectContaining({
         tags: [expect.objectContaining({ label: "legacy", color_key: "neutral" })],
         user_ids: [33],
+      })
+    );
+  });
+
+  it("keeps Linked UI groups changes across tabs and submits group_ids", async () => {
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI groups" }));
+    expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Storage Group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "Linked UI groups" }));
+    expect(screen.getByText("Storage Group")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateS3UserMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3UserMock.mock.calls.at(-1);
+    expect(lastCall?.[0]).toBe(5);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        group_ids: [31],
       })
     );
   });
