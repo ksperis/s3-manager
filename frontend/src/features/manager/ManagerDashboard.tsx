@@ -40,7 +40,10 @@ import {
 import {
   WORKSPACE_TRAFFIC_TREND_WINDOWS as TRAFFIC_TREND_WINDOWS,
   buildWorkspaceDashboardKpis,
+  formatWorkspaceProjectedFull,
+  formatWorkspaceSignedBytesDelta,
   selectWorkspaceTrafficTrend,
+  workspaceStorageGrowthDelta,
   type WorkspaceTrafficTrendSelection,
 } from "../../components/workspaceDashboardKpis";
 import UiBadge from "../../components/ui/UiBadge";
@@ -98,8 +101,6 @@ type QuickAction = {
   unavailableReason?: string | null;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
@@ -151,39 +152,6 @@ function formatQuotaStatusValue(
   if (used == null) return "";
   const usableQuota = quota != null && quota > 0 ? quota : null;
   return usableQuota == null ? formatter(used) : `${formatter(used)} / ${formatter(usableQuota)}`;
-}
-
-function trendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
-  if (baseline?.window === "day") return 1;
-  if (baseline?.window === "week") return 7;
-  return 30;
-}
-
-function formatSignedBytesDelta(value: number | null): string {
-  if (value == null) return "-";
-  if (value === 0) return "0 B";
-  return `${value > 0 ? "+" : "-"}${formatBytes(Math.abs(value))}`;
-}
-
-function formatProjectedFull(
-  currentValue: number | null,
-  quotaValue: number | null,
-  baseline: ManagerUsageTrendBaseline | null | undefined
-): string {
-  if (currentValue == null || quotaValue == null || quotaValue <= 0) return "-";
-  if (currentValue >= quotaValue) return "Full";
-  const baselineValue = baseline?.used_bytes;
-  if (baselineValue == null) return "-";
-  const delta = currentValue - baselineValue;
-  if (delta <= 0) return "Stable";
-  const dailyGrowth = delta / trendWindowDays(baseline);
-  if (dailyGrowth <= 0) return "Stable";
-  const daysToFull = (quotaValue - currentValue) / dailyGrowth;
-  if (!Number.isFinite(daysToFull)) return "-";
-  if (daysToFull < 45) return `~${Math.max(1, Math.round(daysToFull))} days`;
-  const months = daysToFull / 30;
-  if (months < 24) return `~${Math.max(1, Math.round(months))} months`;
-  return `~${Math.max(1, Math.round(months / 12))} years`;
 }
 
 function formatStatus(status: HealthCheckStatus): string {
@@ -293,7 +261,7 @@ function StorageOverviewCard({
     () => (unavailableReason ? [] : buildWorkspaceStorageEvolutionPoints(usedBytes, trendBaseline, referenceDate)),
     [referenceDate, trendBaseline, unavailableReason, usedBytes]
   );
-  const growthDelta = usedBytes == null || trendBaseline?.used_bytes == null ? null : usedBytes - trendBaseline.used_bytes;
+  const growthDelta = workspaceStorageGrowthDelta(usedBytes, trendBaseline);
   const growthToneClass =
     growthDelta == null || growthDelta === 0
       ? "text-[var(--ui-text-muted)]"
@@ -301,7 +269,7 @@ function StorageOverviewCard({
         ? "text-emerald-600 dark:text-emerald-300"
         : "text-rose-600 dark:text-rose-300";
   const growthLabel = trendBaseline?.label ? `Growth (${trendBaseline.label})` : "Growth";
-  const projectedFull = formatProjectedFull(usedBytes, quotaBytes, trendBaseline);
+  const projectedFull = formatWorkspaceProjectedFull(usedBytes, quotaBytes, trendBaseline);
   const content = (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center gap-1.5">
@@ -325,7 +293,7 @@ function StorageOverviewCard({
           <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
             <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{growthLabel}</p>
             <p className={cx("mt-1 text-base font-semibold leading-5", growthToneClass)}>
-              {formatSignedBytesDelta(growthDelta)}
+              {formatWorkspaceSignedBytesDelta(growthDelta)}
             </p>
           </div>
         </div>

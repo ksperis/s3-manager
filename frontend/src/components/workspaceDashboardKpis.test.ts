@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ManagerTrafficStats } from "../api/stats";
 import { buildWorkspaceStorageEvolutionPoints } from "./WorkspaceDashboardKit";
-import { buildWorkspaceDashboardKpis, selectWorkspaceTrafficTrend } from "./workspaceDashboardKpis";
+import {
+  buildWorkspaceDashboardKpis,
+  formatWorkspaceProjectedFull,
+  formatWorkspaceSignedBytesDelta,
+  selectWorkspaceTrafficTrend,
+  workspaceStorageGrowthDelta,
+} from "./workspaceDashboardKpis";
 
 function trafficStats(window: string, bytesIn: number, bytesOut: number, timestamps: string[]): ManagerTrafficStats {
   return {
@@ -101,5 +107,17 @@ describe("workspaceDashboardKpis", () => {
     const stablePoints = buildWorkspaceStorageEvolutionPoints(512, null, "2026-06-10T00:00:00Z");
     expect(stablePoints).toHaveLength(10);
     expect(new Set(stablePoints.map((point) => point.usedBytes))).toEqual(new Set([512]));
+  });
+
+  it("formats shared storage overview growth and projected-full signals", () => {
+    const baseline = { window: "week" as const, label: "last week", period_start: "2026-06-03", used_bytes: 256 };
+    const growthDelta = workspaceStorageGrowthDelta(1024, baseline);
+
+    expect(growthDelta).toBe(768);
+    expect(formatWorkspaceSignedBytesDelta(growthDelta)).toBe("+768 B");
+    expect(formatWorkspaceProjectedFull(1024, 2048, baseline)).toBe("~9 days");
+    expect(formatWorkspaceProjectedFull(1024, 2048, { ...baseline, used_bytes: 1024 })).toBe("Stable");
+    expect(formatWorkspaceProjectedFull(2048, 2048, baseline)).toBe("Full");
+    expect(formatWorkspaceProjectedFull(1024, null, baseline)).toBe("-");
   });
 });

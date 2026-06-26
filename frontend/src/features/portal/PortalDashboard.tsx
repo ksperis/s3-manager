@@ -16,12 +16,14 @@ import {
   WorkspaceDashboardProgressBar as ProgressBar,
   WorkspaceDashboardStorageEvolutionChart,
   WorkspaceStatusDot,
-  type WorkspaceDashboardStorageEvolutionPoint,
   type WorkspaceDashboardTone,
 } from "../../components/WorkspaceDashboardKit";
 import {
   buildWorkspaceDashboardKpis,
+  formatWorkspaceProjectedFull,
+  formatWorkspaceSignedBytesDelta,
   selectWorkspaceTrafficTrend,
+  workspaceStorageGrowthDelta,
   workspaceTrafficTotalBytes,
 } from "../../components/workspaceDashboardKpis";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
@@ -34,6 +36,7 @@ import {
   BucketIcon,
   FileIcon,
   HistoryIcon,
+  InfoIcon,
   LinkIcon,
   OpenIcon,
   TransferIcon,
@@ -185,24 +188,44 @@ function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorksp
 function StorageOverviewCard({
   usedBytes,
   quotaBytes,
-  objectCount,
-  dataInBytes,
-  dataOutBytes,
-  storageTrendPoints,
+  trendBaseline,
+  referenceDate,
 }: {
   usedBytes: number | null | undefined;
   quotaBytes: number | null | undefined;
-  objectCount: number | null | undefined;
-  dataInBytes: number | null | undefined;
-  dataOutBytes: number | null | undefined;
-  storageTrendPoints: WorkspaceDashboardStorageEvolutionPoint[];
+  trendBaseline?: ManagerUsageTrendBaseline | null;
+  referenceDate?: string | Date | null;
 }) {
   const { t } = useI18n();
   const usagePercent = percent(usedBytes, quotaBytes);
+  const storageTrendPoints = useMemo(
+    () => buildWorkspaceStorageEvolutionPoints(usedBytes, trendBaseline, referenceDate),
+    [referenceDate, trendBaseline, usedBytes]
+  );
+  const growthDelta = workspaceStorageGrowthDelta(usedBytes, trendBaseline);
+  const growthToneClass =
+    growthDelta == null || growthDelta === 0
+      ? "text-[var(--ui-text-muted)]"
+      : growthDelta > 0
+        ? "text-emerald-600 dark:text-emerald-300"
+        : "text-rose-600 dark:text-rose-300";
+  const growthLabel = trendBaseline?.label
+    ? t({ en: `Growth (${trendBaseline.label})`, fr: `Croissance (${trendBaseline.label})`, de: `Wachstum (${trendBaseline.label})` })
+    : t({ en: "Growth", fr: "Croissance", de: "Wachstum" });
+  const projectedFull = formatWorkspaceProjectedFull(usedBytes, quotaBytes, trendBaseline, {
+    full: t({ en: "Full", fr: "Plein", de: "Voll" }),
+    stable: t({ en: "Stable", fr: "Stable", de: "Stabil" }),
+    days: (value) => t({ en: `~${value} days`, fr: `~${value} jours`, de: `~${value} Tage` }),
+    months: (value) => t({ en: `~${value} months`, fr: `~${value} mois`, de: `~${value} Monate` }),
+    years: (value) => t({ en: `~${value} years`, fr: `~${value} ans`, de: `~${value} Jahre` }),
+  });
   return (
     <section className={cx(uiCardClass, "h-full p-4")}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">{t({ en: "Storage overview", fr: "Vue du stockage", de: "Speicherübersicht" })}</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="ui-subtitle font-semibold text-[var(--ui-text)]">{t({ en: "Storage overview", fr: "Vue du stockage", de: "Speicherübersicht" })}</h2>
+          <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
+        </div>
         <Link to="/portal/usage" className="inline-flex items-center gap-2 ui-caption font-semibold text-primary">
           {t({ en: "Usage analytics", fr: "Analyse d'utilisation", de: "Nutzungsanalyse" })}
           <OpenIcon className="h-3.5 w-3.5" />
@@ -228,18 +251,23 @@ function StorageOverviewCard({
         emptyLabel={t({ en: "Storage usage unavailable.", fr: "Utilisation du stockage indisponible.", de: "Speichernutzung nicht verfügbar." })}
         chartLabel={t({ en: "Storage evolution chart", fr: "Graphique d'évolution du stockage", de: "Diagramm zur Speicherentwicklung" })}
       />
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</p>
-          <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatDashboardNumber(objectCount)}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="h-full">
+          <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
+            <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{growthLabel}</p>
+            <p className={cx("mt-1 text-base font-semibold leading-5", growthToneClass)}>
+              {formatWorkspaceSignedBytesDelta(growthDelta)}
+            </p>
+          </div>
         </div>
-        <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Data in", fr: "Données entrantes", de: "Eingehende Daten" })}</p>
-          <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatBytes(dataInBytes)}</p>
-        </div>
-        <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
-          <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Data out", fr: "Données sortantes", de: "Ausgehende Daten" })}</p>
-          <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{formatBytes(dataOutBytes)}</p>
+        <div className="h-full">
+          <div className="min-h-[55px] rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold leading-4 text-[var(--ui-text-muted)]">{t({ en: "Projected full", fr: "Saturation estimée", de: "Voraussichtlich voll" })}</p>
+              <InfoIcon className="h-3.5 w-3.5 text-[var(--ui-text-muted)]" />
+            </div>
+            <p className="mt-1 text-base font-semibold leading-5 text-[var(--ui-text)]">{projectedFull}</p>
+          </div>
         </div>
       </div>
     </section>
@@ -473,12 +501,6 @@ export default function PortalDashboard() {
   const activityRows = useMemo(() => buildActivityRows(workspace.activity, t), [t, workspace.activity]);
   const transferRows = useMemo(() => buildTransferRows(workspace.transfers, t), [t, workspace.transfers]);
   const currentTraffic = trafficByWindow.day ?? traffic;
-  const dataInBytes = currentTraffic?.totals.bytes_in ?? null;
-  const dataOutBytes = currentTraffic?.totals.bytes_out ?? null;
-  const storageTrendPoints = useMemo(
-    () => buildWorkspaceStorageEvolutionPoints(workspace.usedBytes, usageTrends?.storage, currentTraffic?.end),
-    [currentTraffic?.end, usageTrends?.storage, workspace.usedBytes]
-  );
   const trafficTrend = useMemo(() => {
     const selection = selectWorkspaceTrafficTrend(trafficByWindow);
     return selection ? { ...selection, label: portalTrendPeriodLabel(selection.label, t) } : null;
@@ -610,10 +632,8 @@ export default function PortalDashboard() {
           <StorageOverviewCard
             usedBytes={workspace.usedBytes}
             quotaBytes={workspace.quotaBytes}
-            objectCount={workspace.usedObjects}
-            dataInBytes={dataInBytes}
-            dataOutBytes={dataOutBytes}
-            storageTrendPoints={storageTrendPoints}
+            trendBaseline={storageTrendBaseline}
+            referenceDate={currentTraffic?.end}
           />
         </div>
         <div className="min-w-0 xl:col-span-8">

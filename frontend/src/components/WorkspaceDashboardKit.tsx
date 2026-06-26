@@ -69,7 +69,7 @@ export type WorkspaceDashboardStorageEvolutionPoint = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function workspaceTrendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
+export function workspaceTrendWindowDays(baseline?: ManagerUsageTrendBaseline | null): number {
   if (baseline?.window === "day") return 1;
   if (baseline?.window === "week") return 7;
   return 30;

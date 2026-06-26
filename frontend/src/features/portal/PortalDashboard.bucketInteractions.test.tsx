@@ -187,6 +187,23 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
+  it("aligns the storage overview card with manager growth and projection details", () => {
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    const storageOverview = screen.getByRole("heading", { name: "Storage overview" }).closest("section");
+    expect(storageOverview).not.toBeNull();
+    expect(within(storageOverview!).getByText("Growth (last 30 days)")).toBeInTheDocument();
+    expect(within(storageOverview!).getByText("+256 B")).toBeInTheDocument();
+    expect(within(storageOverview!).getByText("Projected full")).toBeInTheDocument();
+    expect(within(storageOverview!).getByText("~2 months")).toBeInTheDocument();
+    expect(within(storageOverview!).queryByText("Data in")).not.toBeInTheDocument();
+    expect(within(storageOverview!).queryByText("Data out")).not.toBeInTheDocument();
+  });
+
   it("uses shared KPI cards with manager-style trends", () => {
     render(
       <MemoryRouter>
@@ -274,8 +291,7 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(kpiValue("Transfer")).toBe("3.0 KB");
-    expect(screen.getAllByText("2.0 KB").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("1.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("Last 24h")).toBeInTheDocument();
   });
 
   it("builds the storage overview chart from storage usage trends instead of traffic", () => {

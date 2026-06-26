@@ -5,7 +5,12 @@
 import type { ReactNode } from "react";
 import type { ManagerTrafficStats, ManagerUsageTrendBaseline, TrafficWindow } from "../api/stats";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../utils/format";
-import type { WorkspaceDashboardMetric, WorkspaceDashboardMetricTrend, WorkspaceDashboardTone } from "./WorkspaceDashboardKit";
+import {
+  workspaceTrendWindowDays,
+  type WorkspaceDashboardMetric,
+  type WorkspaceDashboardMetricTrend,
+  type WorkspaceDashboardTone,
+} from "./WorkspaceDashboardKit";
 
 export type WorkspaceTrafficTrendSelection = {
   totalBytes: number;
@@ -165,6 +170,58 @@ export function formatWorkspaceStorageTrend(
   comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
   return formatWorkspaceSignedTrend(currentValue, baseline?.used_bytes, baseline?.label ?? "", formatBytes, comparisonLabel);
+}
+
+export function workspaceStorageGrowthDelta(
+  currentValue: number | null | undefined,
+  baseline?: ManagerUsageTrendBaseline | null
+): number | null {
+  return currentValue == null || baseline?.used_bytes == null ? null : currentValue - baseline.used_bytes;
+}
+
+export function formatWorkspaceSignedBytesDelta(value: number | null): string {
+  if (value == null) return "-";
+  if (value === 0) return "0 B";
+  return `${value > 0 ? "+" : "-"}${formatBytes(Math.abs(value))}`;
+}
+
+export type WorkspaceProjectedFullLabels = {
+  unavailable?: string;
+  full?: string;
+  stable?: string;
+  days?: (value: number) => string;
+  months?: (value: number) => string;
+  years?: (value: number) => string;
+};
+
+export function formatWorkspaceProjectedFull(
+  currentValue: number | null | undefined,
+  quotaValue: number | null | undefined,
+  baseline?: ManagerUsageTrendBaseline | null,
+  labels: WorkspaceProjectedFullLabels = {}
+): string {
+  const unavailableLabel = labels.unavailable ?? "-";
+  if (currentValue == null || quotaValue == null || quotaValue <= 0) return unavailableLabel;
+  if (currentValue >= quotaValue) return labels.full ?? "Full";
+  const baselineValue = baseline?.used_bytes;
+  if (baselineValue == null) return unavailableLabel;
+  const delta = currentValue - baselineValue;
+  if (delta <= 0) return labels.stable ?? "Stable";
+  const dailyGrowth = delta / workspaceTrendWindowDays(baseline);
+  if (dailyGrowth <= 0) return labels.stable ?? "Stable";
+  const daysToFull = (quotaValue - currentValue) / dailyGrowth;
+  if (!Number.isFinite(daysToFull)) return unavailableLabel;
+  if (daysToFull < 45) {
+    const days = Math.max(1, Math.round(daysToFull));
+    return labels.days?.(days) ?? `~${days} days`;
+  }
+  const monthsToFull = daysToFull / 30;
+  if (monthsToFull < 24) {
+    const months = Math.max(1, Math.round(monthsToFull));
+    return labels.months?.(months) ?? `~${months} months`;
+  }
+  const years = Math.max(1, Math.round(monthsToFull / 12));
+  return labels.years?.(years) ?? `~${years} years`;
 }
 
 export function formatWorkspaceCountTrend(
