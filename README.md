@@ -84,10 +84,12 @@ Use prebuilt images:
 ```bash
 mkdir s3-manager && cd s3-manager
 wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker-compose.yml
-S3_MANAGER_TAG=latest docker compose up -d frontend backend
+S3_MANAGER_TAG=0.1 docker compose up -d
 ```
 
-`latest` points to the latest stable release published from a Git tag.
+`0.1` follows the latest stable patch release in the `0.1.x` line. The stack
+also starts the scheduler for healthchecks, billing, quota monitoring, and
+usage history.
 
 Default endpoints:
 
