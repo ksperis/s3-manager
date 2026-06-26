@@ -10,6 +10,10 @@ Use this guide to migrate buckets between contexts with verification and operato
 - `bucket_migration_enabled` enabled.
 - A UI user with **Manager tools > Bucket migration** access enabled.
 
+## Before you start
+
+Run a comparison or inventory check first when the source and target already contain data. Migration decisions should be based on known differences, not on bucket names alone.
+
 ## Steps
 
 1. Open **Manager > Tools > Migration**.
@@ -30,6 +34,14 @@ Use this guide to migrate buckets between contexts with verification and operato
 
 Migration runs with explicit progress, safety checks, and auditable operator decisions.
 
+## You are done when
+
+Prechecks are clean, the run reaches its expected final state, and any cutover, retry, rollback, or source-deletion action is explicitly reviewed.
+
+## If you do not see this action
+
+Check `bucket_migration_enabled`, Manager tool access, and whether the selected source and target contexts support the selected migration mode.
+
 ## Limits / feature flags
 
 !!! note
@@ -39,6 +51,7 @@ Migration runs with explicit progress, safety checks, and auditable operator dec
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
+- [Safe destructive and bulk operations](safe-destructive-operations.md)
 
 ## Visual example
 

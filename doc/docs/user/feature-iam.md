@@ -9,6 +9,10 @@ Use this guide for tenant IAM administration (users, groups, roles, policies).
 - Access to Manager IAM pages.
 - Endpoint IAM capability enabled.
 
+## Before you start
+
+Select the account or connection that owns the IAM resources. IAM changes should map to native IAM concepts and should not be used to compensate for missing UI access.
+
 ## Steps
 
 1. Open `/manager/users`, `/manager/groups`, `/manager/roles`, or `/manager/iam/policies`.
@@ -20,6 +24,14 @@ Use this guide for tenant IAM administration (users, groups, roles, policies).
 ## Expected result
 
 IAM resources are managed with native IAM semantics.
+
+## You are done when
+
+The intended user, group, role, policy, or access key appears in Manager and a separate access check confirms the expected storage permissions.
+
+## If you do not see this action
+
+Check endpoint IAM capability, Manager access, and the selected execution context.
 
 ## Limits / feature flags
 

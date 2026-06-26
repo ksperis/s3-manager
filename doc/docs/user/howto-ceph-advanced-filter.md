@@ -13,6 +13,10 @@ Use **Advanced filter** in **Ceph Admin** listings when you need precise selecti
 - Access to `/ceph-admin/buckets`.
 - An endpoint selected in Ceph Admin.
 
+## Before you start
+
+Choose the smallest filter set that answers the operational question. Detail filters can trigger extra lookups on large inventories.
+
 ## Steps
 
 1. Open the relevant page in **Ceph Admin**:
@@ -36,6 +40,14 @@ Use **Advanced filter** in **Ceph Admin** listings when you need precise selecti
 ## Expected result
 
 The current Ceph Admin listing is narrowed down to the entities matching your advanced criteria.
+
+## You are done when
+
+The active filter chips match the intended criteria and the remaining rows are small enough to review, export, tag, or act on safely.
+
+## If you do not see this action
+
+Check Ceph Admin access, the selected endpoint, and feature-detail capability for filters such as notifications or server-side encryption.
 
 ## Limits / feature flags
 

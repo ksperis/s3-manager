@@ -9,6 +9,10 @@ Use **UI tags** in **Storage Ops > Buckets** to build reusable operational selec
 - Access to `/storage-ops/buckets`.
 - `storage_ops_enabled` feature enabled.
 
+## Before you start
+
+Use Storage Ops UI tags for cross-context campaigns. They stay local to the browser and do not change backend S3 tags.
+
 ## Steps
 
 1. Open **Storage Ops > Buckets**.
@@ -22,6 +26,14 @@ Use **UI tags** in **Storage Ops > Buckets** to build reusable operational selec
 ## Expected result
 
 Your selected buckets are grouped with UI tags so repeated operational campaigns are faster to run.
+
+## You are done when
+
+The selected rows show the intended UI tags and the same tag filter can be reused across authorized contexts.
+
+## If you do not see this action
+
+Check Storage Ops access, the global feature flag, and whether rows are selected in the bucket workbench.
 
 ## Limits / feature flags
 

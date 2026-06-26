@@ -11,6 +11,10 @@ Use this guide when you need to compare bucket states before migration or remedi
 - A UI user with **Manager tools > Bucket compare** access enabled.
 - Context with bucket management capability.
 
+## Before you start
+
+Choose the comparison source and target deliberately. Compare results are only useful when the source and target contexts, bucket names, and optional modified-after cutoff match the remediation plan.
+
 ## Steps
 
 1. Open **Manager > Tools > Compare**.
@@ -28,6 +32,14 @@ You get an actionable diff view to support controlled bucket alignment. Manager
 remediation actions apply only the exact object keys present in the current
 content diff section or object row.
 
+## You are done when
+
+The result summary is reviewed, the relevant rows are expanded, and any remediation action is limited to the exact object keys you intended to align.
+
+## If you do not see this action
+
+Check `bucket_compare_enabled`, your Manager tool access, and whether the selected context can manage buckets.
+
 ## Limits / feature flags
 
 !!! note
@@ -37,6 +49,7 @@ content diff section or object row.
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Bucket migration](feature-bucket-migration.md)
+- [Safe destructive and bulk operations](safe-destructive-operations.md)
 
 ## Visual example
 

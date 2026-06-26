@@ -10,6 +10,10 @@ Use this page when you need a monthly usage and estimated cost overview for Ceph
 - `billing_enabled=true` in general settings.
 - At least one Ceph endpoint with billing data collected for the selected month.
 
+## Before you start
+
+Pick the month and subject type you want to explain. Billing views are most useful when you compare the summary cards, subject table, and selected subject charts together.
+
 ## Steps
 
 1. Open `/admin/billing`.
@@ -21,6 +25,14 @@ Use this page when you need a monthly usage and estimated cost overview for Ceph
 ## Expected result
 
 You can compare monthly billing exposure across tenants and drill into the subjects that explain the current totals.
+
+## You are done when
+
+The selected month shows enough coverage to support the estimate, and the highest-cost subject can be traced to storage, traffic, or request volume.
+
+## If you do not see this action
+
+Check `billing_enabled`, billing collection status, Ceph endpoint selection, and your Admin role.
 
 ## Limits / feature flags
 

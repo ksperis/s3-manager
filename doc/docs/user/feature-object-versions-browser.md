@@ -10,6 +10,10 @@ Use this guide when you need to inspect object history, restore a previous state
 - Effective permissions for the target bucket and object.
 - Versioning enabled on the bucket.
 
+## Before you start
+
+Open the exact bucket and object key from the intended context. Version history belongs to the bucket, not to the display row alone.
+
 ## Steps
 
 1. Open a Browser surface and navigate to the target bucket and object.
@@ -24,6 +28,14 @@ Use this guide when you need to inspect object history, restore a previous state
 ## Expected result
 
 You can inspect object history and act on previous versions without leaving Browser.
+
+## You are done when
+
+The versions tab shows the expected latest version, older versions, and delete markers, or clearly explains that no version history is available.
+
+## If you do not see this action
+
+Check bucket versioning, endpoint capability, the selected object state, and whether your credentials can list versions.
 
 ## Limits / feature flags
 

@@ -9,6 +9,10 @@ Use this guide to manage SNS topic resources from Manager.
 - Access to `/manager/topics`.
 - Endpoint SNS capability enabled.
 
+## Before you start
+
+Confirm that the selected endpoint supports SNS. Topics and bucket notification bindings are endpoint-specific and should be reviewed in the same Manager context.
+
 ## Steps
 
 1. Open **Manager > SNS Topics**.
@@ -24,6 +28,14 @@ SNS topics are managed within the selected manager context.
 For Ceph RGW endpoints, notification bindings returned by the topic API are
 shown as **Notification** entries under their parent topic instead of separate
 topics.
+
+## You are done when
+
+The topic list, attributes, policy, and notification bindings match the intended event workflow.
+
+## If you do not see this action
+
+Check endpoint capability `sns`, Manager access, and whether bucket notification configuration is supported for the target context.
 
 ## Limits / feature flags
 

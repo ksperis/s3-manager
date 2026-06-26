@@ -10,6 +10,10 @@ Use this guide when creating, updating, or inspecting bucket configuration.
 - **Manager tools > Feature rule inventory** access when using `/manager/feature-rules`.
 - Effective storage permissions on target buckets.
 
+## Before you start
+
+Confirm the workspace and execution context first. Bucket names can repeat across accounts, connections, and endpoints, so the selected context is part of the target.
+
 ## Steps
 
 1. Open bucket list in Manager (`/manager/buckets`) or Ceph Admin (`/ceph-admin/buckets`).
@@ -48,6 +52,14 @@ Read-only rule inventories can be reviewed from Manager tools without editing
 bucket configuration.
 Usage snapshots are loaded from the database so bucket detail pages can display
 the latest successful calculation quickly.
+
+## You are done when
+
+The bucket detail page shows the expected configuration state, and Browser or the relevant workbench confirms that the bucket is reachable from the intended context.
+
+## If you do not see this action
+
+Check [Feature availability](feature-availability.md), endpoint capabilities, and Manager tool access before changing IAM policies.
 
 ## Limits / feature flags
 

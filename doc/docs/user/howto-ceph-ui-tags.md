@@ -9,6 +9,10 @@ Use **UI tags** in **Ceph Admin > Buckets** to organize working sets for investi
 - Access to `/ceph-admin/buckets`.
 - An endpoint selected in Ceph Admin.
 
+## Before you start
+
+Use UI tags for local operational grouping, not as backend S3 tags. They help you remember and filter working sets in the console.
+
 ## Steps
 
 1. Open **Ceph Admin > Buckets**.
@@ -22,6 +26,14 @@ Use **UI tags** in **Ceph Admin > Buckets** to organize working sets for investi
 ## Expected result
 
 Selected buckets receive UI tags that can be reused to speed up repeated operational workflows.
+
+## You are done when
+
+The selected rows show the intended UI tags and the tag filter can recover the same working set.
+
+## If you do not see this action
+
+Check that rows are selected and that you are on the Ceph Admin bucket workbench.
 
 ## Limits / feature flags
 

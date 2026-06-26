@@ -9,6 +9,10 @@ Use this guide for object-level actions in Browser surfaces.
 - Access to `/browser`, `/manager/browser`, or `/ceph-admin/browser`.
 - Effective permissions for target bucket/prefix.
 
+## Before you start
+
+Select the execution context before choosing a bucket. The same bucket name may exist in another account or connection, and object actions always use the current context credentials.
+
 ## Steps
 
 1. Open a browser surface and choose context/account.
@@ -50,6 +54,14 @@ Use this guide for object-level actions in Browser surfaces.
 ## Expected result
 
 Object-level operations are executed with current context credentials and reflected immediately.
+
+## You are done when
+
+The object list, inspector, or Operations overview shows the expected completed state for the selected object or prefix.
+
+## If you do not see this action
+
+Check the selected object state, current surface, Browser feature flags, and IAM/S3 permissions. Some actions appear only for a file, only for a folder, or only when versioning is available.
 
 ## Limits / feature flags
 

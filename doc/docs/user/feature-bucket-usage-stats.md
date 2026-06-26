@@ -18,6 +18,10 @@ Use this feature when you need a quick usage snapshot for buckets, including obj
 - Storage Ops: access to Storage Ops and to the manager contexts that own the selected buckets.
 - S3 permissions to list objects or, when supported, list object versions.
 
+## Before you start
+
+Use usage stats as a logical S3/RGW view, not as a physical storage-capacity report. The numbers help understand buckets and versions, but not Ceph placement overhead.
+
 ## Steps
 
 1. Open Manager, Ceph Admin, or Storage Ops in the target scope.
@@ -32,6 +36,14 @@ Use this feature when you need a quick usage snapshot for buckets, including obj
 The report stores the latest successful snapshot per bucket and scope. It shows total objects, total logical bytes, delete markers, type distribution, storage-class distribution, object-size distribution, age distribution, and the current versus noncurrent bytes split.
 
 The account and cluster views do not store a separate aggregate history. They read the latest bucket snapshots, sum counts and bytes, merge distributions, recompute ratios on the aggregate totals, and show coverage such as `N / M buckets covered`.
+
+## You are done when
+
+The page shows the latest snapshot time, coverage, and whether the snapshot is complete or partial for the selected scope.
+
+## If you do not see this action
+
+Check `bucket_usage_stats_enabled`, workspace access, and whether the selected endpoint can list current objects or versions.
 
 ## Limits / feature flags
 

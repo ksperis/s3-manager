@@ -10,6 +10,10 @@ Use this guide when you need to adjust bucket behavior from the **Manager** work
 - A selected execution context (account/connection).
 - Permissions to update bucket settings.
 
+## Before you start
+
+Open the bucket from the account or connection that should own the configuration change. Do not rely on bucket name alone when multiple contexts may contain the same name.
+
 ## Steps
 
 1. Open **Manager > Buckets** (`/manager/buckets`).
@@ -25,6 +29,14 @@ Use this guide when you need to adjust bucket behavior from the **Manager** work
 ## Expected result
 
 The target bucket reflects the new configuration and the updated status is visible in Manager.
+
+## You are done when
+
+The relevant configuration section reports the expected state after refresh, and no warning or disabled control remains for the feature you changed.
+
+## If you do not see this action
+
+Check the selected endpoint capability, your effective Manager access, and the global feature flag for the specific setting.
 
 ## Limits / feature flags
 

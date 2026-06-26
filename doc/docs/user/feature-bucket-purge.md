@@ -14,6 +14,10 @@ configuration.
 - Effective storage permissions for deleting current objects, object versions,
   and delete markers.
 
+## Before you start
+
+Review the target list before typing the confirmation phrase. Bucket purge deletes objects, versions, and delete markers; it does not provide an application-level undo.
+
 ## Steps
 
 1. In Manager, open **Tools > Purge**, select the active context, and select buckets.
@@ -39,6 +43,14 @@ non-empty bucket requires bucket purge access, first runs a guarded purge, and
 then removes the bucket itself. That delete flow removes the bucket and its S3
 configuration; this purge tool does not.
 
+## You are done when
+
+The purge result shows the expected bucket count, deleted object/version totals, and zero unexpected failures.
+
+## If you do not see this action
+
+Check `bucket_purge_enabled`, your Manager tool access, the selected workspace, and whether the workbench exposes purge actions for the current context.
+
 ## Limits / feature flags
 
 !!! warning
@@ -63,6 +75,7 @@ configuration; this purge tool does not.
 - [Workspace: Storage Ops](workspace-storage-ops.md)
 - [Feature: Buckets](feature-buckets.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)
+- [Safe destructive and bulk operations](safe-destructive-operations.md)
 
 ## Visual example
 

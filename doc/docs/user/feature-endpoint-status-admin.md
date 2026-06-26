@@ -9,6 +9,10 @@ Use this page when you need a global healthcheck view across the storage endpoin
 - `ui_admin` or `ui_superadmin` role.
 - `endpoint_status_enabled=true` in general settings.
 
+## Before you start
+
+Use Endpoint Status as a triage page. It tells you which endpoint needs attention, then Ops pages and backend logs explain why.
+
 ## Steps
 
 1. Open `/admin/endpoint-status`.
@@ -26,6 +30,14 @@ Use this page when you need a global healthcheck view across the storage endpoin
 ## Expected result
 
 You can assess current backend health quickly and identify which endpoints require follow-up.
+
+## You are done when
+
+You can name the affected endpoint, current status, latest latency signal, and whether the issue is current or historical.
+
+## If you do not see this action
+
+Check `endpoint_status_enabled`, Admin access, and whether endpoints are configured for healthchecks.
 
 ## Limits / feature flags
 

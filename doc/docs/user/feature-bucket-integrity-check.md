@@ -12,6 +12,10 @@ Use this diagnostic tool when you need to verify that selected buckets can be li
 - S3 permissions to list the bucket and run `HeadObject` on the objects being checked.
 - S3 `GetObject` permission only when using **GET body** mode.
 
+## Before you start
+
+Prefer **HEAD only** for the first diagnostic pass. Use **GET body** only when you intentionally want to read object data and accept the extra traffic.
+
 ## Steps
 
 1. Select one or more buckets from Manager, Ceph Admin, or Storage Ops.
@@ -24,6 +28,14 @@ Use this diagnostic tool when you need to verify that selected buckets can be li
 ## Expected result
 
 The report shows whether each bucket passed, completed with object errors, or failed during listing. The tool does not write to the database and does not persist historical runs.
+
+## You are done when
+
+Each selected bucket has a final status, and any object-level failures include enough key, version, stage, and message detail to decide the next action.
+
+## If you do not see this action
+
+Check the workspace, global feature flag, Manager tool access, and whether the selected context has bucket-management capability.
 
 ## Limits / feature flags
 
