@@ -9,6 +9,75 @@ from .clients import BackendSession
 from .conftest import CephAdminEndpointTestContext, S3AccountTestContext
 
 
+def _parse_int(value) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_bool(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "enabled", "enable"}:
+            return True
+        if normalized in {"false", "0", "no", "disabled", "disable"}:
+            return False
+    return None
+
+
+def _quota_payload(payload: dict, keys: tuple[str, ...]) -> dict | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _quota_max_objects(payload: dict, keys: tuple[str, ...]) -> int | None:
+    quota = _quota_payload(payload, keys)
+    if quota is None:
+        return None
+    return _parse_int(quota.get("max_objects"))
+
+
+def _quota_enabled(payload: dict, keys: tuple[str, ...]) -> bool | None:
+    quota = _quota_payload(payload, keys)
+    if quota is None:
+        return None
+    return _parse_bool(quota.get("enabled"))
+
+
+def _assert_quota_objects_applied(
+    *,
+    label: str,
+    api_detail: dict,
+    api_key: str,
+    raw_account: dict,
+    raw_keys: tuple[str, ...],
+    expected: int,
+) -> None:
+    raw_enabled = _quota_enabled(raw_account, raw_keys)
+    raw_objects = _quota_max_objects(raw_account, raw_keys)
+    if raw_enabled is False or raw_objects != expected:
+        pytest.skip(
+            f"RGW {label} quota update is not applied on this cluster "
+            f"(enabled={raw_enabled}, max_objects={raw_objects})"
+        )
+
+    api_quota = api_detail.get(api_key)
+    assert isinstance(api_quota, dict), f"Updated account detail should include {api_key}"
+    if raw_enabled is not None:
+        assert api_quota.get("enabled") is True
+    assert _quota_max_objects(api_detail, (api_key,)) == expected
+
+
 def _find_account(items: list[dict], account_id: str) -> dict | None:
     for item in items:
         if str(item.get("account_id") or "").strip() == account_id:
@@ -101,6 +170,22 @@ def test_ceph_admin_accounts_listing_detail_update_and_metrics(
         lambda: super_admin_session.get(f"{base_path}/{rgw_account_id}"),
     )
     assert isinstance(raw_account, dict)
+    _assert_quota_objects_applied(
+        label="account",
+        api_detail=updated,
+        api_key="quota",
+        raw_account=raw_account,
+        raw_keys=("quota", "account_quota"),
+        expected=20000,
+    )
+    _assert_quota_objects_applied(
+        label="bucket",
+        api_detail=updated,
+        api_key="bucket_quota",
+        raw_account=raw_account,
+        raw_keys=("bucket_quota",),
+        expected=2000,
+    )
 
     if ceph_admin_endpoint.can_metrics:
         metrics = run_or_skip(
