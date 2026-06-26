@@ -865,7 +865,7 @@ export default function BrowserPage({
   allowFoldersPanel = true,
   allowInspectorPanel = true,
   showPanelToggles = true,
-  defaultShowFolders = false,
+  defaultShowFolders = true,
   defaultShowInspector = false,
   hiddenActionIds = [],
   onSelectedBucketNameChange,
@@ -910,6 +910,8 @@ export default function BrowserPage({
     : true;
   const rootBrowserAdvancedFeaturesEnabled =
     !isMainBrowserPath || userBrowserAdvancedFeaturesEnabled;
+  const rootBrowserFoldersPanelEnabled =
+    isMainBrowserPath && allowFoldersPanel && !isPortalBasicProfile;
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -1530,10 +1532,7 @@ export default function BrowserPage({
     isFoldersPanelVisible,
     isInspectorPanelVisible,
   } = resolveBrowserPanelVisibility({
-    allowFoldersPanel:
-      allowFoldersPanel &&
-      rootBrowserAdvancedFeaturesEnabled &&
-      !isPortalBasicProfile,
+    allowFoldersPanel: rootBrowserFoldersPanelEnabled,
     allowInspectorPanel:
       allowInspectorPanel &&
       rootBrowserAdvancedFeaturesEnabled &&
