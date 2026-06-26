@@ -3,6 +3,9 @@ import type { ManagerTrafficStats } from "../api/stats";
 import { buildWorkspaceStorageEvolutionPoints } from "./WorkspaceDashboardKit";
 import {
   buildWorkspaceDashboardKpis,
+  formatWorkspaceDashboardNumber,
+  formatWorkspaceSignedTrend,
+  formatWorkspaceTrafficTrend,
   formatWorkspaceProjectedFull,
   formatWorkspaceSignedBytesDelta,
   selectWorkspaceTrafficTrend,
@@ -92,6 +95,22 @@ describe("workspaceDashboardKpis", () => {
     expect(metrics[3].value).toBe("384 B");
     expect(metrics[3].detail).toBe("Last 24h");
     expect(metrics[3].trend?.label).toBe("2.0 KB vs last 30 days");
+  });
+
+  it("keeps localized KPI trend values separate from long qualifiers", () => {
+    const signedTrend = formatWorkspaceSignedTrend(91, 47, "la semaine dernière", formatWorkspaceDashboardNumber, "par rapport à");
+    expect(signedTrend).toMatchObject({
+      label: "44 par rapport à la semaine dernière",
+      valueLabel: "44",
+      qualifierLabel: " par rapport à la semaine dernière",
+    });
+
+    const trafficTrend = formatWorkspaceTrafficTrend({ totalBytes: 2048, label: "la semaine dernière" }, "par rapport à");
+    expect(trafficTrend).toMatchObject({
+      label: "2.0 KB par rapport à la semaine dernière",
+      valueLabel: "2.0 KB",
+      qualifierLabel: " par rapport à la semaine dernière",
+    });
   });
 
   it("builds storage evolution points from a baseline and keeps a stable fallback without one", () => {

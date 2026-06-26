@@ -45,6 +45,8 @@ export type WorkspacePlatformMetric = {
 
 export type WorkspaceDashboardMetricTrend = {
   label: string;
+  valueLabel?: string;
+  qualifierLabel?: string;
   tone: "positive" | "negative" | "neutral";
 };
 
@@ -309,20 +311,22 @@ export function WorkspaceDashboardIconBubble({
 
 export function WorkspaceDashboardMetricTrendLine({ trend }: { trend: WorkspaceDashboardMetricTrend }) {
   const toneClass = dashboardTrendToneClasses(trend.tone);
-  const { value, qualifier } = splitDashboardTrendLabel(trend.label);
+  const fallbackParts = splitDashboardTrendLabel(trend.label);
+  const value = trend.valueLabel ?? fallbackParts.value;
+  const qualifier = trend.valueLabel ? trend.qualifierLabel ?? "" : fallbackParts.qualifier;
   return (
-    <p className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-4 text-[var(--ui-text-muted)]">
+    <p className="flex min-w-0 items-start gap-1.5 text-xs font-medium leading-4 text-[var(--ui-text-muted)]">
       {trend.tone === "neutral" ? (
-        <span className={cx("flex h-3.5 w-3.5 items-center justify-center", toneClass)} aria-hidden="true">
+        <span className={cx("mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center", toneClass)} aria-hidden="true">
           -
         </span>
       ) : (
-        <span className={toneClass}>
+        <span className={cx("mt-px shrink-0", toneClass)}>
           <DashboardTrendArrowIcon tone={trend.tone} />
         </span>
       )}
-      <span>
-        <span className={toneClass}>{value}</span>
+      <span className="min-w-0 flex-1 whitespace-normal break-words">
+        <span className={cx(qualifier && "whitespace-nowrap", toneClass)}>{value}</span>
         {qualifier && <span>{qualifier}</span>}
       </span>
     </p>
@@ -338,7 +342,7 @@ export function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDash
       <WorkspaceDashboardIconBubble tone={metric.tone} className="h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
         {metric.icon}
       </WorkspaceDashboardIconBubble>
-      <div className="grid min-h-[108px] min-w-0 flex-1 content-center grid-rows-[1rem_2rem_1rem_0.375rem_1rem] gap-y-1">
+      <div className="grid min-h-[108px] min-w-0 flex-1 content-center grid-rows-[1rem_2rem_1rem_0.375rem_minmax(1rem,auto)] gap-y-1">
         <div className="flex items-center gap-1.5">
           <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
         </div>
@@ -366,7 +370,7 @@ export function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDash
             <span className="h-1.5 w-full max-w-[220px]" aria-hidden="true" />
           )}
         </div>
-        <div className="flex items-center">
+        <div className="flex min-w-0 items-start">
           {metric.trend ? (
             <WorkspaceDashboardMetricTrendLine trend={metric.trend} />
           ) : (

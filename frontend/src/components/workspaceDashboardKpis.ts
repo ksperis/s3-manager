@@ -148,7 +148,9 @@ export function formatWorkspaceTrafficTrend(
   comparisonLabel = "vs"
 ): WorkspaceDashboardMetricTrend | undefined {
   if (!selection) return undefined;
-  return { label: `${formatBytes(selection.totalBytes)} ${comparisonLabel} ${selection.label}`, tone: "positive" };
+  const valueLabel = formatBytes(selection.totalBytes);
+  const qualifierLabel = ` ${comparisonLabel} ${selection.label}`;
+  return { label: `${valueLabel}${qualifierLabel}`, valueLabel, qualifierLabel, tone: "positive" };
 }
 
 export function formatWorkspaceSignedTrend(
@@ -161,7 +163,9 @@ export function formatWorkspaceSignedTrend(
   if (currentValue == null || baselineValue == null || !label) return undefined;
   const delta = currentValue - baselineValue;
   const tone: WorkspaceDashboardMetricTrend["tone"] = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
-  return { label: `${formatter(Math.abs(delta))} ${comparisonLabel} ${label}`, tone };
+  const valueLabel = formatter(Math.abs(delta));
+  const qualifierLabel = ` ${comparisonLabel} ${label}`;
+  return { label: `${valueLabel}${qualifierLabel}`, valueLabel, qualifierLabel, tone };
 }
 
 export function formatWorkspaceStorageTrend(
