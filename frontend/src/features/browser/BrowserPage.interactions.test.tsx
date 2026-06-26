@@ -156,7 +156,6 @@ vi.mock("../../api/buckets", async () => {
 function renderPage({
   defaultShowInspector = false,
   defaultShowFolders = false,
-  useBrowserDefaultShowFolders = false,
   initialEntry = "/browser",
   allowInspectorPanel = true,
   allowFoldersPanel = true,
@@ -169,7 +168,6 @@ function renderPage({
 }: {
   defaultShowInspector?: boolean;
   defaultShowFolders?: boolean;
-  useBrowserDefaultShowFolders?: boolean;
   initialEntry?: string;
   allowInspectorPanel?: boolean;
   allowFoldersPanel?: boolean;
@@ -180,15 +178,12 @@ function renderPage({
   lockedBucketLabel?: string;
   onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
 } = {}) {
-  const foldersDefaultProps = useBrowserDefaultShowFolders
-    ? {}
-    : { defaultShowFolders };
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <BrowserPage
         accountIdForApi={accountIdForApi}
         defaultShowInspector={defaultShowInspector}
-        {...foldersDefaultProps}
+        defaultShowFolders={defaultShowFolders}
         allowInspectorPanel={allowInspectorPanel}
         allowFoldersPanel={allowFoldersPanel}
         workspaceSurface={workspaceSurface}
@@ -696,8 +691,7 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
   });
 
-  it("keeps the folders panel on /browser when advanced Browser access is disabled", async () => {
-    const user = userEvent.setup();
+  it("uses manager-equivalent chrome on /browser when advanced Browser access is disabled", async () => {
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -713,78 +707,13 @@ describe("BrowserPage interactions", () => {
     renderPage({ initialEntry: "/browser" });
     await findRowByLabel("a.txt");
 
-    expect(
-      screen.getByRole("region", { name: "Current bucket" }),
-    ).toBeInTheDocument();
-    const moreMenu = await openContextMoreMenu(user);
-    expect(
-      within(moreMenu).getByRole("menuitemcheckbox", {
-        name: /Folders panel/i,
-      }),
-    ).toHaveAttribute("aria-checked", "true");
-    expect(
-      within(moreMenu).queryByRole("menuitemcheckbox", {
-        name: /Inspector panel/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(moreMenu).queryByRole("menuitemcheckbox", {
-        name: /Action bar/i,
-      }),
-    ).not.toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-
     const mainMenu = openHeaderConfigMenu();
-    expect(
-      within(mainMenu).queryByText("Reset columns"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(mainMenu).queryByText("Compact view"),
-    ).not.toBeInTheDocument();
+    expect(within(mainMenu).queryByText("Reset columns")).not.toBeInTheDocument();
+    expect(within(mainMenu).queryByText("Compact view")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create bucket" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("tablist", { name: "Inspector tabs" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("toolbar", { name: "Browser actions bar" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("opens the folders panel by default on fresh /browser state and preserves stored hidden state", async () => {
-    const user = userEvent.setup();
-    const freshView = renderPage({
-      initialEntry: "/browser",
-      useBrowserDefaultShowFolders: true,
-    });
-    await findRowByLabel("a.txt");
-
-    expect(
-      screen.getByRole("region", { name: "Current bucket" }),
-    ).toBeInTheDocument();
-
-    freshView.unmount();
-    window.localStorage.clear();
-    seedBrowserRootUiState({
-      layout: { showFolders: false, showInspector: false, showActionBar: false },
-    });
-
-    renderPage({
-      initialEntry: "/browser",
-      useBrowserDefaultShowFolders: true,
-    });
-    await findRowByLabel("a.txt");
-
-    expect(
-      screen.queryByRole("region", { name: "Current bucket" }),
-    ).not.toBeInTheDocument();
-
-    const moreMenu = await openContextMoreMenu(user);
-    expect(
-      within(moreMenu).getByRole("menuitemcheckbox", {
-        name: /Folders panel/i,
-      }),
-    ).toHaveAttribute("aria-checked", "false");
   });
 
   it("uses compact mode by default on /manager/browser", async () => {
