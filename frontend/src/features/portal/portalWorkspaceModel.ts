@@ -40,6 +40,8 @@ export type PortalWorkspaceSpace = {
   projectKey: string | null;
   datasetLabel: string | null;
   role: PortalWorkspaceRole;
+  contentRole: PortalWorkspaceRole | null;
+  canBrowse: boolean;
   status: PortalWorkspaceStatus | "Archived";
   access: PortalWorkspaceAccess;
   region: string | null;
@@ -127,6 +129,13 @@ function roleFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspace
   return "Viewer";
 }
 
+function optionalRoleFromStorageSpace(role?: string | null): PortalWorkspaceRole | null {
+  if (role === "Owner" || role === "Editor" || role === "Viewer") {
+    return role;
+  }
+  return null;
+}
+
 function statusFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspaceStatus {
   if (space.status === "Active" || space.status === "Attention") {
     return space.status;
@@ -188,6 +197,8 @@ export function buildPortalWorkspaceModel({
   const spaces = (storageSpaces ?? []).map((storageSpace) => {
     const usageSpace = usageBySpace.get(storageSpace.id);
     const role = roleFromStorageSpace(storageSpace);
+    const canBrowse = storageSpace.can_browse ?? true;
+    const contentRole = optionalRoleFromStorageSpace(storageSpace.content_role) ?? (canBrowse ? role : null);
     const name = storageSpace.name || prettyName(storageSpace.id);
     const visibility = visibilityFromStorageSpace(storageSpace);
     return {
@@ -203,6 +214,8 @@ export function buildPortalWorkspaceModel({
       projectKey: storageSpace.project_key ?? null,
       datasetLabel: storageSpace.dataset_label ?? null,
       role,
+      contentRole,
+      canBrowse,
       status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace),
       access: visibility === "shared" ? "Shared" : "Private",
       region: storageSpace.region ?? null,

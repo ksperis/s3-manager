@@ -154,9 +154,10 @@ def _resolve_portal_browser_context(
         visible_spaces = portal_service.list_storage_spaces(user, portal_access)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    browse_spaces = [space for space in visible_spaces if space.can_browse]
     allowed_buckets = {
         space.internal_bucket_name or space.id
-        for space in visible_spaces
+        for space in browse_spaces
         if (space.internal_bucket_name or space.id)
     }
     target_bucket = _portal_browser_target_bucket(request)
@@ -174,7 +175,7 @@ def _resolve_portal_browser_context(
     account._portal_browser_role = role  # type: ignore[attr-defined]
     account._portal_browser_access = portal_access  # type: ignore[attr-defined]
     account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
-    account._portal_storage_spaces = visible_spaces  # type: ignore[attr-defined]
+    account._portal_storage_spaces = browse_spaces  # type: ignore[attr-defined]
     return account
 
 

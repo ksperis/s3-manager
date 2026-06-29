@@ -16,7 +16,7 @@ Use this page when you need to understand who can access a Portal Storage Space 
 | Editor | Viewer actions plus upload, folder creation, and file deletion. |
 | Owner | Editor actions plus sharing management. |
 
-These roles are translated into storage-side permissions. They are not a separate storage permission system.
+Portal uses the Storage Space owner and collaborator grants shown in Portal to decide who appears in sharing lists. Technical S3 access for personal keys is synchronized from those database records. Portal managers may administer a private Storage Space's metadata without receiving file access to that private content.
 
 ## Main tasks
 

@@ -65,7 +65,6 @@ class PortalBucketsUsersMixin:
                     secret_key=bucket_secret,
                     **self._s3_client_kwargs(account),
                 )
-        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)
         return Bucket(
             name=bucket_name,
             creation_date=None,
@@ -107,6 +106,7 @@ class PortalBucketsUsersMixin:
             link, _, _ = self._ensure_portal_user(target, account, iam_service)
             portal_settings = self._effective_portal_settings(account)
             self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
+            self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
             self._ensure_active_key(link, iam_service)
             return
         link = (

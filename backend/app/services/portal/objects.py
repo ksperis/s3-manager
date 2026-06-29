@@ -15,14 +15,45 @@ class PortalObjectsMixin:
         include_archived: bool = False,
     ) -> Optional[PortalStorageSpaceRole]:
         metadata = self._storage_space_metadata(access.account, bucket_name)
-        if metadata and metadata.archived_at and not include_archived:
-            return None
-        if self._is_portal_manager_access(access):
-            return "Owner"
-        if self._metadata_visibility(metadata) == "private":
-            return "Owner" if metadata and metadata.owner_user_id == user.id else None
-        role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
-        return role_by_bucket.get(bucket_name)
+        role_by_bucket = self._db_storage_space_access(
+            user,
+            access.account,
+            access.role,
+            include_archived=include_archived,
+        )
+        return self._storage_space_effective_role(
+            user,
+            access,
+            metadata,
+            role_by_bucket.get(bucket_name),
+            include_archived=include_archived,
+        )
+
+    def _user_storage_space_content_role(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+    ) -> Optional[PortalStorageSpaceRole]:
+        metadata = self._storage_space_metadata(access.account, bucket_name)
+        role_by_bucket = self._db_storage_space_content_access(user, access.account, access.role)
+        return self._storage_space_effective_content_role(
+            user,
+            access,
+            metadata,
+            role_by_bucket.get(bucket_name),
+        )
+
+    def _require_storage_space_content_role(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+    ) -> PortalStorageSpaceRole:
+        role = self._user_storage_space_content_role(user, access, bucket_name)
+        if role is None:
+            raise RuntimeError("Storage Space content access not allowed for this role.")
+        return role
 
     def _portal_object_client(self, user: User, account: S3Account):
         link = self._existing_portal_link(user, account)
@@ -55,6 +86,7 @@ class PortalObjectsMixin:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_content_role(user, access, bucket_name)
         client = self._portal_object_client(user, access.account)
         try:
             resp = client.get_object(Bucket=bucket_name, Key=target_key)
@@ -109,6 +141,7 @@ class PortalObjectsMixin:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
+        self._require_storage_space_content_role(user, access, bucket_name)
         client = self._portal_object_client(user, access.account)
         try:
             resp = client.head_object(Bucket=bucket_name, Key=target_key)
@@ -142,7 +175,7 @@ class PortalObjectsMixin:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
-        if self._user_storage_space_role(user, access, bucket_name) == "Viewer":
+        if self._require_storage_space_content_role(user, access, bucket_name) == "Viewer":
             raise RuntimeError("Delete not allowed for this storage space role.")
         client = self._portal_object_client(user, access.account)
         try:

@@ -83,6 +83,8 @@ export type PortalStorageSpaceSummary = {
   id: string;
   name: string;
   role: PortalStorageSpaceRole;
+  content_role?: PortalStorageSpaceRole | null;
+  can_browse?: boolean | null;
   status?: string | null;
   description?: string | null;
   owner_label?: string | null;

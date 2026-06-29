@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
           internalName: "research-data-internal",
           description: "Research Data shared storage",
           role: "Owner",
+          contentRole: "Owner",
+          canBrowse: true,
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -109,6 +111,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].role = "Owner";
+    mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
+    mocks.hookResult.workspace.spaces[0].canBrowse = true;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";
@@ -152,6 +156,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
   it("hides write Browser actions for read-only Viewer storage spaces", () => {
     mocks.hookResult.workspace.spaces[0].role = "Viewer";
+    mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
 
     renderPage();
 
@@ -201,6 +206,20 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByText(/This Storage Space is archived/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
+  });
+
+  it("keeps metadata management but hides files when content browsing is denied", () => {
+    mocks.hookResult.workspace.spaces[0].visibility = "private";
+    mocks.hookResult.workspace.spaces[0].access = "Private";
+    mocks.hookResult.workspace.spaces[0].contentRole = null;
+    mocks.hookResult.workspace.spaces[0].canBrowse = false;
+
+    renderPage();
+
+    expect(screen.getByText(/File browsing is not available/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Storage Space settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("confirms archive with explicit target and impacts", async () => {

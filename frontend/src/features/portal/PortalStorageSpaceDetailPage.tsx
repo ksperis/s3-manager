@@ -174,8 +174,10 @@ export default function PortalStorageSpaceDetailPage() {
   const browserAvailable =
     Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
   const isArchived = space.status === "Archived";
+  const canBrowse = Boolean(space.canBrowse) && !isArchived;
+  const contentRole = space.contentRole;
   const canRename = space.role === "Owner" && space.nameEditable;
-  const canModifyObjects = space.role === "Owner" || space.role === "Editor";
+  const canModifyObjects = canBrowse && (contentRole === "Owner" || contentRole === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
   const quotaPercent =
     space.quotaBytes && space.usedBytes
@@ -214,6 +216,10 @@ export default function PortalStorageSpaceDetailPage() {
       {isArchived ? (
         <PageBanner tone="warning">
           {t({ en: "This Storage Space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace de stockage est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Speicherbereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}
+        </PageBanner>
+      ) : !canBrowse ? (
+        <PageBanner tone="warning">
+          {t({ en: "File browsing is not available for this private Storage Space. You can still manage its Portal metadata.", fr: "La navigation dans les fichiers n'est pas disponible pour cet espace privé. Vous pouvez toujours gérer sa metadata Portal.", de: "Dateibrowsing ist für diesen privaten Speicherbereich nicht verfügbar. Die Portal-Metadaten können weiterhin verwaltet werden." })}
         </PageBanner>
       ) : browserAvailable ? (
         <div className="min-h-[520px] h-[min(72vh,760px)]">

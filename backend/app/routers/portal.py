@@ -1046,17 +1046,16 @@ def portal_traffic(
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
+    requested_bucket = (bucket or "").strip()
+    allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
+    if requested_bucket and requested_bucket not in allowed_buckets:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
     bucket_filters: Optional[set[str]] = None
-    if not access.capabilities.can_manage_buckets:
-        requested_bucket = (bucket or "").strip()
-        allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
-        if requested_bucket and requested_bucket not in allowed_buckets:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
-        if requested_bucket:
-            bucket = requested_bucket
-        else:
-            bucket = None
-            bucket_filters = allowed_buckets
+    if requested_bucket:
+        bucket = requested_bucket
+    else:
+        bucket = None
+        bucket_filters = allowed_buckets
     try:
         traffic_service = TrafficService(account)
     except ValueError as exc:

@@ -54,6 +54,20 @@ vi.mock("../../api/portal", () => ({
 describe("PortalSharesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.hookResult.workspace.spaces = [
+      {
+        id: "research-data",
+        name: "Research Data",
+        role: "Owner",
+        status: "Active",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 10, 2023",
+        shareCount: 1,
+      },
+    ];
     mocks.listSharesMock.mockResolvedValue([
       {
         id: "research-data:12",
@@ -101,6 +115,54 @@ describe("PortalSharesPage", () => {
     expect(screen.queryByText(/portal_user/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/bucket permissions/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("loads shares only for active shared storage spaces", async () => {
+    mocks.hookResult.workspace.spaces = [
+      {
+        id: "research-data",
+        name: "Research Data",
+        role: "Owner",
+        status: "Active",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 10, 2023",
+        shareCount: 1,
+      },
+      {
+        id: "private-data",
+        name: "Private Data",
+        role: "Owner",
+        status: "Private",
+        access: "Private",
+        ownerUserId: 7,
+        visibility: "private",
+        region: "eu-west-3",
+        createdLabel: "May 11, 2023",
+        shareCount: 1,
+      },
+      {
+        id: "archived-data",
+        name: "Archived Data",
+        role: "Owner",
+        status: "Archived",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 12, 2023",
+        shareCount: 1,
+      },
+    ];
+
+    render(<PortalSharesPage />);
+
+    await waitFor(() => {
+      expect(mocks.listSharesMock).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
   });
 
   it("loads public links from real portal endpoints", async () => {

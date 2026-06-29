@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
 import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
 
 const mocks = vi.hoisted(() => ({
+  createStorageSpaceMock: vi.fn(),
+  importStorageSpaceMock: vi.fn(),
   hookResult: {
+    accountIdForApi: "101",
     workspace: {
       accountName: "Account 1",
       userEmail: "manager@example.com",
@@ -48,6 +51,15 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("../../api/portal", async () => {
+  const actual = await vi.importActual<typeof import("../../api/portal")>("../../api/portal");
+  return {
+    ...actual,
+    createPortalStorageSpace: (...args: unknown[]) => mocks.createStorageSpaceMock(...args),
+    importPortalStorageSpace: (...args: unknown[]) => mocks.importStorageSpaceMock(...args),
+  };
+});
+
 vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: () => mocks.hookResult,
 }));
@@ -55,6 +67,8 @@ vi.mock("./usePortalWorkspaceData", () => ({
 describe("PortalStorageSpacesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.hookResult.accountIdForApi = "101";
+    mocks.createStorageSpaceMock.mockResolvedValue({ id: "created-space" });
     mocks.hookResult.workspace.spaces = [
       {
         id: "research-data",
@@ -214,6 +228,52 @@ describe("PortalStorageSpacesPage", () => {
 
     expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add existing storage" })).not.toBeInTheDocument();
+  });
+
+  it("forces private visibility when a portal user creates a Storage Space", async () => {
+    mocks.hookResult.state = {
+      account_role: "portal_user",
+      can_manage_buckets: false,
+      can_create_storage_spaces: true,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+
+    expect(screen.queryByLabelText("Storage Space visibility")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+      target: { value: "Private Research" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        name: "Private Research",
+        naming_mode: "generic_uuid",
+        description: null,
+        visibility: "private",
+      });
+    });
+  });
+
+  it("keeps private and shared visibility choices for portal managers", () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+
+    const visibility = screen.getByLabelText("Storage Space visibility");
+    expect(within(visibility).getByRole("option", { name: "Private" })).toBeInTheDocument();
+    expect(within(visibility).getByRole("option", { name: "Shared" })).toBeInTheDocument();
   });
 
   it("does not fall back to bucket management when Storage Space creation is absent", () => {

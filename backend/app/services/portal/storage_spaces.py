@@ -110,6 +110,7 @@ class PortalStorageSpacesMixin:
         bucket: Bucket,
         access: "AccountAccess",
         role: Optional[PortalStorageSpaceRole] = None,
+        content_role: Optional[PortalStorageSpaceRole] = None,
         metadata: PortalStorageSpaceMetadata | None = None,
     ) -> PortalStorageSpaceSummary:
         role = role or self._storage_space_role(access)
@@ -120,6 +121,8 @@ class PortalStorageSpacesMixin:
             id=bucket.name,
             name=name,
             role=role,
+            content_role=content_role,
+            can_browse=content_role is not None,
             status=self._storage_space_status(bucket, role, metadata),
             description=self._default_storage_space_description(name, metadata),
             owner_label=self._storage_space_owner_label(access.account, metadata),
@@ -149,26 +152,39 @@ class PortalStorageSpacesMixin:
         sort: str = "name",
         include_archived: bool = False,
     ) -> list[PortalStorageSpaceSummary]:
-        state = self.get_state(user, access)
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
+        content_role_by_bucket = self.list_existing_user_storage_space_content_access(user, access.account, access.role)
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
+        try:
+            state = self.get_state(user, access)
+            bucket_by_name = {bucket.name: bucket for bucket in state.buckets}
+        except RuntimeError:
+            bucket_by_name = {}
         spaces: list[PortalStorageSpaceSummary] = []
-        for bucket in state.buckets:
-            metadata = metadata_by_bucket.get(bucket.name)
+        for metadata in metadata_by_bucket.values():
             role_for_bucket = self._storage_space_effective_role(
                 user,
                 access,
                 metadata,
-                role_by_bucket.get(bucket.name),
+                role_by_bucket.get(metadata.bucket_name),
                 include_archived=include_archived,
             )
             if role_for_bucket is None:
                 continue
+            bucket = bucket_by_name.get(metadata.bucket_name) or Bucket(
+                name=metadata.bucket_name,
+                creation_date=metadata.created_at,
+                used_bytes=None,
+                object_count=None,
+                quota_max_size_bytes=None,
+                quota_max_objects=None,
+            )
             spaces.append(
                 self._bucket_to_storage_space_summary(
                     bucket,
                     access,
                     role=role_for_bucket,
+                    content_role=content_role_by_bucket.get(metadata.bucket_name),
                     metadata=metadata,
                 )
             )
@@ -246,6 +262,7 @@ class PortalStorageSpacesMixin:
             ),
             access,
             role=summary.role,
+            content_role=summary.content_role,
             metadata=metadata,
         )
         return PortalStorageSpace(**merged.model_dump())
@@ -268,6 +285,8 @@ class PortalStorageSpacesMixin:
         is_portal_user = access.role == AccountRole.PORTAL_USER.value
         if not (access.capabilities.can_manage_buckets or (allow_portal_user_create and is_portal_user)):
             raise RuntimeError("Storage Space creation not allowed for this role.")
+        if is_portal_user and visibility != "private":
+            raise RuntimeError("Portal users can only create private Storage Spaces.")
         existing = {space.internal_bucket_name or space.id for space in self.list_storage_spaces(user, access, include_archived=True)}
         if naming_mode == "named_bucket":
             if not portal_settings.allow_portal_named_bucket_create:
@@ -295,6 +314,7 @@ class PortalStorageSpacesMixin:
         )
         self.db.add(metadata)
         self.db.flush()
+        self._sync_storage_space_participant_projections(access.account, metadata)
         self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)
@@ -332,7 +352,6 @@ class PortalStorageSpacesMixin:
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         self._ensure_policy_and_key(link, iam_service)
-        self._ensure_user_bucket_policy(iam_service, link.iam_username, cleaned_bucket_name, portal_settings=portal_settings)
         metadata = self._storage_space_metadata(access.account, cleaned_bucket_name)
         if metadata is None:
             metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
@@ -355,6 +374,7 @@ class PortalStorageSpacesMixin:
         metadata.updated_at = utcnow()
         self.db.add(metadata)
         self.db.flush()
+        self._sync_storage_space_participant_projections(access.account, metadata)
         self._sync_storage_space_bucket_policy(access.account, cleaned_bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, cleaned_bucket_name)
@@ -412,6 +432,7 @@ class PortalStorageSpacesMixin:
         metadata.updated_at = utcnow()
         self.db.add(metadata)
         self.db.flush()
+        self._sync_storage_space_participant_projections(access.account, metadata)
         self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)

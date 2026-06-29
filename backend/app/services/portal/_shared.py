@@ -21,6 +21,7 @@ from app.db import (
     AccountIAMUser,
     AccountRole,
     PortalPublicLink as DBPortalPublicLink,
+    PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
     S3Account,
     StorageEndpoint,

@@ -13,10 +13,10 @@ Use this page when you need to open, create, import, archive, or understand a Po
 | Task | Where | Notes |
 |---|---|---|
 | Open an assigned space | **Portal > Storage Spaces** | Select a space to browse files and view usage. |
-| Create a new space | **Storage Spaces > Create** | Available only when Portal user Storage Space creation is enabled. |
+| Create a new space | **Storage Spaces > Create** | Regular Portal users can create private spaces only, and only when Portal user Storage Space creation is enabled. Portal managers can create private or shared spaces. |
 | Import an existing bucket | **Storage Spaces > Import** | Portal managers can expose existing buckets as Storage Spaces. |
 | Archive a space | Space actions | Archived spaces keep metadata but suspend browsing, sharing, and public links. |
-| Understand visibility | Space details | Private spaces are limited to the owner and Portal managers; shared spaces use grants. |
+| Understand visibility | Space details | Private spaces are listed for the owner and Portal managers, but file browsing stays limited to the owner. Shared spaces use grants. |
 
 ## You are done when
 
@@ -24,7 +24,7 @@ The Storage Space appears in the list with the expected visibility, role, usage,
 
 ## If you do not see a space
 
-Check the selected Portal account first. If it is still missing, ask an admin or Portal manager to verify your account link, Storage Space grant, and archive status.
+Check the selected Portal account first. If it is still missing, ask an admin or Portal manager to verify your account link, Storage Space grant, visibility, and archive status.
 
 ## Related pages
 

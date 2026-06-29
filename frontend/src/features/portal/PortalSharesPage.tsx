@@ -172,6 +172,7 @@ export default function PortalSharesPage() {
   );
 
   const spaceIds = useMemo(() => workspace.spaces.map((space) => space.id).join("|"), [workspace.spaces]);
+  const activeSharedSpaceIds = useMemo(() => activeSharedSpaces.map((space) => space.id).join("|"), [activeSharedSpaces]);
 
   useEffect(() => {
     const selectableSpaces = activeTab === "with" ? activeSharedSpaces : activeSharedOwnerSpaces;
@@ -185,7 +186,7 @@ export default function PortalSharesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!accountIdForApi || workspace.spaces.length === 0) {
+    if (!accountIdForApi || activeSharedSpaces.length === 0) {
       setApiShares(null);
       setSharesLoading(false);
       setSharesError(null);
@@ -195,7 +196,7 @@ export default function PortalSharesPage() {
     }
     setSharesLoading(true);
     setSharesError(null);
-    Promise.all(workspace.spaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
+    Promise.all(activeSharedSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
       .then((results) => {
         if (!cancelled) setApiShares(results.flat());
       })
@@ -212,7 +213,7 @@ export default function PortalSharesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, spaceIds, workspace.spaces]);
+  }, [accountIdForApi, activeSharedSpaceIds, activeSharedSpaces, t]);
 
   useEffect(() => {
     let cancelled = false;

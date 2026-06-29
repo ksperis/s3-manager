@@ -19,8 +19,9 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 2. Select the portal account context in the top bar.
 3. Use **Home** for the dashboard, quota, usage by Storage Space, recent
    activity, shared spaces, transfers, and simple alerts.
-4. Use **Storage Spaces** to open an assigned space, browse files, upload,
-   download, and share with collaborators when the space is shared.
+4. Use **Storage Spaces** to open an assigned space, browse files when content
+   access is available, upload, download, and share with collaborators when the
+   space is shared.
    You can also open `/browser` with the selected Portal account context for a
    Dropbox-like Storage Spaces sidebar; internal bucket names stay hidden.
 5. Use **Access keys** to generate S3 credentials for external tools. The
@@ -43,17 +44,24 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 
 ## Portal model in one minute
 
-- **Storage Spaces** are the user-facing storage areas. They may map to buckets internally, but Portal keeps labels and navigation simple.
-- **Private** spaces are visible to their owner and Portal managers. **Shared** spaces use Viewer, Editor, and Owner grants.
+- **Storage Spaces** are the user-facing storage areas registered in Portal. They may map to buckets internally, but buckets that are not registered as Portal Storage Spaces stay hidden from Portal lists.
+- **Private** spaces are visible to their owner and Portal managers. Portal
+  managers can administer private-space metadata, visibility, and archive state,
+  but they cannot browse files in a private space owned by someone else.
+- **Shared** spaces use Viewer, Editor, and Owner grants.
+- Regular `portal_user` members can create only private Storage Spaces, and only
+  when Portal user Storage Space creation is enabled for the account.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
 - `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
-- Portal roles are translated into storage-side permissions; they do not replace IAM or S3 authorization.
+- Portal roles come from the owner and collaborator grants managed in Portal.
+  External S3 keys are synchronized from those records; IAM is not the source of
+  Portal listings or roles.
 
 ## Expected result
 
-Portal actions stay user-oriented and use the storage permissions configured by
-the platform as the source of truth.
+Portal actions stay user-oriented and use the Portal Storage Space registry and
+collaborator grants as their source of truth.
 
 ## Limits / feature flags
 

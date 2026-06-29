@@ -77,7 +77,9 @@ export default function PortalStorageSpacesPage() {
   const canCreate = Boolean(state?.can_create_storage_spaces);
   const canImport = state?.account_role === "portal_manager" && Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
+  const canChooseVisibility = state?.account_role === "portal_manager";
   const effectiveNamingMode = canUseNamedBucket ? newNamingMode : "generic_uuid";
+  const effectiveNewVisibility: PortalStorageSpaceVisibility = canChooseVisibility ? newVisibility : "private";
 
   const handleCreate = async () => {
     if (!accountIdForApi || !newName.trim()) return;
@@ -88,7 +90,7 @@ export default function PortalStorageSpacesPage() {
         name: newName.trim(),
         naming_mode: effectiveNamingMode,
         description: newDescription.trim() || null,
-        visibility: newVisibility,
+        visibility: effectiveNewVisibility,
       });
       navigate(storageSpacePath({ id: created.id }));
     } catch (err) {
@@ -146,7 +148,9 @@ export default function PortalStorageSpacesPage() {
 
       {showCreate ? (
         <UiCard title={t({ en: "Create Storage Space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" })}>
-          <div className={cx("grid gap-3", canUseNamedBucket ? "lg:grid-cols-[180px_1fr_1.5fr_160px_auto]" : "lg:grid-cols-[1fr_1.5fr_160px_auto]")}>
+          <div className={cx("grid gap-3", canUseNamedBucket
+            ? canChooseVisibility ? "lg:grid-cols-[180px_1fr_1.5fr_160px_auto]" : "lg:grid-cols-[180px_1fr_1.5fr_auto]"
+            : canChooseVisibility ? "lg:grid-cols-[1fr_1.5fr_160px_auto]" : "lg:grid-cols-[1fr_1.5fr_auto]")}>
             {canUseNamedBucket ? (
               <select
                 className="ui-control h-9 py-1.5 text-xs"
@@ -167,10 +171,12 @@ export default function PortalStorageSpacesPage() {
                 : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
             />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
-            <select className="ui-control h-9 py-1.5 text-xs" value={newVisibility} onChange={(event) => setNewVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label={t({ en: "Storage Space visibility", fr: "Visibilité de l'espace de stockage", de: "Sichtbarkeit des Speicherbereichs" })}>
-              <option value="private">{portalVisibilityLabel("private", t)}</option>
-              <option value="shared">{portalVisibilityLabel("shared", t)}</option>
-            </select>
+            {canChooseVisibility ? (
+              <select className="ui-control h-9 py-1.5 text-xs" value={newVisibility} onChange={(event) => setNewVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label={t({ en: "Storage Space visibility", fr: "Visibilité de l'espace de stockage", de: "Sichtbarkeit des Speicherbereichs" })}>
+                <option value="private">{portalVisibilityLabel("private", t)}</option>
+                <option value="shared">{portalVisibilityLabel("shared", t)}</option>
+              </select>
+            ) : null}
             <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create", fr: "Créer", de: "Erstellen" })}
             </UiButton>

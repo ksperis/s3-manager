@@ -40,7 +40,7 @@ Use this page when you log in for the first time and need to understand where to
 - **Account / context** decides which credentials execute S3 or IAM actions.
 - **Endpoint** appears on Ceph Admin and endpoint-scoped views. It decides which backend receives the request.
 
-If an action is missing, disabled, or returns `AccessDenied`, first check the selected workspace and context. The UI does not widen storage permissions; IAM and S3 remain the source of truth.
+If an action is missing, disabled, or returns `AccessDenied`, first check the selected workspace and context. The UI does not widen storage permissions. Native Browser and Manager actions follow IAM/S3, while Portal Storage Spaces follow the spaces and collaborator grants configured in Portal.
 
 ## First login checklist: storage user
 

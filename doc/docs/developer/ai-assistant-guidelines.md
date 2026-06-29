@@ -46,13 +46,21 @@ It defines the executor identity used for S3 operations and may be:
 
 ## Non-negotiable principles
 
-### IAM and S3 remain the source of truth
+### Storage execution and Portal grants have distinct authorities
 
-- No S3 or IAM action may bypass an IAM or S3 decision.
-- The application must never "fix" IAM or invent privileges.
+- Native S3 and IAM workflows must not bypass a storage-side decision.
+- For Portal Storage Spaces, the application source of truth is the database:
+  `portal_storage_space_metadata` defines the space and primary owner, and
+  `portal_storage_space_grants` defines delegated `Viewer`, `Editor`, and
+  `Owner` roles.
+- Portal IAM policies are projections used for personal S3 keys and external
+  enforcement. They must not be imported as grants or used to derive Portal
+  listings.
+- The application must never silently widen storage privileges outside the
+  documented Portal orchestration.
 - UI rights such as manager, portal, browser, ceph-admin, or storage-ops gate
   access to surfaces and context selection only. They do not replace storage-side
-  authorization.
+  authorization for native storage workflows.
 
 ### Controlled orchestration
 
@@ -92,8 +100,11 @@ Access to `/manager`, `/portal`, and `/browser` is controlled by explicit
 bindings, feature flags, connection access flags, and role-based checks for
 Ceph Admin.
 
-Actual storage permissions are dictated by IAM and S3. The backend must not
-guess, reconstruct, or silently widen those permissions.
+Native storage permissions are dictated by IAM and S3. Portal Storage Space
+visibility, shares, and roles are resolved from the Portal metadata and grants
+stored in the database, then projected to IAM where external S3 keys need
+storage-side enforcement. The backend must not guess, reconstruct, or silently
+widen permissions from stale IAM state.
 
 ### Execution identity must stay explicit
 

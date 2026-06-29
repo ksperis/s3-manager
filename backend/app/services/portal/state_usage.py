@@ -39,6 +39,9 @@ class PortalStateUsageMixin:
         buckets: list[Bucket] = []
         access_keys: list[PortalAccessKey] = []
         link = self._existing_portal_link(user, account)
+        access_by_bucket = self.list_existing_user_storage_space_access(user, account, access.role)
+        accessible_names = set(access_by_bucket)
+        metadata_by_bucket = self._storage_space_metadata_map(account)
         iam_user = None
         iam_provisioned = False
         if link and link.iam_username:
@@ -61,7 +64,6 @@ class PortalStateUsageMixin:
                 iam_provisioned = has_active_portal_credentials
 
                 if has_active_portal_credentials:
-                    accessible_names = set(self.list_existing_user_bucket_access(user, access.account, access.role))
                     if accessible_names:
                         try:
                             for b in s3_client.list_buckets(
@@ -85,6 +87,21 @@ class PortalStateUsageMixin:
                         except Exception as exc:  # pragma: no cover - defensive
                             logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
                             buckets = []
+        listed_names = {bucket.name for bucket in buckets}
+        for bucket_name in sorted(accessible_names - listed_names):
+            metadata = metadata_by_bucket.get(bucket_name)
+            if metadata is None:
+                continue
+            buckets.append(
+                Bucket(
+                    name=bucket_name,
+                    creation_date=metadata.created_at,
+                    used_bytes=None,
+                    object_count=None,
+                    quota_max_size_bytes=None,
+                    quota_max_objects=None,
+                )
+            )
         total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
         portal_settings = self._effective_portal_settings(account)
@@ -124,67 +141,51 @@ class PortalStateUsageMixin:
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
         quota_max_size_bytes, quota_max_objects = self._account_quota(account)
-        if not access.capabilities.can_manage_buckets:
-            allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
-            if not allowed:
-                return PortalUsage(
-                    used_bytes=None,
-                    used_objects=None,
-                    quota_max_size_bytes=quota_max_size_bytes,
-                    quota_max_objects=quota_max_objects,
-                    storage_spaces=[],
-                )
-            try:
-                rgw_admin = self._supervision_admin_for_account(account)
-                bucket_payloads = self._admin_bucket_list(account, admin=rgw_admin)
-            except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
-                logger.warning("Unable to list scoped bucket usage for portal user %s: %s", user.email, exc)
-                return PortalUsage(
-                    used_bytes=None,
-                    used_objects=None,
-                    quota_max_size_bytes=quota_max_size_bytes,
-                    quota_max_objects=quota_max_objects,
-                    storage_spaces=self._usage_storage_space_breakdown(user, access, {}),
-                )
-
-            total_bytes = 0
-            total_objects = 0
-            has_bytes = False
-            has_objects = False
-            usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]] = {}
-            for item in bucket_payloads:
-                if not isinstance(item, dict):
-                    continue
-                bucket_name = item.get("bucket") or item.get("name")
-                if bucket_name not in allowed:
-                    continue
-                usage = item.get("usage")
-                usage_bytes, usage_objects = extract_usage_stats(usage)
-                usage_by_bucket[bucket_name] = (usage_bytes, usage_objects)
-                if usage_bytes is not None:
-                    total_bytes += usage_bytes
-                    has_bytes = True
-                if usage_objects is not None:
-                    total_objects += usage_objects
-                    has_objects = True
+        allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
+        if not allowed:
             return PortalUsage(
-                used_bytes=total_bytes if has_bytes else None,
-                used_objects=total_objects if has_objects else None,
+                used_bytes=None,
+                used_objects=None,
                 quota_max_size_bytes=quota_max_size_bytes,
                 quota_max_objects=quota_max_objects,
-                storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),
+                storage_spaces=[],
             )
-        used_bytes, used_objects = self._account_usage_summary(account)
+        try:
+            rgw_admin = self._supervision_admin_for_account(account)
+            bucket_payloads = self._admin_bucket_list(account, admin=rgw_admin)
+        except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
+            logger.warning("Unable to list scoped bucket usage for portal user %s: %s", user.email, exc)
+            return PortalUsage(
+                used_bytes=None,
+                used_objects=None,
+                quota_max_size_bytes=quota_max_size_bytes,
+                quota_max_objects=quota_max_objects,
+                storage_spaces=self._usage_storage_space_breakdown(user, access, {}),
+            )
+
+        total_bytes = 0
+        total_objects = 0
+        has_bytes = False
+        has_objects = False
         usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]] = {}
-        bucket_bytes, bucket_objects, _ = self._account_usage(account, usage_map=usage_by_bucket)
-        if used_bytes is None or used_objects is None:
-            if used_bytes is None:
-                used_bytes = bucket_bytes
-            if used_objects is None:
-                used_objects = bucket_objects
+        for item in bucket_payloads:
+            if not isinstance(item, dict):
+                continue
+            bucket_name = item.get("bucket") or item.get("name")
+            if bucket_name not in allowed:
+                continue
+            usage = item.get("usage")
+            usage_bytes, usage_objects = extract_usage_stats(usage)
+            usage_by_bucket[bucket_name] = (usage_bytes, usage_objects)
+            if usage_bytes is not None:
+                total_bytes += usage_bytes
+                has_bytes = True
+            if usage_objects is not None:
+                total_objects += usage_objects
+                has_objects = True
         return PortalUsage(
-            used_bytes=used_bytes,
-            used_objects=used_objects,
+            used_bytes=total_bytes if has_bytes else None,
+            used_objects=total_objects if has_objects else None,
             quota_max_size_bytes=quota_max_size_bytes,
             quota_max_objects=quota_max_objects,
             storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),

@@ -522,7 +522,7 @@ export default function PortalSettingsPage() {
                   disabled={!settings}
                 />
                 <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  The PortalUserBuckets statement receives bucket resources automatically.
+                  Storage Space grant projections receive bucket resources automatically from Portal grants.
                 </p>
               </div>
             </SettingsItem>
