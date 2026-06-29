@@ -228,6 +228,7 @@ describe("ManagerLayout", () => {
     const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
     expect(toolsSection?.links.map((link) => link.label)).toEqual(["Feature rules", "Integrity"]);
     expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/feature-rules", "/manager/bucket-integrity"]);
+    expect(toolsSection?.links.map((link) => link.iconName)).toEqual(["rules", "integrity"]);
   });
 
   it("shows Bucket purge tool when the flag and manager tool access are enabled", () => {
@@ -258,6 +259,45 @@ describe("ManagerLayout", () => {
     const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
     expect(toolsSection?.links.map((link) => link.label)).toEqual(["Purge"]);
     expect(toolsSection?.links.map((link) => link.to)).toEqual(["/manager/bucket-purge"]);
+    expect(toolsSection?.links.map((link) => link.iconName)).toEqual(["purge"]);
+  });
+
+  it("assigns distinct icons to every Manager tool link", () => {
+    setStoredManagerUser({
+      manager_tool_access: {
+        bucket_compare: true,
+        bucket_integrity_check: true,
+        bucket_migration: true,
+        bucket_purge: true,
+        feature_rules: true,
+        bucket_quota: false,
+        ceph_s3_user_keys: true,
+      },
+    });
+    useS3AccountContextMock.mockReturnValue(buildContext());
+    useGeneralSettingsMock.mockReturnValue({
+      generalSettings: buildGeneralSettings({
+        bucket_migration_enabled: true,
+        bucket_purge_enabled: true,
+        bucket_integrity_check_enabled: true,
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const toolsSection = capturedNavSections.find((section) => section.label === "Tools");
+    expect(toolsSection?.links.map((link) => [link.label, link.iconName])).toEqual([
+      ["Feature rules", "rules"],
+      ["Compare", "compare"],
+      ["Integrity", "integrity"],
+      ["Purge", "purge"],
+      ["Migration", "migration"],
+    ]);
+    expect(new Set(toolsSection?.links.map((link) => link.iconName)).size).toBe(toolsSection?.links.length ?? 0);
   });
 
   it("does not expose a dedicated Usage stats tool link", () => {

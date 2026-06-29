@@ -16,6 +16,7 @@ export type SidebarLink = {
   end?: boolean;
   disabled?: boolean;
   disabledHint?: string;
+  iconName?: SidebarLinkIconName;
   icon?: ReactNode;
 };
 
@@ -339,10 +340,16 @@ export type SidebarLinkIconName =
   | "bell"
   | "wallet"
   | "tools"
+  | "rules"
+  | "compare"
+  | "integrity"
+  | "purge"
+  | "migration"
   | "stack"
   | "dot";
 
-export function resolveSidebarLinkIconName(link: Pick<SidebarLink, "label" | "to">): SidebarLinkIconName {
+export function resolveSidebarLinkIconName(link: Pick<SidebarLink, "label" | "to" | "iconName">): SidebarLinkIconName {
+  if (link.iconName) return link.iconName;
   const key = `${link.label} ${link.to}`.toLowerCase();
   if (key.includes("dashboard") || key.includes("home")) return "home";
   if (key.includes("metric")) return "chart";
@@ -362,6 +369,11 @@ export function resolveSidebarLinkIconName(link: Pick<SidebarLink, "label" | "to
   if (key.includes("setting") || key.includes("general")) return "cog";
   if (key.includes("topic") || key.includes("event")) return "bell";
   if (key.includes("billing")) return "wallet";
+  if (key.includes("feature") || key.includes("rule")) return "rules";
+  if (key.includes("compare")) return "compare";
+  if (key.includes("integrity")) return "integrity";
+  if (key.includes("purge")) return "purge";
+  if (key.includes("migration")) return "migration";
   if (key.includes("manage")) return "tools";
   if (key.includes("account")) return "stack";
   return "dot";
@@ -388,6 +400,11 @@ function resolveSidebarLinkIcon(link: SidebarLink) {
   if (iconName === "bell") return <NavBellIcon />;
   if (iconName === "wallet") return <NavWalletIcon />;
   if (iconName === "tools") return <NavToolsIcon />;
+  if (iconName === "rules") return <NavRulesIcon />;
+  if (iconName === "compare") return <NavCompareIcon />;
+  if (iconName === "integrity") return <NavIntegrityIcon />;
+  if (iconName === "purge") return <NavPurgeIcon />;
+  if (iconName === "migration") return <NavMigrationIcon />;
   if (iconName === "stack") return <NavStackIcon />;
   return <NavDotIcon />;
 }
@@ -555,6 +572,52 @@ function NavToolsIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5 5.5 8.5 9 6.8 10.7 3.3 7.2 5 5.5Zm6.8-1.8 3 3-6.1 6.1a2.2 2.2 0 1 1-3.1-3.1l6.2-6.2Z" />
+    </svg>
+  );
+}
+
+function NavRulesIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5 4.5h6.2L15 8.3v7.2H5v-11Zm6 0v4h4" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M7.4 10.5h5.2M7.4 13.4h3.8" />
+    </svg>
+  );
+}
+
+function NavCompareIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4.5 6h9.2m0 0-2.2-2.2M13.7 6l-2.2 2.2M15.5 14H6.3m0 0 2.2-2.2M6.3 14l2.2 2.2" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M4.5 10h11" />
+    </svg>
+  );
+}
+
+function NavIntegrityIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10 3.5 15.5 5.8v4.5c0 2.8-1.8 4.8-5.5 6.2-3.7-1.4-5.5-3.4-5.5-6.2V5.8L10 3.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m7.4 10.3 1.7 1.7 3.5-4" />
+    </svg>
+  );
+}
+
+function NavPurgeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5.5 7h9l-.7 8.5H6.2L5.5 7Zm2-2h5l.6 2M4.2 7h11.6" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M8.3 10v3M11.7 10v3" />
+    </svg>
+  );
+}
+
+function NavMigrationIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3.5 5.5 7.8 3.6l4.3 1.9-4.3 2-4.3-2Zm8.7 0 4.3 1.9-4.3 2-2.1-1" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M7.8 7.5v4l4.4 2.1 4.3-2.1V7.4M7.8 11.5l-4.3-2V5.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m8.7 15.7 2.3-2.1-2.3-2.1" />
     </svg>
   );
 }

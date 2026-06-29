@@ -247,19 +247,19 @@ function ManagerShell() {
   if (canManageBuckets) {
     const toolsLinks: SidebarSection[number]["links"] = [];
     if (canAccessFeatureRulesForUser) {
-      toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules" });
+      toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules", iconName: "rules" });
     }
     if (canShowBucketCompare) {
-      toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare" });
+      toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare", iconName: "compare" });
     }
     if (canShowBucketIntegrity) {
-      toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity" });
+      toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity", iconName: "integrity" });
     }
     if (canShowBucketPurge) {
-      toolsLinks.push({ to: "/manager/bucket-purge", label: "Purge" });
+      toolsLinks.push({ to: "/manager/bucket-purge", label: "Purge", iconName: "purge" });
     }
     if (canAccessMigration) {
-      toolsLinks.push({ to: "/manager/migrations", label: "Migration" });
+      toolsLinks.push({ to: "/manager/migrations", label: "Migration", iconName: "migration" });
     }
     if (toolsLinks.length > 0) {
       navSections.push({

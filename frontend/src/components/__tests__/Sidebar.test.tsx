@@ -24,6 +24,23 @@ describe("Sidebar", () => {
     });
   });
 
+  it("honors explicit icon names for links whose labels are otherwise ambiguous", () => {
+    expect(
+      resolveSidebarLinkIconName({
+        to: "/manager/feature-rules",
+        label: "Feature rules",
+        iconName: "rules",
+      })
+    ).toBe("rules");
+    expect(
+      resolveSidebarLinkIconName({
+        to: "/manager/migrations",
+        label: "Migration",
+        iconName: "migration",
+      })
+    ).toBe("migration");
+  });
+
   it("uses disabledHint as title for disabled links", () => {
     render(
       <MemoryRouter>
