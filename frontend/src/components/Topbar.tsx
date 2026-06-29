@@ -2,7 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  fetchUserNotifications,
+  markUserNotificationsRead,
+  type UserNotification,
+} from "../api/userNotifications";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
@@ -67,6 +72,41 @@ function compactWorkspaceLabel(label?: string | null): string {
   return normalized;
 }
 
+function formatPercent(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return `${value.toFixed(1)}%`;
+}
+
+function formatBytes(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  let amount = Math.max(0, value);
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  const fractionDigits = amount >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${amount.toFixed(fractionDigits)} ${units[unitIndex]}`;
+}
+
+function formatCount(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.round(value).toLocaleString();
+}
+
+function formatDateTime(value?: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function Topbar({
   section,
   inlineContent,
@@ -106,6 +146,16 @@ export default function Topbar({
   const accountMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuId = useId();
 
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const notificationsRootRef = useRef<HTMLDivElement | null>(null);
+  const notificationsSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const notificationsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const notificationsMenuId = useId();
+
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [workspaceActiveIndex, setWorkspaceActiveIndex] = useState(-1);
   const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -117,6 +167,7 @@ export default function Topbar({
 
   const accountDisplay = userEmail ?? "Session";
   const accountInitial = buildAccountInitial(accountDisplay);
+  const showNotifications = !isS3Session;
   const closeProfileModal = () => {
     setShowProfileModal(false);
     setProfileModalHasUnsavedChanges(false);
@@ -126,6 +177,35 @@ export default function Topbar({
     onClose: closeProfileModal,
     zIndexClass: "z-[70]",
   });
+
+  const loadNotifications = useCallback(async () => {
+    if (!showNotifications) return;
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+    try {
+      const response = await fetchUserNotifications(20);
+      setNotifications(response.items);
+      setUnreadNotificationsCount(response.unread_count);
+    } catch (error) {
+      console.warn("Unable to load notifications", error);
+      setNotificationsError("Unable to load notifications.");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [showNotifications]);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!showNotifications || unreadNotificationsCount <= 0) return;
+    setNotificationsError(null);
+    try {
+      const response = await markUserNotificationsRead({ all: true });
+      setUnreadNotificationsCount(response.unread_count);
+      await loadNotifications();
+    } catch (error) {
+      console.warn("Unable to mark notifications as read", error);
+      setNotificationsError("Unable to mark notifications as read.");
+    }
+  }, [loadNotifications, showNotifications, unreadNotificationsCount]);
 
   const adaptiveControlDescriptors = useMemo(
     () => (controlDescriptors?.filter((control) => control.id !== "workspace") ?? []),
@@ -174,6 +254,22 @@ export default function Topbar({
       window.removeEventListener("orientationchange", updateViewport);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    void loadNotifications();
+    const interval = window.setInterval(() => {
+      void loadNotifications();
+    }, 60_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [loadNotifications, showNotifications]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    void loadNotifications();
+  }, [loadNotifications, notificationsOpen]);
 
   useEffect(() => {
     if (!hasAdaptiveControls) return;
@@ -318,6 +414,31 @@ export default function Topbar({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (notificationsRootRef.current?.contains(target)) return;
+      if (notificationsSurfaceRef.current?.contains(target)) return;
+      setNotificationsOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setNotificationsOpen(false);
+      notificationsTriggerRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [notificationsOpen]);
 
   const openProfileModal = () => {
     setAccountMenuOpen(false);
@@ -511,6 +632,80 @@ export default function Topbar({
     );
   };
 
+  const renderNotificationItem = (item: UserNotification) => {
+    const payload = item.payload ?? {};
+    const checkedAt = formatDateTime((payload.checked_at as string | undefined) ?? item.created_at);
+    const ratio = formatPercent(payload.usage_ratio_pct);
+    const usedBytes = formatBytes(payload.used_bytes);
+    const quotaBytes = formatBytes(payload.quota_size_bytes);
+    const usedObjects = formatCount(payload.used_objects);
+    const quotaObjects = formatCount(payload.quota_objects);
+    const endpointName = typeof payload.endpoint_name === "string" ? payload.endpoint_name : null;
+    const severityLabel = item.severity === "error" ? "Error" : item.severity === "warning" ? "Warning" : "Info";
+    const severityClass =
+      item.severity === "error"
+        ? "border-red-300 bg-red-50 text-red-700 dark:border-red-700/70 dark:bg-red-950/30 dark:text-red-200"
+        : item.severity === "warning"
+          ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/70 dark:bg-amber-950/30 dark:text-amber-200"
+          : "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700/70 dark:bg-blue-950/30 dark:text-blue-200";
+    return (
+      <li
+        key={item.id}
+        className={`rounded-md border px-3 py-2 ${
+          item.read_at ? "border-[color:var(--shell-border-soft)]" : "border-[color:var(--shell-border)] bg-[var(--shell-hover)]"
+        }`}
+      >
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate ui-caption font-semibold text-[var(--shell-text)]">{item.title}</p>
+            <p className="mt-0.5 ui-caption text-[var(--shell-text)]">{item.message}</p>
+          </div>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${severityClass}`}>
+            {severityLabel}
+          </span>
+        </div>
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 ui-caption text-[var(--shell-muted)]">
+          {ratio && (
+            <>
+              <dt>Usage</dt>
+              <dd className="text-right font-semibold text-[var(--shell-text)]">{ratio}</dd>
+            </>
+          )}
+          {usedBytes && (
+            <>
+              <dt>Storage</dt>
+              <dd className="text-right text-[var(--shell-text)]">
+                {usedBytes}
+                {quotaBytes ? ` / ${quotaBytes}` : ""}
+              </dd>
+            </>
+          )}
+          {usedObjects && (
+            <>
+              <dt>Objects</dt>
+              <dd className="text-right text-[var(--shell-text)]">
+                {usedObjects}
+                {quotaObjects ? ` / ${quotaObjects}` : ""}
+              </dd>
+            </>
+          )}
+          {endpointName && (
+            <>
+              <dt>Endpoint</dt>
+              <dd className="truncate text-right text-[var(--shell-text)]">{endpointName}</dd>
+            </>
+          )}
+          {checkedAt && (
+            <>
+              <dt>Checked</dt>
+              <dd className="text-right text-[var(--shell-text)]">{checkedAt}</dd>
+            </>
+          )}
+        </dl>
+      </li>
+    );
+  };
+
   return (
     <>
       <div
@@ -553,6 +748,82 @@ export default function Topbar({
             {contextAction && <div className="hidden sm:flex">{contextAction}</div>}
 
             <ThemeToggle />
+
+            {showNotifications && (
+              <div ref={notificationsRootRef} className="relative">
+                <button
+                  ref={notificationsTriggerRef}
+                  type="button"
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                  aria-label="Notifications"
+                  aria-haspopup="menu"
+                  aria-expanded={notificationsOpen}
+                  aria-controls={notificationsOpen ? notificationsMenuId : undefined}
+                  className={`shell-control relative inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    notificationsOpen ? "shell-control-active" : ""
+                  }`}
+                >
+                  <BellIcon className="h-4 w-4" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white">
+                      {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+                    </span>
+                  )}
+                </button>
+
+                {notificationsOpen && (
+                  <AnchoredPortalMenu
+                    open={notificationsOpen}
+                    anchorRef={notificationsTriggerRef}
+                    placement="bottom-end"
+                    minWidth={360}
+                    className="shell-menu w-[22.5rem] max-w-[calc(100vw-1.5rem)] rounded-lg border p-0"
+                  >
+                    <div
+                      id={notificationsMenuId}
+                      ref={notificationsSurfaceRef}
+                      role="menu"
+                      aria-label="Notifications"
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--shell-border-soft)] px-3 py-2">
+                        <div>
+                          <p className="ui-caption font-semibold text-[var(--shell-text)]">Notifications</p>
+                          <p className="shell-muted-text ui-caption">{unreadNotificationsCount} unread</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={markAllNotificationsRead}
+                          disabled={unreadNotificationsCount <= 0}
+                          className="rounded-md px-2 py-1 ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-200 dark:hover:bg-white/[0.06]"
+                        >
+                          Mark all as read
+                        </button>
+                      </div>
+
+                      <div className="max-h-[28rem] overflow-y-auto p-2">
+                        {notificationsError && (
+                          <div className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 ui-caption text-red-700 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-200">
+                            {notificationsError}
+                          </div>
+                        )}
+                        {notificationsLoading && notifications.length === 0 ? (
+                          <div className="rounded-md border border-[color:var(--shell-border-soft)] px-3 py-6 text-center ui-caption text-[var(--shell-muted)]">
+                            Loading notifications...
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div className="rounded-md border border-[color:var(--shell-border-soft)] px-3 py-6 text-center ui-caption text-[var(--shell-muted)]">
+                            No notifications.
+                          </div>
+                        ) : (
+                          <ul className="space-y-2">{notifications.map(renderNotificationItem)}</ul>
+                        )}
+                      </div>
+                    </div>
+                  </AnchoredPortalMenu>
+                )}
+              </div>
+            )}
 
             <div ref={accountMenuRootRef} className="relative">
               <button
@@ -778,6 +1049,20 @@ function ApiKeyIcon(props: React.SVGProps<SVGSVGElement>) {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.5 12h9" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 12v-2.5" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.25 12v-2" />
+    </svg>
+  );
+}
+
+function BellIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M18 9.5a6 6 0 1 0-12 0c0 6-2.25 6.5-2.25 6.5h16.5S18 15.5 18 9.5Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 19a2.25 2.25 0 0 0 4.5 0" />
     </svg>
   );
 }

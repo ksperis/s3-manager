@@ -6,6 +6,7 @@ Usage history stores the same managed-account scope once per day.
 Current scope:
 
 - quota alerts by email
+- quota alerts in the topbar notification menu
 - usage history storage for managed `S3Account` and `S3User` subjects
 
 Out of scope:
@@ -21,8 +22,13 @@ Enable from Admin settings:
 
 User-level preferences:
 
-- `/users/me.quota_alerts_enabled` (default `true`)
+- `/users/me.quota_alerts_enabled` (default `true`, email delivery only)
 - `/users/me.quota_alerts_global_watch` (default `false`, admin-like roles only)
+
+Topbar quota notifications are created by the quota monitor for active users who
+administer the affected account, manage it through Portal, or are linked to the
+affected RGW user. Admin-like global watchers also receive the in-app
+notification even when they disable quota alert emails.
 
 ## SMTP configuration
 
@@ -92,6 +98,7 @@ Set retention to `0` to disable purge for the corresponding dataset.
 - Evaluated ratio: `max(bytes%, objects%)`
 - Alerting mode: crossing-only (`normal -> threshold -> full`)
 - First run sends immediate alert if already above threshold or full
+- In-app notifications use the same transitions and can be marked read per user.
 
 ## Related pages
 

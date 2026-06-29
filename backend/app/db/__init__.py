@@ -17,6 +17,7 @@ from .ldap import LdapProvider
 from .oidc import OidcLoginState, OidcProvider
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
 from .quota_monitoring import QuotaAlertState, QuotaUsageDaily, QuotaUsageHourly
+from .user_notification import UserNotification
 from .healthcheck import (
     EndpointHealthCheck,
     EndpointHealthLatest,
@@ -68,6 +69,7 @@ __all__ = [
     "QuotaUsageHourly",
     "QuotaUsageDaily",
     "QuotaAlertState",
+    "UserNotification",
     "EndpointHealthCheck",
     "EndpointHealthLatest",
     "EndpointHealthStatusSegment",

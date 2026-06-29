@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Topbar from "../Topbar";
 
+const notificationApiMock = vi.hoisted(() => ({
+  fetchUserNotifications: vi.fn(),
+  markUserNotificationsRead: vi.fn(),
+}));
+
 vi.mock("../ThemeToggle", () => ({
   default: () => <button type="button">Theme</button>,
 }));
@@ -21,10 +26,12 @@ vi.mock("../../features/admin/ApiTokensPage", () => ({
   ),
 }));
 
+vi.mock("../../api/userNotifications", () => notificationApiMock);
+
 const resolveAccountTrigger = (): HTMLButtonElement => {
   const trigger = screen
     .getAllByRole("button")
-    .find((button) => button.getAttribute("aria-haspopup") === "menu");
+    .find((button) => button.textContent?.includes("@example.com"));
   if (!trigger) {
     throw new Error("Unable to find account menu trigger.");
   }
@@ -33,6 +40,10 @@ const resolveAccountTrigger = (): HTMLButtonElement => {
 
 describe("Topbar account menu", () => {
   beforeEach(() => {
+    notificationApiMock.fetchUserNotifications.mockReset();
+    notificationApiMock.fetchUserNotifications.mockResolvedValue({ items: [], unread_count: 0 });
+    notificationApiMock.markUserNotificationsRead.mockReset();
+    notificationApiMock.markUserNotificationsRead.mockResolvedValue({ updated_count: 0, unread_count: 0 });
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -126,6 +137,73 @@ describe("Topbar account menu", () => {
     expect(await screen.findByText("API Tokens Page (embedded)")).toBeInTheDocument();
   });
 
+  it("opens an empty notifications panel", async () => {
+    const user = userEvent.setup();
+    render(<Topbar userEmail="admin@example.com" />);
+
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+
+    expect(await screen.findByRole("menu", { name: "Notifications" })).toBeInTheDocument();
+    expect(await screen.findByText("No notifications.")).toBeInTheDocument();
+  });
+
+  it("shows quota notifications with unread badge and marks them as read", async () => {
+    const user = userEvent.setup();
+    const unreadNotification = {
+      id: 42,
+      type: "quota_alert",
+      severity: "warning",
+      title: "Quota near limit",
+      message: "RGW account Lab account is near its quota limit (90.000%).",
+      subject_type: "account",
+      storage_endpoint_id: 7,
+      s3_account_id: 12,
+      s3_user_id: null,
+      payload: {
+        alert_level: "threshold",
+        subject_type: "account",
+        subject_label: "RGW account",
+        subject_name: "Lab account",
+        endpoint_name: "Lab endpoint",
+        threshold_percent: 85,
+        usage_ratio_pct: 90,
+        used_bytes: 90 * 1024 * 1024,
+        quota_size_bytes: 100 * 1024 * 1024,
+        used_objects: 90,
+        quota_objects: 100,
+        checked_at: "2026-01-11T09:00:00",
+      },
+      created_at: "2026-01-11T09:00:00",
+      read_at: null,
+    };
+    notificationApiMock.fetchUserNotifications
+      .mockResolvedValueOnce({ items: [unreadNotification], unread_count: 1 })
+      .mockResolvedValueOnce({ items: [unreadNotification], unread_count: 1 })
+      .mockResolvedValueOnce({
+        items: [{ ...unreadNotification, read_at: "2026-01-11T09:01:00" }],
+        unread_count: 0,
+      });
+    notificationApiMock.markUserNotificationsRead.mockResolvedValue({ updated_count: 1, unread_count: 0 });
+
+    render(<Topbar userEmail="admin@example.com" />);
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+
+    expect(await screen.findByText("Quota near limit")).toBeInTheDocument();
+    expect(screen.getByText("Warning")).toBeInTheDocument();
+    expect(screen.getByText("90.0%")).toBeInTheDocument();
+    expect(screen.getByText("Lab endpoint")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mark all as read" }));
+
+    await waitFor(() => {
+      expect(notificationApiMock.markUserNotificationsRead).toHaveBeenCalledWith({ all: true });
+    });
+    expect(await screen.findByText("0 unread")).toBeInTheDocument();
+  });
+
   it("renders the workspace selector in the topbar when requested", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -193,6 +271,10 @@ describe("Topbar account menu", () => {
           ]}
         />
       );
+
+      await waitFor(() => {
+        expect(notificationApiMock.fetchUserNotifications).toHaveBeenCalled();
+      });
 
       const topbar = document.querySelector("[data-topbar]");
       expect(topbar).not.toBeNull();

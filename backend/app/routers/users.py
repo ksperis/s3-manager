@@ -1,10 +1,17 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 from app.db import User
+from app.models.user_notification import (
+    MarkUserNotificationsReadRequest,
+    MarkUserNotificationsReadResponse,
+    UserNotificationsResponse,
+)
 from app.models.user import UserOut, UserSelfUpdate
 from app.routers.dependencies import get_audit_logger, get_current_account_user, get_current_user
 from app.services.audit_service import AuditService
+from app.services.user_notifications_service import UserNotificationsService
 from app.services.users_service import UsersService, get_users_service
 from app.core.database import get_db
 
@@ -17,6 +24,34 @@ def read_users_me(
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
 ) -> UserOut:
     return users_service.user_to_out(current_user)
+
+
+@router.get("/me/notifications", response_model=UserNotificationsResponse)
+def list_my_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> UserNotificationsResponse:
+    return UserNotificationsService(db).list_for_user(current_user, limit=limit)
+
+
+@router.post("/me/notifications/read", response_model=MarkUserNotificationsReadResponse)
+def mark_my_notifications_read(
+    payload: MarkUserNotificationsReadRequest,
+    current_user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> MarkUserNotificationsReadResponse:
+    service = UserNotificationsService(db)
+    updated = service.mark_read(
+        current_user,
+        notification_ids=payload.notification_ids,
+        mark_all=payload.all,
+    )
+    db.commit()
+    return MarkUserNotificationsReadResponse(
+        updated_count=updated,
+        unread_count=service.unread_count_for_user(current_user),
+    )
 
 
 @router.put("/me", response_model=UserOut)

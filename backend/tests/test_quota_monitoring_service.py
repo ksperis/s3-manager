@@ -7,17 +7,24 @@ from datetime import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.db import (    QuotaAlertState,
+from app.db import (
+    AccountRole,
+    QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
     S3Account,
     S3User,
     StorageEndpoint,
     StorageProvider,
+    UiGroup,
+    UiGroupS3Account,
+    UiGroupS3User,
     User,
+    UserNotification,
     UserRole,
     UserS3Account,
     UserS3User,
+    UserUiGroup,
 )
 from app.models.app_settings import AppSettings
 from app.services import quota_monitoring_service
@@ -285,28 +292,37 @@ def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch
     first = service.run_monitor()  # first run above threshold => immediate alert
     assert first["alerts_triggered"] == 1
     assert first["alerts_sent"] == 1
+    assert first["notifications_created"] == 1
+    assert db_session.query(UserNotification).count() == 1
 
     second = service.run_monitor()  # still threshold => no duplicate
     assert second["alerts_triggered"] == 0
     assert second["alerts_sent"] == 0
+    assert second["notifications_created"] == 0
+    assert db_session.query(UserNotification).count() == 1
 
     fake_admin.usage_bytes = 100
     fake_admin.usage_objects = 100
     third = service.run_monitor()  # threshold -> full => alert
     assert third["alerts_triggered"] == 1
     assert third["alerts_sent"] == 1
+    assert third["notifications_created"] == 1
+    assert db_session.query(UserNotification).count() == 2
 
     fake_admin.usage_bytes = 40
     fake_admin.usage_objects = 40
     fourth = service.run_monitor()  # reset below threshold => no alert
     assert fourth["alerts_triggered"] == 0
     assert fourth["alerts_sent"] == 0
+    assert fourth["notifications_created"] == 0
 
     fake_admin.usage_bytes = 90
     fake_admin.usage_objects = 90
     fifth = service.run_monitor()  # back above threshold after reset => alert again
     assert fifth["alerts_triggered"] == 1
     assert fifth["alerts_sent"] == 1
+    assert fifth["notifications_created"] == 1
+    assert db_session.query(UserNotification).count() == 3
 
     assert len(fake_mailer.calls) == 3
     assert fake_mailer.calls[0]["recipients"] == ["account-admin@example.test"]
@@ -323,14 +339,24 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
 
     account_admin = _seed_user(db_session, email="account-admin@example.test")
     account_root = _seed_user(db_session, email="account-root@example.test")
+    account_portal_manager = _seed_user(db_session, email="account-portal-manager@example.test")
     account_member = _seed_user(db_session, email="account-member@example.test")
     account_disabled = _seed_user(db_session, email="account-disabled@example.test", quota_alerts_enabled=False)
     s3_user_member = _seed_user(db_session, email="s3-user-member@example.test")
+    group_portal_manager = _seed_user(db_session, email="group-portal-manager@example.test")
+    group_s3_user_member = _seed_user(db_session, email="group-s3-user@example.test")
 
     _seed_user(
         db_session,
         email="global-admin@example.test",
         role=UserRole.UI_ADMIN.value,
+        quota_alerts_global_watch=True,
+    )
+    _seed_user(
+        db_session,
+        email="global-admin-no-mail@example.test",
+        role=UserRole.UI_ADMIN.value,
+        quota_alerts_enabled=False,
         quota_alerts_global_watch=True,
     )
     _seed_user(
@@ -347,6 +373,13 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
         quota_alerts_global_watch=True,
     )
 
+    account_group = UiGroup(name="quota-account-notification-group")
+    s3_user_group = UiGroup(name="quota-s3-user-notification-group")
+    db_session.add_all([account_group, s3_user_group])
+    db_session.commit()
+    db_session.refresh(account_group)
+    db_session.refresh(s3_user_group)
+
     db_session.add_all(
         [
             UserS3Account(
@@ -358,6 +391,11 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
                 user_id=account_root.id,
                 account_id=account.id,
                 is_root=True,
+            ),
+            UserS3Account(
+                user_id=account_portal_manager.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_MANAGER.value,
             ),
             UserS3Account(
                 user_id=account_member.id,
@@ -372,6 +410,23 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
                 user_id=s3_user_member.id,
                 s3_user_id=s3_user.id,
             ),
+            UserUiGroup(
+                user_id=group_portal_manager.id,
+                group_id=account_group.id,
+            ),
+            UserUiGroup(
+                user_id=group_s3_user_member.id,
+                group_id=s3_user_group.id,
+            ),
+            UiGroupS3Account(
+                group_id=account_group.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_MANAGER.value,
+            ),
+            UiGroupS3User(
+                group_id=s3_user_group.id,
+                s3_user_id=s3_user.id,
+            ),
         ]
     )
     db_session.commit()
@@ -381,6 +436,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     account_recipients = service._load_account_recipients()
     s3_user_recipients = service._load_s3_user_recipients()
     global_watch_recipients = service._load_global_watch_recipients()
+    account_notification_users = service._load_account_notification_users()
+    s3_user_notification_users = service._load_s3_user_notification_users()
+    global_watch_notification_users = service._load_global_watch_notification_users()
 
     account_subject = SubjectContext(
         subject_type="account",
@@ -405,6 +463,8 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     assert set(account_resolved) == {
         "account-admin@example.test",
         "account-root@example.test",
+        "account-portal-manager@example.test",
+        "group-portal-manager@example.test",
         "global-admin@example.test",
         "account-contact@example.test",
     }
@@ -430,7 +490,39 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
     )
     assert set(s3_user_resolved) == {
         "s3-user-member@example.test",
+        "group-s3-user@example.test",
         "global-admin@example.test",
+    }
+
+    assert set(
+        service._resolve_notification_user_ids(
+            subject=account_subject,
+            account_notification_users=account_notification_users,
+            s3_user_notification_users=s3_user_notification_users,
+            global_watch_notification_users=global_watch_notification_users,
+        )
+    ) == {
+        account_admin.id,
+        account_root.id,
+        account_portal_manager.id,
+        account_disabled.id,
+        group_portal_manager.id,
+        db_session.query(User).filter(User.email == "global-admin@example.test").one().id,
+        db_session.query(User).filter(User.email == "global-admin-no-mail@example.test").one().id,
+    }
+
+    assert set(
+        service._resolve_notification_user_ids(
+            subject=s3_user_subject,
+            account_notification_users=account_notification_users,
+            s3_user_notification_users=s3_user_notification_users,
+            global_watch_notification_users=global_watch_notification_users,
+        )
+    ) == {
+        s3_user_member.id,
+        group_s3_user_member.id,
+        db_session.query(User).filter(User.email == "global-admin@example.test").one().id,
+        db_session.query(User).filter(User.email == "global-admin-no-mail@example.test").one().id,
     }
 
 

@@ -15,7 +15,8 @@ Use this page when you need to adjust personal UI preferences or manage your own
 2. In **Preferences**:
    - choose language and theme,
    - set the default workspace after sign-in,
-   - enable **Show tags in top selectors** if you want compact color-coded tags in the topbar context and endpoint selectors on this browser.
+   - enable **Show tags in top selectors** if you want compact color-coded tags in the topbar context and endpoint selectors on this browser,
+   - choose whether you receive quota alert emails.
 3. In **Private S3 connections**:
    - create or edit your own private connection,
    - manage tags directly from the main form: add them inline, remove them with `×`, and click a tag badge to open its compact settings popover for color and `Standard` / `Administrative` scope,
@@ -25,11 +26,17 @@ Use this page when you need to adjust personal UI preferences or manage your own
 ## Expected result
 
 Your local UI preferences are updated, and your private connections remain easier to identify and filter.
+Quota notifications for accounts or RGW users you administer remain visible from
+the topbar notification menu when the platform quota monitor raises them.
 
 ## Limits / feature flags
 
 !!! note
     The selector-tags preference is stored locally in the browser. It is not shared across browsers or devices. Tags marked `Administrative` stay visible in management lists and edit dialogs but are never shown in top selectors.
+
+!!! note
+    The quota email preference controls email delivery only. Topbar quota notifications
+    are shown for accessible RGW accounts or users when quota monitoring is enabled.
 
 !!! note
     Private S3 connections remain private to their owner. Tags on those connections are also editable only by the owner.

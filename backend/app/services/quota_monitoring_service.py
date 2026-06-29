@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
+    AccountRole,
     QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
@@ -24,15 +25,19 @@ from app.db import (
     S3User,
     StorageEndpoint,
     StorageProvider,
+    UiGroupS3Account,
+    UiGroupS3User,
     User,
     UserRole,
     UserS3Account,
     UserS3User,
+    UserUiGroup,
 )
 from app.models.app_settings import QuotaNotificationSettings
 from app.services.app_settings_service import load_app_settings
 from app.services.data_retention_service import DataRetentionService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.user_notifications_service import UserNotificationsService
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 from app.utils.usage_stats import extract_usage_stats
@@ -140,6 +145,7 @@ class QuotaMonitoringService:
             "history_daily_upserts": 0,
             "alerts_triggered": 0,
             "alerts_sent": 0,
+            "notifications_created": 0,
             "email_errors": 0,
             "errors": [],
             "warnings": [],
@@ -172,9 +178,13 @@ class QuotaMonitoringService:
         account_recipients = self._load_account_recipients()
         s3_user_recipients = self._load_s3_user_recipients()
         global_watch_recipients = self._load_global_watch_recipients()
+        account_notification_users = self._load_account_notification_users()
+        s3_user_notification_users = self._load_s3_user_notification_users()
+        global_watch_notification_users = self._load_global_watch_notification_users()
         states = self._load_alert_states()
         usage_clients: dict[int, Optional[RGWAdminClient]] = {}
         admin_clients: dict[int, Optional[RGWAdminClient]] = {}
+        notifications_service = UserNotificationsService(self.db)
 
         if quota_alerts_enabled:
             self._mailer, self._mail_error_reason = self._build_mailer(app_settings.quota_notifications)
@@ -255,7 +265,7 @@ class QuotaMonitoringService:
                 summary["history_daily_upserts"] += 1
 
             if quota_alerts_enabled:
-                should_alert, next_level = self._update_state_and_check_alert(
+                should_alert, next_level, previous_level = self._update_state_and_check_alert(
                     subject=subject,
                     states=states,
                     ratio_pct=ratio_pct,
@@ -264,6 +274,38 @@ class QuotaMonitoringService:
                 )
                 if should_alert and next_level in {self._LEVEL_THRESHOLD, self._LEVEL_FULL}:
                     summary["alerts_triggered"] += 1
+                    notification_user_ids = self._resolve_notification_user_ids(
+                        subject=subject,
+                        account_notification_users=account_notification_users,
+                        s3_user_notification_users=s3_user_notification_users,
+                        global_watch_notification_users=global_watch_notification_users,
+                    )
+                    summary["notifications_created"] += notifications_service.create_quota_alert_notifications(
+                        user_ids=notification_user_ids,
+                        subject_type=subject.subject_type,
+                        subject_id=subject.subject_id,
+                        storage_endpoint_id=subject.endpoint_id,
+                        event_key=self._quota_notification_event_key(subject, previous_level, next_level, now),
+                        title=self._quota_notification_title(next_level),
+                        message=self._quota_notification_message(
+                            subject=subject,
+                            alert_level=next_level,
+                            ratio_pct=ratio_pct,
+                        ),
+                        severity="error" if next_level == self._LEVEL_FULL else "warning",
+                        payload=self._quota_notification_payload(
+                            subject=subject,
+                            alert_level=next_level,
+                            ratio_pct=ratio_pct,
+                            threshold_percent=int(app_settings.quota_notifications.threshold_percent),
+                            used_bytes=usage_bytes,
+                            used_objects=usage_objects,
+                            quota_size_bytes=quota_size_bytes,
+                            quota_objects=quota_objects,
+                            checked_at=now,
+                        ),
+                        created_at=now,
+                    )
                     recipients = self._resolve_recipients(
                         subject=subject,
                         account_recipients=account_recipients,
@@ -616,7 +658,7 @@ class QuotaMonitoringService:
         ratio_pct: Optional[float],
         threshold_percent: int,
         now: datetime,
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, Optional[str]]:
         key = self._state_key(subject)
         state = states.get(key)
         previous_level = state.last_level if state else None
@@ -653,7 +695,7 @@ class QuotaMonitoringService:
             state.last_notified_at = now
             state.updated_at = now
 
-        return should_alert, next_level
+        return should_alert, next_level, previous_level
 
     def _normalize_email(self, value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -671,12 +713,33 @@ class QuotaMonitoringService:
                 or_(
                     UserS3Account.account_admin.is_(True),
                     UserS3Account.is_root.is_(True),
+                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
                 )
             )
             .all()
         )
         result: dict[int, set[str]] = {}
         for account_id, email in rows:
+            normalized = self._normalize_email(email)
+            if not normalized:
+                continue
+            result.setdefault(int(account_id), set()).add(normalized)
+
+        group_rows = (
+            self.db.query(UiGroupS3Account.account_id, User.email)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(User.quota_alerts_enabled.is_(True))
+            .filter(
+                or_(
+                    UiGroupS3Account.account_admin.is_(True),
+                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+                )
+            )
+            .all()
+        )
+        for account_id, email in group_rows:
             normalized = self._normalize_email(email)
             if not normalized:
                 continue
@@ -693,6 +756,20 @@ class QuotaMonitoringService:
         )
         result: dict[int, set[str]] = {}
         for s3_user_id, email in rows:
+            normalized = self._normalize_email(email)
+            if not normalized:
+                continue
+            result.setdefault(int(s3_user_id), set()).add(normalized)
+
+        group_rows = (
+            self.db.query(UiGroupS3User.s3_user_id, User.email)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3User.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(User.quota_alerts_enabled.is_(True))
+            .all()
+        )
+        for s3_user_id, email in group_rows:
             normalized = self._normalize_email(email)
             if not normalized:
                 continue
@@ -734,6 +811,147 @@ class QuotaMonitoringService:
             if normalized:
                 recipients.add(normalized)
         return sorted(recipients)
+
+    def _load_account_notification_users(self) -> dict[int, set[int]]:
+        rows = (
+            self.db.query(UserS3Account.account_id, User.id)
+            .join(User, User.id == UserS3Account.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(
+                or_(
+                    UserS3Account.account_admin.is_(True),
+                    UserS3Account.is_root.is_(True),
+                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+                )
+            )
+            .all()
+        )
+        result: dict[int, set[int]] = {}
+        for account_id, user_id in rows:
+            result.setdefault(int(account_id), set()).add(int(user_id))
+
+        group_rows = (
+            self.db.query(UiGroupS3Account.account_id, User.id)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(
+                or_(
+                    UiGroupS3Account.account_admin.is_(True),
+                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+                )
+            )
+            .all()
+        )
+        for account_id, user_id in group_rows:
+            result.setdefault(int(account_id), set()).add(int(user_id))
+        return result
+
+    def _load_s3_user_notification_users(self) -> dict[int, set[int]]:
+        rows = (
+            self.db.query(UserS3User.s3_user_id, User.id)
+            .join(User, User.id == UserS3User.user_id)
+            .filter(User.is_active.is_(True))
+            .all()
+        )
+        result: dict[int, set[int]] = {}
+        for s3_user_id, user_id in rows:
+            result.setdefault(int(s3_user_id), set()).add(int(user_id))
+
+        group_rows = (
+            self.db.query(UiGroupS3User.s3_user_id, User.id)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3User.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .all()
+        )
+        for s3_user_id, user_id in group_rows:
+            result.setdefault(int(s3_user_id), set()).add(int(user_id))
+        return result
+
+    def _load_global_watch_notification_users(self) -> set[int]:
+        rows = (
+            self.db.query(User.id)
+            .filter(User.is_active.is_(True))
+            .filter(User.quota_alerts_global_watch.is_(True))
+            .filter(User.role.in_([UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]))
+            .all()
+        )
+        return {int(user_id) for (user_id,) in rows}
+
+    def _resolve_notification_user_ids(
+        self,
+        *,
+        subject: SubjectContext,
+        account_notification_users: dict[int, set[int]],
+        s3_user_notification_users: dict[int, set[int]],
+        global_watch_notification_users: set[int],
+    ) -> list[int]:
+        user_ids: set[int] = set(global_watch_notification_users)
+        if subject.subject_type == "account":
+            user_ids.update(account_notification_users.get(subject.subject_id, set()))
+        else:
+            user_ids.update(s3_user_notification_users.get(subject.subject_id, set()))
+        return sorted(user_ids)
+
+    def _quota_notification_event_key(
+        self,
+        subject: SubjectContext,
+        previous_level: Optional[str],
+        alert_level: str,
+        checked_at: datetime,
+    ) -> str:
+        transition_from = previous_level or "new"
+        return (
+            f"quota:{subject.subject_type}:{subject.endpoint_id}:"
+            f"{subject.subject_id}:{transition_from}:{alert_level}:{checked_at.isoformat()}"
+        )
+
+    def _quota_notification_title(self, alert_level: str) -> str:
+        if alert_level == self._LEVEL_FULL:
+            return "Quota reached"
+        return "Quota near limit"
+
+    def _quota_notification_message(
+        self,
+        *,
+        subject: SubjectContext,
+        alert_level: str,
+        ratio_pct: Optional[float],
+    ) -> str:
+        subject_label = "RGW account" if subject.subject_type == "account" else "RGW user"
+        ratio_display = f"{ratio_pct:.3f}%" if ratio_pct is not None else "n/a"
+        if alert_level == self._LEVEL_FULL:
+            return f"{subject_label} {subject.subject_name} has reached its quota ({ratio_display})."
+        return f"{subject_label} {subject.subject_name} is near its quota limit ({ratio_display})."
+
+    def _quota_notification_payload(
+        self,
+        *,
+        subject: SubjectContext,
+        alert_level: str,
+        ratio_pct: Optional[float],
+        threshold_percent: int,
+        used_bytes: int,
+        used_objects: int,
+        quota_size_bytes: Optional[int],
+        quota_objects: Optional[int],
+        checked_at: datetime,
+    ) -> dict[str, Any]:
+        return {
+            "alert_level": alert_level,
+            "subject_type": subject.subject_type,
+            "subject_label": "RGW account" if subject.subject_type == "account" else "RGW user",
+            "subject_name": subject.subject_name,
+            "endpoint_name": subject.endpoint_name,
+            "threshold_percent": int(threshold_percent),
+            "usage_ratio_pct": ratio_pct,
+            "used_bytes": int(used_bytes),
+            "quota_size_bytes": quota_size_bytes,
+            "used_objects": int(used_objects),
+            "quota_objects": quota_objects,
+            "checked_at": checked_at.isoformat(),
+        }
 
     def _build_mailer(
         self,
