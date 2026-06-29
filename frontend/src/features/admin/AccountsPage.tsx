@@ -223,55 +223,11 @@ export default function S3AccountsPage() {
     editingEndpointCanWrite &&
     Boolean(editingS3Account?.rgw_account_id);
   const effectivePortalSettings = portalAccountSettings?.effective ?? null;
-  const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
   const showGroupsTab = editTab === "groups";
   const showPrivilegedTab = editTab === "privileged";
   const showPortalTab = portalEnabled && editTab === "portal";
-  const hasPortalManagerOverrides = useMemo(() => {
-    if (!portalManagerOverride) return false;
-    if (
-      portalManagerOverride.allow_portal_key != null ||
-      portalManagerOverride.allow_portal_user_bucket_create != null ||
-      portalManagerOverride.allow_portal_named_bucket_create != null ||
-      portalManagerOverride.allow_portal_user_access_key_create != null
-    ) {
-      return true;
-    }
-    if (portalManagerOverride.bucket_defaults) {
-      if (
-        portalManagerOverride.bucket_defaults.versioning != null ||
-        portalManagerOverride.bucket_defaults.enable_cors != null ||
-        portalManagerOverride.bucket_defaults.enable_lifecycle != null ||
-        portalManagerOverride.bucket_defaults.cors_allowed_origins != null
-      ) {
-        return true;
-      }
-    }
-    const managerPolicy = portalManagerOverride.iam_group_manager_policy;
-    if (
-      hasOwn(managerPolicy as Record<string, unknown> | null, "actions") ||
-      hasOwn(managerPolicy as Record<string, unknown> | null, "advanced_policy")
-    ) {
-      return true;
-    }
-    const userPolicy = portalManagerOverride.iam_group_user_policy;
-    if (
-      hasOwn(userPolicy as Record<string, unknown> | null, "actions") ||
-      hasOwn(userPolicy as Record<string, unknown> | null, "advanced_policy")
-    ) {
-      return true;
-    }
-    const bucketPolicy = portalManagerOverride.bucket_access_policy;
-    if (
-      hasOwn(bucketPolicy as Record<string, unknown> | null, "actions") ||
-      hasOwn(bucketPolicy as Record<string, unknown> | null, "advanced_policy")
-    ) {
-      return true;
-    }
-    return false;
-  }, [portalManagerOverride]);
   const {
     catalog: adminTagCatalog,
     loading: adminTagCatalogLoading,
@@ -2169,7 +2125,7 @@ export default function S3AccountsPage() {
                     <div>
                       <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Portal overrides</p>
                       <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Force settings for this account. Admin overrides take precedence over portal manager overrides.
+                        Force Portal settings for this account.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -2196,9 +2152,6 @@ export default function S3AccountsPage() {
                     {portalSettingsMessage && <PageBanner tone="success">{portalSettingsMessage}</PageBanner>}
                     {portalSettingsLoading && !portalSettingsError && (
                       <PageBanner tone="info">Loading portal settings...</PageBanner>
-                    )}
-                    {hasPortalManagerOverrides && (
-                      <PageBanner tone="warning">Portal manager overrides are active for this account.</PageBanner>
                     )}
                     {portalAccountSettings && effectivePortalSettings && (
                       <div className="space-y-4">

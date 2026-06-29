@@ -360,4 +360,33 @@ describe("PortalUsagePage", () => {
       expect(screen.getByText("Billing source is disabled or unavailable.")).toBeInTheDocument();
     });
   });
+
+  it("keeps Other usage out of Storage Space drill-downs", async () => {
+    mocks.hookResult.workspace = {
+      ...mocks.hookResult.workspace,
+      usedBytes: 1024,
+      usedObjects: 22,
+    };
+    mocks.hookResult.usage = {
+      used_bytes: 1024,
+      used_objects: 22,
+      quota_max_size_bytes: 2048,
+      storage_spaces: [{ id: "research-data", name: "Research Data", used_bytes: 512, object_count: 12 }],
+      other_storage_space: { id: "__other__", name: "Other", used_bytes: 512, object_count: 10 },
+    };
+
+    render(<PortalUsagePage />);
+
+    await waitFor(() => {
+      expect(mocks.billingMock).toHaveBeenCalled();
+      expect(mocks.usageStatsMock).toHaveBeenCalled();
+      expect(mocks.usageHistoryMock).toHaveBeenCalled();
+    });
+    expect(screen.getByText("50% of quota")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
+
+    expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Other")).not.toBeInTheDocument();
+  });
 });

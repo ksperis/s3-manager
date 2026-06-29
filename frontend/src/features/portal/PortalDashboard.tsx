@@ -5,6 +5,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
+import type { PortalUsageStorageSpace } from "../../api/portal";
 import type { ManagerUsageTrendBaseline } from "../../api/stats";
 import PageHeader from "../../components/PageHeader";
 import {
@@ -59,7 +60,15 @@ import {
 } from "./portalI18n";
 
 type StorageSpaceRow = {
-  space: PortalWorkspaceSpace;
+  id: string;
+  name: string;
+  usedBytes?: number | null;
+  objectCount?: number | null;
+  quotaBytes?: number | null;
+  role?: PortalWorkspaceSpace["role"];
+  status?: PortalWorkspaceSpace["status"];
+  space?: PortalWorkspaceSpace;
+  isOther?: boolean;
   percent: number | null;
 };
 
@@ -139,15 +148,43 @@ function localizeTrendBaseline<T extends ManagerUsageTrendBaseline | null | unde
   } as T;
 }
 
-function buildStorageRows(spaces: PortalWorkspaceSpace[]): StorageSpaceRow[] {
-  const rows = [...spaces]
+function hasOtherUsage(other?: PortalUsageStorageSpace | null): other is PortalUsageStorageSpace {
+  return Boolean(other && ((other.used_bytes ?? 0) > 0 || (other.object_count ?? 0) > 0));
+}
+
+function buildStorageRows(spaces: PortalWorkspaceSpace[], other?: PortalUsageStorageSpace | null): StorageSpaceRow[] {
+  const includeOther = hasOtherUsage(other);
+  const namedLimit = includeOther ? TOP_STORAGE_SPACES_LIMIT - 1 : TOP_STORAGE_SPACES_LIMIT;
+  const namedRows = [...spaces]
     .sort((left, right) => (right.usedBytes ?? 0) - (left.usedBytes ?? 0))
-    .slice(0, TOP_STORAGE_SPACES_LIMIT);
+    .slice(0, namedLimit)
+    .map((space) => ({
+      id: space.id,
+      name: space.name,
+      usedBytes: space.usedBytes,
+      objectCount: space.objectCount,
+      quotaBytes: space.quotaBytes,
+      role: space.role,
+      status: space.status,
+      space,
+    }));
+  const rows: Omit<StorageSpaceRow, "percent">[] = includeOther
+    ? [
+        ...namedRows,
+        {
+          id: other.id,
+          name: other.name,
+          usedBytes: other.used_bytes,
+          objectCount: other.object_count,
+          isOther: true,
+        },
+      ]
+    : namedRows;
   const maxBytes = Math.max(...rows.map((row) => row.usedBytes ?? 0), 1);
-  return rows.map((space) => {
-    const quotaPercent = percent(space.usedBytes, space.quotaBytes);
-    const rankingPercent = space.usedBytes == null ? null : Math.max(4, ((space.usedBytes ?? 0) / maxBytes) * 100);
-    return { space, percent: quotaPercent ?? rankingPercent };
+  return rows.map((row) => {
+    const quotaPercent = percent(row.usedBytes, row.quotaBytes);
+    const rankingPercent = row.usedBytes == null ? null : Math.max(4, ((row.usedBytes ?? 0) / maxBytes) * 100);
+    return { ...row, percent: quotaPercent ?? rankingPercent };
   });
 }
 
@@ -292,9 +329,9 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
             <span>{t({ en: "Storage", fr: "Stockage", de: "Speicher" })}</span>
             <span className="text-right">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</span>
           </div>
-          {rows.map(({ space, percent: rowPercent }) => (
+          {rows.map((row) => (
             <div
-              key={space.id}
+              key={row.id}
               className="grid min-h-[44px] grid-cols-[minmax(0,1.2fr)_minmax(92px,0.8fr)_minmax(72px,0.5fr)] items-center gap-3"
             >
               <div className="min-w-0">
@@ -302,24 +339,30 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                   <IconBubble tone="emerald" className="h-7 w-7 rounded-md">
                     <BucketIcon className="h-4 w-4" />
                   </IconBubble>
-                  <Link to={storageSpacePath(space)} className="truncate ui-caption font-semibold text-[var(--ui-text)] hover:text-primary">
-                    {space.name}
-                  </Link>
+                  {row.space && !row.isOther ? (
+                    <Link to={storageSpacePath(row.space)} className="truncate ui-caption font-semibold text-[var(--ui-text)] hover:text-primary">
+                      {row.name}
+                    </Link>
+                  ) : (
+                    <span className="truncate ui-caption font-semibold text-[var(--ui-text)]">{row.name}</span>
+                  )}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1.5 pl-9">
-                  <UiBadge tone={portalRoleTone(space.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                    {portalRoleLabel(space.role, t)}
-                  </UiBadge>
-                  <UiBadge tone={portalStorageSpaceStatusTone(space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                    {portalStatusLabel(space.status, t)}
-                  </UiBadge>
-                </div>
+                {row.space && row.role && row.status ? (
+                  <div className="mt-1 flex flex-wrap gap-1.5 pl-9">
+                    <UiBadge tone={portalRoleTone(row.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
+                      {portalRoleLabel(row.role, t)}
+                    </UiBadge>
+                    <UiBadge tone={portalStorageSpaceStatusTone(row.space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
+                      {portalStatusLabel(row.status, t)}
+                    </UiBadge>
+                  </div>
+                ) : null}
               </div>
               <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3">
-                <span className="ui-caption font-semibold text-[var(--ui-text)]">{formatBytes(space.usedBytes)}</span>
-                {rowPercent != null ? <ProgressBar value={rowPercent} className="h-1.5" /> : <span className="h-1.5" />}
+                <span className="ui-caption font-semibold text-[var(--ui-text)]">{formatBytes(row.usedBytes)}</span>
+                {row.percent != null ? <ProgressBar value={row.percent} className="h-1.5" /> : <span className="h-1.5" />}
               </div>
-              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatDashboardNumber(space.objectCount)}</span>
+              <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatDashboardNumber(row.objectCount)}</span>
             </div>
           ))}
         </div>
@@ -487,6 +530,7 @@ export default function PortalDashboard() {
     usageTrends,
     trafficLoading,
     trafficError,
+    usage,
   } = usePortalWorkspaceData({
     includeTraffic: true,
     includeTrafficTrend: true,
@@ -494,7 +538,7 @@ export default function PortalDashboard() {
     includeUsageTrends: true,
   });
 
-  const storageRows = useMemo(() => buildStorageRows(workspace.spaces), [workspace.spaces]);
+  const storageRows = useMemo(() => buildStorageRows(workspace.spaces, usage?.other_storage_space), [usage?.other_storage_space, workspace.spaces]);
   const activityRows = useMemo(() => buildActivityRows(workspace.activity, t), [t, workspace.activity]);
   const transferRows = useMemo(() => buildTransferRows(workspace.transfers, t), [t, workspace.transfers]);
   const currentTraffic = trafficByWindow.day ?? traffic;

@@ -11,7 +11,6 @@ import {
   SettingsItem,
   SettingsSection,
   SettingsToggleAction,
-  settingsCheckboxClassName,
   settingsCompactInputClassName,
   settingsInlineButtonClassName,
   settingsTextareaClassName,
@@ -21,7 +20,6 @@ import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettin
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
-const allowOverrideLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]";
 const corsOriginsTextareaClass = `mt-2 ${settingsTextareaClassName}`;
 
 export default function PortalSettingsPage() {
@@ -112,48 +110,6 @@ export default function PortalSettingsPage() {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, cors_allowed_origins: origins } } } : prev
     );
-  };
-
-  const updateOverridePolicy = (
-    updater: (policy: AppSettings["portal"]["override_policy"]) => AppSettings["portal"]["override_policy"]
-  ) => {
-    setSettings((prev) =>
-      prev ? { ...prev, portal: { ...prev.portal, override_policy: updater(prev.portal.override_policy) } } : prev
-    );
-  };
-
-  const handleOverrideToggle = (
-    field: "allow_portal_user_bucket_create" | "allow_portal_named_bucket_create" | "allow_portal_user_access_key_create",
-    value: boolean
-  ) => {
-    updateOverridePolicy((policy) => ({ ...policy, [field]: value }));
-  };
-
-  const handleOverridePolicyToggle = (
-    section: "iam_group_manager_policy" | "iam_group_user_policy" | "bucket_access_policy",
-    field: "actions",
-    value: boolean
-  ) => {
-    updateOverridePolicy((policy) => ({
-      ...policy,
-      [section]: {
-        ...policy[section],
-        [field]: value,
-      },
-    }));
-  };
-
-  const handleOverrideBucketDefaultsToggle = (
-    field: "versioning" | "enable_cors" | "enable_lifecycle" | "cors_allowed_origins",
-    value: boolean
-  ) => {
-    updateOverridePolicy((policy) => ({
-      ...policy,
-      bucket_defaults: {
-        ...policy.bucket_defaults,
-        [field]: value,
-      },
-    }));
   };
 
   const handleManagerActionsChange = (value: string) => {
@@ -313,77 +269,41 @@ export default function PortalSettingsPage() {
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         <SettingsCard>
-          <SettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
+          <SettingsSection title="UI" description="Portal UI switches and account defaults." layout="grid">
             <SettingsItem
               title="Portal user Storage Space creation"
               description="Allow portal-user members to create their own Storage Spaces from the Portal. Storage-side permissions and the Portal service still enforce the actual bucket creation workflow."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={portalBucketCreateEnabled}
-                    onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
-                    disabled={!settings}
-                    ariaLabel="Portal user Storage Space creation"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.allow_portal_user_bucket_create)}
-                      onChange={(e) => handleOverrideToggle("allow_portal_user_bucket_create", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={portalBucketCreateEnabled}
+                  onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal user Storage Space creation"
+                />
               }
             />
             <SettingsItem
               title="Named bucket creation"
               description="Allow the portal create form to create a locked Storage Space whose bucket name is based on the submitted name."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={portalNamedBucketCreateEnabled}
-                    onChange={(value) => handleToggleAllowPortalNamedBucketCreate(value)}
-                    disabled={!settings}
-                    ariaLabel="Portal named bucket creation"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.allow_portal_named_bucket_create)}
-                      onChange={(e) => handleOverrideToggle("allow_portal_named_bucket_create", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={portalNamedBucketCreateEnabled}
+                  onChange={(value) => handleToggleAllowPortalNamedBucketCreate(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal named bucket creation"
+                />
               }
             />
             <SettingsItem
               title="Access key management"
               description="Allow portal users to create and delete their own IAM user keys from the portal."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={portalAccessKeyCreateEnabled}
-                    onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
-                    disabled={!settings}
-                    ariaLabel="Portal user access key management"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.allow_portal_user_access_key_create)}
-                      onChange={(e) => handleOverrideToggle("allow_portal_user_access_key_create", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={portalAccessKeyCreateEnabled}
+                  onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal user access key management"
+                />
               }
             />
             <SettingsItem
@@ -415,26 +335,14 @@ export default function PortalSettingsPage() {
                 title="Policy portal-manager"
                 description="Actions granted to the portal-manager IAM group."
                 action={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className={allowOverrideLabelClass}>
-                      <span>Allow override</span>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(settings?.portal.override_policy.iam_group_manager_policy.actions)}
-                        onChange={(e) => handleOverridePolicyToggle("iam_group_manager_policy", "actions", e.target.checked)}
-                        className={settingsCheckboxClassName}
-                        disabled={!settings}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleResetPolicy("manager")}
-                      disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                      className={settingsInlineButtonClassName}
-                    >
-                      {resettingPolicy === "manager" ? "Resetting..." : "Reset policy"}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetPolicy("manager")}
+                    disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+                    className={settingsInlineButtonClassName}
+                  >
+                    {resettingPolicy === "manager" ? "Resetting..." : "Reset policy"}
+                  </button>
                 }
               >
                 <div className="mt-3">
@@ -452,26 +360,14 @@ export default function PortalSettingsPage() {
                 title="Policy portal-user"
                 description="Actions granted to the portal-user IAM group."
                 action={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className={allowOverrideLabelClass}>
-                      <span>Allow override</span>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(settings?.portal.override_policy.iam_group_user_policy.actions)}
-                        onChange={(e) => handleOverridePolicyToggle("iam_group_user_policy", "actions", e.target.checked)}
-                        className={settingsCheckboxClassName}
-                        disabled={!settings}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleResetPolicy("user")}
-                      disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                      className={settingsInlineButtonClassName}
-                    >
-                      {resettingPolicy === "user" ? "Resetting..." : "Reset policy"}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleResetPolicy("user")}
+                    disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+                    className={settingsInlineButtonClassName}
+                  >
+                    {resettingPolicy === "user" ? "Resetting..." : "Reset policy"}
+                  </button>
                 }
               >
                 <div className="mt-3">
@@ -490,26 +386,14 @@ export default function PortalSettingsPage() {
               title="Policy bucket access"
               description="Actions added when granting a portal user access to a bucket."
               action={
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.bucket_access_policy.actions)}
-                      onChange={(e) => handleOverridePolicyToggle("bucket_access_policy", "actions", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => handleResetPolicy("bucket")}
-                    disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                    className={settingsInlineButtonClassName}
-                  >
-                    {resettingPolicy === "bucket" ? "Resetting..." : "Reset policy"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleResetPolicy("bucket")}
+                  disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+                  className={settingsInlineButtonClassName}
+                >
+                  {resettingPolicy === "bucket" ? "Resetting..." : "Reset policy"}
+                </button>
               }
             >
               <div className="mt-3">
@@ -538,90 +422,42 @@ export default function PortalSettingsPage() {
               title="Versioning"
               description="Enable bucket versioning by default."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={bucketVersioningEnabled}
-                    onChange={(value) => handleBucketDefaultVersioning(value)}
-                    disabled={!settings}
-                    ariaLabel="Bucket versioning default"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.bucket_defaults.versioning)}
-                      onChange={(e) => handleOverrideBucketDefaultsToggle("versioning", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={bucketVersioningEnabled}
+                  onChange={(value) => handleBucketDefaultVersioning(value)}
+                  disabled={!settings}
+                  ariaLabel="Bucket versioning default"
+                />
               }
             />
             <SettingsItem
               title="Lifecycle baseline"
               description="Remove obsolete delete markers and non-current versions after 90 days."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={bucketLifecycleEnabled}
-                    onChange={(value) => handleBucketDefaultLifecycle(value)}
-                    disabled={!settings}
-                    ariaLabel="Bucket lifecycle default"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_lifecycle)}
-                      onChange={(e) => handleOverrideBucketDefaultsToggle("enable_lifecycle", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={bucketLifecycleEnabled}
+                  onChange={(value) => handleBucketDefaultLifecycle(value)}
+                  disabled={!settings}
+                  ariaLabel="Bucket lifecycle default"
+                />
               }
             />
             <SettingsItem
               title="Portal CORS"
               description="Apply a CORS rule to allow the portal UI to access the bucket."
               action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <SettingsToggleAction
-                    checked={bucketCorsEnabled}
-                    onChange={(value) => handleBucketDefaultCors(value)}
-                    disabled={!settings}
-                    ariaLabel="Portal CORS default"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_cors)}
-                      onChange={(e) => handleOverrideBucketDefaultsToggle("enable_cors", e.target.checked)}
-                      className={settingsCheckboxClassName}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
+                <SettingsToggleAction
+                  checked={bucketCorsEnabled}
+                  onChange={(value) => handleBucketDefaultCors(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal CORS default"
+                />
               }
             />
             <SettingsItem
               title="CORS allowed origins"
               description="One URL per line. These origins are added to the portal bucket CORS rule."
               className="md:col-span-2"
-              action={
-                <label className={allowOverrideLabelClass}>
-                  <span>Allow override</span>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings?.portal.override_policy.bucket_defaults.cors_allowed_origins)}
-                    onChange={(e) => handleOverrideBucketDefaultsToggle("cors_allowed_origins", e.target.checked)}
-                    className={settingsCheckboxClassName}
-                    disabled={!settings}
-                  />
-                </label>
-              }
             >
               <textarea
                 value={corsOriginsText}

@@ -6,7 +6,7 @@ import client from "./client";
 import { Bucket } from "./buckets";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
-import { PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy } from "./appSettings";
+import { PortalSettings, PortalSettingsOverride } from "./appSettings";
 import type { BucketUsageStatsAggregateResponse } from "./bucketUsageStats";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
@@ -65,6 +65,7 @@ export type PortalUsage = {
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
   storage_spaces?: PortalUsageStorageSpace[];
+  other_storage_space?: PortalUsageStorageSpace | null;
 };
 
 export type PortalUsageStorageSpace = {
@@ -215,8 +216,6 @@ export type PortalAlert = {
 export type PortalAccountSettings = {
   effective: PortalSettings;
   admin_override: PortalSettingsOverride;
-  portal_manager_override: PortalSettingsOverride;
-  override_policy: PortalSettingsOverridePolicy;
 };
 
 export async function listPortalAccounts(): Promise<S3Account[]> {

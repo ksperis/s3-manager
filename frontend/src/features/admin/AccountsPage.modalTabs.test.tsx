@@ -59,22 +59,6 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     },
   },
   admin_override: {},
-  portal_manager_override: {},
-  override_policy: {
-    allow_portal_key: false,
-    allow_portal_user_bucket_create: true,
-    allow_portal_named_bucket_create: true,
-    allow_portal_user_access_key_create: true,
-    iam_group_manager_policy: { actions: true, advanced_policy: false },
-    iam_group_user_policy: { actions: true, advanced_policy: false },
-    bucket_access_policy: { actions: true, advanced_policy: false },
-    bucket_defaults: {
-      versioning: true,
-      enable_cors: true,
-      enable_lifecycle: true,
-      cors_allowed_origins: true,
-    },
-  },
   ...overrides,
 });
 
@@ -492,14 +476,7 @@ describe("AccountsPage modal tabs", () => {
 
   it("shows portal overrides tab when the portal feature is enabled", async () => {
     portalEnabled = true;
-    fetchAccountPortalSettingsMock.mockResolvedValueOnce(
-      makePortalAccountSettings({
-        portal_manager_override: {
-          allow_portal_user_bucket_create: true,
-          allow_portal_named_bucket_create: true,
-        },
-      })
-    );
+    fetchAccountPortalSettingsMock.mockResolvedValueOnce(makePortalAccountSettings());
 
     render(<AccountsPage />);
 
@@ -508,8 +485,8 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
-    expect(await screen.findByText("Portal manager overrides are active for this account.")).toBeInTheDocument();
-    expect(screen.getByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.queryByText("Portal manager overrides are active for this account.")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
   });
 

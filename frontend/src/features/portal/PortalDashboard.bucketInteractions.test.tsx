@@ -112,6 +112,7 @@ const mocks = vi.hoisted(() => {
       week: weekTraffic,
       month: monthTraffic,
     },
+    usage: null,
     usageTrends: {
       storage: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_bytes: 256 },
       buckets: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 0 },
@@ -246,6 +247,38 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(within(topStorageSpaces!).getByText("Lab Notes")).toBeInTheDocument();
     expect(within(topStorageSpaces!).getByText("Research Data")).toBeInTheDocument();
     expect(within(topStorageSpaces!).queryByText("Cold Vault")).not.toBeInTheDocument();
+  });
+
+  it("shows anonymized Other usage without exposing a Storage Space link or badges", () => {
+    const baseSpace = mocks.hookResult.workspace.spaces[0];
+    mocks.hookResult.workspace.spaces = [
+      { ...baseSpace, id: "research-data", name: "Research Data", internalName: "research-data", usedBytes: 512, objectCount: 12 },
+      { ...baseSpace, id: "genomics-archive", name: "Genomics Archive", internalName: "genomics-archive", usedBytes: 2048, objectCount: 40 },
+      { ...baseSpace, id: "telemetry-lake", name: "Telemetry Lake", internalName: "telemetry-lake", usedBytes: 1536, objectCount: 35 },
+      { ...baseSpace, id: "lab-notes", name: "Lab Notes", internalName: "lab-notes", usedBytes: 1024, objectCount: 28 },
+    ];
+    mocks.hookResult.usage = {
+      other_storage_space: {
+        id: "__other__",
+        name: "Other",
+        used_bytes: 900,
+        object_count: 9,
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    const topStorageSpaces = screen.getByRole("heading", { name: "Top storage spaces" }).closest("section");
+    expect(topStorageSpaces).not.toBeNull();
+    expect(within(topStorageSpaces!).getByText("Other")).toBeInTheDocument();
+    expect(within(topStorageSpaces!).queryByRole("link", { name: "Other" })).not.toBeInTheDocument();
+    expect(within(topStorageSpaces!).queryByText("Research Data")).not.toBeInTheDocument();
+    expect(within(topStorageSpaces!).getAllByText("Owner")).toHaveLength(3);
+    expect(within(topStorageSpaces!).getAllByText("Active")).toHaveLength(3);
   });
 
   it("opens only useful portal routes from dashboard cards and rows", () => {

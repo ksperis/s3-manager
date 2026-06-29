@@ -106,6 +106,11 @@ placeholder.
   `portal_storage_space_grants`.
   Archived Storage Spaces suspend Portal access and public links without
   deleting stored grants or links.
+- Portal user usage views may show global account usage and quota pressure, but
+  named Storage Space breakdowns, activity, and transfer rows must be scoped to
+  content-accessible Storage Spaces. Any hidden remainder must be represented
+  only as an anonymous `Other` aggregate with no bucket or Storage Space
+  identifiers.
 - Portal-managed bucket policies must only add, replace, or remove dedicated
   `Sid` statements such as `PortalStorageSpacePrivate` and
   `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
@@ -157,7 +162,8 @@ removed from the Portal router and API client:
 
 Use `/portal/storage-spaces*` and `/portal/storage-spaces/{spaceId}/shares*`
 for end-user collaboration workflows. Use `/admin/accounts/{accountId}/portal-settings`
-for Portal override governance. Native IAM, policy compliance, access-key, and
+for super-admin-only Portal override governance. Portal managers cannot manage
+or apply account Portal overrides. Native IAM, policy compliance, access-key, and
 bucket administration workflows belong outside the Portal user surface. Future
 Portal preferences use the simple `/users/me` `ui_preferences` contract, not
 the advanced Portal settings payload. Stored preferences such as theme and
@@ -178,7 +184,7 @@ Use these replacement surfaces instead:
   the remaining Portal read endpoints.
 - External S3 credentials:
   `/portal/access-keys`, excluding the active Portal runtime key.
-- Portal override governance:
+- Super-admin Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
 
 Native IAM access keys, IAM compliance remediation, bucket-user grants, and

@@ -43,10 +43,11 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["admin_override"]["allow_portal_user_bucket_create"] is False
-    assert body["portal_manager_override"]["allow_portal_user_access_key_create"] is True
+    assert "portal_manager_override" not in body
+    assert "override_policy" not in body
 
 
-def test_admin_put_account_portal_settings_preserves_portal_manager_override_and_audits(client, db_session):
+def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_override_and_audits(client, db_session):
     audit = _CapturingAuditService()
     app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: audit
     account = _seed_account(
@@ -71,13 +72,13 @@ def test_admin_put_account_portal_settings_preserves_portal_manager_override_and
     body = response.json()
     assert body["admin_override"]["allow_portal_user_bucket_create"] is False
     assert body["admin_override"]["bucket_defaults"]["versioning"] is True
-    assert body["portal_manager_override"]["allow_portal_user_access_key_create"] is True
-    assert body["portal_manager_override"]["bucket_defaults"]["enable_cors"] is True
+    assert "portal_manager_override" not in body
+    assert "override_policy" not in body
 
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
     assert stored["admin"]["allow_portal_user_bucket_create"] is False
-    assert stored["portal_manager"]["allow_portal_user_access_key_create"] is True
+    assert "portal_manager" not in stored
 
     assert len(audit.actions) == 1
     assert audit.actions[0]["action"] == "update_account_portal_settings"

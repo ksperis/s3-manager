@@ -52,6 +52,10 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 - Regular `portal_user` members can create only private Storage Spaces, and only
   when Portal user Storage Space creation is enabled for the account.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
+- **Usage** can show the global account total and quota. For regular Portal
+  users, Storage Space details, activity, and transfers are limited to spaces
+  they can access; undisclosed usage can appear only as the anonymous `Other`
+  aggregate.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
 - `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
 - Portal roles come from the owner and collaborator grants managed in Portal.

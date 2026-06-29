@@ -1922,8 +1922,22 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     assert db_session.query(PortalPublicLink).filter_by(token="restore-link-token").one().revoked_at is None
 
 
-def test_portal_named_bucket_account_override_requires_global_policy(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-override", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-storage-override",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        portal_settings_override=json.dumps(
+            {
+                "admin": {"allow_portal_user_bucket_create": False},
+                "portal_manager": {
+                    "allow_portal_named_bucket_create": True,
+                    "allow_portal_user_access_key_create": False,
+                    "bucket_defaults": {"enable_cors": False},
+                },
+            }
+        ),
+    )
     db_session.add(account)
     db_session.commit()
 
@@ -1931,29 +1945,28 @@ def test_portal_named_bucket_account_override_requires_global_policy(monkeypatch
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
 
-    with pytest.raises(RuntimeError, match="Override non autorise"):
-        service.update_portal_manager_override(
-            account,
-            PortalSettingsOverride(allow_portal_named_bucket_create=True),
-        )
-
     base.override_policy.allow_portal_named_bucket_create = True
-    updated = service.update_portal_manager_override(
-        account,
-        PortalSettingsOverride(allow_portal_named_bucket_create=True),
-    )
-    assert updated.effective.allow_portal_named_bucket_create is True
+    base.override_policy.allow_portal_user_access_key_create = True
+    base.override_policy.bucket_defaults.enable_cors = True
+
+    effective = service.get_effective_portal_settings(account)
+    assert effective.allow_portal_user_bucket_create is False
+    assert effective.allow_portal_named_bucket_create is False
+    assert effective.allow_portal_user_access_key_create is True
+    assert effective.bucket_defaults.enable_cors is True
+
+    account_settings = service.get_portal_account_settings(account).model_dump(exclude_unset=True)
+    assert account_settings["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert "portal_manager_override" not in account_settings
+    assert "override_policy" not in account_settings
 
     service.update_admin_portal_settings_override(
         account,
-        PortalSettingsOverride(allow_portal_named_bucket_create=False),
+        PortalSettingsOverride(allow_portal_user_bucket_create=True),
     )
-    with pytest.raises(RuntimeError, match="Override verrouille"):
-        service.update_portal_manager_override(
-            account,
-            PortalSettingsOverride(allow_portal_named_bucket_create=True),
-        )
-    assert service.get_effective_portal_settings(account).allow_portal_named_bucket_create is False
+    db_session.refresh(account)
+    stored = json.loads(account.portal_settings_override)
+    assert stored == {"admin": {"allow_portal_user_bucket_create": True}}
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):
@@ -2569,6 +2582,73 @@ def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(mo
         service.list_portal_activity(user, access, space_id="hidden-data")
 
 
+def test_portal_user_activity_and_transfers_use_content_access(db_session):
+    account = S3Account(name="portal-activity-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="activity-privacy@example.com", hashed_password="x", role="ui_user")
+    hidden_owner = User(email="hidden-activity-owner@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user, hidden_owner])
+    db_session.commit()
+    db_session.add_all(
+        [
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="visible-data",
+                display_name="Visible Data",
+                owner_user_id=user.id,
+                visibility="private",
+            ),
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="hidden-data",
+                display_name="Hidden Data",
+                owner_user_id=hidden_owner.id,
+                visibility="private",
+            ),
+            AuditLog(
+                user_id=user.id,
+                user_email=user.email,
+                user_role=user.role,
+                scope="portal",
+                action="upload_object",
+                entity_type="object",
+                entity_id="visible/report.csv",
+                account_id=account.id,
+                account_name=account.name,
+                status="success",
+                metadata_json=json.dumps({"storage_space_id": "visible-data", "size_bytes": 42}),
+            ),
+            AuditLog(
+                user_id=hidden_owner.id,
+                user_email=hidden_owner.email,
+                user_role=hidden_owner.role,
+                scope="portal",
+                action="download_object",
+                entity_type="object",
+                entity_id="hidden/secret.txt",
+                account_id=account.id,
+                account_name=account.name,
+                status="success",
+                metadata_json=json.dumps({"storage_space_id": "hidden-data", "size_bytes": 99}),
+            ),
+        ]
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+
+    activity = service.list_portal_activity(user, access)
+    transfers = service.list_portal_transfers(user, access)
+
+    assert [(item.action, item.storage_space_name, item.target) for item in activity] == [
+        ("Uploaded", "Visible Data", "report.csv")
+    ]
+    assert [(item.direction, item.storage_space_name, item.size_bytes) for item in transfers] == [
+        ("Upload", "Visible Data", 42)
+    ]
+    serialized = "".join(item.model_dump_json() for item in [*activity, *transfers])
+    assert "Hidden Data" not in serialized
+
+
 def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch, db_session):
     account = S3Account(name="portal-usage", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="usage@example.com", hashed_password="x", role="ui_user")
@@ -2624,6 +2704,104 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
         ("research-data", 700, 70),
         ("archive", 200, 20),
     ]
+    assert usage.other_storage_space is None
+
+
+def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_session):
+    account = S3Account(name="portal-usage-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="usage-privacy@example.com", hashed_password="x", role="ui_user")
+    hidden_owner = User(email="hidden-owner@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user, hidden_owner])
+    db_session.commit()
+    db_session.add_all(
+        [
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=user.id,
+                visibility="private",
+            ),
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="hidden-private",
+                display_name="Hidden Private",
+                owner_user_id=hidden_owner.id,
+                visibility="private",
+            ),
+        ]
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+
+    monkeypatch.setattr(service, "_account_quota", lambda _account: (2_000, 200))
+    monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
+    monkeypatch.setattr(
+        service,
+        "_admin_bucket_list",
+        lambda _account, admin=None: [
+            {"bucket": "research-data", "usage": {"total_bytes": 700, "total_objects": 70}},
+            {"bucket": "hidden-private", "usage": {"total_bytes": 200, "total_objects": 20}},
+            {"bucket": "unregistered-bucket", "usage": {"total_bytes": 100, "total_objects": 10}},
+        ],
+    )
+
+    usage = service.get_usage(user, access)
+
+    assert usage.used_bytes == 1_000
+    assert usage.used_objects == 100
+    assert usage.quota_max_size_bytes == 2_000
+    assert [(space.id, space.name, space.used_bytes, space.object_count) for space in usage.storage_spaces] == [
+        ("research-data", "Research Data", 700, 70),
+    ]
+    assert usage.other_storage_space is not None
+    assert usage.other_storage_space.id == "__other__"
+    assert usage.other_storage_space.name == "Other"
+    assert usage.other_storage_space.used_bytes == 300
+    assert usage.other_storage_space.object_count == 30
+    serialized = usage.model_dump_json()
+    assert "hidden-private" not in serialized
+    assert "Hidden Private" not in serialized
+    assert "unregistered-bucket" not in serialized
+
+
+def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db_session):
+    account = S3Account(name="portal-usage-no-other", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="usage-no-other@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="research-data",
+            display_name="Research Data",
+            owner_user_id=user.id,
+            visibility="private",
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+
+    monkeypatch.setattr(service, "_account_quota", lambda _account: (1_000, 100))
+    monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
+    monkeypatch.setattr(
+        service,
+        "_admin_bucket_list",
+        lambda _account, admin=None: [
+            {"bucket": "research-data", "usage": {"total_bytes": 700, "total_objects": 70}},
+        ],
+    )
+
+    usage = service.get_usage(user, access)
+
+    assert usage.used_bytes == 700
+    assert usage.used_objects == 70
+    assert [(space.id, space.used_bytes, space.object_count) for space in usage.storage_spaces] == [
+        ("research-data", 700, 70),
+    ]
+    assert usage.other_storage_space is None
 
 
 def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):

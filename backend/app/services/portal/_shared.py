@@ -38,7 +38,6 @@ from app.models.app_settings import (
     PortalIAMPolicySettings,
     PortalSettings,
     PortalSettingsOverride,
-    PortalSettingsOverridePolicy,
 )
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser

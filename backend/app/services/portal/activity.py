@@ -21,7 +21,15 @@ class PortalActivityMixin:
         access: "AccountAccess",
     ) -> dict[str, PortalStorageSpaceSummary]:
         lookup: dict[str, PortalStorageSpaceSummary] = {}
+        content_bucket_names = (
+            set(self.list_existing_user_content_bucket_access(user, access.account, access.role))
+            if access.role == AccountRole.PORTAL_USER.value
+            else None
+        )
         for item in self.list_storage_spaces(user, access):
+            bucket_name = item.internal_bucket_name or item.id
+            if content_bucket_names is not None and bucket_name not in content_bucket_names:
+                continue
             lookup[item.id] = item
             if item.internal_bucket_name:
                 lookup[item.internal_bucket_name] = item

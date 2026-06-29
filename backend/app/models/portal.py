@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.app_settings import PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy
+from app.models.app_settings import PortalSettings, PortalSettingsOverride
 
 from app.models.bucket import Bucket
 
@@ -77,6 +77,7 @@ class PortalUsage(BaseModel):
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
     storage_spaces: list[PortalUsageStorageSpace] = Field(default_factory=list)
+    other_storage_space: Optional[PortalUsageStorageSpace] = None
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
@@ -293,8 +294,6 @@ class PortalIamComplianceReport(BaseModel):
 class PortalAccountSettings(BaseModel):
     effective: PortalSettings
     admin_override: PortalSettingsOverride
-    portal_manager_override: PortalSettingsOverride
-    override_policy: PortalSettingsOverridePolicy
 
 
 class PortalEligibility(BaseModel):

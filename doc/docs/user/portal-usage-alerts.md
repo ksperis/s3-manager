@@ -12,13 +12,18 @@ Use this page when you need to understand storage consumption, traffic, quota, b
 
 | Signal | Meaning |
 |---|---|
-| Storage used | Account or visible Storage Space consumption reported by the backend. |
+| Storage used | Account consumption reported by the backend. For regular Portal users, this total may include storage outside the spaces listed by name. |
 | Quota | Account quota when configured and available. |
-| Usage by Storage Space | Per-space storage and object counts when reported by the Portal usage API. |
+| Usage by Storage Space | Per-space storage and object counts only for Storage Spaces you can access. |
+| Other | Anonymous storage used elsewhere in the account. It is not a Storage Space you can open and does not reveal hidden names or identifiers. |
 | Usage history | Stored trend snapshots for the selected Portal account. |
 | Traffic and requests | Traffic metrics or billing-derived values when collection is available. |
 | Billing source | Optional billing data for the selected account and month. |
 | Alerts | Deduplicated warnings such as quota near limit, public links, failed transfer, or degraded endpoint. |
+
+Activity and transfer details are shown only for Storage Spaces you can access.
+The dashboard may keep global totals so you can understand quota pressure, but
+it must not expose the names of other users' private spaces.
 
 ## You are done when
 

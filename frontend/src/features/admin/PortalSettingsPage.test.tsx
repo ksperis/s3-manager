@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSettings } from "../../api/appSettings";
@@ -144,13 +144,11 @@ describe("PortalSettingsPage", () => {
     expect(payload.portal.max_portal_user_access_keys).toBe(5);
   });
 
-  it("saves named bucket creation setting and override policy", async () => {
+  it("saves named bucket creation setting without override policy controls", async () => {
     render(<PortalSettingsPage />);
 
     fireEvent.click(await screen.findByLabelText("Portal named bucket creation"));
-    const namedBucketCard = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
-    expect(namedBucketCard).not.toBeNull();
-    fireEvent.click(within(namedBucketCard as HTMLElement).getByRole("checkbox", { name: "Allow override" }));
+    expect(screen.queryByRole("checkbox", { name: "Allow override" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -159,7 +157,7 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.allow_portal_named_bucket_create).toBe(true);
-    expect(payload.portal.override_policy.allow_portal_named_bucket_create).toBe(true);
+    expect(payload.portal.override_policy.allow_portal_named_bucket_create).toBe(false);
   });
 
   it("labels portal user Storage Space creation without bucket management wording", async () => {

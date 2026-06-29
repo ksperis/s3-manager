@@ -6,6 +6,8 @@ from ._shared import *
 
 
 class PortalStateUsageMixin:
+    _portal_other_storage_space_id = "__other__"
+
     def _usage_storage_space_breakdown(
         self,
         user: User,
@@ -31,6 +33,27 @@ class PortalStateUsageMixin:
                 )
             )
         return breakdown
+
+    def _portal_other_usage(
+        self,
+        *,
+        total_bytes: int,
+        total_objects: int,
+        has_total_bytes: bool,
+        has_total_objects: bool,
+        detailed_bytes: int,
+        detailed_objects: int,
+    ) -> PortalUsageStorageSpace | None:
+        other_bytes = max(0, total_bytes - detailed_bytes) if has_total_bytes else None
+        other_objects = max(0, total_objects - detailed_objects) if has_total_objects else None
+        if (other_bytes is None or other_bytes == 0) and (other_objects is None or other_objects == 0):
+            return None
+        return PortalUsageStorageSpace(
+            id=self._portal_other_storage_space_id,
+            name="Other",
+            used_bytes=other_bytes,
+            object_count=other_objects,
+        )
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account
@@ -141,8 +164,12 @@ class PortalStateUsageMixin:
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
         quota_max_size_bytes, quota_max_objects = self._account_quota(account)
-        allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
-        if not allowed:
+        is_portal_user = access.role == AccountRole.PORTAL_USER.value
+        if is_portal_user:
+            allowed = set(self.list_existing_user_content_bucket_access(user, account, access.role))
+        else:
+            allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
+        if not allowed and not is_portal_user:
             return PortalUsage(
                 used_bytes=None,
                 used_objects=None,
@@ -167,28 +194,47 @@ class PortalStateUsageMixin:
         total_objects = 0
         has_bytes = False
         has_objects = False
+        detailed_bytes = 0
+        detailed_objects = 0
         usage_by_bucket: dict[str, tuple[Optional[int], Optional[int]]] = {}
         for item in bucket_payloads:
             if not isinstance(item, dict):
                 continue
             bucket_name = item.get("bucket") or item.get("name")
-            if bucket_name not in allowed:
-                continue
             usage = item.get("usage")
             usage_bytes, usage_objects = extract_usage_stats(usage)
-            usage_by_bucket[bucket_name] = (usage_bytes, usage_objects)
-            if usage_bytes is not None:
-                total_bytes += usage_bytes
-                has_bytes = True
-            if usage_objects is not None:
-                total_objects += usage_objects
-                has_objects = True
+            if is_portal_user or bucket_name in allowed:
+                if usage_bytes is not None:
+                    total_bytes += usage_bytes
+                    has_bytes = True
+                if usage_objects is not None:
+                    total_objects += usage_objects
+                    has_objects = True
+            if bucket_name in allowed:
+                usage_by_bucket[bucket_name] = (usage_bytes, usage_objects)
+                if usage_bytes is not None:
+                    detailed_bytes += usage_bytes
+                if usage_objects is not None:
+                    detailed_objects += usage_objects
+        other_storage_space = (
+            self._portal_other_usage(
+                total_bytes=total_bytes,
+                total_objects=total_objects,
+                has_total_bytes=has_bytes,
+                has_total_objects=has_objects,
+                detailed_bytes=detailed_bytes,
+                detailed_objects=detailed_objects,
+            )
+            if is_portal_user
+            else None
+        )
         return PortalUsage(
             used_bytes=total_bytes if has_bytes else None,
             used_objects=total_objects if has_objects else None,
             quota_max_size_bytes=quota_max_size_bytes,
             quota_max_objects=quota_max_objects,
             storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),
+            other_storage_space=other_storage_space,
         )
 
     def get_bucket_stats(self, user: User, access: "AccountAccess", bucket_name: str) -> Bucket:
