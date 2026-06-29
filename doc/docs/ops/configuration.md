@@ -20,7 +20,7 @@ Primary source of truth: `backend/app/core/config.py`.
 
 Key areas:
 
-- Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC providers, LDAP providers.
+- Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC/LDAP environment providers.
 - Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`).
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
@@ -29,7 +29,39 @@ Key areas:
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
 - Quota SMTP secret: `SMTP_PASSWORD`.
 
-LDAP providers are configured with nested environment variables:
+OIDC providers can be configured either from Admin **Settings > Authentication**
+or with nested environment variables:
+
+- UI-managed OIDC providers are persisted in the `oidc_providers` database
+  table. Their `client_secret` value is encrypted with the credential key and
+  is write-only: read APIs return only `has_client_secret`.
+- Environment-managed providers use `OIDC_PROVIDERS__<key>__...` variables.
+  They take priority over any UI provider with the same `provider_id` and appear
+  locked/read-only in Admin **Settings > Authentication**.
+- `OIDC_STATE_TTL_SECONDS` remains a backend runtime setting and is not editable
+  from the UI.
+
+Common environment fields:
+
+- `OIDC_PROVIDERS__<key>__DISPLAY_NAME`
+- `OIDC_PROVIDERS__<key>__DISCOVERY_URL`
+- `OIDC_PROVIDERS__<key>__CLIENT_ID`
+- `OIDC_PROVIDERS__<key>__CLIENT_SECRET`
+- `OIDC_PROVIDERS__<key>__REDIRECT_URI`
+- `OIDC_PROVIDERS__<key>__SCOPES`
+- optional behavior fields: `PROMPT`, `ENABLED`, `ICON_URL`, `USE_PKCE`, `USE_NONCE`
+
+LDAP providers can be configured either from Admin **Settings > Authentication**
+or with nested environment variables:
+
+- UI-managed LDAP providers are persisted in the `ldap_providers` database
+  table. Their `bind_password` value is encrypted with the credential key and
+  is write-only: read APIs return only `has_bind_password`.
+- Environment-managed providers use `LDAP_PROVIDERS__<key>__...` variables.
+  They take priority over any UI provider with the same `provider_id` and appear
+  locked/read-only in Admin **Settings > Authentication**.
+
+Common environment fields:
 
 - `LDAP_PROVIDERS__<key>__DISPLAY_NAME`
 - `LDAP_PROVIDERS__<key>__URL` (`ldaps://...` or `ldap://...` with `START_TLS=true`)
@@ -53,6 +85,7 @@ Primary model: `backend/app/models/app_settings.py`.
 Managed from Admin UI:
 
 - General feature toggles (`manager_enabled`, `portal_enabled`, `browser_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`, `billing_enabled`, `endpoint_status_enabled`).
+- Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, and private S3 connections for UI users).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
 - Portal settings (`portal`): IAM key policy, portal user Storage Space creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and account override policy.
@@ -66,6 +99,11 @@ until explicitly enabled and configured.
 The Browser workspace is enabled on root `/browser` and in Portal storage spaces
 (`/portal/storage-spaces/:spaceId`) by default. Manager and Ceph Admin Browser
 integrations remain disabled until explicitly enabled.
+
+Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
+**Settings > Authentication**. The four access-key login options remain in
+`AppSettings.general` and are persisted in `app_settings.json`; UI-managed OIDC
+and LDAP providers are persisted separately in the database.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 

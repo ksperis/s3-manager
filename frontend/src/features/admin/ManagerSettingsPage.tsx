@@ -7,10 +7,13 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
+  SettingsCard,
+  SettingsItem,
+  SettingsSection,
+  SettingsToggleAction,
+  settingsInputClassName,
+  settingsLabelClassName,
+} from "../../components/settings/SettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -245,37 +248,37 @@ export default function ManagerSettingsPage() {
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
-          <div className="space-y-4 ui-surface-card p-5">
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
-              <PortalSettingsSection
+          <div className="grid gap-4">
+            <SettingsCard>
+              <SettingsSection
                 title="Workspace access"
                 description="Manager workspace access rules for non-admin roles."
                 layout="stack"
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Allow stats for all users"
                   description="Allows every non-admin profile to view bucket stats and usage from /manager."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.manager.allow_manager_user_usage_stats)}
                       onChange={(value) => handleToggleAllowManagerUserStats(value)}
                       ariaLabel="Allow manager user stats"
                     />
                   }
                 />
-              </PortalSettingsSection>
-            </div>
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
-              <PortalSettingsSection
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="Extra Tools"
                 description="Optional manager tools and access policy for non-admin users."
                 layout="stack"
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Bucket migration tool"
                   description="Enables the Manager bucket migration tool."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_migration_enabled)}
                       onChange={(value) => handleToggleBucketMigrationTool(value)}
                       ariaLabel="Bucket migration tool"
@@ -283,107 +286,107 @@ export default function ManagerSettingsPage() {
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Bucket purge tool"
                   description="Enables the Manager bucket purge tool and purge actions for Ceph Admin and Storage Ops."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_purge_enabled)}
                       onChange={(value) => handleToggleBucketPurgeTool(value)}
                       ariaLabel="Bucket purge tool"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Bucket compare tool"
                   description="Enables the Manager bucket compare tool."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_compare_enabled)}
                       onChange={(value) => handleToggleBucketCompareTool(value)}
                       ariaLabel="Bucket compare tool"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Bucket integrity check tool"
                   description="Enables the Manager bucket integrity diagnostic tool."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_integrity_check_enabled)}
                       onChange={(value) => handleToggleBucketIntegrityCheckTool(value)}
                       ariaLabel="Bucket integrity check tool"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Bucket usage stats"
                   description="Enables bucket usage statistics on Manager pages and bucket details."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_usage_stats_enabled)}
                       onChange={(value) => handleToggleBucketUsageStats(value)}
                       ariaLabel="Bucket usage stats"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Ceph S3 User keys manager"
                   description="Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
                       onChange={(value) => handleToggleManagerCephS3UserKeysTool(value)}
                       ariaLabel="Ceph S3 User keys manager"
                     />
                   }
                 />
-              </PortalSettingsSection>
+              </SettingsSection>
 
               <div className="my-4 border-t border-slate-200 dark:border-slate-700" />
 
               <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket migration controls</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                <p className="ui-body font-semibold text-[var(--ui-text)]">Bucket migration controls</p>
+                <p className="ui-caption text-[var(--ui-text-muted)]">
                   Global limits applied to all manager bucket migrations.
                 </p>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <label className="space-y-1 ui-caption">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Default parallelism</span>
+                  <span className={settingsLabelClassName}>Default parallelism</span>
                   <input
                     type="number"
                     min={1}
                     max={settings.manager.bucket_migration_parallelism_max || 128}
                     value={settings.manager.bucket_migration_parallelism_default}
                     onChange={(e) => handleManagerParallelismDefaultChange(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+                    className={settingsInputClassName}
                   />
                 </label>
                 <label className="space-y-1 ui-caption">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Max parallelism per migration</span>
+                  <span className={settingsLabelClassName}>Max parallelism per migration</span>
                   <input
                     type="number"
                     min={1}
                     max={128}
                     value={settings.manager.bucket_migration_parallelism_max}
                     onChange={(e) => handleManagerParallelismMaxChange(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+                    className={settingsInputClassName}
                   />
                 </label>
                 <label className="space-y-1 ui-caption">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Max active migrations per endpoint</span>
+                  <span className={settingsLabelClassName}>Max active migrations per endpoint</span>
                   <input
                     type="number"
                     min={1}
                     max={64}
                     value={settings.manager.bucket_migration_max_active_per_endpoint}
                     onChange={(e) => handleManagerMaxActivePerEndpointChange(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+                    className={settingsInputClassName}
                   />
                 </label>
               </div>
-            </div>
+            </SettingsCard>
           </div>
         )}
       </form>

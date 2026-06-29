@@ -7,10 +7,12 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
+  SettingsCard,
+  SettingsItem,
+  SettingsSection,
+  SettingsToggleAction,
+  settingsInputClassName,
+} from "../../components/settings/SettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -177,28 +179,28 @@ export default function BrowserSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+            <SettingsCard>
+              <SettingsSection
                 title="BROWSER WORKSPACES"
                 description="Enable the browser in specific workspaces."
                 layout="stack"
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="/browser"
                   description="Standalone browser workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={settings.general.browser_root_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_root_enabled", value)}
                       ariaLabel="Enable /browser workspace"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="/manager/browser"
                   description="Browser tab inside the manager workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={settings.general.browser_manager_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_manager_enabled", value)}
                       ariaLabel="Enable /manager/browser workspace"
@@ -208,23 +210,23 @@ export default function BrowserSettingsPage() {
                   {settings.general.browser_manager_enabled && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_MANAGER_WARNING_MESSAGE}</p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="/portal/storage-spaces/:spaceId"
                   description="Minimal locked Browser inside Portal Storage Spaces."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={settings.general.browser_portal_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
                       ariaLabel="Enable Browser in Portal Storage Spaces"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="/ceph-admin/browser"
                   description="Browser tab inside the Ceph Admin workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={settings.general.browser_ceph_admin_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_ceph_admin_enabled", value)}
                       ariaLabel="Enable /ceph-admin/browser workspace"
@@ -234,16 +236,16 @@ export default function BrowserSettingsPage() {
                   {settings.general.browser_ceph_admin_enabled && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_CEPH_ADMIN_WARNING_MESSAGE}</p>
                   )}
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="ZIP DOWNLOADS"
                 description="Stream ZIP generation in the browser for large folder downloads."
                 layout="stack"
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Streaming threshold (MB)"
                   description="ZIP streaming is used only above this size. Set to 0 to always stream when supported."
                 >
@@ -252,41 +254,41 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={ZIP_STREAM_THRESHOLD_MIN}
                       max={ZIP_STREAM_THRESHOLD_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.streaming_zip_threshold_mb}
                       onChange={(e) => handleZipThresholdChange(e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="PROXY TRANSFERS"
                 description="Allow the backend to proxy uploads/downloads when direct browser-to-S3 transfers are unavailable."
                 layout="stack"
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Enable proxy mode"
                   description="Use the backend as a relay when direct transfers are blocked."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={settings.browser.allow_proxy_transfers}
                       onChange={(value) => handleToggleChange(value)}
                       ariaLabel="Enable proxy mode"
                     />
                   }
                 />
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="UPLOAD PARALLELISM"
                 description="Direct mode uses browser-to-S3 transfers. Proxy mode is used when the backend proxies uploads."
                 layout="grid"
                 columns={2}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Direct uploads"
                   description={`Limits concurrent direct uploads (${PARALLELISM_MIN}-${PARALLELISM_MAX}).`}
                 >
@@ -295,13 +297,13 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={PARALLELISM_MIN}
                       max={PARALLELISM_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.direct_upload_parallelism}
                       onChange={(e) => handleParallelismChange("direct_upload_parallelism", e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Proxy uploads"
                   description={`Limits concurrent uploads when the backend proxies traffic (${PARALLELISM_MIN}-${PARALLELISM_MAX}).`}
                 >
@@ -310,22 +312,22 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={PARALLELISM_MIN}
                       max={PARALLELISM_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.proxy_upload_parallelism}
                       onChange={(e) => handleParallelismChange("proxy_upload_parallelism", e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="DOWNLOAD PARALLELISM"
                 description="Applies to folder downloads, with separate limits for direct and proxy modes."
                 layout="grid"
                 columns={2}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Direct downloads"
                   description={`Limits concurrent direct downloads (${PARALLELISM_MIN}-${PARALLELISM_MAX}).`}
                 >
@@ -334,13 +336,13 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={PARALLELISM_MIN}
                       max={PARALLELISM_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.direct_download_parallelism}
                       onChange={(e) => handleParallelismChange("direct_download_parallelism", e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Proxy downloads"
                   description={`Limits concurrent downloads when the backend proxies traffic (${PARALLELISM_MIN}-${PARALLELISM_MAX}).`}
                 >
@@ -349,22 +351,22 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={PARALLELISM_MIN}
                       max={PARALLELISM_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.proxy_download_parallelism}
                       onChange={(e) => handleParallelismChange("proxy_download_parallelism", e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="OTHER OPERATIONS"
                 description="Parallelism for operations like recursive deletes or server-side copies."
                 layout="grid"
                 columns={1}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Parallel operations"
                   description={`Limits concurrent non-upload/download tasks (${PARALLELISM_MIN}-${PARALLELISM_MAX}).`}
                 >
@@ -373,14 +375,14 @@ export default function BrowserSettingsPage() {
                       type="number"
                       min={PARALLELISM_MIN}
                       max={PARALLELISM_MAX}
-                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className={settingsInputClassName}
                       value={settings.browser.other_operations_parallelism}
                       onChange={(e) => handleParallelismChange("other_operations_parallelism", e.target.value)}
                     />
                   </div>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
           </div>
         )}
       </form>

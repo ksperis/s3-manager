@@ -13,7 +13,8 @@ from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .ui_group import UiGroup, UserUiGroup, UiGroupS3Account, UiGroupS3User, UiGroupS3Connection
 from .tag_definition import TagDefinition, StorageEndpointTag, S3AccountTag, S3UserTag, S3ConnectionTag
-from .oidc import OidcLoginState
+from .ldap import LdapProvider
+from .oidc import OidcLoginState, OidcProvider
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
 from .quota_monitoring import QuotaAlertState, QuotaUsageDaily, QuotaUsageHourly
 from .healthcheck import (
@@ -57,7 +58,9 @@ __all__ = [
     "S3AccountTag",
     "S3UserTag",
     "S3ConnectionTag",
+    "LdapProvider",
     "OidcLoginState",
+    "OidcProvider",
     "BillingAssignment",
     "BillingRateCard",
     "BillingStorageDaily",

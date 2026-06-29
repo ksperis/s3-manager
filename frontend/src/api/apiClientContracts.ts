@@ -30,6 +30,14 @@ export const API_CLIENT_CONTRACTS: ApiClientContractRow[] = [
   },
   {
     area: "admin",
+    clientFile: "api/authSettings.ts",
+    transport: "axios",
+    mappingBoundary: "typed-api-payload",
+    contextHeaders: ["Authorization"],
+    errorSurface: "extractApiError",
+  },
+  {
+    area: "admin",
     clientFile: "api/users.ts",
     transport: "axios",
     mappingBoundary: "typed-api-payload",

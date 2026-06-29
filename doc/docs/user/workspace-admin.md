@@ -17,7 +17,7 @@ Use **Admin** for platform governance and global configuration.
 5. Use **Storage Backends** for endpoints and endpoint status.
 6. Use **Usage & Metrics** to review endpoint-scoped storage, usage composition, usage history, and traffic from tabbed categories.
 7. Use **Audit & Reporting** for billing, stored usage-history snapshots, and audit trail.
-8. If superadmin, use **Settings** pages for global behavior.
+8. If superadmin, use **Settings** pages for global behavior, including authentication options and UI-managed OIDC/LDAP providers.
 
 ## Expected result
 
@@ -40,6 +40,9 @@ Platform and tenant-entry resources are configured and auditable.
     - `can_access_storage_ops` can be granted by `ui_admin` or `ui_superadmin` for `ui_user`, `ui_admin`, or `ui_superadmin`.
     - Manager tool access can be configured by `ui_admin` or `ui_superadmin` from the **Manager tools** tab. Each tool also requires its matching global Manager setting to be enabled.
     - Entitlements are automatically disabled when the target role does not support them.
+
+!!! note
+    Admin **Settings > Authentication** manages access-key login options and UI-defined OIDC/LDAP providers. OIDC and LDAP providers defined by backend environment variables are visible there but remain locked/read-only.
 
 ## Related pages
 

@@ -121,7 +121,19 @@ export SEED_S3_ENDPOINT_FEATURES='{"features":{"admin":{"enabled":true},"sts":{"
 
 ### OpenID Connect / Google Login
 
-The API can delegate authentication to one or more OIDC providers (Google, Azure AD, Keycloak, ...). Each provider is defined in `Settings.oidc_providers`. With `pydantic-settings`, nested fields can be set through environment variables such as:
+The API can delegate authentication to one or more OIDC providers (Google, Azure AD, Keycloak, ...).
+
+Providers can be managed from Admin **Settings > Authentication** or defined
+with environment variables. UI-managed providers are persisted in the
+`oidc_providers` database table and their `client_secret` is encrypted with the
+credential key. Read APIs never return the secret; they expose only
+`has_client_secret`.
+
+Environment-managed providers are still supported through `Settings.oidc_providers`.
+They take priority over UI providers with the same key and are shown as locked
+read-only entries in Admin **Settings > Authentication**. With
+`pydantic-settings`, nested fields can be set through environment variables such
+as:
 
 ```bash
 export OIDC_PROVIDERS__google__display_name="Google"
@@ -136,12 +148,23 @@ export OIDC_PROVIDERS__google__scopes='["openid","email","profile"]'
 - If no providers are configured the login page silently hides the SSO block.
 - When a user signs in with OIDC for the first time they are automatically created in the database without any account assignments. An administrator must later grant access to specific accounts/users.
 - Additional providers can be defined by repeating the prefix (`OIDC_PROVIDERS__azure__...` etc.). Future providers reuse the same `/api/auth/oidc/<provider>/start|callback` pipeline.
+- `OIDC_STATE_TTL_SECONDS` remains a backend runtime setting and is not managed from the Admin UI.
 
 ### LDAP Login
 
 The API can authenticate UI users against one or more LDAP directories. LDAP is an
 identity check only: s3-manager remains the source of truth for UI roles, S3
 account membership, S3 user links, and shared S3 connections.
+
+Providers can be managed from Admin **Settings > Authentication** or defined
+with environment variables. UI-managed providers are persisted in the
+`ldap_providers` database table and their `bind_password` is encrypted with the
+credential key. Read APIs never return the password; they expose only
+`has_bind_password`.
+
+Environment-managed providers are still supported through `Settings.ldap_providers`.
+They take priority over UI providers with the same key and are shown as locked
+read-only entries in Admin **Settings > Authentication**.
 
 ```bash
 export LDAP_PROVIDERS__corp__display_name="Corporate LDAP"
@@ -160,7 +183,7 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 - `tls_verify=false` and `allow_email_linking=true` are allowed for compatibility and planned migrations, but they emit startup security warnings.
 - First LDAP sign-in creates an active external UI user with role `ui_none` and no storage access. An administrator must grant the intended role and bindings.
 - If LDAP returns an email already used by a local account, login is refused by default. Set `allow_email_linking=true` only for a planned migration where that takeover is intended.
-- The login page hides the Directory tab when no LDAP providers are enabled. Additional providers can be defined by repeating the prefix (`LDAP_PROVIDERS__ad__...`, `LDAP_PROVIDERS__openldap__...`).
+- The login page hides the Directory tab when no LDAP providers are enabled. Additional environment providers can be defined by repeating the prefix (`LDAP_PROVIDERS__ad__...`, `LDAP_PROVIDERS__openldap__...`).
 
 ## Included endpoints (MVP)
 

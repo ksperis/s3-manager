@@ -7,10 +7,14 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
+  SettingsCard,
+  SettingsItem,
+  SettingsSection,
+  SettingsToggleAction,
+  settingsInputClassName,
+  settingsInlineButtonClassName,
+  settingsLabelClassName,
+} from "../../components/settings/SettingsLayout";
 import {
   AppSettings,
   GeneralFeatureLocks,
@@ -30,8 +34,6 @@ const CEPH_ADMIN_WARNING_MESSAGE =
   "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
-const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
-  "Warning: custom endpoints are restricted to public HTTPS targets. Private/local hosts and insecure transport are rejected by the backend. Admin-managed HTTP endpoints remain possible only through the admin surfaces.";
 const BRANDING_PRESET_COLORS = [
   "#0ea5e9",
   "#2563eb",
@@ -54,10 +56,6 @@ const FEATURE_FIELDS = [
 type FeatureField = (typeof FEATURE_FIELDS)[number];
 type ToggleField =
   | FeatureField
-  | "allow_login_access_keys"
-  | "allow_login_endpoint_list"
-  | "allow_login_custom_endpoint"
-  | "allow_user_private_connections"
   | "quota_alerts_enabled"
   | "usage_history_enabled";
 
@@ -234,6 +232,10 @@ export default function GeneralSettingsPage() {
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
                 bucket_integrity_check_enabled: prev.general.bucket_integrity_check_enabled,
                 manager_ceph_s3_user_keys_enabled: prev.general.manager_ceph_s3_user_keys_enabled,
+                allow_login_access_keys: prev.general.allow_login_access_keys,
+                allow_login_endpoint_list: prev.general.allow_login_endpoint_list,
+                allow_login_custom_endpoint: prev.general.allow_login_custom_endpoint,
+                allow_user_private_connections: prev.general.allow_user_private_connections,
               },
               quota_notifications: defaults.quota_notifications,
               branding: defaults.branding,
@@ -287,18 +289,18 @@ export default function GeneralSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+            <SettingsCard>
+              <SettingsSection
                 title="CORE FEATURES"
                 description="Main application feature set available to your users."
                 layout="grid"
                 columns={1}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Manager feature"
                   description="Tenant administration workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.manager_enabled)}
                       disabled={isFeatureLocked("manager_enabled")}
                       onChange={(value) => handleToggle("manager_enabled", value)}
@@ -311,12 +313,12 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("manager_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Browser feature"
                   description="Object and bucket navigation workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.browser_enabled)}
                       disabled={isFeatureLocked("browser_enabled")}
                       onChange={(value) => handleToggle("browser_enabled", value)}
@@ -329,12 +331,12 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("browser_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Portal feature"
                   description="Self-service workspace governed by explicit per-account portal roles."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.portal_enabled)}
                       disabled={isFeatureLocked("portal_enabled")}
                       onChange={(value) => handleToggle("portal_enabled", value)}
@@ -348,12 +350,12 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("portal_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Ceph Admin feature"
                   description="Cluster-wide advanced operations."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.ceph_admin_enabled)}
                       disabled={isFeatureLocked("ceph_admin_enabled")}
                       onChange={(value) => handleToggle("ceph_admin_enabled", value)}
@@ -369,12 +371,12 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("ceph_admin_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Storage Ops feature"
                   description="Cross-account and cross-connection bucket operations workspace."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.storage_ops_enabled)}
                       disabled={isFeatureLocked("storage_ops_enabled")}
                       onChange={(value) => handleToggle("storage_ops_enabled", value)}
@@ -387,21 +389,21 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("storage_ops_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="EXTRA FEATURES"
                 description="Optional capabilities that extend operations visibility."
                 layout="grid"
                 columns={1}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Billing feature"
                   description="Enables the billing dashboards."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.billing_enabled)}
                       disabled={isFeatureLocked("billing_enabled")}
                       onChange={(value) => handleToggle("billing_enabled", value)}
@@ -414,12 +416,12 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("billing_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Endpoint Status feature"
                   description="Enables the Endpoint Status workspace for endpoint healthchecks."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.endpoint_status_enabled)}
                       disabled={isFeatureLocked("endpoint_status_enabled")}
                       onChange={(value) => handleToggle("endpoint_status_enabled", value)}
@@ -432,39 +434,39 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("endpoint_status_enabled")}
                     </p>
                   )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Quota alerts feature"
                   description="Enables quota threshold/full email notifications for S3 Accounts and S3 Users."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.quota_alerts_enabled)}
                       onChange={(value) => handleToggle("quota_alerts_enabled", value)}
                       ariaLabel="Quota alerts feature"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="Usage history feature"
                   description="Collects quota usage history snapshots for future metrics trends."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.general.usage_history_enabled)}
                       onChange={(value) => handleToggle("usage_history_enabled", value)}
                       ariaLabel="Usage history feature"
                     />
                   }
                 />
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="QUOTA NOTIFICATIONS"
                 description="Configure threshold notifications and SMTP delivery."
                 layout="grid"
                 columns={1}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Threshold percent"
                   description="Alert when usage reaches this percent of quota (full alerts are always sent at 100%)."
                 >
@@ -479,21 +481,21 @@ export default function GeneralSettingsPage() {
                         Math.max(1, Math.min(100, Number(event.target.value || 0)))
                       )
                     }
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="Include subject contact email"
                   description="Also send alerts to account.email / s3_user.email when defined."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.quota_notifications.include_subject_contact_email)}
                       onChange={(value) => handleQuotaNotificationsChange("include_subject_contact_email", value)}
                       ariaLabel="Include subject contact email"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="SMTP host"
                   description="SMTP host used to send quota notifications."
                 >
@@ -502,10 +504,10 @@ export default function GeneralSettingsPage() {
                     value={settings.quota_notifications.smtp_host ?? ""}
                     onChange={(event) => handleQuotaNotificationsChange("smtp_host", event.target.value || null)}
                     placeholder="smtp.example.com"
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="SMTP port"
                   description="SMTP server port."
                 >
@@ -520,10 +522,10 @@ export default function GeneralSettingsPage() {
                         Math.max(1, Math.min(65535, Number(event.target.value || 0)))
                       )
                     }
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="SMTP username"
                   description="Optional SMTP username (required if SMTP_PASSWORD is set)."
                 >
@@ -531,10 +533,10 @@ export default function GeneralSettingsPage() {
                     type="text"
                     value={settings.quota_notifications.smtp_username ?? ""}
                     onChange={(event) => handleQuotaNotificationsChange("smtp_username", event.target.value || null)}
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="SMTP from email"
                   description="Sender email address used for notifications."
                 >
@@ -543,10 +545,10 @@ export default function GeneralSettingsPage() {
                     value={settings.quota_notifications.smtp_from_email ?? ""}
                     onChange={(event) => handleQuotaNotificationsChange("smtp_from_email", event.target.value || null)}
                     placeholder="alerts@example.com"
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="SMTP from name"
                   description="Optional sender display name."
                 >
@@ -554,21 +556,21 @@ export default function GeneralSettingsPage() {
                     type="text"
                     value={settings.quota_notifications.smtp_from_name ?? ""}
                     onChange={(event) => handleQuotaNotificationsChange("smtp_from_name", event.target.value || null)}
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
-                </PortalSettingsItem>
-                <PortalSettingsItem
+                </SettingsItem>
+                <SettingsItem
                   title="SMTP STARTTLS"
                   description="Enable STARTTLS upgrade for SMTP transport."
                   action={
-                    <PortalSettingsToggleAction
+                    <SettingsToggleAction
                       checked={Boolean(settings.quota_notifications.smtp_starttls)}
                       onChange={(value) => handleQuotaNotificationsChange("smtp_starttls", value)}
                       ariaLabel="SMTP STARTTLS"
                     />
                   }
                 />
-                <PortalSettingsItem
+                <SettingsItem
                   title="SMTP timeout (seconds)"
                   description="Connection timeout used by SMTP delivery."
                 >
@@ -583,7 +585,7 @@ export default function GeneralSettingsPage() {
                         Math.max(1, Math.min(300, Number(event.target.value || 0)))
                       )
                     }
-                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={`mt-3 ${settingsInputClassName}`}
                   />
                   <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                     SMTP password must be provided through the backend environment variable <code>SMTP_PASSWORD</code>.
@@ -592,80 +594,21 @@ export default function GeneralSettingsPage() {
                     type="button"
                     onClick={handleSendTestEmail}
                     disabled={sendingTestEmail || saving || resetting}
-                    className="mt-3 inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                    className={`mt-3 ${settingsInlineButtonClassName}`}
                   >
                     {sendingTestEmail ? "Sending test..." : "Send test email"}
                   </button>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
-                title="LOGIN OPTIONS"
-                description="Control how access-key users authenticate and select endpoints."
-                layout="grid"
-                columns={1}
-              >
-                <PortalSettingsItem
-                  title="Access-key login"
-                  description="Allow users to sign in with S3 access keys."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_login_access_keys)}
-                      onChange={(value) => handleToggle("allow_login_access_keys", value)}
-                      ariaLabel="Access-key login"
-                    />
-                  }
-                />
-                <PortalSettingsItem
-                  title="Access-key endpoint list"
-                  description="Allow the access-key login screen to display the configured endpoints."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_login_endpoint_list)}
-                      onChange={(value) => handleToggle("allow_login_endpoint_list", value)}
-                      ariaLabel="Access-key endpoint list"
-                    />
-                  }
-                />
-                <PortalSettingsItem
-                  title="Custom login endpoint"
-                  description="Allow access-key users to enter a custom endpoint URL on the login screen."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_login_custom_endpoint)}
-                      onChange={(value) => handleToggle("allow_login_custom_endpoint", value)}
-                      ariaLabel="Custom login endpoint"
-                    />
-                  }
-                >
-                  {settings.general.allow_login_custom_endpoint && (
-                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
-                      {CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE}
-                    </p>
-                  )}
-                </PortalSettingsItem>
-                <PortalSettingsItem
-                  title="Private S3 connections for UI users"
-                  description="Allow standard UI users to create and manage their own private S3 connections."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_user_private_connections)}
-                      onChange={(value) => handleToggle("allow_user_private_connections", value)}
-                      ariaLabel="Private S3 connections for UI users"
-                    />
-                  }
-                />
-              </PortalSettingsSection>
-            </div>
-            <div className="ui-surface-card p-5">
-              <PortalSettingsSection
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
+            <SettingsCard>
+              <SettingsSection
                 title="BRANDING"
                 description="Customize the primary accent color used across the application."
                 layout="grid"
                 columns={1}
               >
-                <PortalSettingsItem
+                <SettingsItem
                   title="Primary accent color"
                   description="Used for primary buttons, links, focus states and selected elements."
                 >
@@ -687,7 +630,7 @@ export default function GeneralSettingsPage() {
                     <div className="relative ml-1">
                       <label
                         htmlFor="branding-primary-picker"
-                        className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={settingsInlineButtonClassName}
                       >
                         <span
                           className="inline-block h-3.5 w-3.5 rounded-full border border-slate-300 dark:border-slate-600"
@@ -714,7 +657,7 @@ export default function GeneralSettingsPage() {
                   <div className="mt-3 space-y-1.5">
                     <label
                       htmlFor="branding-login-logo-url"
-                      className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                      className={settingsLabelClassName}
                     >
                       Login logo URL
                     </label>
@@ -725,7 +668,7 @@ export default function GeneralSettingsPage() {
                       value={loginLogoUrlDraft}
                       onChange={(event) => handleLoginLogoUrlChange(event.target.value)}
                       placeholder="https://cdn.example.com/logo.svg"
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={settingsInputClassName}
                     />
                     {!isLogoUrlValid && (
                       <p className="ui-caption text-rose-700 dark:text-rose-200">
@@ -733,7 +676,7 @@ export default function GeneralSettingsPage() {
                       </p>
                     )}
                     {isLogoUrlValid && loginLogoUrlDraft.trim() && (
-                      <div className="rounded-md border border-slate-200/80 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                      <div className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Login preview
                         </p>
@@ -745,9 +688,9 @@ export default function GeneralSettingsPage() {
                       </div>
                     )}
                   </div>
-                </PortalSettingsItem>
-              </PortalSettingsSection>
-            </div>
+                </SettingsItem>
+              </SettingsSection>
+            </SettingsCard>
           </div>
         )}
       </form>

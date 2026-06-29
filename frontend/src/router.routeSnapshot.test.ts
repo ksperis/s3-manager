@@ -40,6 +40,7 @@ describe("route snapshot", () => {
       "/admin/billing",
       "/admin/usage-history",
       "/admin/general-settings",
+      "/admin/authentication-settings",
       "/admin/manager-settings",
       "/admin/portal-settings",
       "/admin/browser-settings",

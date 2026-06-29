@@ -155,14 +155,14 @@ describe("GeneralSettingsPage branding", () => {
     expect(applyBrandingMock).toHaveBeenCalledWith("#0057b8");
   });
 
-  it("shows custom endpoint warning only when option is enabled", async () => {
-    const user = userEvent.setup();
+  it("does not render authentication options", async () => {
     render(<GeneralSettingsPage />);
 
-    expect(screen.queryByText(/custom endpoints are restricted to public https targets/i)).not.toBeInTheDocument();
-
-    await user.click(await screen.findByLabelText("Custom login endpoint"));
-    expect(screen.getByText(/custom endpoints are restricted to public https targets/i)).toBeInTheDocument();
+    await screen.findByLabelText("Primary color picker");
+    expect(screen.queryByLabelText("Access-key login")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Access-key endpoint list")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Custom login endpoint")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Private S3 connections for UI users")).not.toBeInTheDocument();
   });
 
   it("does not render manager extra tools toggles", async () => {
@@ -192,6 +192,40 @@ describe("GeneralSettingsPage branding", () => {
     });
     expect(sendQuotaNotificationTestEmailMock.mock.calls[0][0]).toEqual(buildSettings().quota_notifications);
     expect(await screen.findByText(/test email sent to superadmin@example.com/i)).toBeInTheDocument();
+  });
+
+  it("preserves authentication fields when resetting general settings", async () => {
+    const user = userEvent.setup();
+    const initialSettings = buildSettings();
+    initialSettings.general.allow_login_access_keys = true;
+    initialSettings.general.allow_login_endpoint_list = true;
+    initialSettings.general.allow_login_custom_endpoint = true;
+    initialSettings.general.allow_user_private_connections = true;
+    const defaultSettings = buildSettings();
+    defaultSettings.general.allow_login_access_keys = false;
+    defaultSettings.general.allow_login_endpoint_list = false;
+    defaultSettings.general.allow_login_custom_endpoint = false;
+    defaultSettings.general.allow_user_private_connections = false;
+    fetchAppSettingsMock.mockResolvedValueOnce(initialSettings);
+    fetchDefaultAppSettingsMock.mockResolvedValueOnce(defaultSettings);
+
+    render(<GeneralSettingsPage />);
+
+    await screen.findByLabelText("Primary color picker");
+    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
+    await waitFor(() => {
+      expect(fetchDefaultAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.general.allow_login_access_keys).toBe(true);
+    expect(payload.general.allow_login_endpoint_list).toBe(true);
+    expect(payload.general.allow_login_custom_endpoint).toBe(true);
+    expect(payload.general.allow_user_private_connections).toBe(true);
   });
 
   it("shows backend detail when initial settings load fails with detail", async () => {

@@ -10,6 +10,9 @@ import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
+import UiButton from "../../components/ui/UiButton";
+import { SettingsCard, settingsCheckboxClassName } from "../../components/settings/SettingsLayout";
+import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 
@@ -188,7 +191,7 @@ export default function KeyRotationPage() {
       {actionMessage && <PageBanner tone={result?.summary.failed ? "warning" : "success"}>{actionMessage}</PageBanner>}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="ui-surface-card p-5">
+        <SettingsCard>
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Endpoints</p>
@@ -197,20 +200,22 @@ export default function KeyRotationPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button
+              <UiButton
                 type="button"
                 onClick={selectAllEndpoints}
-                className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                variant="secondary"
+                size="xs"
               >
                 Select all
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="button"
                 onClick={clearAllEndpoints}
-                className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                variant="secondary"
+                size="xs"
               >
                 Clear
-              </button>
+              </UiButton>
             </div>
           </div>
           <div className="space-y-2">
@@ -221,8 +226,8 @@ export default function KeyRotationPage() {
                   key={endpoint.id}
                   className={`flex items-start gap-3 rounded-lg border px-3 py-2 ui-caption ${
                     eligible
-                      ? "border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200"
-                      : "border-slate-100 text-slate-400 dark:border-slate-800 dark:text-slate-500"
+                      ? "border-[color:var(--ui-border)] text-[var(--ui-text)]"
+                      : "border-[color:var(--ui-border-soft)] text-[var(--ui-text-muted)] opacity-70"
                   }`}
                 >
                   <input
@@ -230,11 +235,11 @@ export default function KeyRotationPage() {
                     checked={selectedEndpointIds.includes(endpoint.id)}
                     disabled={!eligible}
                     onChange={() => toggleEndpoint(endpoint.id)}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    className={`mt-0.5 ${settingsCheckboxClassName}`}
                   />
                   <span className="flex-1">
                     <span className="block font-semibold">{endpoint.name}</span>
-                    <span className="block text-slate-500 dark:text-slate-400">
+                    <span className="block text-[var(--ui-text-muted)]">
                       {endpoint.endpoint_url} · {endpoint.provider}
                     </span>
                     {!eligible && (
@@ -250,72 +255,74 @@ export default function KeyRotationPage() {
               <p className="ui-caption text-slate-500 dark:text-slate-400">No storage endpoints found.</p>
             )}
           </div>
-        </div>
+        </SettingsCard>
 
-        <div className="ui-surface-card p-5">
+        <SettingsCard>
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Key types</p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">Choose the key categories to rotate.</p>
             </div>
             <div className="flex gap-2">
-              <button
+              <UiButton
                 type="button"
                 onClick={selectAllTypes}
-                className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                variant="secondary"
+                size="xs"
               >
                 Select all
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="button"
                 onClick={clearAllTypes}
-                className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                variant="secondary"
+                size="xs"
               >
                 Clear
-              </button>
+              </UiButton>
             </div>
           </div>
           <div className="space-y-2">
             {ROTATION_TYPE_OPTIONS.map((option) => (
               <label
                 key={option.value}
-                className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                className="flex items-start gap-3 rounded-lg border border-[color:var(--ui-border)] px-3 py-2 ui-caption text-[var(--ui-text)]"
               >
                 <input
                   type="checkbox"
                   checked={selectedTypes.includes(option.value)}
                   onChange={() => toggleType(option.value)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  className={`mt-0.5 ${settingsCheckboxClassName}`}
                 />
                 <span className="flex-1">
                   <span className="block font-semibold">{option.label}</span>
-                  <span className="block text-slate-500 dark:text-slate-400">{option.description}</span>
+                  <span className="block text-[var(--ui-text-muted)]">{option.description}</span>
                 </span>
               </label>
             ))}
           </div>
 
-          <div className="mt-4 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-            <label className="flex items-start gap-3 ui-caption text-slate-700 dark:text-slate-200">
+          <div className="mt-4 rounded-lg border border-[color:var(--ui-border)] px-3 py-3">
+            <label className="flex items-start gap-3 ui-caption text-[var(--ui-text)]">
               <input
                 type="checkbox"
                 checked={deactivateOnly}
                 onChange={(event) => setDeactivateOnly(event.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                className={`mt-0.5 ${settingsCheckboxClassName}`}
               />
               <span>
                 <span className="block font-semibold">Disable old keys only</span>
-                <span className="block text-slate-500 dark:text-slate-400">
+                <span className="block text-[var(--ui-text-muted)]">
                   Keep previous keys but suspend them instead of deleting them.
                 </span>
               </span>
             </label>
           </div>
-        </div>
+        </SettingsCard>
       </div>
 
       {result && (
-        <div className="ui-surface-card">
+        <SettingsCard padded={false}>
           <ListToolbar
             title="Execution summary"
             description={`Mode: ${result.mode === "deactivate_old_keys" ? "Deactivate old keys" : "Delete old keys"}`}
@@ -339,34 +346,34 @@ export default function KeyRotationPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-            <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-              <thead className="bg-slate-50 dark:bg-slate-900/60">
+          <div className={uiTableContainerClass}>
+            <table className={cx(uiDataTableClass, "compact-table min-w-full")}>
+              <thead>
                 <tr>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th>
                     Endpoint
                   </th>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th>
                     Type
                   </th>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th>
                     Target
                   </th>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th>
                     Status
                   </th>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th>
                     Details
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              <tbody>
                 {result.results.map((item, index) => (
                   <tr key={`${item.endpoint_id}-${item.key_type}-${item.target_id ?? "none"}-${index}`}>
-                    <td className="px-3 py-2 ui-caption text-slate-700 dark:text-slate-200">{item.endpoint_name}</td>
-                    <td className="px-3 py-2 ui-caption text-slate-700 dark:text-slate-200">{KEY_TYPE_LABEL[item.key_type]}</td>
-                    <td className="px-3 py-2 ui-caption text-slate-700 dark:text-slate-200">{item.target_label || item.target_type}</td>
-                    <td className="px-3 py-2 ui-caption">
+                    <td>{item.endpoint_name}</td>
+                    <td>{KEY_TYPE_LABEL[item.key_type]}</td>
+                    <td>{item.target_label || item.target_type}</td>
+                    <td>
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${
                           item.status === "rotated"
@@ -379,7 +386,7 @@ export default function KeyRotationPage() {
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2 ui-caption text-slate-600 dark:text-slate-300">
+                    <td>
                       {item.message}
                       {item.old_access_key && item.new_access_key && (
                         <span className="ml-1 text-slate-500 dark:text-slate-400">
@@ -396,7 +403,7 @@ export default function KeyRotationPage() {
             </table>
           </div>
           </div>
-        </div>
+        </SettingsCard>
       )}
     </div>
   );

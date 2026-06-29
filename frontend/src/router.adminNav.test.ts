@@ -41,6 +41,12 @@ describe("buildAdminNav", () => {
     expect(apiTokensLink).toBeUndefined();
   });
 
+  it("exposes Authentication in settings navigation", () => {
+    const authenticationLink = getSettingsLink("Authentication", [true, true, false, false, false, true]);
+
+    expect(authenticationLink?.to).toBe("/admin/authentication-settings");
+  });
+
   it("keeps settings collapsed until the admin settings route asks for expansion", () => {
     const baseArgs = [true, true, false, false, false, true] as const;
 

@@ -46,6 +46,7 @@ const loadS3UsersPage = () => import("./features/admin/S3UsersPage");
 const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
 const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
 const loadGeneralSettingsPage = () => import("./features/admin/GeneralSettingsPage");
+const loadAuthenticationSettingsPage = () => import("./features/admin/AuthenticationSettingsPage");
 const loadManagerSettingsPage = () => import("./features/admin/ManagerSettingsPage");
 const loadAdminPortalSettingsPage = () => import("./features/admin/PortalSettingsPage");
 const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPage");
@@ -119,6 +120,7 @@ const S3UsersPage = lazy(loadS3UsersPage);
 const S3UserKeysPage = lazy(loadS3UserKeysPage);
 const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
 const GeneralSettingsPage = lazy(loadGeneralSettingsPage);
+const AuthenticationSettingsPage = lazy(loadAuthenticationSettingsPage);
 const ManagerSettingsPage = lazy(loadManagerSettingsPage);
 const AdminPortalSettingsPage = lazy(loadAdminPortalSettingsPage);
 const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
@@ -182,6 +184,7 @@ const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 const ADMIN_SETTINGS_PATHS = [
   "/admin/general-settings",
+  "/admin/authentication-settings",
   "/admin/manager-settings",
   "/admin/browser-settings",
   "/admin/portal-settings",
@@ -203,6 +206,7 @@ export const buildAdminNav = (
 ) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
+    { to: "/admin/authentication-settings", label: "Authentication" },
     { to: "/admin/manager-settings", label: "Manager" },
     {
       to: "/admin/browser-settings",
@@ -353,6 +357,7 @@ export function createAppRoutes() {
             <Route path="usage-history" element={<AdminUsageHistoryRoute />} />
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
               <Route path="general-settings" element={<GeneralSettingsPage />} />
+              <Route path="authentication-settings" element={<AuthenticationSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
               <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />

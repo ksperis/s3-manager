@@ -7,18 +7,22 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
-  PortalSettingsItem,
-  PortalSettingsSection,
-  PortalSettingsToggleAction,
-} from "../../components/PortalSettingsLayout";
+  SettingsCard,
+  SettingsItem,
+  SettingsSection,
+  SettingsToggleAction,
+  settingsCheckboxClassName,
+  settingsCompactInputClassName,
+  settingsInlineButtonClassName,
+  settingsTextareaClassName,
+} from "../../components/settings/SettingsLayout";
 import UiButton from "../../components/ui/UiButton";
-import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
-const allowOverrideLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200";
-const corsOriginsTextareaClass = cx("mt-2 ui-caption", uiInputClass);
+const allowOverrideLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]";
+const corsOriginsTextareaClass = `mt-2 ${settingsTextareaClassName}`;
 
 export default function PortalSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -308,14 +312,14 @@ export default function PortalSettingsPage() {
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
-        <div className="ui-surface-card p-5">
-          <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
-            <PortalSettingsItem
+        <SettingsCard>
+          <SettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
+            <SettingsItem
               title="Portal user Storage Space creation"
               description="Allow portal-user members to create their own Storage Spaces from the Portal. Storage-side permissions and the Portal service still enforce the actual bucket creation workflow."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={portalBucketCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
                     disabled={!settings}
@@ -327,19 +331,19 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_bucket_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_bucket_create", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="Named bucket creation"
               description="Allow the portal create form to create a locked Storage Space whose bucket name is based on the submitted name."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={portalNamedBucketCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalNamedBucketCreate(value)}
                     disabled={!settings}
@@ -351,19 +355,19 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_named_bucket_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_named_bucket_create", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="Access key management"
               description="Allow portal users to create and delete their own IAM user keys from the portal."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={portalAccessKeyCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
                     disabled={!settings}
@@ -375,14 +379,14 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_access_key_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_access_key_create", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="Max IAM user keys per portal user"
               description="Global limit for IAM user access keys created from the portal."
               action={
@@ -394,20 +398,20 @@ export default function PortalSettingsPage() {
                   onChange={(e) => handleMaxPortalUserAccessKeysChange(e.target.value)}
                   disabled={!settings}
                   aria-label="Max IAM user keys per portal user"
-                  className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className={`w-28 ${settingsCompactInputClassName}`}
                 />
               }
             />
-          </PortalSettingsSection>
-        </div>
-        <div className="ui-surface-card p-5">
-          <PortalSettingsSection
+          </SettingsSection>
+        </SettingsCard>
+        <SettingsCard>
+          <SettingsSection
             title="IAM POLICIES"
             description="Action lists applied to portal IAM groups and bucket access."
             layout="stack"
           >
             <div className="grid gap-3 md:grid-cols-2">
-              <PortalSettingsItem
+              <SettingsItem
                 title="Policy portal-manager"
                 description="Actions granted to the portal-manager IAM group."
                 action={
@@ -418,7 +422,7 @@ export default function PortalSettingsPage() {
                         type="checkbox"
                         checked={Boolean(settings?.portal.override_policy.iam_group_manager_policy.actions)}
                         onChange={(e) => handleOverridePolicyToggle("iam_group_manager_policy", "actions", e.target.checked)}
-                        className={uiCheckboxClass}
+                        className={settingsCheckboxClassName}
                         disabled={!settings}
                       />
                     </label>
@@ -426,7 +430,7 @@ export default function PortalSettingsPage() {
                       type="button"
                       onClick={() => handleResetPolicy("manager")}
                       disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                      className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                      className={settingsInlineButtonClassName}
                     >
                       {resettingPolicy === "manager" ? "Resetting..." : "Reset policy"}
                     </button>
@@ -437,14 +441,14 @@ export default function PortalSettingsPage() {
                   <textarea
                     value={(settings?.portal.iam_group_manager_policy.actions || []).join("\n")}
                     onChange={(e) => handleManagerActionsChange(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className={settingsTextareaClassName}
                     rows={6}
                     placeholder="s3:ListAllMyBuckets"
                     disabled={!settings}
                   />
                 </div>
-              </PortalSettingsItem>
-              <PortalSettingsItem
+              </SettingsItem>
+              <SettingsItem
                 title="Policy portal-user"
                 description="Actions granted to the portal-user IAM group."
                 action={
@@ -455,7 +459,7 @@ export default function PortalSettingsPage() {
                         type="checkbox"
                         checked={Boolean(settings?.portal.override_policy.iam_group_user_policy.actions)}
                         onChange={(e) => handleOverridePolicyToggle("iam_group_user_policy", "actions", e.target.checked)}
-                        className={uiCheckboxClass}
+                        className={settingsCheckboxClassName}
                         disabled={!settings}
                       />
                     </label>
@@ -463,7 +467,7 @@ export default function PortalSettingsPage() {
                       type="button"
                       onClick={() => handleResetPolicy("user")}
                       disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                      className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                      className={settingsInlineButtonClassName}
                     >
                       {resettingPolicy === "user" ? "Resetting..." : "Reset policy"}
                     </button>
@@ -474,15 +478,15 @@ export default function PortalSettingsPage() {
                   <textarea
                     value={(settings?.portal.iam_group_user_policy.actions || []).join("\n")}
                     onChange={(e) => handleUserActionsChange(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className={settingsTextareaClassName}
                     rows={4}
                     placeholder="s3:ListAllMyBuckets"
                     disabled={!settings}
                   />
                 </div>
-              </PortalSettingsItem>
+              </SettingsItem>
             </div>
-            <PortalSettingsItem
+            <SettingsItem
               title="Policy bucket access"
               description="Actions added when granting a portal user access to a bucket."
               action={
@@ -493,7 +497,7 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_access_policy.actions)}
                       onChange={(e) => handleOverridePolicyToggle("bucket_access_policy", "actions", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
@@ -501,7 +505,7 @@ export default function PortalSettingsPage() {
                     type="button"
                     onClick={() => handleResetPolicy("bucket")}
                     disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                    className="rounded-md border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                    className={settingsInlineButtonClassName}
                   >
                     {resettingPolicy === "bucket" ? "Resetting..." : "Reset policy"}
                   </button>
@@ -512,7 +516,7 @@ export default function PortalSettingsPage() {
                 <textarea
                   value={(settings?.portal.bucket_access_policy.actions || []).join("\n")}
                   onChange={(e) => handleBucketActionsChange(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className={settingsTextareaClassName}
                   rows={8}
                   placeholder="s3:GetObject"
                   disabled={!settings}
@@ -521,21 +525,21 @@ export default function PortalSettingsPage() {
                   The PortalUserBuckets statement receives bucket resources automatically.
                 </p>
               </div>
-            </PortalSettingsItem>
-          </PortalSettingsSection>
-        </div>
-        <div className="ui-surface-card p-5">
-          <PortalSettingsSection
+            </SettingsItem>
+          </SettingsSection>
+        </SettingsCard>
+        <SettingsCard>
+          <SettingsSection
             title="BUCKET DEFAULTS"
             description="Defaults applied when a bucket is created from the portal."
             layout="grid"
           >
-            <PortalSettingsItem
+            <SettingsItem
               title="Versioning"
               description="Enable bucket versioning by default."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={bucketVersioningEnabled}
                     onChange={(value) => handleBucketDefaultVersioning(value)}
                     disabled={!settings}
@@ -547,19 +551,19 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.versioning)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("versioning", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="Lifecycle baseline"
               description="Remove obsolete delete markers and non-current versions after 90 days."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={bucketLifecycleEnabled}
                     onChange={(value) => handleBucketDefaultLifecycle(value)}
                     disabled={!settings}
@@ -571,19 +575,19 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_lifecycle)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("enable_lifecycle", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="Portal CORS"
               description="Apply a CORS rule to allow the portal UI to access the bucket."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsToggleAction
+                  <SettingsToggleAction
                     checked={bucketCorsEnabled}
                     onChange={(value) => handleBucketDefaultCors(value)}
                     disabled={!settings}
@@ -595,14 +599,14 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_cors)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("enable_cors", e.target.checked)}
-                      className={uiCheckboxClass}
+                      className={settingsCheckboxClassName}
                       disabled={!settings}
                     />
                   </label>
                 </div>
               }
             />
-            <PortalSettingsItem
+            <SettingsItem
               title="CORS allowed origins"
               description="One URL per line. These origins are added to the portal bucket CORS rule."
               className="md:col-span-2"
@@ -613,7 +617,7 @@ export default function PortalSettingsPage() {
                     type="checkbox"
                     checked={Boolean(settings?.portal.override_policy.bucket_defaults.cors_allowed_origins)}
                     onChange={(e) => handleOverrideBucketDefaultsToggle("cors_allowed_origins", e.target.checked)}
-                    className={uiCheckboxClass}
+                    className={settingsCheckboxClassName}
                     disabled={!settings}
                   />
                 </label>
@@ -627,9 +631,9 @@ export default function PortalSettingsPage() {
                 placeholder="https://s3-manager.example.com"
                 disabled={!settings || !bucketCorsEnabled}
               />
-            </PortalSettingsItem>
-          </PortalSettingsSection>
-        </div>
+            </SettingsItem>
+          </SettingsSection>
+        </SettingsCard>
       </form>
     </div>
   );
