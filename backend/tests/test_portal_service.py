@@ -1945,10 +1945,6 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
 
-    base.override_policy.allow_portal_named_bucket_create = True
-    base.override_policy.allow_portal_user_access_key_create = True
-    base.override_policy.bucket_defaults.enable_cors = True
-
     effective = service.get_effective_portal_settings(account)
     assert effective.allow_portal_user_bucket_create is False
     assert effective.allow_portal_named_bucket_create is False
@@ -1962,11 +1958,15 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
 
     service.update_admin_portal_settings_override(
         account,
-        PortalSettingsOverride(allow_portal_user_bucket_create=True),
+        PortalSettingsOverride(
+            allow_portal_user_bucket_create=True,
+            bucket_defaults={"enable_cors": False},
+        ),
     )
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
-    assert stored == {"admin": {"allow_portal_user_bucket_create": True}}
+    assert stored == {"admin": {"allow_portal_user_bucket_create": True, "bucket_defaults": {"enable_cors": False}}}
+    assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):

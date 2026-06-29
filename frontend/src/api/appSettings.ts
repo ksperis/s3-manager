@@ -14,35 +14,11 @@ export type PortalSettings = {
   iam_group_user_policy: PortalIAMPolicySettings;
   bucket_access_policy: PortalIAMPolicySettings;
   bucket_defaults: PortalBucketDefaults;
-  override_policy: PortalSettingsOverridePolicy;
 };
 
 export type PortalIAMPolicySettings = {
   actions: string[];
   advanced_policy?: Record<string, unknown> | null;
-};
-
-export type PortalIAMPolicyOverridePolicy = {
-  actions: boolean;
-  advanced_policy: boolean;
-};
-
-export type PortalBucketDefaultsOverridePolicy = {
-  versioning: boolean;
-  enable_cors: boolean;
-  enable_lifecycle: boolean;
-  cors_allowed_origins: boolean;
-};
-
-export type PortalSettingsOverridePolicy = {
-  allow_portal_key: boolean;
-  allow_portal_user_bucket_create: boolean;
-  allow_portal_named_bucket_create: boolean;
-  allow_portal_user_access_key_create: boolean;
-  iam_group_manager_policy: PortalIAMPolicyOverridePolicy;
-  iam_group_user_policy: PortalIAMPolicyOverridePolicy;
-  bucket_access_policy: PortalIAMPolicyOverridePolicy;
-  bucket_defaults: PortalBucketDefaultsOverridePolicy;
 };
 
 export type PortalBucketDefaults = {

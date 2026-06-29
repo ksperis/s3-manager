@@ -69,21 +69,6 @@ function buildSettings(): AppSettings {
         enable_lifecycle: true,
         cors_allowed_origins: [],
       },
-      override_policy: {
-        allow_portal_key: false,
-        allow_portal_user_bucket_create: false,
-        allow_portal_named_bucket_create: false,
-        allow_portal_user_access_key_create: false,
-        iam_group_manager_policy: { actions: false, advanced_policy: false },
-        iam_group_user_policy: { actions: false, advanced_policy: false },
-        bucket_access_policy: { actions: false, advanced_policy: false },
-        bucket_defaults: {
-          versioning: false,
-          enable_cors: false,
-          enable_lifecycle: false,
-          cors_allowed_origins: false,
-        },
-      },
     },
     manager: {
       allow_manager_user_usage_stats: true,
@@ -157,7 +142,7 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.allow_portal_named_bucket_create).toBe(true);
-    expect(payload.portal.override_policy.allow_portal_named_bucket_create).toBe(false);
+    expect("override_policy" in payload.portal).toBe(false);
   });
 
   it("labels portal user Storage Space creation without bucket management wording", async () => {

@@ -72,29 +72,6 @@ class PortalIAMPolicySettings(BaseModel):
         return [entry for entry in value if isinstance(entry, str) and entry.strip()]
 
 
-class PortalIAMPolicyOverridePolicy(BaseModel):
-    actions: bool = False
-    advanced_policy: bool = False
-
-
-class PortalBucketDefaultsOverridePolicy(BaseModel):
-    versioning: bool = False
-    enable_cors: bool = False
-    enable_lifecycle: bool = False
-    cors_allowed_origins: bool = False
-
-
-class PortalSettingsOverridePolicy(BaseModel):
-    allow_portal_key: bool = False
-    allow_portal_user_bucket_create: bool = False
-    allow_portal_named_bucket_create: bool = False
-    allow_portal_user_access_key_create: bool = False
-    iam_group_manager_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
-    iam_group_user_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
-    bucket_access_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
-    bucket_defaults: PortalBucketDefaultsOverridePolicy = Field(default_factory=PortalBucketDefaultsOverridePolicy)
-
-
 class PortalIAMPolicyOverride(BaseModel):
     actions: Optional[list[str]] = None
     advanced_policy: Optional[dict] = None
@@ -242,7 +219,6 @@ class PortalSettings(BaseModel):
         default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_bucket_access_actions())
     )
     bucket_defaults: PortalBucketDefaults = Field(default_factory=PortalBucketDefaults)
-    override_policy: PortalSettingsOverridePolicy = Field(default_factory=PortalSettingsOverridePolicy)
 
     @model_validator(mode="after")
     def normalize_manager_policy_actions(self):

@@ -33,7 +33,6 @@ from app.db import (
 from app.models.app_settings import (
     PortalBucketDefaults,
     PortalBucketDefaultsOverride,
-    PortalBucketDefaultsOverridePolicy,
     PortalIAMPolicyOverride,
     PortalIAMPolicySettings,
     PortalSettings,

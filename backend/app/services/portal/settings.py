@@ -78,20 +78,16 @@ class PortalSettingsMixin:
         self,
         target: PortalBucketDefaults,
         override: Optional[PortalBucketDefaultsOverride],
-        policy: PortalBucketDefaultsOverridePolicy,
-        lock: Optional[PortalBucketDefaultsOverride] = None,
     ) -> None:
         if not override:
             return
-        if override.versioning is not None and policy.versioning and not (lock and lock.versioning is not None):
+        if override.versioning is not None:
             target.versioning = override.versioning
-        if override.enable_cors is not None and policy.enable_cors and not (lock and lock.enable_cors is not None):
+        if override.enable_cors is not None:
             target.enable_cors = override.enable_cors
-        if override.enable_lifecycle is not None and policy.enable_lifecycle and not (lock and lock.enable_lifecycle is not None):
+        if override.enable_lifecycle is not None:
             target.enable_lifecycle = override.enable_lifecycle
-        if override.cors_allowed_origins is not None and policy.cors_allowed_origins and not (
-            lock and lock.cors_allowed_origins is not None
-        ):
+        if override.cors_allowed_origins is not None:
             target.cors_allowed_origins = override.cors_allowed_origins
 
     def _apply_admin_overrides(
@@ -135,8 +131,6 @@ class PortalSettingsMixin:
             self._apply_bucket_defaults_override(
                 portal_settings.bucket_defaults,
                 override.bucket_defaults,
-                policy=PortalBucketDefaultsOverridePolicy(),
-                lock=None,
             )
 
     def _effective_portal_settings(self, account: S3Account, base_settings: Optional[PortalSettings] = None) -> PortalSettings:

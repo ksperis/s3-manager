@@ -60,21 +60,6 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
         enable_lifecycle: false,
         cors_allowed_origins: [],
       },
-      override_policy: {
-        allow_portal_key: false,
-        allow_portal_user_bucket_create: false,
-        allow_portal_named_bucket_create: false,
-        allow_portal_user_access_key_create: false,
-        iam_group_manager_policy: { actions: false, advanced_policy: false },
-        iam_group_user_policy: { actions: false, advanced_policy: false },
-        bucket_access_policy: { actions: false, advanced_policy: false },
-        bucket_defaults: {
-          versioning: false,
-          enable_cors: false,
-          enable_lifecycle: false,
-          cors_allowed_origins: false,
-        },
-      },
     },
     manager: {
       allow_manager_user_usage_stats: true,
