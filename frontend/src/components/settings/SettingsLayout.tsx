@@ -11,6 +11,7 @@ import {
   uiCardClass,
   uiCardMutedClass,
   uiCheckboxClass,
+  uiDividerClass,
   uiInputClass,
   uiMutedTextClass,
   uiTitleTextClass,
@@ -49,6 +50,16 @@ type SettingsConditionalBadgeProps = {
 
 type SettingsToggleActionProps = SettingsSwitchProps & {
   badge?: SettingsConditionalBadgeProps;
+  className?: string;
+};
+
+type SettingsChoiceRowProps = {
+  title: string;
+  description?: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+  children?: ReactNode;
   className?: string;
 };
 
@@ -101,8 +112,12 @@ export const SettingsSection = ({
   columns = 2,
   children,
 }: SettingsSectionProps) => {
-  const layoutClass =
-    layout === "grid" ? `mt-3 grid gap-3 ${columns === 2 ? "md:grid-cols-2" : ""}` : "mt-3 space-y-3";
+  const layoutClass = cx(
+    "mt-3 grid",
+    layout === "grid" &&
+      columns === 2 &&
+      "gap-x-6 md:grid-cols-2 md:[&>*:nth-child(2)]:border-t-0 md:[&>*:nth-child(2)]:pt-0"
+  );
 
   return (
     <div>
@@ -116,7 +131,8 @@ export const SettingsSection = ({
 export const SettingsItem = ({ title, description, action, children, className }: SettingsItemProps) => (
   <div
     className={cx(
-      "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3 text-[var(--ui-text)]",
+      "border-t py-3 text-[var(--ui-text)] first:border-t-0 first:pt-0 last:pb-0",
+      uiDividerClass,
       className
     )}
   >
@@ -129,6 +145,38 @@ export const SettingsItem = ({ title, description, action, children, className }
     </div>
     {children}
   </div>
+);
+
+export const SettingsChoiceRow = ({
+  title,
+  description,
+  checked,
+  disabled,
+  onChange,
+  children,
+  className,
+}: SettingsChoiceRowProps) => (
+  <label
+    className={cx(
+      "flex items-start gap-3 border-t py-3 ui-caption first:border-t-0 first:pt-0 last:pb-0",
+      uiDividerClass,
+      disabled ? "cursor-not-allowed text-[var(--ui-text-muted)] opacity-70" : "cursor-pointer text-[var(--ui-text)]",
+      className
+    )}
+  >
+    <input
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.checked)}
+      className={`mt-0.5 ${settingsCheckboxClassName}`}
+    />
+    <span className="min-w-0 flex-1">
+      <span className={cx("block font-semibold", disabled ? uiMutedTextClass : uiTitleTextClass)}>{title}</span>
+      {description && <span className="block text-[var(--ui-text-muted)]">{description}</span>}
+      {children}
+    </span>
+  </label>
 );
 
 export const SettingsSwitch = ({ checked, disabled, ariaLabel, onChange }: SettingsSwitchProps) => (

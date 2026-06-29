@@ -11,7 +11,7 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import TableEmptyState from "../../components/TableEmptyState";
 import UiButton from "../../components/ui/UiButton";
-import { SettingsCard, settingsCheckboxClassName } from "../../components/settings/SettingsLayout";
+import { SettingsCard, SettingsChoiceRow } from "../../components/settings/SettingsLayout";
 import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -218,37 +218,24 @@ export default function KeyRotationPage() {
               </UiButton>
             </div>
           </div>
-          <div className="space-y-2">
+          <div>
             {endpoints.map((endpoint) => {
               const eligible = isEndpointEligible(endpoint);
               return (
-                <label
+                <SettingsChoiceRow
                   key={endpoint.id}
-                  className={`flex items-start gap-3 rounded-lg border px-3 py-2 ui-caption ${
-                    eligible
-                      ? "border-[color:var(--ui-border)] text-[var(--ui-text)]"
-                      : "border-[color:var(--ui-border-soft)] text-[var(--ui-text-muted)] opacity-70"
-                  }`}
+                  title={endpoint.name}
+                  description={`${endpoint.endpoint_url} · ${endpoint.provider}`}
+                  checked={selectedEndpointIds.includes(endpoint.id)}
+                  disabled={!eligible}
+                  onChange={() => toggleEndpoint(endpoint.id)}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedEndpointIds.includes(endpoint.id)}
-                    disabled={!eligible}
-                    onChange={() => toggleEndpoint(endpoint.id)}
-                    className={`mt-0.5 ${settingsCheckboxClassName}`}
-                  />
-                  <span className="flex-1">
-                    <span className="block font-semibold">{endpoint.name}</span>
-                    <span className="block text-[var(--ui-text-muted)]">
-                      {endpoint.endpoint_url} · {endpoint.provider}
+                  {!eligible && (
+                    <span className="block text-amber-700 dark:text-amber-300">
+                      Unsupported: endpoint is not Ceph or admin feature is disabled.
                     </span>
-                    {!eligible && (
-                      <span className="block text-amber-700 dark:text-amber-300">
-                        Unsupported: endpoint is not Ceph or admin feature is disabled.
-                      </span>
-                    )}
-                  </span>
-                </label>
+                  )}
+                </SettingsChoiceRow>
               );
             })}
             {!loading && endpoints.length === 0 && (
@@ -282,41 +269,25 @@ export default function KeyRotationPage() {
               </UiButton>
             </div>
           </div>
-          <div className="space-y-2">
+          <div>
             {ROTATION_TYPE_OPTIONS.map((option) => (
-              <label
+              <SettingsChoiceRow
                 key={option.value}
-                className="flex items-start gap-3 rounded-lg border border-[color:var(--ui-border)] px-3 py-2 ui-caption text-[var(--ui-text)]"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedTypes.includes(option.value)}
-                  onChange={() => toggleType(option.value)}
-                  className={`mt-0.5 ${settingsCheckboxClassName}`}
-                />
-                <span className="flex-1">
-                  <span className="block font-semibold">{option.label}</span>
-                  <span className="block text-[var(--ui-text-muted)]">{option.description}</span>
-                </span>
-              </label>
+                title={option.label}
+                description={option.description}
+                checked={selectedTypes.includes(option.value)}
+                onChange={() => toggleType(option.value)}
+              />
             ))}
           </div>
 
-          <div className="mt-4 rounded-lg border border-[color:var(--ui-border)] px-3 py-3">
-            <label className="flex items-start gap-3 ui-caption text-[var(--ui-text)]">
-              <input
-                type="checkbox"
-                checked={deactivateOnly}
-                onChange={(event) => setDeactivateOnly(event.target.checked)}
-                className={`mt-0.5 ${settingsCheckboxClassName}`}
-              />
-              <span>
-                <span className="block font-semibold">Disable old keys only</span>
-                <span className="block text-[var(--ui-text-muted)]">
-                  Keep previous keys but suspend them instead of deleting them.
-                </span>
-              </span>
-            </label>
+          <div className="mt-4 border-t border-[color:var(--ui-border-soft)] pt-4">
+            <SettingsChoiceRow
+              title="Disable old keys only"
+              description="Keep previous keys but suspend them instead of deleting them."
+              checked={deactivateOnly}
+              onChange={setDeactivateOnly}
+            />
           </div>
         </SettingsCard>
       </div>

@@ -410,7 +410,7 @@ export default function PortalSettingsPage() {
             description="Action lists applied to portal IAM groups and bucket access."
             layout="stack"
           >
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-x-6 md:grid-cols-2 md:[&>*:nth-child(2)]:border-t-0 md:[&>*:nth-child(2)]:pt-0">
               <SettingsItem
                 title="Policy portal-manager"
                 description="Actions granted to the portal-manager IAM group."
