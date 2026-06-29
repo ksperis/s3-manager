@@ -9,6 +9,7 @@ import uuid
 from typing import Any, Callable
 
 import pytest
+import requests
 
 from .ceph_admin_helpers import backend_error_detail, looks_unsupported, run_or_skip
 from .clients import BackendAPIError, BackendAuthenticator, BackendSession
@@ -55,14 +56,14 @@ def _wait_for_value(
 ) -> Any:
     deadline = time.monotonic() + timeout
     last_value: Any = None
-    last_error: BackendAPIError | None = None
+    last_error: Exception | None = None
 
     while time.monotonic() < deadline:
         try:
             last_value = fetch()
             if predicate(last_value):
                 return last_value
-        except BackendAPIError as exc:
+        except (BackendAPIError, requests.RequestException) as exc:
             last_error = exc
         time.sleep(interval)
 
@@ -70,7 +71,7 @@ def _wait_for_value(
         last_value = fetch()
         if predicate(last_value):
             return last_value
-    except BackendAPIError as exc:
+    except (BackendAPIError, requests.RequestException) as exc:
         last_error = exc
 
     if last_error is not None:
