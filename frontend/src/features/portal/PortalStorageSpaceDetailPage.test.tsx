@@ -192,7 +192,11 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("portal-browser-embed").compareDocumentPosition(screen.getByRole("heading", { name: "Storage Space settings" })) &
+      screen.getByRole("heading", { name: "Storage Space settings" }).compareDocumentPosition(screen.getByRole("heading", { name: "Access" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Access" }).compareDocumentPosition(screen.getByTestId("portal-browser-embed")) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
 

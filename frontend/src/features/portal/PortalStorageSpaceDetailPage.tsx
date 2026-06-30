@@ -379,6 +379,33 @@ export default function PortalStorageSpaceDetailPage() {
       ? space.usedBytes / space.objectCount
       : null;
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
+  const storageSpaceSettingsCard = space.role === "Owner" ? (
+    <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
+      <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
+        <input
+          className="ui-control h-9 text-xs disabled:opacity-70"
+          value={metadataName}
+          onChange={(event) => setMetadataName(event.target.value)}
+          aria-label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+          disabled={!canRename || metadataBusy}
+          title={canRename ? t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" }) : t({ en: "Name locked for this Storage Space", fr: "Nom verrouillé pour cet espace de stockage", de: "Name für diesen Speicherbereich gesperrt" })}
+        />
+        <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })} />
+        <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
+          {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
+        </UiButton>
+        {isArchived ? (
+          <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
+            {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
+          </UiButton>
+        ) : (
+          <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
+            {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
+          </UiButton>
+        )}
+      </div>
+    </UiCard>
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -407,6 +434,8 @@ export default function PortalStorageSpaceDetailPage() {
         <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per object", fr: "par objet", de: "pro Objekt" })} />
         <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
       </section>
+
+      {storageSpaceSettingsCard}
 
       <UiCard title={t({ en: "Access", fr: "Accès", de: "Zugriff" })}>
         {accessSummaryLoading ? (
@@ -644,34 +673,6 @@ export default function PortalStorageSpaceDetailPage() {
           {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour ce workspace.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
         </PageBanner>
       )}
-
-      {space.role === "Owner" ? (
-        <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
-          <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
-            <input
-              className="ui-control h-9 text-xs disabled:opacity-70"
-              value={metadataName}
-              onChange={(event) => setMetadataName(event.target.value)}
-              aria-label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
-              disabled={!canRename || metadataBusy}
-              title={canRename ? t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" }) : t({ en: "Name locked for this Storage Space", fr: "Nom verrouillé pour cet espace de stockage", de: "Name für diesen Speicherbereich gesperrt" })}
-            />
-            <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })} />
-            <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
-              {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
-            </UiButton>
-            {isArchived ? (
-              <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
-                {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
-              </UiButton>
-            ) : (
-              <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
-                {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
-              </UiButton>
-            )}
-          </div>
-        </UiCard>
-      ) : null}
 
       {pendingAccessChange ? (
         <ConfirmActionDialog
