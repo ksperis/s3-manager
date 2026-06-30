@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import { Bucket } from "./buckets";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
@@ -35,8 +34,6 @@ export type PortalState = {
   iam_user: PortalIAMUser;
   access_keys: PortalAccessKey[];
   iam_provisioned?: boolean;
-  buckets: Bucket[];
-  total_buckets?: number | null;
   max_buckets?: number | null;
   s3_endpoint?: string | null;
   used_bytes?: number | null;

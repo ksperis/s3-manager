@@ -102,7 +102,8 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    expect(screen.getByRole("heading", { name: "Shares" })).toBeInTheDocument();
+    expect(screen.getByText("Loading shares...")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Shares" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Create a new share" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Shared by me" }));
     expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
@@ -170,7 +171,7 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(screen.getByRole("button", { name: "Public links" }));
+    await user.click(await screen.findByRole("button", { name: "Public links" }));
     expect(await screen.findByText("report.csv")).toBeInTheDocument();
     expect(screen.getByText("/api/portal/public-links/token/download")).toBeInTheDocument();
     await waitFor(() => {
@@ -185,7 +186,7 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(screen.getByRole("button", { name: "Shared by me" }));
+    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
     expect(await screen.findByText("No shares to display.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Public links" }));
     expect(await screen.findByText("No public links to display.")).toBeInTheDocument();
@@ -196,7 +197,7 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(screen.getByRole("button", { name: "Shared by me" }));
+    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
     expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     const shareDialog = screen.getByRole("dialog", { name: "Revoke access" });

@@ -516,8 +516,6 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
     assert state.iam_provisioned is False
     assert state.iam_user.iam_username is None
     assert state.access_keys == []
-    assert state.buckets == []
-    assert state.total_buckets == 0
     assert state.just_created is False
 
 
@@ -710,7 +708,6 @@ def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
         iam_user=PortalIAMUser(iam_user_id="iam-uid", iam_username="portal-bootstrap-iam"),
         iam_provisioned=True,
         access_keys=[],
-        buckets=[],
         account_role=AccountRole.PORTAL_MANAGER.value,
         can_manage_buckets=True,
         can_manage_portal_users=True,
@@ -831,7 +828,7 @@ def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_s
     assert all(not key.is_portal for key in state.access_keys)
 
 
-def test_get_state_scopes_buckets_for_portal_manager(monkeypatch, db_session):
+def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_session):
     account = S3Account(name="portal-account-manager-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-manager-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -882,23 +879,14 @@ def test_get_state_scopes_buckets_for_portal_manager(monkeypatch, db_session):
 
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
     monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
-    monkeypatch.setattr(
-        s3_client,
-        "list_buckets",
-        lambda **kwargs: [  # noqa: ARG005
-            {"name": "bucket-a", "creation_date": "2026-03-01T00:00:00Z"},
-            {"name": "bucket-b", "creation_date": "2026-03-02T00:00:00Z"},
-        ],
-    )
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
     state = service.get_state(user, access)
 
-    assert [bucket.name for bucket in state.buckets] == ["bucket-a"]
-    assert state.total_buckets == 1
     assert state.can_manage_buckets is True
 
 
-def test_get_state_scopes_buckets_for_portal_user(monkeypatch, db_session):
+def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session):
     account = S3Account(name="portal-account-user-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -950,19 +938,10 @@ def test_get_state_scopes_buckets_for_portal_user(monkeypatch, db_session):
 
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
     monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
-    monkeypatch.setattr(
-        s3_client,
-        "list_buckets",
-        lambda **kwargs: [  # noqa: ARG005
-            {"name": "bucket-user", "creation_date": "2026-03-01T00:00:00Z"},
-            {"name": "bucket-other", "creation_date": "2026-03-02T00:00:00Z"},
-        ],
-    )
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
     state = service.get_state(user, access)
 
-    assert [bucket.name for bucket in state.buckets] == ["bucket-user"]
-    assert state.total_buckets == 1
     assert state.can_manage_buckets is False
     assert state.can_create_storage_spaces is True
 
@@ -987,7 +966,7 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     assert state.can_create_storage_spaces is False
 
 
-def test_get_state_returns_no_buckets_when_scope_is_empty(monkeypatch, db_session):
+def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session):
     account = S3Account(name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-empty-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -1036,21 +1015,15 @@ def test_get_state_returns_no_buckets_when_scope_is_empty(monkeypatch, db_sessio
         "list_existing_user_bucket_access",
         lambda target, scoped_account, role: [],  # noqa: ARG005
     )
-    monkeypatch.setattr(
-        s3_client,
-        "list_buckets",
-        lambda **kwargs: [  # noqa: ARG005
-            {"name": "fallback-bucket", "creation_date": "2026-03-01T00:00:00Z"},
-        ],
-    )
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: pytest.fail("PortalState must not list buckets"))
 
     state = service.get_state(user, access)
 
-    assert state.buckets == []
-    assert state.total_buckets == 0
+    assert state.iam_provisioned is True
+    assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
 
 
-def test_list_storage_spaces_maps_visible_buckets_to_workspace_summary(monkeypatch, db_session):
+def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_session):
     account = S3Account(name="portal-storage-spaces", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-spaces@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -1068,26 +1041,6 @@ def test_list_storage_spaces_maps_visible_buckets_to_workspace_summary(monkeypat
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[
-                Bucket(
-                    name="research-data",
-                    creation_date="2026-03-01T00:00:00Z",
-                    used_bytes=2048,
-                    object_count=12,
-                ),
-                Bucket(name="archive", creation_date="2026-03-02T00:00:00Z"),
-            ],
-            account_role=AccountRole.PORTAL_MANAGER.value,
-            can_manage_buckets=True,
-        ),
-    )
 
     spaces = service.list_storage_spaces(user, access, search="research")
 
@@ -1097,11 +1050,11 @@ def test_list_storage_spaces_maps_visible_buckets_to_workspace_summary(monkeypat
     assert spaces[0].role == "Owner"
     assert spaces[0].status == "Shared"
     assert spaces[0].internal_bucket_name == "research-data"
-    assert spaces[0].used_bytes == 2048
-    assert spaces[0].object_count == 12
+    assert spaces[0].used_bytes is None
+    assert spaces[0].object_count is None
 
 
-def test_storage_space_metadata_filters_sorting_and_archive(monkeypatch, db_session):
+def test_storage_space_metadata_filters_sorting_and_archive(db_session):
     account = S3Account(name="portal-storage-metadata", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-metadata@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -1131,21 +1084,6 @@ def test_storage_space_metadata_filters_sorting_and_archive(monkeypatch, db_sess
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[
-                Bucket(name="research-data", creation_date="2026-03-01T00:00:00Z", used_bytes=2048, object_count=12),
-                Bucket(name="old-data", creation_date="2026-01-01T00:00:00Z", used_bytes=4096, object_count=2),
-            ],
-            account_role=AccountRole.PORTAL_MANAGER.value,
-            can_manage_buckets=True,
-        ),
-    )
 
     spaces = service.list_storage_spaces(user, access, search="gen", sort="-used_bytes")
     archived = service.list_storage_spaces(user, access, include_archived=True, status="Archived")
@@ -1156,7 +1094,7 @@ def test_storage_space_metadata_filters_sorting_and_archive(monkeypatch, db_sess
     assert [(space.id, space.status) for space in archived] == [("old-data", "Archived")]
 
 
-def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(monkeypatch, db_session):
+def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_session):
     account = S3Account(name="portal-private-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private@example.com", hashed_password="x", role="ui_user")
     other = User(email="other-private@example.com", hashed_password="x", role="ui_user")
@@ -1175,16 +1113,6 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(monk
     db_session.commit()
 
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[Bucket(name="private-data", creation_date="2026-03-01T00:00:00Z")],
-        ),
-    )
 
     owner_spaces = service.list_storage_spaces(owner, _portal_access(account, owner))
     other_spaces = service.list_storage_spaces(other, _portal_access(account, other))
@@ -1288,16 +1216,6 @@ def test_portal_manager_cannot_read_private_storage_space_content_owned_by_other
     db_session.commit()
 
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[Bucket(name="private-data", creation_date="2026-03-01T00:00:00Z")],
-        ),
-    )
     monkeypatch.setattr(
         service,
         "_portal_object_client",
@@ -1451,18 +1369,6 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[Bucket(name="allowed-bucket", creation_date="2026-03-01T00:00:00Z")],
-            account_role=AccountRole.PORTAL_USER.value,
-            can_manage_buckets=False,
-        ),
-    )
 
     def fake_stats(_user, _access, bucket_name):
         assert bucket_name == "allowed-bucket"
@@ -1631,16 +1537,6 @@ def test_portal_manager_creates_private_and_shared_without_user_create_setting(m
     )
     monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        service,
-        "get_state",
-        lambda *_args, **_kwargs: PortalState(
-            account_id=account.id,
-            iam_user=PortalIAMUser(),
-            access_keys=[],
-            buckets=[],
-        ),
-    )
     monkeypatch.setattr(
         service,
         "get_bucket_stats",

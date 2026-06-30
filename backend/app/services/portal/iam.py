@@ -1325,9 +1325,6 @@ class PortalIamMixin:
         else:
             iam_service.delete_user_inline_policy(iam_username, self._bucket_access_policy_name)
 
-    def _extract_bucket_access(self, policy: Optional[dict]) -> list[str]:
-        return sorted(self._extract_storage_space_access(policy).keys())
-
     def _portal_user_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
         roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
         return (
@@ -1532,70 +1529,3 @@ class PortalIamMixin:
     ) -> dict[str, PortalStorageSpaceRole]:
         """Read active Storage Space content permissions from DB without IAM side effects."""
         return self._db_storage_space_content_access(target, account, account_role)
-
-    def grant_bucket_access(self, target: User, account: S3Account, account_role: str, bucket_name: str) -> list[str]:
-        if not bucket_name:
-            raise RuntimeError("Bucket name requis.")
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
-        iam_service = self._get_iam_service(account)
-        link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
-        access_key, secret_key = self._account_credentials(account)
-        buckets = s3_client.list_buckets(
-            access_key=access_key, secret_key=secret_key, **self._s3_client_kwargs(account)
-        )
-        if bucket_name not in [b.get("name") for b in buckets]:
-            raise RuntimeError("Bucket introuvable pour ce compte.")
-        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_settings)
-        policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
-        return self._extract_bucket_access(policy)
-
-    def revoke_bucket_access(self, target: User, account: S3Account, account_role: str, bucket_name: str) -> list[str]:
-        if not bucket_name:
-            raise RuntimeError("Bucket name requis.")
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
-        iam_service = self._get_iam_service(account)
-        link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
-        bucket_actions = self._bucket_access_actions(portal_settings)
-        use_advanced = isinstance(portal_settings.bucket_access_policy.advanced_policy, dict)
-        policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name) or {}
-        statements = policy.get("Statement") or []
-        if not isinstance(statements, list):
-            statements = [statements]
-        bucket_statement = None
-        for stmt in statements:
-            if isinstance(stmt, dict) and stmt.get("Sid") == self._bucket_access_sid:
-                bucket_statement = stmt
-                break
-        if not bucket_statement:
-            return []
-        resources = bucket_statement.get("Resource") or []
-        if not isinstance(resources, list):
-            resources = [resources]
-        remove_arns = {f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"}
-        remaining_resources = [arn for arn in resources if arn not in remove_arns]
-        if remaining_resources:
-            bucket_statement["Resource"] = remaining_resources
-            if not use_advanced or "Action" not in bucket_statement:
-                bucket_statement["Action"] = bucket_actions
-            policy = {
-                "Version": policy.get("Version") or "2012-10-17",
-                "Statement": statements,
-            }
-            iam_service.put_user_inline_policy(link.iam_username, self._bucket_access_policy_name, policy)
-            return self._extract_bucket_access(policy)
-        remaining_statements = [stmt for stmt in statements if stmt is not bucket_statement]
-        if remaining_statements:
-            policy = {
-                "Version": policy.get("Version") or "2012-10-17",
-                "Statement": remaining_statements,
-            }
-            iam_service.put_user_inline_policy(link.iam_username, self._bucket_access_policy_name, policy)
-            return self._extract_bucket_access(policy)
-        iam_service.delete_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
-        return []

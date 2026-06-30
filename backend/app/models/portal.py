@@ -7,8 +7,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
 
-from app.models.bucket import Bucket
-
 
 class PortalAccessKey(BaseModel):
     access_key_id: str
@@ -38,8 +36,6 @@ class PortalState(BaseModel):
     iam_user: PortalIAMUser
     access_keys: list[PortalAccessKey]
     iam_provisioned: bool = False
-    buckets: list[Bucket]
-    total_buckets: Optional[int] = None
     max_buckets: Optional[int] = None
     s3_endpoint: Optional[str] = None
     used_bytes: Optional[int] = None

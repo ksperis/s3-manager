@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildPortalWorkspaceModel } from "./portalWorkspaceModel";
 
 describe("buildPortalWorkspaceModel", () => {
-  it("uses canonical storage spaces instead of PortalState buckets", () => {
+  it("uses canonical storage spaces as the workspace source", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
       state: {
         account_id: 101,
         iam_user: {},
         access_keys: [],
-        buckets: [{ name: "legacy-bucket" }],
         max_buckets: 4,
         can_manage_buckets: true,
       },
@@ -59,7 +58,6 @@ describe("buildPortalWorkspaceModel", () => {
         account_id: 101,
         iam_user: {},
         access_keys: [],
-        buckets: [{ name: "legacy-bucket" }],
       },
       storageSpaces: [],
       usage: null,
@@ -83,7 +81,6 @@ describe("buildPortalWorkspaceModel", () => {
         account_id: 101,
         iam_user: {},
         access_keys: [],
-        buckets: [],
         quota_max_size_bytes: 10_000,
         quota_max_objects: 1_000,
       },
@@ -134,7 +131,6 @@ describe("buildPortalWorkspaceModel", () => {
         account_id: 101,
         iam_user: {},
         access_keys: [],
-        buckets: [],
       },
       storageSpaces: [
         {

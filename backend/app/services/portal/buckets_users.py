@@ -6,9 +6,6 @@ from ._shared import *
 
 
 class PortalBucketsUsersMixin:
-    def list_buckets(self, account: S3Account) -> list[Bucket]:
-        raise RuntimeError("Listing buckets requires user context")
-
     def create_bucket(
         self,
         user: User,

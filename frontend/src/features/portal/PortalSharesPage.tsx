@@ -151,8 +151,8 @@ export default function PortalSharesPage() {
   const { locale, t } = useI18n();
   const [activeTab, setActiveTab] = useState<ShareTab>("with");
   const [apiShares, setApiShares] = useState<PortalStorageSpaceShare[] | null>(null);
+  const [sharesLoadedKey, setSharesLoadedKey] = useState<string | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
-  const [sharesLoading, setSharesLoading] = useState(false);
   const [sharesError, setSharesError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
@@ -173,6 +173,10 @@ export default function PortalSharesPage() {
 
   const spaceIds = useMemo(() => workspace.spaces.map((space) => space.id).join("|"), [workspace.spaces]);
   const activeSharedSpaceIds = useMemo(() => activeSharedSpaces.map((space) => space.id).join("|"), [activeSharedSpaces]);
+  const sharesRequestKey = useMemo(
+    () => (accountIdForApi ? `${accountIdForApi}:${activeSharedSpaceIds}` : ""),
+    [accountIdForApi, activeSharedSpaceIds]
+  );
 
   useEffect(() => {
     const selectableSpaces = activeTab === "with" ? activeSharedSpaces : activeSharedOwnerSpaces;
@@ -187,33 +191,34 @@ export default function PortalSharesPage() {
   useEffect(() => {
     let cancelled = false;
     if (!accountIdForApi || activeSharedSpaces.length === 0) {
-      setApiShares(null);
-      setSharesLoading(false);
+      setApiShares([]);
+      setSharesLoadedKey(sharesRequestKey);
       setSharesError(null);
       return () => {
         cancelled = true;
       };
     }
-    setSharesLoading(true);
+    setApiShares(null);
     setSharesError(null);
     Promise.all(activeSharedSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
       .then((results) => {
-        if (!cancelled) setApiShares(results.flat());
+        if (!cancelled) {
+          setApiShares(results.flat());
+          setSharesLoadedKey(sharesRequestKey);
+        }
       })
       .catch((err) => {
         console.error(err);
         if (!cancelled) {
           setApiShares(null);
+          setSharesLoadedKey(null);
           setSharesError(extractApiError(err, t({ en: "Unable to load shares.", fr: "Impossible de charger les partages.", de: "Freigaben können nicht geladen werden." })));
         }
-      })
-      .finally(() => {
-        if (!cancelled) setSharesLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeSharedSpaceIds, activeSharedSpaces, t]);
+  }, [accountIdForApi, activeSharedSpaces, sharesRequestKey, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,9 +372,12 @@ export default function PortalSharesPage() {
   const shares = rows[activeTab];
   const displayedCount = activeTab === "links" ? publicLinks.length : shares.length;
 
+  const sharesInitialLoading = Boolean(
+    accountIdForApi && activeSharedSpaces.length > 0 && !sharesError && sharesLoadedKey !== sharesRequestKey
+  );
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
-    loading,
+    loading: loading || sharesInitialLoading,
     accountError,
     error,
     hasAccountContext,
@@ -399,7 +407,6 @@ export default function PortalSharesPage() {
             variant="bar"
           />
         </div>
-        {sharesLoading ? <div className={cx("mb-3 text-xs font-semibold", uiMutedTextClass)}>{t({ en: "Loading share permissions...", fr: "Chargement des permissions de partage...", de: "Freigabeberechtigungen werden geladen..." })}</div> : null}
         {activeTab === "links" ? (
           <div className="overflow-x-auto">
             <table className="ui-data-table min-w-[860px]">

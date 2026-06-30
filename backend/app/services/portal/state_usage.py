@@ -59,12 +59,8 @@ class PortalStateUsageMixin:
         account = access.account
         used_bytes = None
         used_objects = None
-        buckets: list[Bucket] = []
         access_keys: list[PortalAccessKey] = []
         link = self._existing_portal_link(user, account)
-        access_by_bucket = self.list_existing_user_storage_space_access(user, account, access.role)
-        accessible_names = set(access_by_bucket)
-        metadata_by_bucket = self._storage_space_metadata_map(account)
         iam_user = None
         iam_provisioned = False
         if link and link.iam_username:
@@ -85,47 +81,6 @@ class PortalStateUsageMixin:
                     and self._is_active_status(portal_meta.status, default=True)
                 )
                 iam_provisioned = has_active_portal_credentials
-
-                if has_active_portal_credentials:
-                    if accessible_names:
-                        try:
-                            for b in s3_client.list_buckets(
-                                access_key=link.active_access_key,
-                                secret_key=link.active_secret_key,
-                                **self._s3_client_kwargs(account),
-                            ):
-                                name = b.get("name")
-                                if name not in accessible_names:
-                                    continue
-                                buckets.append(
-                                    Bucket(
-                                        name=name,
-                                        creation_date=b.get("creation_date"),
-                                        used_bytes=None,
-                                        object_count=None,
-                                        quota_max_size_bytes=None,
-                                        quota_max_objects=None,
-                                    )
-                                )
-                        except Exception as exc:  # pragma: no cover - defensive
-                            logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
-                            buckets = []
-        listed_names = {bucket.name for bucket in buckets}
-        for bucket_name in sorted(accessible_names - listed_names):
-            metadata = metadata_by_bucket.get(bucket_name)
-            if metadata is None:
-                continue
-            buckets.append(
-                Bucket(
-                    name=bucket_name,
-                    creation_date=metadata.created_at,
-                    used_bytes=None,
-                    object_count=None,
-                    quota_max_size_bytes=None,
-                    quota_max_objects=None,
-                )
-            )
-        total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
         portal_settings = self._effective_portal_settings(account)
         can_create_storage_spaces = bool(
@@ -145,8 +100,6 @@ class PortalStateUsageMixin:
             ),
             access_keys=access_keys,
             iam_provisioned=iam_provisioned,
-            buckets=buckets,
-            total_buckets=total_buckets,
             max_buckets=max_buckets,
             s3_endpoint=resolve_s3_endpoint(account),
             used_bytes=used_bytes,

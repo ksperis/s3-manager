@@ -155,11 +155,6 @@ class PortalStorageSpacesMixin:
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
         content_role_by_bucket = self.list_existing_user_storage_space_content_access(user, access.account, access.role)
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
-        try:
-            state = self.get_state(user, access)
-            bucket_by_name = {bucket.name: bucket for bucket in state.buckets}
-        except RuntimeError:
-            bucket_by_name = {}
         spaces: list[PortalStorageSpaceSummary] = []
         for metadata in metadata_by_bucket.values():
             role_for_bucket = self._storage_space_effective_role(
@@ -171,7 +166,7 @@ class PortalStorageSpacesMixin:
             )
             if role_for_bucket is None:
                 continue
-            bucket = bucket_by_name.get(metadata.bucket_name) or Bucket(
+            bucket = Bucket(
                 name=metadata.bucket_name,
                 creation_date=metadata.created_at,
                 used_bytes=None,
