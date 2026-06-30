@@ -12,6 +12,14 @@ class PortalStorageSpaceMetadata(Base):
     __tablename__ = "portal_storage_space_metadata"
     __table_args__ = (
         UniqueConstraint("account_id", "bucket_name", name="uq_portal_storage_space_metadata_account_bucket"),
+        CheckConstraint(
+            "share_scope IN ('restricted', 'account')",
+            name="ck_portal_storage_space_metadata_share_scope",
+        ),
+        CheckConstraint(
+            "account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor')",
+            name="ck_portal_storage_space_metadata_account_member_role",
+        ),
         Index("ix_portal_storage_space_metadata_account", "account_id"),
     )
 
@@ -23,6 +31,8 @@ class PortalStorageSpaceMetadata(Base):
     owner_label = Column(String, nullable=True)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     visibility = Column(String, nullable=False, default="private")
+    share_scope = Column(String, nullable=False, default="restricted")
+    account_member_role = Column(String, nullable=True)
     project_key = Column(String, nullable=True)
     dataset_label = Column(String, nullable=True)
     origin = Column(String, nullable=False, default="legacy")

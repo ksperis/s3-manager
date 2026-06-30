@@ -2,9 +2,17 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createPortalStorageSpace, importPortalStorageSpace, type PortalStorageSpaceRole, type PortalStorageSpaceVisibility } from "../../api/portal";
+import {
+  createPortalStorageSpace,
+  importPortalStorageSpace,
+  listPortalShareCandidates,
+  type PortalStorageSpaceAccountMemberRole,
+  type PortalStorageSpaceRole,
+  type PortalStorageSpaceShareCandidate,
+  type PortalStorageSpaceVisibility,
+} from "../../api/portal";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -13,6 +21,14 @@ import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styl
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import {
+  PortalAccessModeFields,
+  PortalShareCandidatePicker,
+  portalAccessModeDescription,
+  portalAccessModeSummary,
+  selectedPortalShares,
+  type PortalAccessMode,
+} from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
@@ -22,8 +38,8 @@ import {
 } from "./portalUi";
 import {
   portalRoleLabel,
+  portalShareScopeLabel,
   portalStatusLabel,
-  portalVisibilityLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -44,13 +60,22 @@ export default function PortalStorageSpacesPage() {
   const [showImport, setShowImport] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newVisibility, setNewVisibility] = useState<PortalStorageSpaceVisibility>("private");
+  const [newAccessMode, setNewAccessMode] = useState<PortalAccessMode>("private");
+  const [newAccountMemberRole, setNewAccountMemberRole] = useState<PortalStorageSpaceAccountMemberRole>("Editor");
+  const [shareCandidates, setShareCandidates] = useState<PortalStorageSpaceShareCandidate[]>([]);
+  const [shareCandidateQuery, setShareCandidateQuery] = useState("");
+  const [shareCandidatesLoading, setShareCandidatesLoading] = useState(false);
+  const [shareCandidatesError, setShareCandidatesError] = useState<string | null>(null);
+  const [restrictedRolesByUserId, setRestrictedRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
+  const [importShareCandidateQuery, setImportShareCandidateQuery] = useState("");
+  const [importRestrictedRolesByUserId, setImportRestrictedRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
   const [newNamingMode, setNewNamingMode] = useState<"generic_uuid" | "named_bucket">("generic_uuid");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [importBucketName, setImportBucketName] = useState("");
   const [importDescription, setImportDescription] = useState("");
-  const [importVisibility, setImportVisibility] = useState<PortalStorageSpaceVisibility>("private");
+  const [importAccessMode, setImportAccessMode] = useState<PortalAccessMode>("private");
+  const [importAccountMemberRole, setImportAccountMemberRole] = useState<PortalStorageSpaceAccountMemberRole>("Editor");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -59,7 +84,7 @@ export default function PortalStorageSpacesPage() {
       if (roleFilter !== "all" && space.role !== roleFilter) return false;
       if (statusFilter !== "all" && space.status !== statusFilter) return false;
       if (!normalizedQuery) return true;
-      return [space.name, space.description, space.ownerLabel, space.visibility, portalVisibilityLabel(space.visibility, t), space.projectKey, space.datasetLabel]
+      return [space.name, space.description, space.ownerLabel, space.visibility, portalShareScopeLabel(space.visibility, space.shareScope, t), space.projectKey, space.datasetLabel]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedQuery));
     });
@@ -79,7 +104,66 @@ export default function PortalStorageSpacesPage() {
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
   const canChooseVisibility = state?.account_role === "portal_manager";
   const effectiveNamingMode = canUseNamedBucket ? newNamingMode : "generic_uuid";
-  const effectiveNewVisibility: PortalStorageSpaceVisibility = canChooseVisibility ? newVisibility : "private";
+  const effectiveNewAccessMode: PortalAccessMode = canChooseVisibility ? newAccessMode : "private";
+  const effectiveNewVisibility: PortalStorageSpaceVisibility = effectiveNewAccessMode === "private" ? "private" : "shared";
+  const effectiveNewShareScope = effectiveNewAccessMode === "account" ? "account" : "restricted";
+  const effectiveImportVisibility: PortalStorageSpaceVisibility = importAccessMode === "private" ? "private" : "shared";
+  const effectiveImportShareScope = importAccessMode === "account" ? "account" : "restricted";
+  const selectedRestrictedEntries = selectedPortalShares(restrictedRolesByUserId);
+  const selectedImportRestrictedEntries = selectedPortalShares(importRestrictedRolesByUserId);
+  const portalMemberCount = shareCandidates.length + 1;
+
+  useEffect(() => {
+    let cancelled = false;
+    const needsCandidates = (
+      showCreate && newAccessMode !== "private" && canChooseVisibility
+    ) || (
+      showImport && importAccessMode !== "private" && canImport
+    );
+    if (!needsCandidates || !accountIdForApi) {
+      setShareCandidates([]);
+      setShareCandidatesLoading(false);
+      setShareCandidatesError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setShareCandidatesLoading(true);
+    setShareCandidatesError(null);
+    listPortalShareCandidates(accountIdForApi)
+      .then((candidates) => {
+        if (!cancelled) setShareCandidates(candidates);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setShareCandidates([]);
+          setShareCandidatesError(extractApiError(err, t({ en: "Unable to load eligible users.", fr: "Impossible de charger les utilisateurs éligibles.", de: "Berechtigte Benutzer können nicht geladen werden." })));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setShareCandidatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, canChooseVisibility, canImport, importAccessMode, newAccessMode, showCreate, showImport, t]);
+
+  const updateRestrictedRoles = (
+    setter: Dispatch<SetStateAction<Record<number, PortalStorageSpaceRole>>>,
+    userId: number,
+    role: PortalStorageSpaceRole | null,
+  ) => {
+    setter((current) => {
+      const next = { ...current };
+      if (!role) {
+        delete next[userId];
+      } else {
+        next[userId] = role;
+      }
+      return next;
+    });
+  };
 
   const handleCreate = async () => {
     if (!accountIdForApi || !newName.trim()) return;
@@ -91,6 +175,9 @@ export default function PortalStorageSpacesPage() {
         naming_mode: effectiveNamingMode,
         description: newDescription.trim() || null,
         visibility: effectiveNewVisibility,
+        share_scope: effectiveNewShareScope,
+        account_member_role: effectiveNewShareScope === "account" ? newAccountMemberRole : null,
+        initial_shares: effectiveNewShareScope === "restricted" ? selectedRestrictedEntries : [],
       });
       navigate(storageSpacePath({ id: created.id }));
     } catch (err) {
@@ -109,7 +196,10 @@ export default function PortalStorageSpacesPage() {
       const imported = await importPortalStorageSpace(accountIdForApi, {
         bucket_name: importBucketName.trim(),
         description: importDescription.trim() || null,
-        visibility: importVisibility,
+        visibility: effectiveImportVisibility,
+        share_scope: effectiveImportShareScope,
+        account_member_role: effectiveImportShareScope === "account" ? importAccountMemberRole : null,
+        initial_shares: effectiveImportShareScope === "restricted" ? selectedImportRestrictedEntries : [],
       });
       navigate(storageSpacePath({ id: imported.id }));
     } catch (err) {
@@ -149,8 +239,8 @@ export default function PortalStorageSpacesPage() {
       {showCreate ? (
         <UiCard title={t({ en: "Create Storage Space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" })}>
           <div className={cx("grid gap-3", canUseNamedBucket
-            ? canChooseVisibility ? "lg:grid-cols-[180px_1fr_1.5fr_160px_auto]" : "lg:grid-cols-[180px_1fr_1.5fr_auto]"
-            : canChooseVisibility ? "lg:grid-cols-[1fr_1.5fr_160px_auto]" : "lg:grid-cols-[1fr_1.5fr_auto]")}>
+            ? "lg:grid-cols-[180px_1fr_1.5fr_auto]"
+            : "lg:grid-cols-[1fr_1.5fr_auto]")}>
             {canUseNamedBucket ? (
               <select
                 className="ui-control h-9 py-1.5 text-xs"
@@ -171,23 +261,47 @@ export default function PortalStorageSpacesPage() {
                 : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
             />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
-            {canChooseVisibility ? (
-              <select className="ui-control h-9 py-1.5 text-xs" value={newVisibility} onChange={(event) => setNewVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label={t({ en: "Storage Space visibility", fr: "Visibilité de l'espace de stockage", de: "Sichtbarkeit des Speicherbereichs" })}>
-                <option value="private">{portalVisibilityLabel("private", t)}</option>
-                <option value="shared">{portalVisibilityLabel("shared", t)}</option>
-              </select>
-            ) : null}
             <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create", fr: "Créer", de: "Erstellen" })}
             </UiButton>
           </div>
+          <div className="mt-3 space-y-3">
+            {canChooseVisibility ? (
+              <PortalAccessModeFields
+                mode={newAccessMode}
+                onModeChange={setNewAccessMode}
+                accountMemberRole={newAccountMemberRole}
+                onAccountMemberRoleChange={setNewAccountMemberRole}
+                modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
+                roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+              />
+            ) : (
+              <div className={cx("text-xs font-medium", uiMutedTextClass)}>
+                {portalAccessModeDescription("private", t)}
+              </div>
+            )}
+            <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
+              {portalAccessModeSummary(effectiveNewAccessMode, selectedRestrictedEntries.length, portalMemberCount, t)}
+            </div>
+          </div>
+          {canChooseVisibility && newAccessMode === "restricted" ? (
+            <PortalShareCandidatePicker
+              candidates={shareCandidates}
+              selectedRolesByUserId={restrictedRolesByUserId}
+              query={shareCandidateQuery}
+              loading={shareCandidatesLoading}
+              error={shareCandidatesError}
+              onQueryChange={setShareCandidateQuery}
+              onRoleChange={(userId, role) => updateRestrictedRoles(setRestrictedRolesByUserId, userId, role)}
+            />
+          ) : null}
           {createError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{createError}</div> : null}
         </UiCard>
       ) : null}
 
       {showImport ? (
         <UiCard title={t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" })}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_160px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
             <input
               className="ui-control h-9 text-xs"
               value={importBucketName}
@@ -200,14 +314,34 @@ export default function PortalStorageSpacesPage() {
               onChange={(event) => setImportDescription(event.target.value)}
               placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
             />
-            <select className="ui-control h-9 py-1.5 text-xs" value={importVisibility} onChange={(event) => setImportVisibility(event.target.value as PortalStorageSpaceVisibility)} aria-label={t({ en: "Imported Storage Space visibility", fr: "Visibilité de l'espace importé", de: "Sichtbarkeit des importierten Speicherbereichs" })}>
-              <option value="private">{portalVisibilityLabel("private", t)}</option>
-              <option value="shared">{portalVisibilityLabel("shared", t)}</option>
-            </select>
             <UiButton disabled={!importBucketName.trim() || importBusy} onClick={handleImport} className="h-9 px-3 py-1.5">
               {importBusy ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefügt..." }) : t({ en: "Add", fr: "Ajouter", de: "Hinzufügen" })}
             </UiButton>
           </div>
+          <div className="mt-3 space-y-3">
+            <PortalAccessModeFields
+              mode={importAccessMode}
+              onModeChange={setImportAccessMode}
+              accountMemberRole={importAccountMemberRole}
+              onAccountMemberRoleChange={setImportAccountMemberRole}
+              modeLabel={t({ en: "Imported Storage Space access", fr: "Accès à l'espace importé", de: "Zugriff auf den importierten Speicherbereich" })}
+              roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+            />
+            <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
+              {portalAccessModeSummary(importAccessMode, selectedImportRestrictedEntries.length, portalMemberCount, t)}
+            </div>
+          </div>
+          {importAccessMode === "restricted" ? (
+            <PortalShareCandidatePicker
+              candidates={shareCandidates}
+              selectedRolesByUserId={importRestrictedRolesByUserId}
+              query={importShareCandidateQuery}
+              loading={shareCandidatesLoading}
+              error={shareCandidatesError}
+              onQueryChange={setImportShareCandidateQuery}
+              onRoleChange={(userId, role) => updateRestrictedRoles(setImportRestrictedRolesByUserId, userId, role)}
+            />
+          ) : null}
           {importError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{importError}</div> : null}
         </UiCard>
       ) : null}
@@ -245,7 +379,7 @@ export default function PortalStorageSpacesPage() {
             <thead>
               <tr>
                 <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
-                <th>{t({ en: "Visibility", fr: "Visibilité", de: "Sichtbarkeit" })}</th>
+                <th>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</th>
                 <th>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</th>
                 <th>{t({ en: "Size", fr: "Taille", de: "Größe" })}</th>
                 <th>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</th>
@@ -272,7 +406,7 @@ export default function PortalStorageSpacesPage() {
                     </td>
                     <td>
                       <div className="flex flex-wrap items-center gap-2">
-                        <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalVisibilityLabel(space.visibility, t)}</UiBadge>
+                        <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
                         {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
                       </div>
                     </td>

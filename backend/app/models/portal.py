@@ -80,6 +80,8 @@ PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
 PortalStorageSpaceOrigin = Literal["legacy", "portal_generic", "portal_named", "imported"]
 PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
 PortalStorageSpaceVisibility = Literal["private", "shared"]
+PortalStorageSpaceShareScope = Literal["restricted", "account"]
+PortalStorageSpaceAccountMemberRole = Literal["Viewer", "Editor"]
 PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
 PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
@@ -98,6 +100,8 @@ class PortalStorageSpaceSummary(BaseModel):
     owner_label: Optional[str] = None
     owner_user_id: Optional[int] = None
     visibility: PortalStorageSpaceVisibility = "private"
+    share_scope: PortalStorageSpaceShareScope = "restricted"
+    account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
     project_key: Optional[str] = None
     dataset_label: Optional[str] = None
     region: Optional[str] = None
@@ -116,12 +120,20 @@ class PortalStorageSpace(PortalStorageSpaceSummary):
     pass
 
 
+class PortalStorageSpaceInitialShare(BaseModel):
+    user_id: int
+    role: PortalStorageSpaceRole
+
+
 class PortalStorageSpaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: PortalStorageSpaceVisibility = "private"
+    share_scope: PortalStorageSpaceShareScope = "restricted"
+    account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
+    initial_shares: list[PortalStorageSpaceInitialShare] = Field(default_factory=list)
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
 
@@ -139,6 +151,9 @@ class PortalStorageSpaceImport(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: PortalStorageSpaceVisibility = "private"
+    share_scope: PortalStorageSpaceShareScope = "restricted"
+    account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
+    initial_shares: list[PortalStorageSpaceInitialShare] = Field(default_factory=list)
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
 
@@ -156,6 +171,8 @@ class PortalStorageSpaceUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: Optional[PortalStorageSpaceVisibility] = None
+    share_scope: Optional[PortalStorageSpaceShareScope] = None
+    account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
     project_key: Optional[str] = Field(default=None, max_length=80)
     dataset_label: Optional[str] = Field(default=None, max_length=120)
     archived: Optional[bool] = None
@@ -198,6 +215,35 @@ class PortalStorageSpaceShare(BaseModel):
     role: PortalStorageSpaceRole
     direction: PortalStorageSpaceShareDirection
     activity_label: str = "Active"
+
+
+class PortalStorageSpaceAccessPerson(BaseModel):
+    user_id: Optional[int] = None
+    email: str
+    display_name: Optional[str] = None
+    role: PortalStorageSpaceRole
+    account_role: Optional[str] = None
+    access_source: Optional[Literal["owner", "direct", "group", "direct_and_group"]] = None
+
+
+class PortalStorageSpaceAccessSummary(BaseModel):
+    mode: Literal["private", "all", "restricted"]
+    default_account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
+    owner: PortalStorageSpaceAccessPerson
+    effective_member_count: int = 0
+    explicit_shares: list[PortalStorageSpaceShare] = Field(default_factory=list)
+    public_link_count: int = 0
+    can_manage_access: bool = False
+    can_create_public_links: bool = False
+
+
+class PortalStorageSpaceShareCandidate(BaseModel):
+    user_id: int
+    email: str
+    display_name: Optional[str] = None
+    account_role: str
+    access_source: Literal["direct", "group", "direct_and_group"]
+    already_shared: bool = False
 
 
 class PortalStorageSpaceSharePayload(BaseModel):

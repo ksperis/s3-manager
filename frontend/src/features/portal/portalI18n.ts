@@ -37,6 +37,31 @@ export function portalVisibilityLabel(visibility: PortalStorageSpaceVisibility, 
     : t({ en: "Private", fr: "Privé", de: "Privat" });
 }
 
+export function portalShareScopeLabel(
+  visibility: PortalStorageSpaceVisibility,
+  shareScope: "restricted" | "account",
+  t: TFunction,
+): string {
+  if (visibility !== "shared") {
+    return t({ en: "Private", fr: "Privé", de: "Privat" });
+  }
+  return shareScope === "account"
+    ? t({ en: "All", fr: "Tous", de: "Alle" })
+    : t({ en: "Restricted", fr: "Restreint", de: "Beschränkt" });
+}
+
+export function portalAccountRoleLabel(role: string | null | undefined, t: TFunction): string {
+  if (role === "portal_manager") return t({ en: "Portal manager", fr: "Manager portail", de: "Portal-Manager" });
+  if (role === "portal_user") return t({ en: "Portal user", fr: "Utilisateur portail", de: "Portal-Benutzer" });
+  return t({ en: "Portal member", fr: "Membre portail", de: "Portal-Mitglied" });
+}
+
+export function portalAccessSourceLabel(source: string | null | undefined, t: TFunction): string {
+  if (source === "direct") return t({ en: "Direct access", fr: "Accès direct", de: "Direkter Zugriff" });
+  if (source === "group") return t({ en: "Group access", fr: "Accès par groupe", de: "Gruppenzugriff" });
+  return t({ en: "Direct and group access", fr: "Accès direct et par groupe", de: "Direkter und Gruppenzugriff" });
+}
+
 export function portalTransferDirectionLabel(direction: PortalWorkspaceTransfer["direction"], t: TFunction): string {
   return direction === "Upload"
     ? t({ en: "Upload", fr: "Envoi", de: "Upload" })

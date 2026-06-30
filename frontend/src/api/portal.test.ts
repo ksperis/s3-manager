@@ -24,12 +24,15 @@ import {
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
+  fetchPortalStorageSpaceAccessSummary,
   fetchPortalStorageSpace,
   fetchPortalUsageHistoryTrends,
   fetchPortalTransfers,
   fetchPortalUsageTrends,
   getPortalUsageStatsAggregate,
   importPortalStorageSpace,
+  listPortalShareCandidates,
+  listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   listPortalStorageSpaces,
@@ -75,23 +78,26 @@ describe("portal storage spaces api", () => {
       naming_mode: "named_bucket",
       description: "Lab files",
       visibility: "shared",
+      share_scope: "account",
+      account_member_role: "Editor",
+      initial_shares: [],
     });
-    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported", visibility: "private" });
-    await updatePortalStorageSpace("101", "research data", { description: "Updated", visibility: "private", archived: true });
+    await importPortalStorageSpace("101", { bucket_name: "existing-bucket", description: "Imported", visibility: "shared", share_scope: "account", account_member_role: "Viewer", initial_shares: [] });
+    await updatePortalStorageSpace("101", "research data", { description: "Updated", visibility: "private", share_scope: "restricted", archived: true });
 
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces",
-      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files", visibility: "shared" },
+      { name: "Research Data", naming_mode: "named_bucket", description: "Lab files", visibility: "shared", share_scope: "account", account_member_role: "Editor", initial_shares: [] },
       { params: { account_id: "101" } }
     );
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/storage-spaces/import",
-      { bucket_name: "existing-bucket", description: "Imported", visibility: "private" },
+      { bucket_name: "existing-bucket", description: "Imported", visibility: "shared", share_scope: "account", account_member_role: "Viewer", initial_shares: [] },
       { params: { account_id: "101" } }
     );
     expect(clientMock.patch).toHaveBeenCalledWith(
       "/portal/storage-spaces/research%20data",
-      { description: "Updated", visibility: "private", archived: true },
+      { description: "Updated", visibility: "private", share_scope: "restricted", archived: true },
       { params: { account_id: "101" } }
     );
   });
@@ -102,6 +108,18 @@ describe("portal storage spaces api", () => {
     await fetchPortalStorageSpace("101", "research data");
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data", {
+      params: {
+        account_id: "101",
+      },
+    });
+  });
+
+  it("fetches a storage space access summary without IAM vocabulary", async () => {
+    clientMock.get.mockResolvedValueOnce({ data: { mode: "restricted", effective_member_count: 2 } });
+
+    await fetchPortalStorageSpaceAccessSummary("101", "research data");
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/access-summary", {
       params: {
         account_id: "101",
       },
@@ -149,11 +167,19 @@ describe("portal storage spaces api", () => {
     clientMock.get.mockResolvedValueOnce({ data: [] });
 
     await listPortalStorageSpaceShares("101", "research data");
+    await listPortalShareCandidates("101");
+    await listPortalStorageSpaceShareCandidates("101", "research data");
     await grantPortalStorageSpaceShare("101", "research data", { email: "viewer@example.com", role: "Viewer" });
     await updatePortalStorageSpaceShare("101", "research data", 12, "Editor");
     await revokePortalStorageSpaceShare("101", "research data", 12);
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/shares", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/share-candidates", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/research%20data/share-candidates", {
       params: { account_id: "101" },
     });
     expect(clientMock.post).toHaveBeenCalledWith(

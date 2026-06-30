@@ -22,7 +22,10 @@ from app.db import (
     QuotaUsageDaily,
     S3Account,
     StorageEndpoint,
+    UiGroup,
+    UiGroupS3Account,
     User,
+    UserUiGroup,
     UserS3Account,
 )
 from app.models.app_settings import AppSettings, PortalSettings, PortalSettingsOverride
@@ -36,6 +39,7 @@ from app.models.portal import (
     PortalIAMUser,
     PortalState,
     PortalStorageSpace,
+    PortalStorageSpaceInitialShare,
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
@@ -1194,7 +1198,6 @@ def test_portal_manager_content_access_excludes_private_spaces_owned_by_others(m
     policy = iam.policies[("manager-iam", service._bucket_access_policy_name)]
     assert service._extract_storage_space_access(policy) == {
         "manager-private": "Owner",
-        "owner-shared": "Owner",
     }
 
 
@@ -1293,7 +1296,21 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     assert [space.id for space in scoped_account._portal_storage_spaces] == ["shared-data"]
 
 
-def test_storage_space_bucket_policy_preserves_external_statements(db_session):
+def _storage_space_policy_statement(policy: dict, sid: str) -> dict:
+    statements = policy.get("Statement") or []
+    if not isinstance(statements, list):
+        statements = [statements]
+    return next(stmt for stmt in statements if stmt.get("Sid") == sid)
+
+
+def _storage_space_policy_principals(statement: dict) -> set[str]:
+    principals = statement.get("NotPrincipal", {}).get("AWS", [])
+    if isinstance(principals, str):
+        principals = [principals]
+    return {principal for principal in principals if isinstance(principal, str)}
+
+
+def test_storage_space_bucket_policy_preserves_external_statements_and_private_owner_guard(db_session):
     account = S3Account(
         name="portal-policy-space",
         rgw_account_id="rgw-policy-account",
@@ -1324,21 +1341,23 @@ def test_storage_space_bucket_policy_preserves_external_statements(db_session):
         "Version": "2012-10-17",
         "Statement": [
             {"Sid": "ExternalRule", "Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"},
+            {"Sid": service._storage_space_private_sid, "Effect": "Deny", "Action": "s3:*", "Resource": "*"},
             {"Sid": service._storage_space_archived_sid, "Effect": "Deny", "Action": "s3:*", "Resource": "*"},
         ],
     }
 
     private_policy = service._storage_space_bucket_policy(account, "research-data", metadata, existing)
     assert private_policy is not None
-    assert [stmt["Sid"] for stmt in private_policy["Statement"]] == ["ExternalRule", service._storage_space_private_sid]
+    assert [stmt["Sid"] for stmt in private_policy["Statement"]] == ["ExternalRule", service._storage_space_access_sid]
     private_statement = private_policy["Statement"][1]
-    allowed_principals = private_statement["NotPrincipal"]["AWS"]
+    allowed_principals = _storage_space_policy_principals(private_statement)
     assert "Principal" not in private_statement
     assert "Condition" not in private_statement
     assert "arn:aws:iam:::user/owner-iam" in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:user/owner-iam" in allowed_principals
     assert "arn:aws:iam:::user/manager-iam" not in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:user/manager-iam" not in allowed_principals
+    assert "arn:aws:iam::rgw-policy-account:root" not in allowed_principals
 
     metadata.archived_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     archived_policy = service._storage_space_bucket_policy(account, "research-data", metadata, private_policy)
@@ -1349,7 +1368,148 @@ def test_storage_space_bucket_policy_preserves_external_statements(db_session):
     metadata.visibility = "shared"
     restored_policy = service._storage_space_bucket_policy(account, "research-data", metadata, archived_policy)
     assert restored_policy is not None
-    assert [stmt["Sid"] for stmt in restored_policy["Statement"]] == ["ExternalRule"]
+    assert [stmt["Sid"] for stmt in restored_policy["Statement"]] == ["ExternalRule", service._storage_space_access_sid]
+    restored_principals = _storage_space_policy_principals(restored_policy["Statement"][1])
+    assert "arn:aws:iam:::user/owner-iam" in restored_principals
+    assert "arn:aws:iam::rgw-policy-account:root" in restored_principals
+
+
+def test_account_scope_bucket_policy_allows_effective_portal_members(db_session):
+    account = S3Account(
+        name="portal-policy-account-scope",
+        rgw_account_id="rgw-policy-account",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    owner = User(email="owner-policy-account@example.com", hashed_password="x", role="ui_user")
+    direct = User(email="direct-policy-account@example.com", hashed_password="x", role="ui_user")
+    grouped = User(email="grouped-policy-account@example.com", hashed_password="x", role="ui_user")
+    manager = User(email="manager-policy-account@example.com", hashed_password="x", role="ui_user")
+    inactive = User(email="inactive-policy-account@example.com", hashed_password="x", role="ui_user", is_active=False)
+    outsider = User(email="outsider-policy-account@example.com", hashed_password="x", role="ui_user")
+    group = UiGroup(name="Portal policy group")
+    db_session.add_all([account, owner, direct, grouped, manager, inactive, outsider, group])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=inactive.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserUiGroup(user_id=grouped.id, group_id=group.id),
+            AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
+            AccountIAMUser(user_id=direct.id, account_id=account.id, iam_user_id="direct-iam-id", iam_username="direct-iam"),
+            AccountIAMUser(user_id=grouped.id, account_id=account.id, iam_user_id="grouped-iam-id", iam_username="grouped-iam"),
+            AccountIAMUser(user_id=manager.id, account_id=account.id, iam_user_id="manager-iam-id", iam_username="manager-iam"),
+            AccountIAMUser(user_id=inactive.id, account_id=account.id, iam_user_id="inactive-iam-id", iam_username="inactive-iam"),
+            AccountIAMUser(user_id=outsider.id, account_id=account.id, iam_user_id="outsider-iam-id", iam_username="outsider-iam"),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="team-data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="account",
+        account_member_role="Editor",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    policy = service._storage_space_bucket_policy(account, "team-data", metadata, None)
+    assert policy is not None
+    statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
+    principals = _storage_space_policy_principals(statement)
+    for username in ("owner-iam", "direct-iam", "grouped-iam", "manager-iam"):
+        assert f"arn:aws:iam:::user/{username}" in principals
+        assert f"arn:aws:iam::rgw-policy-account:user/{username}" in principals
+    assert "arn:aws:iam::rgw-policy-account:root" in principals
+    assert "arn:aws:iam:::user/inactive-iam" not in principals
+    assert "arn:aws:iam:::user/outsider-iam" not in principals
+
+
+def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
+    account = S3Account(
+        name="portal-policy-restricted",
+        rgw_account_id="rgw-policy-account",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    owner = User(email="owner-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    editor = User(email="editor-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    delegated_owner = User(email="delegated-owner-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    member_without_grant = User(email="member-no-grant-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    outsider = User(email="outsider-policy-restricted@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer, editor, delegated_owner, member_without_grant, outsider])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member_without_grant.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
+            AccountIAMUser(user_id=viewer.id, account_id=account.id, iam_user_id="viewer-iam-id", iam_username="viewer-iam"),
+            AccountIAMUser(user_id=editor.id, account_id=account.id, iam_user_id="editor-iam-id", iam_username="editor-iam"),
+            AccountIAMUser(user_id=delegated_owner.id, account_id=account.id, iam_user_id="delegated-owner-iam-id", iam_username="delegated-owner-iam"),
+            AccountIAMUser(user_id=member_without_grant.id, account_id=account.id, iam_user_id="member-no-grant-iam-id", iam_username="member-no-grant-iam"),
+            AccountIAMUser(user_id=outsider.id, account_id=account.id, iam_user_id="outsider-iam-id", iam_username="outsider-iam"),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="restricted-data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add_all(
+        [
+            PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=viewer.id, role="Viewer"),
+            PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=editor.id, role="Editor"),
+            PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=delegated_owner.id, role="Owner"),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    policy = service._storage_space_bucket_policy(account, "restricted-data", metadata, None)
+    assert policy is not None
+    statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
+    principals = _storage_space_policy_principals(statement)
+    for username in ("owner-iam", "viewer-iam", "editor-iam", "delegated-owner-iam"):
+        assert f"arn:aws:iam:::user/{username}" in principals
+        assert f"arn:aws:iam::rgw-policy-account:user/{username}" in principals
+    assert "arn:aws:iam::rgw-policy-account:root" in principals
+    assert "arn:aws:iam:::user/member-no-grant-iam" not in principals
+    assert "arn:aws:iam:::user/outsider-iam" not in principals
+
+
+def test_storage_space_bucket_policy_denies_everyone_without_projectable_principals(db_session):
+    account = S3Account(name="portal-policy-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-policy-empty@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="empty-data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    policy = service._storage_space_bucket_policy(account, "empty-data", metadata, None)
+    assert policy is not None
+    statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
+    assert statement["Principal"] == "*"
+    assert "NotPrincipal" not in statement
 
 
 def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monkeypatch, db_session):
@@ -1551,6 +1711,144 @@ def test_portal_manager_creates_private_and_shared_without_user_create_setting(m
     assert shared_space.visibility == "shared"
 
 
+def test_create_restricted_storage_space_persists_initial_shares_atomically(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-initial-shares", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-initial@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer-initial@example.com", hashed_password="x", role="ui_user")
+    editor = User(email="editor-initial@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer, editor])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    db_session.commit()
+
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda _existing: "restricted-bucket")
+    monkeypatch.setattr(service, "create_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Restricted Research",
+            role="Owner",
+            visibility="shared",
+            share_scope="restricted",
+            internal_bucket_name=bucket_name,
+        ),
+    )
+
+    service.create_storage_space(
+        owner,
+        access,
+        name="Restricted Research",
+        visibility="shared",
+        share_scope="restricted",
+        initial_shares=[
+            PortalStorageSpaceInitialShare(user_id=viewer.id, role="Viewer"),
+            PortalStorageSpaceInitialShare(user_id=editor.id, role="Editor"),
+        ],
+    )
+
+    metadata = db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="restricted-bucket").one()
+    grants = db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id).order_by(PortalStorageSpaceGrant.user_id).all()
+    assert [(grant.user_id, grant.role) for grant in grants] == [(viewer.id, "Viewer"), (editor.id, "Editor")]
+
+
+@pytest.mark.parametrize(
+    ("shares", "message"),
+    [
+        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=owner.id, role="Viewer")], "owner already"),
+        (lambda owner, viewer, outsider: [
+            PortalStorageSpaceInitialShare(user_id=viewer.id, role="Viewer"),
+            PortalStorageSpaceInitialShare(user_id=viewer.id, role="Editor"),
+        ], "Duplicate"),
+        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=outsider.id, role="Viewer")], "not allowed"),
+    ],
+)
+def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_bucket(monkeypatch, db_session, shares, message):
+    account = S3Account(name=f"portal-storage-invalid-initial-{message}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email=f"owner-invalid-{message}@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email=f"viewer-invalid-{message}@example.com", hashed_password="x", role="ui_user")
+    outsider = User(email=f"outsider-invalid-{message}@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer, outsider])
+    db_session.commit()
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.commit()
+
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Bucket should not be created")),
+    )
+
+    with pytest.raises(RuntimeError, match=message):
+        service.create_storage_space(
+            owner,
+            access,
+            name="Restricted Research",
+            visibility="shared",
+            share_scope="restricted",
+            initial_shares=shares(owner, viewer, outsider),
+        )
+
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(account_id=account.id).all() == []
+    assert db_session.query(PortalStorageSpaceGrant).all() == []
+
+
+def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_fails(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-initial-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-initial-rollback@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer-initial-rollback@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer])
+    db_session.commit()
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.commit()
+
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    created_buckets: list[str] = []
+    deleted_buckets: list[str] = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda _existing: "rollback-bucket")
+    monkeypatch.setattr(service, "create_bucket", lambda _user, _access, bucket_name, **_kwargs: created_buckets.append(bucket_name))
+    monkeypatch.setattr(service, "delete_bucket", lambda _user, _access, bucket_name, **_kwargs: deleted_buckets.append(bucket_name))
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_participant_projections",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("projection failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="projection failed"):
+        service.create_storage_space(
+            owner,
+            access,
+            name="Rollback Research",
+            visibility="shared",
+            share_scope="restricted",
+            initial_shares=[PortalStorageSpaceInitialShare(user_id=viewer.id, role="Viewer")],
+        )
+
+    assert created_buckets == ["rollback-bucket"]
+    assert deleted_buckets == ["rollback-bucket"]
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="rollback-bucket").first() is None
+    assert db_session.query(PortalStorageSpaceGrant).all() == []
+
+
 def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monkeypatch, db_session):
     account = S3Account(name="portal-storage-named", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-named@example.com", hashed_password="x", role="ui_user")
@@ -1679,6 +1977,57 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     assert metadata.visibility == "private"
     assert metadata.origin == "imported"
     assert metadata.name_editable is False
+
+
+def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-import-restricted", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-import-restricted@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer-import-restricted@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer])
+    db_session.commit()
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.commit()
+
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    link = AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-restricted"}])
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name=bucket_name,
+            role="Owner",
+            visibility="shared",
+            share_scope="restricted",
+            internal_bucket_name=bucket_name,
+            origin="imported",
+            name_editable=False,
+        ),
+    )
+
+    service.import_storage_space(
+        owner,
+        access,
+        bucket_name="existing-restricted",
+        visibility="shared",
+        share_scope="restricted",
+        initial_shares=[PortalStorageSpaceInitialShare(user_id=viewer.id, role="Editor")],
+    )
+
+    metadata = db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="existing-restricted").one()
+    grant = db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id, user_id=viewer.id).one()
+    assert metadata.visibility == "shared"
+    assert metadata.share_scope == "restricted"
+    assert grant.role == "Editor"
 
 
 @pytest.mark.parametrize("origin", ["legacy", "imported"])
@@ -1917,6 +2266,12 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     target = User(email="matrix-target@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, actor, target])
     db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="iam-target", iam_username=f"iam-{target.id}"),
+        ]
+    )
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name="bucket-research-data",
@@ -2230,6 +2585,279 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
     ]
 
 
+def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
+    account = S3Account(name="portal-account-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-account-scope@example.com", hashed_password="x", role="ui_user")
+    member = User(email="member-account-scope@example.com", hashed_password="x", role="ui_user")
+    manager = User(email="manager-account-scope@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, member, manager])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="team-data",
+        display_name="Team Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="account",
+        account_member_role="Editor",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    assert service.list_existing_user_storage_space_content_access(
+        member,
+        account,
+        AccountRole.PORTAL_USER.value,
+    ) == {"team-data": "Editor"}
+    assert service.list_existing_user_storage_space_content_access(
+        manager,
+        account,
+        AccountRole.PORTAL_MANAGER.value,
+    ) == {"team-data": "Editor"}
+
+    db_session.add(
+        PortalStorageSpaceGrant(
+            storage_space_metadata_id=metadata.id,
+            user_id=member.id,
+            role="Owner",
+            created_by_user_id=owner.id,
+        )
+    )
+    db_session.commit()
+
+    assert service.list_existing_user_storage_space_content_access(
+        member,
+        account,
+        AccountRole.PORTAL_USER.value,
+    ) == {"team-data": "Owner"}
+
+
+def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch, db_session):
+    account = S3Account(name="portal-share-candidates", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-candidates@example.com", hashed_password="x", role="ui_user")
+    direct = User(email="direct-candidates@example.com", hashed_password="x", role="ui_user")
+    grouped = User(email="grouped-candidates@example.com", hashed_password="x", role="ui_user")
+    outsider = User(email="outsider-candidates@example.com", hashed_password="x", role="ui_user")
+    group = UiGroup(name="Portal group")
+    db_session.add_all([account, owner, direct, grouped, outsider, group])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserUiGroup(user_id=grouped.id, group_id=group.id),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="research-data",
+        display_name="Research Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add(
+        PortalStorageSpaceGrant(
+            storage_space_metadata_id=metadata.id,
+            user_id=direct.id,
+            role="Viewer",
+            created_by_user_id=owner.id,
+        )
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    candidates = service.list_storage_space_share_candidates(owner, owner_access, "research-data")
+
+    assert [(candidate.email, candidate.account_role, candidate.access_source, candidate.already_shared) for candidate in candidates] == [
+        ("direct-candidates@example.com", "portal_user", "direct", True),
+        ("grouped-candidates@example.com", "portal_manager", "group", False),
+    ]
+    assert all(candidate.email != outsider.email for candidate in candidates)
+
+
+def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(monkeypatch, db_session):
+    account = S3Account(name="portal-access-summary", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-access-summary@example.com", display_name="Owner Summary", hashed_password="x", role="ui_user")
+    member = User(email="member-access-summary@example.com", hashed_password="x", role="ui_user")
+    manager = User(email="manager-access-summary@example.com", hashed_password="x", role="ui_user")
+    outsider = User(email="outsider-access-summary@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, member, manager, outsider])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    private_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="private-data",
+        display_name="Private Data",
+        owner_user_id=owner.id,
+        visibility="private",
+    )
+    all_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="all-data",
+        display_name="All Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="account",
+        account_member_role="Viewer",
+    )
+    restricted_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="restricted-data",
+        display_name="Restricted Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    archived_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="archived-data",
+        display_name="Archived Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+        archived_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    db_session.add_all([private_metadata, all_metadata, restricted_metadata, archived_metadata])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PortalStorageSpaceGrant(storage_space_metadata_id=restricted_metadata.id, user_id=member.id, role="Editor"),
+            PortalPublicLink(
+                token="summary-token",
+                account_id=account.id,
+                bucket_name="restricted-data",
+                object_key="report.csv",
+                label="report.csv",
+                created_by_user_id=owner.id,
+                created_by_email=owner.email,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    def fake_list_storage_spaces(_user, _access, include_archived=False, **_kwargs):
+        rows = [
+            ("private-data", "Private Data"),
+            ("all-data", "All Data"),
+            ("restricted-data", "Restricted Data"),
+            ("archived-data", "Archived Data"),
+        ]
+        return [
+            PortalStorageSpaceSummary(
+                id=bucket_name,
+                name=display_name,
+                role="Owner",
+                content_role="Owner",
+                internal_bucket_name=bucket_name,
+            )
+            for bucket_name, display_name in rows
+            if include_archived or bucket_name != "archived-data"
+        ]
+
+    monkeypatch.setattr(service, "list_storage_spaces", fake_list_storage_spaces)
+    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Owner")
+    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    private_summary = service.get_storage_space_access_summary(owner, owner_access, "private-data")
+    all_summary = service.get_storage_space_access_summary(owner, owner_access, "all-data")
+    restricted_summary = service.get_storage_space_access_summary(owner, owner_access, "restricted-data")
+    archived_summary = service.get_storage_space_access_summary(owner, owner_access, "archived-data")
+    manager_summary = service.get_storage_space_access_summary(manager, manager_access, "restricted-data")
+
+    assert private_summary.mode == "private"
+    assert private_summary.effective_member_count == 1
+    assert private_summary.owner.email == owner.email
+    assert private_summary.can_manage_access is True
+
+    assert all_summary.mode == "all"
+    assert all_summary.default_account_member_role == "Viewer"
+    assert all_summary.effective_member_count == 3
+
+    assert restricted_summary.mode == "restricted"
+    assert restricted_summary.effective_member_count == 2
+    assert [(share.email, share.role) for share in restricted_summary.explicit_shares] == [(member.email, "Editor")]
+    assert restricted_summary.public_link_count == 1
+    assert restricted_summary.can_create_public_links is True
+
+    assert archived_summary.mode == "restricted"
+    assert archived_summary.effective_member_count == 0
+    assert archived_summary.can_manage_access is False
+
+    assert manager_summary.can_manage_access is True
+    assert manager_summary.owner.email == owner.email
+
+
+def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db_session):
+    account = S3Account(name="portal-share-member-required", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-member-required@example.com", hashed_password="x", role="ui_user")
+    target = User(email="target-member-required@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, target])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="research-data",
+        display_name="Research Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    with pytest.raises(RuntimeError, match="not allowed for this Portal account"):
+        service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
+
+    assert db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id).all() == []
+    assert db_session.query(UserS3Account).filter_by(user_id=target.id, account_id=account.id).first() is None
+
+
 def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monkeypatch, db_session):
     account = S3Account(name="portal-share-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-rollback@example.com", hashed_password="x", role="ui_user")
@@ -2284,6 +2912,64 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
         service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
 
     assert db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id).all() == []
+
+
+def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-share-policy-sync", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-policy-sync@example.com", hashed_password="x", role="ui_user")
+    target = User(email="target-policy-sync@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, target])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="research-data",
+        display_name="Research Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_user_storage_space_projection", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
+    bucket_policy_syncs = []
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_bucket_policy",
+        lambda account_arg, bucket_name, metadata_arg: bucket_policy_syncs.append(
+            (account_arg.id, bucket_name, metadata_arg.id)
+        ),
+    )
+    owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
+    service.revoke_storage_space_share(owner, owner_access, target, "research-data")
+
+    assert bucket_policy_syncs == [
+        (account.id, "research-data", metadata.id),
+        (account.id, "research-data", metadata.id),
+    ]
 
 
 def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session):

@@ -128,6 +128,8 @@ class PortalStorageSpacesMixin:
             owner_label=self._storage_space_owner_label(access.account, metadata),
             owner_user_id=metadata.owner_user_id if metadata else None,
             visibility=self._metadata_visibility(metadata),
+            share_scope=self._metadata_share_scope(metadata),
+            account_member_role=self._metadata_account_member_role(metadata),
             project_key=metadata.project_key if metadata else None,
             dataset_label=metadata.dataset_label if metadata else None,
             region=region,
@@ -272,6 +274,9 @@ class PortalStorageSpacesMixin:
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
         visibility: PortalStorageSpaceVisibility = "private",
+        share_scope: PortalStorageSpaceShareScope = "restricted",
+        account_member_role: Optional[PortalStorageSpaceRole] = None,
+        initial_shares: Optional[list[PortalStorageSpaceInitialShare]] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
     ) -> PortalStorageSpace:
@@ -282,6 +287,19 @@ class PortalStorageSpacesMixin:
             raise RuntimeError("Storage Space creation not allowed for this role.")
         if is_portal_user and visibility != "private":
             raise RuntimeError("Portal users can only create private Storage Spaces.")
+        share_scope, account_member_role = self._normalize_storage_space_sharing(
+            visibility,
+            share_scope,
+            account_member_role,
+        )
+        validated_initial_shares = self._validate_initial_storage_space_shares(
+            user,
+            access,
+            visibility=visibility,
+            share_scope=share_scope,
+            initial_shares=initial_shares,
+            owner_user_id=user.id,
+        )
         existing = {space.internal_bucket_name or space.id for space in self.list_storage_spaces(user, access, include_archived=True)}
         if naming_mode == "named_bucket":
             if not portal_settings.allow_portal_named_bucket_create:
@@ -293,25 +311,40 @@ class PortalStorageSpacesMixin:
             bucket_name = self._unique_uuid_storage_space_bucket_name(existing)
             origin = "portal_generic"
             name_editable = True
-        self.create_bucket(user, access, bucket_name, portal_settings=portal_settings)
-        metadata = PortalStorageSpaceMetadata(
-            account_id=access.account.id,
-            bucket_name=bucket_name,
-            display_name=name,
-            description=description,
-            owner_label=owner_label or user.email,
-            owner_user_id=user.id,
-            visibility=visibility,
-            project_key=project_key,
-            dataset_label=dataset_label,
-            origin=origin,
-            name_editable=name_editable,
-        )
-        self.db.add(metadata)
-        self.db.flush()
-        self._sync_storage_space_participant_projections(access.account, metadata)
-        self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
-        self.db.commit()
+        bucket_created = False
+        try:
+            self.create_bucket(user, access, bucket_name, portal_settings=portal_settings)
+            bucket_created = True
+            metadata = PortalStorageSpaceMetadata(
+                account_id=access.account.id,
+                bucket_name=bucket_name,
+                display_name=name,
+                description=description,
+                owner_label=owner_label or user.email,
+                owner_user_id=user.id,
+                visibility=visibility,
+                share_scope=share_scope,
+                account_member_role=account_member_role,
+                project_key=project_key,
+                dataset_label=dataset_label,
+                origin=origin,
+                name_editable=name_editable,
+            )
+            self.db.add(metadata)
+            self.db.flush()
+            self._add_storage_space_initial_grants(metadata, user, validated_initial_shares)
+            self.db.flush()
+            self._sync_storage_space_participant_projections(access.account, metadata)
+            self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            if bucket_created:
+                try:
+                    self.delete_bucket(user, access, bucket_name, use_root=True)
+                except Exception as cleanup_exc:
+                    logger.warning("Unable to delete failed Portal Storage Space bucket %s: %s", bucket_name, cleanup_exc)
+            raise
         storage_space = self.get_storage_space(user, access, bucket_name)
         if storage_space is None:
             raise RuntimeError("Created Storage Space is not visible.")
@@ -326,6 +359,9 @@ class PortalStorageSpacesMixin:
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
         visibility: PortalStorageSpaceVisibility = "private",
+        share_scope: PortalStorageSpaceShareScope = "restricted",
+        account_member_role: Optional[PortalStorageSpaceRole] = None,
+        initial_shares: Optional[list[PortalStorageSpaceInitialShare]] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
     ) -> PortalStorageSpace:
@@ -334,6 +370,20 @@ class PortalStorageSpacesMixin:
             raise RuntimeError("Bucket name requis.")
         if not access.capabilities.can_manage_buckets:
             raise RuntimeError("Storage Space import not allowed for this role.")
+        metadata = self._storage_space_metadata(access.account, cleaned_bucket_name)
+        share_scope, account_member_role = self._normalize_storage_space_sharing(
+            visibility,
+            share_scope,
+            account_member_role,
+        )
+        validated_initial_shares = self._validate_initial_storage_space_shares(
+            user,
+            access,
+            visibility=visibility,
+            share_scope=share_scope,
+            initial_shares=initial_shares,
+            owner_user_id=(metadata.owner_user_id if metadata is not None else user.id),
+        )
         access_key, secret_key = self._account_credentials(access.account)
         buckets = s3_client.list_buckets(
             access_key=access_key,
@@ -347,31 +397,38 @@ class PortalStorageSpacesMixin:
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         self._ensure_policy_and_key(link, iam_service)
-        metadata = self._storage_space_metadata(access.account, cleaned_bucket_name)
-        if metadata is None:
-            metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
+        try:
+            if metadata is None:
+                metadata = PortalStorageSpaceMetadata(account_id=access.account.id, bucket_name=cleaned_bucket_name)
+                self.db.add(metadata)
+            metadata.display_name = cleaned_bucket_name
+            metadata.owner_user_id = metadata.owner_user_id or user.id
+            metadata.visibility = visibility
+            metadata.share_scope = share_scope
+            metadata.account_member_role = account_member_role
+            if description is not None:
+                metadata.description = description
+            if owner_label is not None:
+                metadata.owner_label = owner_label
+            elif not metadata.owner_label:
+                metadata.owner_label = user.email
+            if project_key is not None:
+                metadata.project_key = project_key
+            if dataset_label is not None:
+                metadata.dataset_label = dataset_label
+            metadata.origin = "imported"
+            metadata.name_editable = False
+            metadata.updated_at = utcnow()
             self.db.add(metadata)
-        metadata.display_name = cleaned_bucket_name
-        metadata.owner_user_id = metadata.owner_user_id or user.id
-        metadata.visibility = visibility
-        if description is not None:
-            metadata.description = description
-        if owner_label is not None:
-            metadata.owner_label = owner_label
-        elif not metadata.owner_label:
-            metadata.owner_label = user.email
-        if project_key is not None:
-            metadata.project_key = project_key
-        if dataset_label is not None:
-            metadata.dataset_label = dataset_label
-        metadata.origin = "imported"
-        metadata.name_editable = False
-        metadata.updated_at = utcnow()
-        self.db.add(metadata)
-        self.db.flush()
-        self._sync_storage_space_participant_projections(access.account, metadata)
-        self._sync_storage_space_bucket_policy(access.account, cleaned_bucket_name, metadata)
-        self.db.commit()
+            self.db.flush()
+            self._add_storage_space_initial_grants(metadata, user, validated_initial_shares)
+            self.db.flush()
+            self._sync_storage_space_participant_projections(access.account, metadata)
+            self._sync_storage_space_bucket_policy(access.account, cleaned_bucket_name, metadata)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         storage_space = self.get_storage_space(user, access, cleaned_bucket_name)
         if storage_space is None:
             raise RuntimeError("Imported Storage Space is not visible.")
@@ -387,6 +444,8 @@ class PortalStorageSpacesMixin:
         description: Optional[str] = None,
         owner_label: Optional[str] = None,
         visibility: Optional[PortalStorageSpaceVisibility] = None,
+        share_scope: Optional[PortalStorageSpaceShareScope] = None,
+        account_member_role: Optional[PortalStorageSpaceRole] = None,
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
         archived: Optional[bool] = None,
@@ -396,6 +455,9 @@ class PortalStorageSpacesMixin:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_owner(user, access, bucket_name, include_archived=True)
         metadata = self._storage_space_metadata(access.account, bucket_name)
+        previous_participant_user_ids: set[int] = set()
+        if metadata is not None:
+            previous_participant_user_ids = self._storage_space_participant_user_ids(metadata)
         if metadata is None:
             metadata = PortalStorageSpaceMetadata(
                 account_id=access.account.id,
@@ -416,8 +478,21 @@ class PortalStorageSpacesMixin:
             metadata.description = description
         if owner_label is not None:
             metadata.owner_label = owner_label
+        next_visibility = visibility if visibility is not None else self._metadata_visibility(metadata)
+        next_share_scope = share_scope if share_scope is not None else self._metadata_share_scope(metadata)
+        next_account_member_role = account_member_role
+        if account_member_role is None and share_scope is None:
+            next_account_member_role = self._metadata_account_member_role(metadata)
+        normalized_share_scope, normalized_account_member_role = self._normalize_storage_space_sharing(
+            next_visibility,
+            next_share_scope,
+            next_account_member_role,
+        )
         if visibility is not None:
             metadata.visibility = visibility
+        if visibility is not None or share_scope is not None or account_member_role is not None:
+            metadata.share_scope = normalized_share_scope
+            metadata.account_member_role = normalized_account_member_role
         if project_key is not None:
             metadata.project_key = project_key
         if dataset_label is not None:
@@ -427,7 +502,11 @@ class PortalStorageSpacesMixin:
         metadata.updated_at = utcnow()
         self.db.add(metadata)
         self.db.flush()
-        self._sync_storage_space_participant_projections(access.account, metadata)
+        self._sync_storage_space_participant_projections(
+            access.account,
+            metadata,
+            extra_user_ids=previous_participant_user_ids,
+        )
         self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)

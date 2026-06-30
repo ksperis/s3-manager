@@ -2,10 +2,11 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createPortalStorageSpacePublicLink,
   grantPortalStorageSpaceShare,
+  listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   revokePortalStorageSpacePublicLink,
@@ -13,26 +14,32 @@ import {
   revokePortalStorageSpaceShare,
   updatePortalStorageSpaceShare,
   type PortalStorageSpaceRole,
+  type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
-import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { PortalShareCandidatePicker, selectedPortalShares } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
 import {
   portalRoleTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
-import { portalDateLabel, portalPublicLinkStatusLabel, portalRoleLabel } from "./portalI18n";
+import {
+  portalDateLabel,
+  portalPublicLinkStatusLabel,
+  portalRoleLabel,
+} from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 const tabs = [
@@ -84,9 +91,9 @@ function SharesTable({
 }) {
   const { t } = useI18n();
   return (
-    <div className="overflow-x-auto">
-      <table className="ui-data-table min-w-[760px]">
-        <thead>
+    <div className="overflow-x-auto max-md:overflow-visible">
+      <table className="ui-data-table min-w-[760px] max-md:block max-md:min-w-0">
+        <thead className="max-md:hidden">
           <tr>
             <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
             <th>{editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" })}</th>
@@ -95,12 +102,21 @@ function SharesTable({
             {editable ? <th className="w-28 text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th> : null}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="max-md:block max-md:space-y-3">
           {shares.map((share) => (
-            <tr key={share.id}>
-              <td className={cx("font-bold", uiTitleTextClass)}>{share.spaceName}</td>
-              <td>{share.person}</td>
-              <td>
+            <tr key={share.id} className="max-md:block max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
+              <td className={cx("font-bold max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
+                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                {share.spaceName}
+              </td>
+              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
+                  {editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" })}
+                </span>
+                {share.person}
+              </td>
+              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
                 {editable && share.userId ? (
                   <select
                     className="ui-control h-8 py-1.5 text-xs"
@@ -117,9 +133,12 @@ function SharesTable({
                   <UiBadge tone={portalRoleTone(share.access)}>{portalRoleLabel(share.access, t)}</UiBadge>
                 )}
               </td>
-              <td>{share.activityLabel === "Active" ? t({ en: "Active", fr: "Actif", de: "Aktiv" }) : share.activityLabel}</td>
+              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Activity", fr: "Activité", de: "Aktivität" })}</span>
+                {share.activityLabel === "Active" ? t({ en: "Active", fr: "Actif", de: "Aktiv" }) : share.activityLabel}
+              </td>
               {editable ? (
-                <td className="text-right">
+                <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
                   {share.userId ? (
                     <button
                       type="button"
@@ -135,8 +154,8 @@ function SharesTable({
             </tr>
           ))}
           {shares.length === 0 ? (
-            <tr>
-              <td colSpan={editable ? 5 : 4} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+            <tr className="max-md:block">
+              <td colSpan={editable ? 5 : 4} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
                 {t({ en: "No shares to display.", fr: "Aucun partage à afficher.", de: "Keine Freigaben zum Anzeigen." })}
               </td>
             </tr>
@@ -154,14 +173,17 @@ export default function PortalSharesPage() {
   const [sharesLoadedKey, setSharesLoadedKey] = useState<string | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
   const [sharesError, setSharesError] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+  const [shareCandidateQuery, setShareCandidateQuery] = useState("");
+  const [shareCandidates, setShareCandidates] = useState<PortalStorageSpaceShareCandidate[]>([]);
+  const [shareCandidatesLoading, setShareCandidatesLoading] = useState(false);
+  const [selectedShareRolesByUserId, setSelectedShareRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
-  const [selectedRole, setSelectedRole] = useState<PortalStorageSpaceRole>("Viewer");
   const [publicObjectKey, setPublicObjectKey] = useState("");
   const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const initialUrlContextApplied = useRef(false);
   const activeSharedSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived" && space.visibility === "shared"),
     [workspace.spaces]
@@ -177,6 +199,21 @@ export default function PortalSharesPage() {
     () => (accountIdForApi ? `${accountIdForApi}:${activeSharedSpaceIds}` : ""),
     [accountIdForApi, activeSharedSpaceIds]
   );
+  const selectedShareEntries = selectedPortalShares(selectedShareRolesByUserId);
+
+  useEffect(() => {
+    if (initialUrlContextApplied.current || workspace.spaces.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get("tab");
+    const requestedSpaceId = params.get("space_id");
+    if (requestedTab === "with" || requestedTab === "by" || requestedTab === "links") {
+      setActiveTab(requestedTab);
+    }
+    if (requestedSpaceId && workspace.spaces.some((space) => space.id === requestedSpaceId)) {
+      setSelectedSpaceId(requestedSpaceId);
+    }
+    initialUrlContextApplied.current = true;
+  }, [workspace.spaces]);
 
   useEffect(() => {
     const selectableSpaces = activeTab === "with" ? activeSharedSpaces : activeSharedOwnerSpaces;
@@ -245,6 +282,47 @@ export default function PortalSharesPage() {
     };
   }, [accountIdForApi, spaceIds, workspace.spaces]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!accountIdForApi || activeTab !== "by" || !selectedSpaceId) {
+      setShareCandidates([]);
+      setShareCandidatesLoading(false);
+      setSelectedShareRolesByUserId({});
+      return () => {
+        cancelled = true;
+      };
+    }
+    setShareCandidatesLoading(true);
+    listPortalStorageSpaceShareCandidates(accountIdForApi, selectedSpaceId)
+      .then((candidates) => {
+        if (cancelled) return;
+        setShareCandidates(candidates);
+        const availableUserIds = new Set(candidates.filter((candidate) => !candidate.already_shared).map((candidate) => candidate.user_id));
+        setSelectedShareRolesByUserId((current) =>
+          Object.fromEntries(Object.entries(current).filter(([userId]) => availableUserIds.has(Number(userId)))) as Record<number, PortalStorageSpaceRole>
+        );
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setShareCandidates([]);
+          setSelectedShareRolesByUserId({});
+          setSharesError(extractApiError(err, t({ en: "Unable to load eligible users.", fr: "Impossible de charger les utilisateurs éligibles.", de: "Berechtigte Benutzer können nicht geladen werden." })));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setShareCandidatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, activeTab, selectedSpaceId, t]);
+
+  useEffect(() => {
+    setShareCandidateQuery("");
+    setSelectedShareRolesByUserId({});
+  }, [selectedSpaceId]);
+
   const rows = useMemo(() => {
     return {
       with: (apiShares ?? []).filter((share) => share.direction === "with_me").map(fromApiShare),
@@ -263,20 +341,32 @@ export default function PortalSharesPage() {
   };
 
   const handleCreateShare = async () => {
-    if (!accountIdForApi || !selectedSpaceId || !email.trim()) return;
+    if (!accountIdForApi || !selectedSpaceId || selectedShareEntries.length === 0) return;
     if (!activeSharedOwnerSpaces.some((space) => space.id === selectedSpaceId)) return;
     setBusyShareId("new");
     setSharesError(null);
     try {
-      const share = await grantPortalStorageSpaceShare(accountIdForApi, selectedSpaceId, {
-        email: email.trim(),
-        role: selectedRole,
-      });
-      setEmail("");
+      const createdShares = await Promise.all(
+        selectedShareEntries.map((entry) =>
+          grantPortalStorageSpaceShare(accountIdForApi, selectedSpaceId, {
+            user_id: entry.user_id,
+            role: entry.role,
+          })
+        )
+      );
+      setShareCandidateQuery("");
+      setSelectedShareRolesByUserId({});
       setApiShares((current) => {
-        const filtered = (current ?? []).filter((item) => item.id !== share.id);
-        return [...filtered, share];
+        const createdIds = new Set(createdShares.map((share) => share.id));
+        const filtered = (current ?? []).filter((item) => !createdIds.has(item.id));
+        return [...filtered, ...createdShares];
       });
+      const sharedUserIds = new Set(selectedShareEntries.map((entry) => entry.user_id));
+      setShareCandidates((current) =>
+        current.map((candidate) =>
+          sharedUserIds.has(candidate.user_id) ? { ...candidate, already_shared: true } : candidate
+        )
+      );
       setActiveTab("by");
     } catch (err) {
       console.error(err);
@@ -408,9 +498,9 @@ export default function PortalSharesPage() {
           />
         </div>
         {activeTab === "links" ? (
-          <div className="overflow-x-auto">
-            <table className="ui-data-table min-w-[860px]">
-              <thead>
+          <div className="overflow-x-auto max-md:overflow-visible">
+            <table className="ui-data-table min-w-[860px] max-md:block max-md:min-w-0">
+              <thead className="max-md:hidden">
                 <tr>
                   <th>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</th>
                   <th>{t({ en: "Object", fr: "Objet", de: "Objekt" })}</th>
@@ -420,15 +510,30 @@ export default function PortalSharesPage() {
                   <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block max-md:space-y-3">
                 {publicLinks.map((link) => (
-                  <tr key={link.id}>
-                    <td className={cx("font-bold", uiTitleTextClass)}>{link.storage_space_name}</td>
-                    <td>{link.object_name}</td>
-                    <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge></td>
-                    <td>{link.expires_at ? portalDateLabel(link.expires_at, locale) : "-"}</td>
-                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
-                    <td className="text-right">
+                  <tr key={link.id} className="max-md:block max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
+                    <td className={cx("font-bold max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                      {link.storage_space_name}
+                    </td>
+                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Object", fr: "Objet", de: "Objekt" })}</span>
+                      {link.object_name}
+                    </td>
+                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Status", fr: "Statut", de: "Status" })}</span>
+                      <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge>
+                    </td>
+                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Expires", fr: "Expire", de: "Läuft ab" })}</span>
+                      {link.expires_at ? portalDateLabel(link.expires_at, locale) : "-"}
+                    </td>
+                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200 max-md:mt-2 max-md:block max-md:max-w-full max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "URL", fr: "URL", de: "URL" })}</span>
+                      {link.url}
+                    </td>
+                    <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
                       {link.status === "Active" ? (
                         <button
                           type="button"
@@ -443,8 +548,8 @@ export default function PortalSharesPage() {
                   </tr>
                 ))}
                 {publicLinks.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                  <tr className="max-md:block">
+                    <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
                       {t({ en: "No public links to display.", fr: "Aucun lien public à afficher.", de: "Keine öffentlichen Links zum Anzeigen." })}
                     </td>
                   </tr>
@@ -468,31 +573,55 @@ export default function PortalSharesPage() {
 
       {activeTab === "by" ? (
         <UiCard title={t({ en: "Create a new share", fr: "Créer un nouveau partage", de: "Neue Freigabe erstellen" })}>
-          <div className="grid gap-3 md:grid-cols-[1fr_180px_160px_auto]">
-            <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-              {activeSharedOwnerSpaces.map((space) => (
-                <option key={space.id} value={space.id}>{space.name}</option>
-              ))}
-            </select>
-            <input
-              className="ui-control h-8 text-xs"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="user@example.com"
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto]">
+              <select
+                className="ui-control h-9 py-1.5 text-xs"
+                value={selectedSpaceId}
+                onChange={(event) => setSelectedSpaceId(event.target.value)}
+                aria-label={t({ en: "Storage Space to share", fr: "Espace de stockage à partager", de: "Zu teilender Speicherbereich" })}
+              >
+                {activeSharedOwnerSpaces.map((space) => (
+                  <option key={space.id} value={space.id}>{space.name}</option>
+                ))}
+              </select>
+              <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
+                {t({
+                  en: "Select existing Portal members of this account, then assign their role.",
+                  fr: "Sélectionnez les membres Portal existants de cet account, puis attribuez leur rôle.",
+                  de: "Wählen Sie vorhandene Portal-Mitglieder dieses Accounts aus und weisen Sie eine Rolle zu.",
+                })}
+              </div>
+              <UiButton
+                disabled={!accountIdForApi || !selectedSpaceId || selectedShareEntries.length === 0 || busyShareId === "new" || activeSharedOwnerSpaces.length === 0}
+                onClick={handleCreateShare}
+                className="h-9 px-3 py-1.5"
+              >
+                {busyShareId === "new"
+                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
+                  : t({ en: "Create share", fr: "Créer le partage", de: "Freigabe erstellen" })}
+              </UiButton>
+            </div>
+            <PortalShareCandidatePicker
+              candidates={shareCandidates}
+              selectedRolesByUserId={selectedShareRolesByUserId}
+              query={shareCandidateQuery}
+              loading={shareCandidatesLoading}
+              error={null}
+              includeAlreadyShared
+              onQueryChange={setShareCandidateQuery}
+              onRoleChange={(userId, role) => {
+                setSelectedShareRolesByUserId((current) => {
+                  const next = { ...current };
+                  if (role) {
+                    next[userId] = role;
+                  } else {
+                    delete next[userId];
+                  }
+                  return next;
+                });
+              }}
             />
-            <select className="ui-control h-8 py-1.5 text-xs" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as PortalStorageSpaceRole)}>
-              {roles.map((role) => (
-                <option key={role} value={role}>{portalRoleLabel(role, t)}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={!accountIdForApi || !selectedSpaceId || !email.trim() || busyShareId === "new" || activeSharedOwnerSpaces.length === 0}
-              onClick={handleCreateShare}
-              className={tableActionButtonClasses}
-            >
-              {t({ en: "Create share", fr: "Créer le partage", de: "Freigabe erstellen" })}
-            </button>
           </div>
         </UiCard>
       ) : activeTab === "links" ? (

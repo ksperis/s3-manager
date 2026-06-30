@@ -89,7 +89,8 @@ placeholder.
   diagnostics, bucket defaults, lifecycle, CORS, replication, or versioning in
   Portal UI text.
 - Do not reintroduce a Storage Space `Type` field. Use `visibility` for
-  `private` or `shared`, and `archived_at`/`status` for archived state.
+  `private` or `shared`, `share_scope` for restricted versus all-account
+  sharing, and `archived_at`/`status` for archived state.
 - Portal user Storage Space creation is exposed through the dedicated
   `can_create_storage_spaces` Portal state flag. Do not reuse
   `can_manage_buckets` for portal-user creation UI, because bucket management
@@ -102,8 +103,11 @@ placeholder.
   Portal managers can edit metadata, visibility, and archive state for those
   spaces, but content access, object routes, Browser bucket filters, and IAM
   projections must exclude private spaces owned by another user.
-  Shared Storage Spaces use DB-backed Viewer, Editor, and Owner grants from
-  `portal_storage_space_grants`.
+  Shared Storage Spaces either use DB-backed Viewer, Editor, and Owner grants
+  from `portal_storage_space_grants`, or `share_scope = account` to grant the
+  configured default role to current and future effective Portal members of the
+  account. Portal must not silently create account membership when adding an
+  individual share; users outside the account require a separate admin workflow.
   Archived Storage Spaces suspend Portal access and public links without
   deleting stored grants or links.
 - Portal user usage views may show global account usage and quota pressure, but
@@ -112,7 +116,7 @@ placeholder.
   only as an anonymous `Other` aggregate with no bucket or Storage Space
   identifiers.
 - Portal-managed bucket policies must only add, replace, or remove dedicated
-  `Sid` statements such as `PortalStorageSpacePrivate` and
+  `Sid` statements such as `PortalStorageSpaceAccess` and
   `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
   statements.
 - The default `portal-manager` IAM group policy must stay limited to global
@@ -202,11 +206,13 @@ The current backend flow is:
 
 1. Resolve the authenticated UI user and Portal account binding.
 2. Resolve visible Storage Spaces from `portal_storage_space_metadata`,
-   ownership, Portal manager status, visibility, archive state, and DB grants.
-   Buckets without Portal metadata are not Storage Spaces.
+   ownership, Portal manager status, visibility, share scope, archive state,
+   effective account membership, and DB grants. Buckets without Portal metadata
+   are not Storage Spaces.
 3. Map Storage Spaces to a user-facing management role and a separate content
    role. Portal managers get management `Owner` on every Storage Space, but
-   content access only on shared spaces and private spaces they own.
+   content access comes only from ownership, all-account scope, or explicit
+   grants.
 4. Block archived Storage Spaces from Portal object routes, embedded Browser
    bucket targets, sharing, and public-link downloads.
 5. Execute file and sharing operations with the Portal execution identity.

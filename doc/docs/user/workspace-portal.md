@@ -36,7 +36,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 
 | Workflow | Read next | What it covers |
 |---|---|---|
-| Open, create, import, or archive a Storage Space | [Portal: Storage Spaces](portal-storage-spaces.md) | Visibility, active/archived states, creation, and imports. |
+| Open, create, import, or archive a Storage Space | [Portal: Storage Spaces](portal-storage-spaces.md) | Access modes, active/archived states, creation, and imports. |
 | Browse, upload, download, or inspect files | [Portal: Files](portal-files.md) | Object list, folders, safe details, and Portal-specific limits. |
 | Share with collaborators or understand roles | [Portal: Sharing](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
 | Create credentials for external S3 tools | [Portal: Access Keys](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
@@ -48,7 +48,9 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 - **Private** spaces are visible to their owner and Portal managers. Portal
   managers can administer private-space metadata, visibility, and archive state,
   but they cannot browse files in a private space owned by someone else.
-- **Shared** spaces use Viewer, Editor, and Owner grants.
+- **All** spaces are shared with current and future Portal members of the
+  selected account. **Restricted** spaces are shared only with selected
+  collaborators with Viewer, Editor, and Owner grants.
 - Regular `portal_user` members can create only private Storage Spaces, and only
   when Portal user Storage Space creation is enabled for the account.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
@@ -58,9 +60,9 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
   aggregate.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
 - `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
-- Portal roles come from the owner and collaborator grants managed in Portal.
-  External S3 keys are synchronized from those records; IAM is not the source of
-  Portal listings or roles.
+- Portal roles come from the owner, the Storage Space access mode, and
+  collaborator grants managed in Portal. External S3 keys are synchronized from
+  those records; IAM is not the source of Portal listings or roles.
 
 ## Expected result
 

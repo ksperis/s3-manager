@@ -76,6 +76,8 @@ export type PortalUsageStorageSpace = {
 
 export type PortalStorageSpaceRole = "Viewer" | "Editor" | "Owner";
 export type PortalStorageSpaceVisibility = "private" | "shared";
+export type PortalStorageSpaceShareScope = "restricted" | "account";
+export type PortalStorageSpaceAccountMemberRole = "Viewer" | "Editor";
 
 export type PortalStorageSpaceSummary = {
   id: string;
@@ -88,6 +90,8 @@ export type PortalStorageSpaceSummary = {
   owner_label?: string | null;
   owner_user_id?: number | null;
   visibility?: PortalStorageSpaceVisibility;
+  share_scope?: PortalStorageSpaceShareScope;
+  account_member_role?: PortalStorageSpaceAccountMemberRole | null;
   project_key?: string | null;
   dataset_label?: string | null;
   region?: string | null;
@@ -104,12 +108,20 @@ export type PortalStorageSpaceSummary = {
 
 export type PortalStorageSpace = PortalStorageSpaceSummary;
 
+export type PortalStorageSpaceInitialShare = {
+  user_id: number;
+  role: PortalStorageSpaceRole;
+};
+
 export type PortalStorageSpaceCreate = {
   name: string;
   naming_mode?: "generic_uuid" | "named_bucket";
   description?: string | null;
   owner_label?: string | null;
   visibility?: PortalStorageSpaceVisibility;
+  share_scope?: PortalStorageSpaceShareScope;
+  account_member_role?: PortalStorageSpaceAccountMemberRole | null;
+  initial_shares?: PortalStorageSpaceInitialShare[];
   project_key?: string | null;
   dataset_label?: string | null;
 };
@@ -119,6 +131,9 @@ export type PortalStorageSpaceImport = {
   description?: string | null;
   owner_label?: string | null;
   visibility?: PortalStorageSpaceVisibility;
+  share_scope?: PortalStorageSpaceShareScope;
+  account_member_role?: PortalStorageSpaceAccountMemberRole | null;
+  initial_shares?: PortalStorageSpaceInitialShare[];
   project_key?: string | null;
   dataset_label?: string | null;
 };
@@ -156,6 +171,35 @@ export type PortalStorageSpaceShare = {
   role: PortalStorageSpaceRole;
   direction: PortalStorageSpaceShareDirection;
   activity_label?: string | null;
+};
+
+export type PortalStorageSpaceAccessPerson = {
+  user_id?: number | null;
+  email: string;
+  display_name?: string | null;
+  role: PortalStorageSpaceRole;
+  account_role?: string | null;
+  access_source?: "owner" | "direct" | "group" | "direct_and_group" | null;
+};
+
+export type PortalStorageSpaceAccessSummary = {
+  mode: "private" | "all" | "restricted";
+  default_account_member_role?: PortalStorageSpaceAccountMemberRole | null;
+  owner: PortalStorageSpaceAccessPerson;
+  effective_member_count: number;
+  explicit_shares: PortalStorageSpaceShare[];
+  public_link_count: number;
+  can_manage_access: boolean;
+  can_create_public_links: boolean;
+};
+
+export type PortalStorageSpaceShareCandidate = {
+  user_id: number;
+  email: string;
+  display_name?: string | null;
+  account_role: string;
+  access_source: "direct" | "group" | "direct_and_group";
+  already_shared?: boolean;
 };
 
 export type PortalPublicLink = {
@@ -394,6 +438,17 @@ export async function updatePortalStorageSpace(
   return data;
 }
 
+export async function fetchPortalStorageSpaceAccessSummary(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpaceAccessSummary> {
+  const { data } = await client.get<PortalStorageSpaceAccessSummary>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/access-summary`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
 export async function fetchPortalStorageSpaceObjectDetail(
   accountId: S3AccountSelector,
   spaceId: string,
@@ -457,6 +512,27 @@ export async function listPortalStorageSpaceShares(
 ): Promise<PortalStorageSpaceShare[]> {
   const { data } = await client.get<PortalStorageSpaceShare[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function listPortalShareCandidates(
+  accountId: S3AccountSelector
+): Promise<PortalStorageSpaceShareCandidate[]> {
+  const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(
+    "/portal/share-candidates",
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function listPortalStorageSpaceShareCandidates(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpaceShareCandidate[]> {
+  const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/share-candidates`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;

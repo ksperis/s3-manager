@@ -105,6 +105,7 @@ class PortalBucketsUsersMixin:
             self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
             self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
             self._ensure_active_key(link, iam_service)
+            self._sync_account_storage_space_bucket_policies(account)
             return
         link = (
             self.db.query(AccountIAMUser)
@@ -120,6 +121,8 @@ class PortalBucketsUsersMixin:
         if link.iam_username:
             self._delete_portal_iam_user(iam_service, link.iam_username)
         self.db.delete(link)
+        self.db.flush()
+        self._sync_account_storage_space_bucket_policies(account)
         self.db.commit()
 
     def _delete_portal_iam_user(self, iam_service: RGWIAMService, iam_username: str) -> None:
@@ -153,4 +156,6 @@ class PortalBucketsUsersMixin:
         if link.iam_username:
             self._delete_portal_iam_user(iam_service, link.iam_username)
         self.db.delete(link)
+        self.db.flush()
+        self._sync_account_storage_space_bucket_policies(account)
         self.db.commit()

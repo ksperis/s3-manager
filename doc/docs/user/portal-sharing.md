@@ -6,6 +6,7 @@ Use this page when you need to understand who can access a Portal Storage Space 
 
 - The Storage Space is shared and active.
 - You have Owner or Portal manager rights for share management.
+- The person you want to add already has Portal access to the selected account.
 - Public links are enabled when you need link-based sharing.
 
 ## Portal roles
@@ -16,15 +17,23 @@ Use this page when you need to understand who can access a Portal Storage Space 
 | Editor | Viewer actions plus upload, folder creation, and file deletion. |
 | Owner | Editor actions plus sharing management. |
 
-Portal uses the Storage Space owner and collaborator grants shown in Portal to decide who appears in sharing lists. Technical S3 access for personal keys is synchronized from those database records. Portal managers may administer a private Storage Space's metadata without receiving file access to that private content.
+Portal uses the Storage Space owner, access mode, and collaborator grants shown in Portal to decide who can browse files. Technical S3 access for personal keys is synchronized from those database records. Portal managers may administer a private Storage Space's metadata without receiving file access to that private content.
+
+## Access modes
+
+| Mode | How sharing works |
+|---|---|
+| Private | No normal collaborator grants. File access stays with the owner. |
+| All | Every current and future Portal member of the selected account receives the default role, usually Editor. |
+| Restricted | Owners choose specific eligible Portal members and assign Viewer, Editor, or Owner. |
 
 ## Main tasks
 
-1. Open the Storage Space.
-2. Review current collaborators and links.
-3. Add a collaborator with the least-powerful role that fits the task.
+1. Open the Storage Space and review the **Access** panel.
+2. Check the current mode, direct collaborators, and public-link count.
+3. Add a collaborator from the eligible Portal members list with the least-powerful role that fits the task.
 4. Set public-link expiry or access limits when public links are enabled.
-5. Recheck the Storage Space visibility after changes.
+5. Recheck the Storage Space access mode after changes.
 
 ## You are done when
 
@@ -32,7 +41,7 @@ The intended collaborator or link appears on the Storage Space, and the role mat
 
 ## If sharing is unavailable
 
-Private spaces cannot receive normal collaborator grants. Archived spaces keep stored grants and links for future restoration, but those grants and links are inactive while archived.
+Private spaces cannot receive active collaborator grants. Existing direct grants are kept but inactive while the space is private. Restricted spaces only accept users already allowed on the selected account; adding a new account member is a separate admin request. Archived spaces keep stored grants and links for future restoration, but those grants and links are inactive while archived.
 
 ## Related pages
 

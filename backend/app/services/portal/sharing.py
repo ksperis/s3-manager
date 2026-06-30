@@ -6,6 +6,13 @@ from ._shared import *
 
 
 class PortalSharingMixin:
+    def _portal_access_source(self, sources: set[str]) -> str:
+        if sources == {"direct"}:
+            return "direct"
+        if sources == {"group"}:
+            return "group"
+        return "direct_and_group"
+
     def _storage_space_share_card(
         self,
         actor: User,
@@ -22,6 +29,170 @@ class PortalSharingMixin:
             role=role,
             direction="with_me" if actor.id == target.id else "by_me",
             activity_label="Active",
+        )
+
+    def _validate_initial_storage_space_shares(
+        self,
+        user: User,
+        access: "AccountAccess",
+        *,
+        visibility: PortalStorageSpaceVisibility,
+        share_scope: PortalStorageSpaceShareScope,
+        initial_shares: Optional[list[PortalStorageSpaceInitialShare]],
+        owner_user_id: Optional[int] = None,
+    ) -> list[PortalStorageSpaceInitialShare]:
+        shares = initial_shares or []
+        if not shares:
+            return []
+        if visibility != "shared" or share_scope != "restricted":
+            raise RuntimeError("Initial shares are allowed only for restricted shared Storage Spaces.")
+        member_map = self._portal_account_member_map(access.account)
+        seen_user_ids: set[int] = set()
+        owner_user_ids = {user.id}
+        if owner_user_id is not None:
+            owner_user_ids.add(owner_user_id)
+        validated: list[PortalStorageSpaceInitialShare] = []
+        for share in shares:
+            if share.user_id in owner_user_ids:
+                raise RuntimeError("Storage Space owner already has Owner access.")
+            if share.user_id in seen_user_ids:
+                raise RuntimeError("Duplicate initial share user.")
+            member = member_map.get(share.user_id)
+            if member is None or member[1] not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+                raise RuntimeError("User is not allowed for this Portal account.")
+            seen_user_ids.add(share.user_id)
+            validated.append(share)
+        return validated
+
+    def _add_storage_space_initial_grants(
+        self,
+        metadata: PortalStorageSpaceMetadata,
+        user: User,
+        initial_shares: list[PortalStorageSpaceInitialShare],
+    ) -> None:
+        for share in initial_shares:
+            grant = (
+                self.db.query(PortalStorageSpaceGrant)
+                .filter(
+                    PortalStorageSpaceGrant.storage_space_metadata_id == metadata.id,
+                    PortalStorageSpaceGrant.user_id == share.user_id,
+                )
+                .first()
+            )
+            if grant is None:
+                grant = PortalStorageSpaceGrant(
+                    storage_space_metadata_id=metadata.id,
+                    user_id=share.user_id,
+                    role=share.role,
+                    created_by_user_id=user.id,
+                )
+            else:
+                grant.role = share.role
+                grant.updated_at = utcnow()
+            self.db.add(grant)
+
+    def _storage_space_owner_person(
+        self,
+        metadata: PortalStorageSpaceMetadata | None,
+        fallback_user: User,
+        account: S3Account,
+    ) -> PortalStorageSpaceAccessPerson:
+        owner: User | None = None
+        if metadata and metadata.owner_user_id is not None:
+            owner = self.db.query(User).filter(User.id == metadata.owner_user_id).first()
+        owner = owner or fallback_user
+        member = self._portal_account_member_map(account).get(owner.id)
+        return PortalStorageSpaceAccessPerson(
+            user_id=owner.id,
+            email=owner.email,
+            display_name=owner.display_name or owner.full_name,
+            role="Owner",
+            account_role=member[1] if member else None,
+            access_source="owner",
+        )
+
+    def _storage_space_effective_access_user_ids(self, metadata: PortalStorageSpaceMetadata) -> set[int]:
+        if metadata.archived_at:
+            return set()
+        user_ids: set[int] = set()
+        if metadata.owner_user_id is not None:
+            user_ids.add(metadata.owner_user_id)
+        if self._metadata_visibility(metadata) != "shared":
+            return user_ids
+        if self._metadata_share_scope(metadata) == "account":
+            account = self.db.query(S3Account).filter(S3Account.id == metadata.account_id).first()
+            if account is not None:
+                user_ids.update(self._portal_account_member_map(account))
+            return user_ids
+        grant_rows = (
+            self.db.query(PortalStorageSpaceGrant.user_id)
+            .filter(PortalStorageSpaceGrant.storage_space_metadata_id == metadata.id)
+            .all()
+        )
+        user_ids.update(user_id for (user_id,) in grant_rows if user_id is not None)
+        return user_ids
+
+    def get_storage_space_access_summary(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+    ) -> PortalStorageSpaceAccessSummary:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        metadata = self._storage_space_metadata(access.account, bucket_name)
+        if metadata is None:
+            raise RuntimeError("Storage space metadata is missing.")
+        storage_space = next(
+            (
+                item
+                for item in self.list_storage_spaces(user, access, include_archived=True)
+                if item.id == space_id or item.internal_bucket_name == bucket_name
+            ),
+            None,
+        )
+        if storage_space is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        actor_role = self._user_storage_space_role(user, access, bucket_name, include_archived=True)
+        can_manage_access = actor_role == "Owner" and metadata.archived_at is None
+        content_role = self._user_storage_space_content_role(user, access, bucket_name)
+        mode = "private"
+        if self._metadata_visibility(metadata) == "shared":
+            mode = "all" if self._metadata_share_scope(metadata) == "account" else "restricted"
+        query = (
+            self.db.query(PortalStorageSpaceGrant, User)
+            .join(User, User.id == PortalStorageSpaceGrant.user_id)
+            .filter(PortalStorageSpaceGrant.storage_space_metadata_id == metadata.id)
+        )
+        explicit_shares = [
+            self._storage_space_share_card(user, target, storage_space, grant.role)
+            for grant, target in query.all()
+            if grant.role in {"Viewer", "Editor", "Owner"}
+        ]
+        public_link_count = (
+            self.db.query(DBPortalPublicLink)
+            .filter(
+                DBPortalPublicLink.account_id == access.account.id,
+                DBPortalPublicLink.bucket_name == bucket_name,
+                DBPortalPublicLink.revoked_at.is_(None),
+            )
+            .count()
+        )
+        return PortalStorageSpaceAccessSummary(
+            mode=mode,
+            default_account_member_role=self._metadata_account_member_role(metadata),
+            owner=self._storage_space_owner_person(metadata, user, access.account),
+            effective_member_count=len(self._storage_space_effective_access_user_ids(metadata)),
+            explicit_shares=sorted(explicit_shares, key=lambda item: item.email.lower()),
+            public_link_count=public_link_count,
+            can_manage_access=can_manage_access,
+            can_create_public_links=bool(
+                can_manage_access
+                and content_role == "Owner"
+                and metadata.archived_at is None
+                and self._metadata_visibility(metadata) == "shared"
+            ),
         )
 
     def _require_storage_space_owner(
@@ -96,6 +267,49 @@ class PortalSharingMixin:
             shares.append(self._storage_space_share_card(user, target, storage_space, grant.role))
         return sorted(shares, key=lambda item: (item.direction, item.email.lower()))
 
+    def list_storage_space_share_candidates(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: Optional[str] = None,
+    ) -> list[PortalStorageSpaceShareCandidate]:
+        metadata: PortalStorageSpaceMetadata | None = None
+        excluded_user_ids = {user.id}
+        shared_user_ids: set[int] = set()
+        if space_id:
+            bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+            if not bucket_name:
+                raise RuntimeError("Storage space not found or not allowed.")
+            self._require_storage_space_owner(user, access, bucket_name)
+            metadata = self._require_storage_space_active(access.account, bucket_name)
+            if metadata is None:
+                raise RuntimeError("Storage space metadata is missing.")
+            if metadata.owner_user_id is not None:
+                excluded_user_ids.add(metadata.owner_user_id)
+            shared_user_ids = {
+                user_id
+                for (user_id,) in (
+                    self.db.query(PortalStorageSpaceGrant.user_id)
+                    .filter(PortalStorageSpaceGrant.storage_space_metadata_id == metadata.id)
+                    .all()
+                )
+            }
+        rows = []
+        for user_id, (target, account_role, sources) in self._portal_account_member_map(access.account).items():
+            if user_id in excluded_user_ids:
+                continue
+            rows.append(
+                PortalStorageSpaceShareCandidate(
+                    user_id=user_id,
+                    email=target.email,
+                    display_name=target.display_name or target.full_name,
+                    account_role=account_role,
+                    access_source=self._portal_access_source(sources),
+                    already_shared=user_id in shared_user_ids,
+                )
+            )
+        return sorted(rows, key=lambda item: item.email.lower())
+
     def set_storage_space_share(
         self,
         user: User,
@@ -113,38 +327,14 @@ class PortalSharingMixin:
             raise RuntimeError("Storage space metadata is missing.")
         if metadata.owner_user_id == target.id:
             raise RuntimeError("Storage Space owner already has Owner access.")
-        if is_admin_ui_role(target.role):
-            raise RuntimeError("Cannot share a storage space with this user.")
-        link = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.user_id == target.id, UserS3Account.account_id == access.account.id)
+        account_role = self._user_s3_account_role(target.id, access.account.id)
+        if account_role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+            raise RuntimeError("User is not allowed for this Portal account.")
+        iam_link = (
+            self.db.query(AccountIAMUser)
+            .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
             .first()
         )
-        account_role = (
-            AccountRole.PORTAL_USER.value
-            if link is None or link.account_role == AccountRole.PORTAL_NONE.value
-            else link.account_role
-        )
-        iam_service = self._get_iam_service(access.account)
-        portal_settings = self._effective_portal_settings(access.account)
-        iam_link, _, _ = self._ensure_portal_user(target, access.account, iam_service)
-        self._sync_user_group_membership(
-            iam_service,
-            iam_link.iam_username,
-            account_role,
-            portal_settings=portal_settings,
-        )
-        if not link:
-            link = UserS3Account(
-                user_id=target.id,
-                account_id=access.account.id,
-                is_root=False,
-                account_role=account_role,
-            )
-            self.db.add(link)
-        elif link.account_role == AccountRole.PORTAL_NONE.value:
-            link.account_role = account_role
-            self.db.add(link)
         grant = (
             self.db.query(PortalStorageSpaceGrant)
             .filter(
@@ -166,13 +356,22 @@ class PortalSharingMixin:
         self.db.add(grant)
         try:
             self.db.flush()
-            self._sync_user_storage_space_projection(
-                target,
-                access.account,
-                account_role,
-                iam_service,
-                iam_link.iam_username,
-            )
+            if iam_link and iam_link.iam_username:
+                iam_service = self._get_iam_service(access.account)
+                self._sync_user_group_membership(
+                    iam_service,
+                    iam_link.iam_username,
+                    account_role,
+                    portal_settings=self._effective_portal_settings(access.account),
+                )
+                self._sync_user_storage_space_projection(
+                    target,
+                    access.account,
+                    account_role,
+                    iam_service,
+                    iam_link.iam_username,
+                )
+            self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -220,13 +419,13 @@ class PortalSharingMixin:
             )
             .first()
         )
-        if grant is not None:
-            self.db.delete(grant)
         account_role = self._user_s3_account_role(target.id, access.account.id)
-        if link and link.iam_username:
-            iam_service = self._get_iam_service(access.account)
-            try:
+        try:
+            if grant is not None:
+                self.db.delete(grant)
                 self.db.flush()
+            if link and link.iam_username:
+                iam_service = self._get_iam_service(access.account)
                 self._sync_user_storage_space_projection(
                     target,
                     access.account,
@@ -234,12 +433,12 @@ class PortalSharingMixin:
                     iam_service,
                     link.iam_username,
                 )
-                self.db.commit()
-            except Exception:
-                self.db.rollback()
-                raise
-        elif grant is not None:
+            if grant is not None:
+                self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
             self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return self.list_storage_space_shares(user, access, space_id)
 
     def _public_link_status(self, link: DBPortalPublicLink, now: datetime | None = None) -> str:

@@ -34,6 +34,7 @@ class PortalService(
         self._bucket_access_policy_name = "portal-user-buckets"
         self._bucket_access_sid = "PortalUserBuckets"
         self._storage_space_share_sid_prefix = "PortalStorageSpace"
+        self._storage_space_access_sid = "PortalStorageSpaceAccess"
         self._storage_space_private_sid = "PortalStorageSpacePrivate"
         self._storage_space_archived_sid = "PortalStorageSpaceArchived"
         self._bucket_access_default_actions = PortalSettings().bucket_access_policy.actions

@@ -3,7 +3,14 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { S3Account } from "../../api/accounts";
-import type { PortalState, PortalStorageSpaceSummary, PortalStorageSpaceVisibility, PortalUsage } from "../../api/portal";
+import type {
+  PortalState,
+  PortalStorageSpaceAccountMemberRole,
+  PortalStorageSpaceShareScope,
+  PortalStorageSpaceSummary,
+  PortalStorageSpaceVisibility,
+  PortalUsage,
+} from "../../api/portal";
 import type { UiLanguage } from "../../components/language";
 import { translate, type I18nMessage } from "../../i18n";
 import { portalDateLabel } from "./portalI18n";
@@ -37,6 +44,8 @@ export type PortalWorkspaceSpace = {
   ownerLabel: string | null;
   ownerUserId: number | null;
   visibility: PortalStorageSpaceVisibility;
+  shareScope: PortalStorageSpaceShareScope;
+  accountMemberRole: PortalStorageSpaceAccountMemberRole | null;
   projectKey: string | null;
   datasetLabel: string | null;
   role: PortalWorkspaceRole;
@@ -201,6 +210,7 @@ export function buildPortalWorkspaceModel({
     const contentRole = optionalRoleFromStorageSpace(storageSpace.content_role) ?? (canBrowse ? role : null);
     const name = storageSpace.name || prettyName(storageSpace.id);
     const visibility = visibilityFromStorageSpace(storageSpace);
+    const shareScope = visibility === "shared" && storageSpace.share_scope === "account" ? "account" : "restricted";
     return {
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
@@ -211,6 +221,8 @@ export function buildPortalWorkspaceModel({
       ownerLabel: storageSpace.owner_label ?? null,
       ownerUserId: storageSpace.owner_user_id ?? null,
       visibility,
+      shareScope,
+      accountMemberRole: shareScope === "account" ? storageSpace.account_member_role ?? "Editor" : null,
       projectKey: storageSpace.project_key ?? null,
       datasetLabel: storageSpace.dataset_label ?? null,
       role,

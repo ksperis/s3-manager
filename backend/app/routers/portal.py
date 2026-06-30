@@ -27,9 +27,11 @@ from app.models.portal import (
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
     PortalStorageSpace,
+    PortalStorageSpaceAccessSummary,
     PortalStorageSpaceCreate,
     PortalStorageSpaceImport,
     PortalStorageSpaceShare,
+    PortalStorageSpaceShareCandidate,
     PortalStorageSpaceSharePayload,
     PortalStorageSpaceShareUpdate,
     PortalStorageSpaceSummary,
@@ -581,6 +583,9 @@ def create_portal_storage_space(
             description=payload.description,
             owner_label=payload.owner_label,
             visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
+            initial_shares=payload.initial_shares,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
         )
@@ -594,6 +599,9 @@ def create_portal_storage_space(
             metadata={
                 "storage_space_id": storage_space.id,
                 "visibility": storage_space.visibility,
+                "share_scope": storage_space.share_scope,
+                "account_member_role": storage_space.account_member_role,
+                "initial_share_count": len(payload.initial_shares),
                 "owner_user_id": storage_space.owner_user_id,
             },
         )
@@ -620,6 +628,9 @@ def import_portal_storage_space(
             description=payload.description,
             owner_label=payload.owner_label,
             visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
+            initial_shares=payload.initial_shares,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
         )
@@ -633,6 +644,9 @@ def import_portal_storage_space(
             metadata={
                 "storage_space_id": storage_space.id,
                 "visibility": storage_space.visibility,
+                "share_scope": storage_space.share_scope,
+                "account_member_role": storage_space.account_member_role,
+                "initial_share_count": len(payload.initial_shares),
                 "owner_user_id": storage_space.owner_user_id,
             },
         )
@@ -661,6 +675,8 @@ def update_portal_storage_space(
             description=payload.description,
             owner_label=payload.owner_label,
             visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
             project_key=payload.project_key,
             dataset_label=payload.dataset_label,
             archived=payload.archived,
@@ -682,11 +698,28 @@ def update_portal_storage_space(
             metadata={
                 "storage_space_id": storage_space.id,
                 "visibility": storage_space.visibility,
+                "share_scope": storage_space.share_scope,
+                "account_member_role": storage_space.account_member_role,
                 "owner_user_id": storage_space.owner_user_id,
                 "archived": storage_space.archived_at is not None,
             },
         )
         return storage_space
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/access-summary", response_model=PortalStorageSpaceAccessSummary)
+def portal_storage_space_access_summary(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceAccessSummary:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.get_storage_space_access_summary(actor, access, space_id)
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
 
@@ -904,6 +937,37 @@ def portal_storage_space_shares(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
         return service.list_storage_space_shares(actor, access, space_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
+def portal_share_candidates(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShareCandidate]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    if not access.capabilities.can_manage_portal_users:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
+    try:
+        return service.list_storage_space_share_candidates(actor, access)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
+def portal_storage_space_share_candidates(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShareCandidate]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_storage_space_share_candidates(actor, access, space_id)
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
 

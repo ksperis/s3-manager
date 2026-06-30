@@ -6,7 +6,12 @@ import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
 import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
+  fetchAccessSummaryMock: vi.fn(),
+  grantShareMock: vi.fn(),
+  listShareCandidatesMock: vi.fn(),
+  revokeShareMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
+  updateShareMock: vi.fn(),
   generalSettings: {
     browser_enabled: true,
     browser_portal_enabled: true,
@@ -41,6 +46,8 @@ const mocks = vi.hoisted(() => ({
           access: "Shared",
           ownerUserId: 7,
           visibility: "shared",
+          shareScope: "restricted",
+          accountMemberRole: null,
           region: "eu-west-3",
           createdLabel: "12 mars 2024",
           usedBytes: 512,
@@ -87,7 +94,12 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
+  grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
+  listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
+  revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
+  updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 
 vi.mock("../browser/BrowserEmbed", () => ({
@@ -108,6 +120,55 @@ function renderPage() {
 describe("PortalStorageSpaceDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchAccessSummaryMock.mockResolvedValue({
+      mode: "restricted",
+      default_account_member_role: null,
+      owner: {
+        user_id: 7,
+        email: "manager@example.com",
+        display_name: "Manager User",
+        role: "Owner",
+        account_role: "portal_manager",
+        access_source: "owner",
+      },
+      effective_member_count: 4,
+      explicit_shares: [
+        {
+          id: "research-data:12",
+          storage_space_id: "research-data",
+          storage_space_name: "Research Data",
+          user_id: 12,
+          email: "viewer@example.com",
+          role: "Viewer",
+          direction: "by_me",
+          activity_label: "Active",
+        },
+      ],
+      public_link_count: 2,
+      can_manage_access: true,
+      can_create_public_links: true,
+    });
+    mocks.listShareCandidatesMock.mockResolvedValue([
+      {
+        user_id: 12,
+        email: "viewer@example.com",
+        display_name: null,
+        account_role: "portal_user",
+        access_source: "direct",
+        already_shared: true,
+      },
+      {
+        user_id: 13,
+        email: "editor@example.com",
+        display_name: "Editor User",
+        account_role: "portal_user",
+        access_source: "group",
+        already_shared: false,
+      },
+    ]);
+    mocks.grantShareMock.mockResolvedValue({ id: "research-data:13" });
+    mocks.revokeShareMock.mockResolvedValue([]);
+    mocks.updateShareMock.mockResolvedValue({ id: "research-data:12", role: "Editor" });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].role = "Owner";
@@ -118,6 +179,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].status = "Active";
     mocks.hookResult.workspace.spaces[0].access = "Shared";
     mocks.hookResult.workspace.spaces[0].visibility = "shared";
+    mocks.hookResult.workspace.spaces[0].shareScope = "restricted";
+    mocks.hookResult.workspace.spaces[0].accountMemberRole = null;
     mocks.hookResult.workspace.spaces[0].archivedAt = null;
   });
 
@@ -193,7 +256,42 @@ describe("PortalStorageSpaceDetailPage", () => {
     await waitFor(() => {
       expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", {
         description: "Updated description",
+      });
+    });
+  });
+
+  it("shows the unified access panel with collaborators and public link context", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Access" })).toBeInTheDocument();
+    expect(screen.getAllByText("Restricted").length).toBeGreaterThan(0);
+    expect(screen.getByText("Manager User")).toBeInTheDocument();
+    expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 public links")).toHaveAttribute(
+      "href",
+      "/portal/shares?space_id=research-data&tab=links"
+    );
+    expect(screen.getByRole("link", { name: "Open Shares" })).toHaveAttribute(
+      "href",
+      "/portal/shares?space_id=research-data&tab=by"
+    );
+  });
+
+  it("confirms access mode changes from the Access panel", async () => {
+    renderPage();
+
+    const accessSelect = await screen.findByLabelText("Storage Space access");
+    fireEvent.change(accessSelect, { target: { value: "account" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save access" }));
+
+    expect(screen.getByRole("heading", { name: "Change access" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update access" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", {
         visibility: "shared",
+        share_scope: "account",
+        account_member_role: "Editor",
       });
     });
   });

@@ -7,6 +7,7 @@ import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
 const mocks = vi.hoisted(() => ({
   createStorageSpaceMock: vi.fn(),
   importStorageSpaceMock: vi.fn(),
+  listShareCandidatesMock: vi.fn(),
   hookResult: {
     accountIdForApi: "101",
     workspace: {
@@ -27,6 +28,8 @@ const mocks = vi.hoisted(() => ({
           access: "Shared",
           ownerUserId: 7,
           visibility: "shared",
+          shareScope: "restricted",
+          accountMemberRole: null,
           region: "eu-west-3",
           createdLabel: "May 10, 2023",
           usedBytes: 512,
@@ -57,6 +60,7 @@ vi.mock("../../api/portal", async () => {
     ...actual,
     createPortalStorageSpace: (...args: unknown[]) => mocks.createStorageSpaceMock(...args),
     importPortalStorageSpace: (...args: unknown[]) => mocks.importStorageSpaceMock(...args),
+    listPortalShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   };
 });
 
@@ -69,6 +73,17 @@ describe("PortalStorageSpacesPage", () => {
     vi.clearAllMocks();
     mocks.hookResult.accountIdForApi = "101";
     mocks.createStorageSpaceMock.mockResolvedValue({ id: "created-space" });
+    mocks.importStorageSpaceMock.mockResolvedValue({ id: "imported-space" });
+    mocks.listShareCandidatesMock.mockResolvedValue([
+      {
+        user_id: 12,
+        email: "viewer@example.com",
+        display_name: null,
+        account_role: "portal_user",
+        access_source: "direct",
+        already_shared: false,
+      },
+    ]);
     mocks.hookResult.workspace.spaces = [
       {
         id: "research-data",
@@ -80,6 +95,8 @@ describe("PortalStorageSpacesPage", () => {
         access: "Shared",
         ownerUserId: 7,
         visibility: "shared",
+        shareScope: "restricted",
+        accountMemberRole: null,
         region: "eu-west-3",
         createdLabel: "May 10, 2023",
         usedBytes: 512,
@@ -110,7 +127,7 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
-    expect(within(researchRow!).getByText("Shared")).toBeInTheDocument();
+    expect(within(researchRow!).getByText("Restricted")).toBeInTheDocument();
     expect(within(researchRow!).queryByText("Active")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
@@ -258,11 +275,14 @@ describe("PortalStorageSpacesPage", () => {
         naming_mode: "generic_uuid",
         description: null,
         visibility: "private",
+        share_scope: "restricted",
+        account_member_role: null,
+        initial_shares: [],
       });
     });
   });
 
-  it("keeps private and shared visibility choices for portal managers", () => {
+  it("keeps private, account-wide, and restricted access choices for portal managers", () => {
     render(
       <MemoryRouter>
         <PortalStorageSpacesPage />
@@ -271,9 +291,133 @@ describe("PortalStorageSpacesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
 
-    const visibility = screen.getByLabelText("Storage Space visibility");
-    expect(within(visibility).getByRole("option", { name: "Private" })).toBeInTheDocument();
-    expect(within(visibility).getByRole("option", { name: "Shared" })).toBeInTheDocument();
+    const access = screen.getByLabelText("Storage Space access");
+    expect(within(access).getByRole("option", { name: "Private" })).toBeInTheDocument();
+    expect(within(access).getByRole("option", { name: "All" })).toBeInTheDocument();
+    expect(within(access).getByRole("option", { name: "Restricted" })).toBeInTheDocument();
+  });
+
+  it("creates account-wide Storage Spaces with Editor access by default", async () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+    fireEvent.change(screen.getByLabelText("Storage Space access"), {
+      target: { value: "account" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+      target: { value: "Team Research" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        name: "Team Research",
+        naming_mode: "generic_uuid",
+        description: null,
+        visibility: "shared",
+        share_scope: "account",
+        account_member_role: "Editor",
+        initial_shares: [],
+      });
+    });
+  });
+
+  it("creates restricted Storage Spaces atomically with selected initial shares", async () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+    fireEvent.change(screen.getByLabelText("Storage Space access"), {
+      target: { value: "restricted" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+      target: { value: "Restricted Research" },
+    });
+
+    expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.change(screen.getByRole("combobox", { name: "Access for viewer@example.com" }), {
+      target: { value: "Editor" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        name: "Restricted Research",
+        naming_mode: "generic_uuid",
+        description: null,
+        visibility: "shared",
+        share_scope: "restricted",
+        account_member_role: null,
+        initial_shares: [{ user_id: 12, role: "Editor" }],
+      });
+    });
+  });
+
+  it("imports existing storage with account-wide access when selected", async () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add existing storage" }));
+    fireEvent.change(screen.getByPlaceholderText("Existing storage name"), {
+      target: { value: "existing-research" },
+    });
+    fireEvent.change(screen.getByLabelText("Imported Storage Space access"), {
+      target: { value: "account" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(mocks.importStorageSpaceMock).toHaveBeenCalledWith("101", {
+        bucket_name: "existing-research",
+        description: null,
+        visibility: "shared",
+        share_scope: "account",
+        account_member_role: "Editor",
+        initial_shares: [],
+      });
+    });
+  });
+
+  it("imports restricted storage with selected initial shares", async () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add existing storage" }));
+    fireEvent.change(screen.getByPlaceholderText("Existing storage name"), {
+      target: { value: "existing-restricted" },
+    });
+    fireEvent.change(screen.getByLabelText("Imported Storage Space access"), {
+      target: { value: "restricted" },
+    });
+
+    expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(mocks.importStorageSpaceMock).toHaveBeenCalledWith("101", {
+        bucket_name: "existing-restricted",
+        description: null,
+        visibility: "shared",
+        share_scope: "restricted",
+        account_member_role: null,
+        initial_shares: [{ user_id: 12, role: "Viewer" }],
+      });
+    });
   });
 
   it("does not fall back to bucket management when Storage Space creation is absent", () => {
