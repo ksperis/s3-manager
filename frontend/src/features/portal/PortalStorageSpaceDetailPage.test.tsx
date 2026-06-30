@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   revokeShareMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
   updateShareMock: vi.fn(),
+  usePortalWorkspaceDataMock: vi.fn(),
   generalSettings: {
     browser_enabled: true,
     browser_portal_enabled: true,
@@ -84,7 +85,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./usePortalWorkspaceData", () => ({
-  usePortalWorkspaceData: () => mocks.hookResult,
+  usePortalWorkspaceData: (...args: unknown[]) => {
+    mocks.usePortalWorkspaceDataMock(...args);
+    return mocks.hookResult;
+  },
 }));
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -120,6 +124,7 @@ function renderPage() {
 describe("PortalStorageSpaceDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.usePortalWorkspaceDataMock.mockClear();
     mocks.fetchAccessSummaryMock.mockResolvedValue({
       mode: "restricted",
       default_account_member_role: null,
@@ -188,6 +193,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
+    expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
     expect(screen.getByTestId("portal-browser-embed")).toBeInTheDocument();
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();

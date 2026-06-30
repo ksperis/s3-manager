@@ -50,7 +50,7 @@ function visibleStatus(space: { status: string }) {
 
 export default function PortalStorageSpacesPage() {
   const { t } = useI18n();
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData();
+  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData({ includeArchived: true });
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<PortalStorageSpaceRole | "all">("all");

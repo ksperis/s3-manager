@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createStorageSpaceMock: vi.fn(),
   importStorageSpaceMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
+  usePortalWorkspaceDataMock: vi.fn(),
   hookResult: {
     accountIdForApi: "101",
     workspace: {
@@ -65,12 +66,16 @@ vi.mock("../../api/portal", async () => {
 });
 
 vi.mock("./usePortalWorkspaceData", () => ({
-  usePortalWorkspaceData: () => mocks.hookResult,
+  usePortalWorkspaceData: (...args: unknown[]) => {
+    mocks.usePortalWorkspaceDataMock(...args);
+    return mocks.hookResult;
+  },
 }));
 
 describe("PortalStorageSpacesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.usePortalWorkspaceDataMock.mockClear();
     mocks.hookResult.accountIdForApi = "101";
     mocks.createStorageSpaceMock.mockResolvedValue({ id: "created-space" });
     mocks.importStorageSpaceMock.mockResolvedValue({ id: "imported-space" });
@@ -124,6 +129,7 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Storage Spaces" })).toBeInTheDocument();
+    expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();

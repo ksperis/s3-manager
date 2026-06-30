@@ -128,7 +128,7 @@ export default function PortalStorageSpaceDetailPage() {
     accountLoading,
     accountIdForApi,
     selectedAccount,
-  } = usePortalWorkspaceData();
+  } = usePortalWorkspaceData({ includeArchived: true });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
   const spaceAccessMode: PortalAccessMode = space
