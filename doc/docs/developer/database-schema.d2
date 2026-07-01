@@ -1,0 +1,311 @@
+# Generated from backend/app/db SQLAlchemy models via app.db.Base.metadata.
+# Scope: all tables and foreign-key topology; use detail slices for readable column-level views.
+# Column flags: PK=primary key, FK=foreign key, NN=not nullable, UQ=single-column unique.
+# Composite constraints and indexes are available as table tooltips in rendered D2 output.
+# Detail slices:
+# - doc/docs/developer/database-schema/identity-ui-access.d2 (Identity and UI access)
+# - doc/docs/developer/database-schema/storage-s3-execution.d2 (Storage and S3 execution)
+# - doc/docs/developer/database-schema/tags-classification.d2 (Tags and classification)
+# - doc/docs/developer/database-schema/portal.d2 (Portal)
+# - doc/docs/developer/database-schema/operations-audit.d2 (Operations and audit)
+# - doc/docs/developer/database-schema/observability-quota-billing.d2 (Observability quota and billing)
+# - doc/docs/developer/database-schema/full.d2 (monolithic fallback)
+direction: right
+classes: {
+  table: {
+    shape: rectangle
+    style.fill: "#ffffff"
+    style.stroke: "#64748b"
+  }
+}
+
+Legend: {
+  shape: text
+  label: "Overview only: all tables and FK topology. Render per-domain D2 files for readable columns."
+}
+
+"Identity and UI access": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_users_email(email); uq_users_provider_subject(auth_provider, auth_provider_subject)\nIndexes: ix_users_id(id) [index]"
+  }
+  "ui_groups": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_ui_groups_name(name)\nIndexes: ix_ui_groups_id(id) [index]; ix_ui_groups_name(name) [index]"
+  }
+  "user_ui_groups": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_ui_group(user_id, group_id)\nIndexes: ix_user_ui_groups_group_user(group_id, user_id) [index]; ix_user_ui_groups_id(id) [index]"
+  }
+  "api_tokens": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_api_tokens_created_at(created_at) [index]; ix_api_tokens_id(id) [index]; ix_api_tokens_jti(jti) [unique]; ix_api_tokens_revoked_by_user_id(revoked_by_user_id) [index]; ix_api_tokens_token_hash(token_hash) [unique]; ix_api_tokens_user_id(user_id) [index]"
+  }
+  "refresh_sessions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_refresh_sessions_id(id) [index]; ix_refresh_sessions_revoked_by_user_id(revoked_by_user_id) [index]; ix_refresh_sessions_s3_session_id(s3_session_id) [index]; ix_refresh_sessions_token_hash(token_hash) [unique]; ix_refresh_sessions_user_id(user_id) [index]"
+  }
+  "s3_sessions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_s3_sessions_access_key_hash(access_key_hash) [index]; ix_s3_sessions_id(id) [index]"
+  }
+  "oidc_providers": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_oidc_providers_id(id) [index]; ix_oidc_providers_provider_id(provider_id) [unique]"
+  }
+  "oidc_login_states": {
+    class: table
+    tooltip: "PK: state\nIndexes: ix_oidc_login_states_created_at(created_at) [index]; ix_oidc_login_states_state(state) [index]"
+  }
+  "ldap_providers": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_ldap_providers_id(id) [index]; ix_ldap_providers_provider_id(provider_id) [unique]"
+  }
+}
+
+"Storage and S3 execution": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "storage_endpoints": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_storage_endpoints_endpoint(endpoint_url); uq_storage_endpoints_name(name)\nIndexes: ix_storage_endpoints_id(id) [index]"
+  }
+  "s3_accounts": {
+    class: table
+    tooltip: "PK: id\nUnique: unnamed(name); unnamed(rgw_account_id)\nIndexes: ix_s3_accounts_id(id) [index]"
+  }
+  "user_s3_accounts": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_s3_account(user_id, account_id)\nIndexes: ix_user_s3_accounts_account_user(account_id, user_id) [index]; ix_user_s3_accounts_id(id) [index]"
+  }
+  "account_iam_users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_account_iam_user(user_id, account_id); uq_account_iam_user_id(iam_user_id)\nIndexes: ix_account_iam_users_id(id) [index]"
+  }
+  "s3_users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_users_uid(rgw_user_uid)\nIndexes: ix_s3_users_id(id) [index]"
+  }
+  "user_s3_users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_s3_user(user_id, s3_user_id)\nIndexes: ix_user_s3_users_id(id) [index]; ix_user_s3_users_s3_user_user(s3_user_id, user_id) [index]"
+  }
+  "s3_connections": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_s3_connections_created_by_user_id(created_by_user_id) [index]; ix_s3_connections_id(id) [index]; ix_s3_connections_storage_endpoint_id(storage_endpoint_id) [index]; uq_s3_connections_private_creator_name(created_by_user_id, name) [unique]; uq_s3_connections_shared_name(name) [unique]"
+  }
+  "user_s3_connections": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_s3_connection(user_id, s3_connection_id)\nIndexes: ix_user_s3_connections_connection_user(s3_connection_id, user_id) [index]; ix_user_s3_connections_id(id) [index]"
+  }
+  "ui_group_s3_accounts": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_ui_group_s3_account(group_id, account_id)\nIndexes: ix_ui_group_s3_accounts_account_group(account_id, group_id) [index]; ix_ui_group_s3_accounts_id(id) [index]"
+  }
+  "ui_group_s3_users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_ui_group_s3_user(group_id, s3_user_id)\nIndexes: ix_ui_group_s3_users_id(id) [index]; ix_ui_group_s3_users_s3_user_group(s3_user_id, group_id) [index]"
+  }
+  "ui_group_s3_connections": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_ui_group_s3_connection(group_id, s3_connection_id)\nIndexes: ix_ui_group_s3_connections_connection_group(s3_connection_id, group_id) [index]; ix_ui_group_s3_connections_id(id) [index]"
+  }
+}
+
+"Tags and classification": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "tag_definitions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_tag_definitions_domain_owner(domain_kind, owner_user_id) [index]; ix_tag_definitions_id(id) [index]; uq_tag_definitions_domain_global_label(domain_kind, label_key) [unique]; uq_tag_definitions_domain_owner_label(domain_kind, owner_user_id, label_key) [unique]"
+  }
+  "storage_endpoint_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]; ix_storage_endpoint_tags_id(id) [index]"
+  }
+  "s3_account_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_id(id) [index]"
+  }
+  "s3_user_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_id(id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
+  }
+  "s3_connection_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_id(id) [index]"
+  }
+}
+
+"Portal": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "portal_storage_space_metadata": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_metadata_account_bucket(account_id, bucket_name)\nCheck: ck_portal_storage_space_metadata_account_member_role: account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor'); ck_portal_storage_space_metadata_share_scope: share_scope IN ('restricted', 'account')\nIndexes: ix_portal_storage_space_metadata_account(account_id) [index]; ix_portal_storage_space_metadata_id(id) [index]"
+  }
+  "portal_storage_space_grants": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_grants_space_user(storage_space_metadata_id, user_id)\nCheck: ck_portal_storage_space_grants_role: role IN ('Viewer', 'Editor', 'Owner')\nIndexes: ix_portal_storage_space_grants_id(id) [index]; ix_portal_storage_space_grants_space(storage_space_metadata_id) [index]; ix_portal_storage_space_grants_user(user_id) [index]"
+  }
+  "portal_public_links": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_public_links_token(token)\nIndexes: ix_portal_public_links_account_bucket(account_id, bucket_name) [index]; ix_portal_public_links_expires(expires_at) [index]; ix_portal_public_links_id(id) [index]"
+  }
+}
+
+"Operations and audit": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "audit_logs": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_audit_logs_account_id_id(account_id, id) [index]; ix_audit_logs_created_at(created_at) [index]; ix_audit_logs_id(id) [index]; ix_audit_logs_request_id(request_id) [index]; ix_audit_logs_scope_id(scope, id) [index]; ix_audit_logs_user_role_id(user_role, id) [index]"
+  }
+  "user_notifications": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_notifications_user_event(user_id, event_key)\nIndexes: ix_user_notifications_created_at(created_at) [index]; ix_user_notifications_id(id) [index]; ix_user_notifications_notification_type(notification_type) [index]; ix_user_notifications_s3_account_id(s3_account_id) [index]; ix_user_notifications_s3_user_id(s3_user_id) [index]; ix_user_notifications_storage_endpoint_id(storage_endpoint_id) [index]; ix_user_notifications_subject_account(s3_account_id, created_at) [index]; ix_user_notifications_subject_s3_user(s3_user_id, created_at) [index]; ix_user_notifications_user_created(user_id, created_at) [index]; ix_user_notifications_user_id(user_id) [index]; ix_user_notifications_user_read(user_id, read_at) [index]"
+  }
+  "bucket_migrations": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_bucket_migrations_created_at(created_at) [index]; ix_bucket_migrations_created_by_user_id(created_by_user_id) [index]; ix_bucket_migrations_id(id) [index]; ix_bucket_migrations_precheck_status(precheck_status) [index]; ix_bucket_migrations_source_context_id(source_context_id) [index]; ix_bucket_migrations_source_target(source_context_id, target_context_id) [index]; ix_bucket_migrations_status(status) [index]; ix_bucket_migrations_status_created(status, created_at) [index]; ix_bucket_migrations_target_context_id(target_context_id) [index]; ix_bucket_migrations_updated_at(updated_at) [index]; ix_bucket_migrations_worker_lease(worker_lease_until, status) [index]; ix_bucket_migrations_worker_lease_owner(worker_lease_owner) [index]; ix_bucket_migrations_worker_lease_until(worker_lease_until) [index]"
+  }
+  "bucket_migration_items": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_bucket_migration_items_source(migration_id, source_bucket)\nIndexes: ix_bucket_migration_items_created_at(created_at) [index]; ix_bucket_migration_items_id(id) [index]; ix_bucket_migration_items_migration_id(migration_id) [index]; ix_bucket_migration_items_migration_status(migration_id, status) [index]; ix_bucket_migration_items_status(status) [index]; ix_bucket_migration_items_updated_at(updated_at) [index]"
+  }
+  "bucket_migration_events": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_bucket_migration_events_created_at(created_at) [index]; ix_bucket_migration_events_id(id) [index]; ix_bucket_migration_events_item_created(item_id, created_at) [index]; ix_bucket_migration_events_item_id(item_id) [index]; ix_bucket_migration_events_migration_created(migration_id, created_at) [index]; ix_bucket_migration_events_migration_id(migration_id) [index]"
+  }
+  "bucket_usage_stats_snapshots": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_bucket_usage_stats_scope_bucket(scope_kind, scope_id, bucket_name)\nIndexes: ix_bucket_usage_stats_calculated_at(calculated_at) [index]; ix_bucket_usage_stats_scope(scope_kind, scope_id) [index]; ix_bucket_usage_stats_snapshots_calculated_at(calculated_at) [index]; ix_bucket_usage_stats_snapshots_id(id) [index]"
+  }
+}
+
+"Observability quota and billing": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "endpoint_health_checks": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_endpoint_health_checks_checked_at(checked_at) [index]; ix_endpoint_health_checks_endpoint_mode_checked(storage_endpoint_id, check_mode, checked_at) [index]; ix_endpoint_health_checks_id(id) [index]; ix_endpoint_health_checks_storage_endpoint_id(storage_endpoint_id) [index]"
+  }
+  "endpoint_health_latest": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_endpoint_health_latest_scope(storage_endpoint_id, check_mode, check_type, scope)\nIndexes: ix_endpoint_health_latest_checked_at(checked_at) [index]; ix_endpoint_health_latest_endpoint_type_scope_checked(storage_endpoint_id, check_type, scope, checked_at) [index]; ix_endpoint_health_latest_id(id) [index]; ix_endpoint_health_latest_storage_endpoint_id(storage_endpoint_id) [index]; ix_endpoint_health_latest_updated_at(updated_at) [index]"
+  }
+  "endpoint_health_status_segments": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_endpoint_health_segments_endpoint_type_scope_ended(storage_endpoint_id, check_type, scope, ended_at) [index]; ix_endpoint_health_segments_endpoint_type_scope_started(storage_endpoint_id, check_type, scope, started_at) [index]; ix_endpoint_health_status_segments_ended_at(ended_at) [index]; ix_endpoint_health_status_segments_id(id) [index]; ix_endpoint_health_status_segments_started_at(started_at) [index]; ix_endpoint_health_status_segments_status(status) [index]; ix_endpoint_health_status_segments_storage_endpoint_id(storage_endpoint_id) [index]; ix_endpoint_health_status_segments_updated_at(updated_at) [index]"
+  }
+  "endpoint_health_rollups": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_endpoint_health_rollup_bucket(storage_endpoint_id, check_mode, check_type, scope, resolution_seconds, bucket_start)\nIndexes: ix_endpoint_health_rollups_bucket_start(bucket_start) [index]; ix_endpoint_health_rollups_endpoint_type_scope_res_bucket(storage_endpoint_id, check_type, scope, resolution_seconds, bucket_start) [index]; ix_endpoint_health_rollups_id(id) [index]; ix_endpoint_health_rollups_storage_endpoint_id(storage_endpoint_id) [index]; ix_endpoint_health_rollups_updated_at(updated_at) [index]"
+  }
+  "quota_usage_hourly": {
+    class: table
+    tooltip: "PK: id\nCheck: ck_quota_usage_hourly_subject_kind: (s3_account_id IS NOT NULL AND s3_user_id IS NULL) OR (s3_account_id IS NULL AND s3_user_id IS NOT NULL)\nIndexes: ix_quota_usage_hourly_endpoint_hour_account(storage_endpoint_id, hour_ts, s3_account_id) [index]; ix_quota_usage_hourly_endpoint_hour_user(storage_endpoint_id, hour_ts, s3_user_id) [index]; ix_quota_usage_hourly_hour_ts(hour_ts) [index]; ix_quota_usage_hourly_id(id) [index]; ix_quota_usage_hourly_s3_account_id(s3_account_id) [index]; ix_quota_usage_hourly_s3_user_id(s3_user_id) [index]; ix_quota_usage_hourly_storage_endpoint_id(storage_endpoint_id) [index]; uq_quota_usage_hourly_account(hour_ts, storage_endpoint_id, s3_account_id) [unique]; uq_quota_usage_hourly_user(hour_ts, storage_endpoint_id, s3_user_id) [unique]"
+  }
+  "quota_usage_daily": {
+    class: table
+    tooltip: "PK: id\nCheck: ck_quota_usage_daily_subject_kind: (s3_account_id IS NOT NULL AND s3_user_id IS NULL) OR (s3_account_id IS NULL AND s3_user_id IS NOT NULL)\nIndexes: ix_quota_usage_daily_day(day) [index]; ix_quota_usage_daily_endpoint_day_account(storage_endpoint_id, day, s3_account_id) [index]; ix_quota_usage_daily_endpoint_day_user(storage_endpoint_id, day, s3_user_id) [index]; ix_quota_usage_daily_id(id) [index]; ix_quota_usage_daily_s3_account_id(s3_account_id) [index]; ix_quota_usage_daily_s3_user_id(s3_user_id) [index]; ix_quota_usage_daily_storage_endpoint_id(storage_endpoint_id) [index]; uq_quota_usage_daily_account(day, storage_endpoint_id, s3_account_id) [unique]; uq_quota_usage_daily_user(day, storage_endpoint_id, s3_user_id) [unique]"
+  }
+  "quota_alert_states": {
+    class: table
+    tooltip: "PK: id\nCheck: ck_quota_alert_states_subject_kind: (s3_account_id IS NOT NULL AND s3_user_id IS NULL) OR (s3_account_id IS NULL AND s3_user_id IS NOT NULL)\nIndexes: ix_quota_alert_states_endpoint_account(storage_endpoint_id, s3_account_id) [index]; ix_quota_alert_states_endpoint_user(storage_endpoint_id, s3_user_id) [index]; ix_quota_alert_states_id(id) [index]; ix_quota_alert_states_s3_account_id(s3_account_id) [index]; ix_quota_alert_states_s3_user_id(s3_user_id) [index]; ix_quota_alert_states_storage_endpoint_id(storage_endpoint_id) [index]; uq_quota_alert_states_account(storage_endpoint_id, s3_account_id) [unique]; uq_quota_alert_states_user(storage_endpoint_id, s3_user_id) [unique]"
+  }
+  "billing_usage_daily": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_billing_usage_daily(day, storage_endpoint_id, s3_account_id, s3_user_id, source)\nIndexes: ix_billing_usage_daily_day(day) [index]; ix_billing_usage_daily_endpoint_day_account(storage_endpoint_id, day, s3_account_id) [index]; ix_billing_usage_daily_endpoint_day_user(storage_endpoint_id, day, s3_user_id) [index]; ix_billing_usage_daily_id(id) [index]; ix_billing_usage_daily_s3_account_id(s3_account_id) [index]; ix_billing_usage_daily_s3_user_id(s3_user_id) [index]; ix_billing_usage_daily_storage_endpoint_id(storage_endpoint_id) [index]"
+  }
+  "billing_storage_daily": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_billing_storage_daily(day, storage_endpoint_id, s3_account_id, s3_user_id, source)\nIndexes: ix_billing_storage_daily_day(day) [index]; ix_billing_storage_daily_endpoint_day_account(storage_endpoint_id, day, s3_account_id) [index]; ix_billing_storage_daily_endpoint_day_user(storage_endpoint_id, day, s3_user_id) [index]; ix_billing_storage_daily_id(id) [index]; ix_billing_storage_daily_s3_account_id(s3_account_id) [index]; ix_billing_storage_daily_s3_user_id(s3_user_id) [index]; ix_billing_storage_daily_storage_endpoint_id(storage_endpoint_id) [index]"
+  }
+  "billing_rate_cards": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_billing_rate_cards_name(name)\nIndexes: ix_billing_rate_cards_endpoint_effective_window(storage_endpoint_id, effective_from, effective_to) [index]; ix_billing_rate_cards_id(id) [index]; ix_billing_rate_cards_storage_endpoint_id(storage_endpoint_id) [index]"
+  }
+  "billing_assignments": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_billing_assignments_endpoint_account_created(storage_endpoint_id, s3_account_id, created_at) [index]; ix_billing_assignments_endpoint_user_created(storage_endpoint_id, s3_user_id, created_at) [index]; ix_billing_assignments_id(id) [index]; ix_billing_assignments_rate_card_id(rate_card_id) [index]; ix_billing_assignments_s3_account_id(s3_account_id) [index]; ix_billing_assignments_s3_user_id(s3_user_id) [index]; ix_billing_assignments_storage_endpoint_id(storage_endpoint_id) [index]"
+  }
+}
+
+"api_tokens" -> "users"
+"api_tokens" -> "users"
+"billing_rate_cards" -> "storage_endpoints"
+"bucket_migrations" -> "users"
+"endpoint_health_checks" -> "storage_endpoints"
+"endpoint_health_latest" -> "storage_endpoints"
+"endpoint_health_rollups" -> "storage_endpoints"
+"endpoint_health_status_segments" -> "storage_endpoints"
+"refresh_sessions" -> "users"
+"refresh_sessions" -> "s3_sessions"
+"refresh_sessions" -> "users"
+"s3_accounts" -> "storage_endpoints"
+"s3_connections" -> "users"
+"s3_connections" -> "storage_endpoints"
+"s3_users" -> "storage_endpoints"
+"tag_definitions" -> "users"
+"user_ui_groups" -> "ui_groups"
+"user_ui_groups" -> "users"
+"account_iam_users" -> "s3_accounts"
+"account_iam_users" -> "users"
+"audit_logs" -> "s3_accounts"
+"audit_logs" -> "users"
+"billing_assignments" -> "billing_rate_cards"
+"billing_assignments" -> "s3_accounts"
+"billing_assignments" -> "s3_users"
+"billing_assignments" -> "storage_endpoints"
+"billing_storage_daily" -> "s3_accounts"
+"billing_storage_daily" -> "s3_users"
+"billing_storage_daily" -> "storage_endpoints"
+"billing_usage_daily" -> "s3_accounts"
+"billing_usage_daily" -> "s3_users"
+"billing_usage_daily" -> "storage_endpoints"
+"bucket_migration_items" -> "bucket_migrations"
+"portal_public_links" -> "s3_accounts": "ondelete=CASCADE"
+"portal_public_links" -> "users"
+"portal_storage_space_metadata" -> "s3_accounts": "ondelete=CASCADE"
+"portal_storage_space_metadata" -> "users"
+"quota_alert_states" -> "s3_accounts"
+"quota_alert_states" -> "s3_users"
+"quota_alert_states" -> "storage_endpoints"
+"quota_usage_daily" -> "s3_accounts"
+"quota_usage_daily" -> "s3_users"
+"quota_usage_daily" -> "storage_endpoints"
+"quota_usage_hourly" -> "s3_accounts"
+"quota_usage_hourly" -> "s3_users"
+"quota_usage_hourly" -> "storage_endpoints"
+"s3_account_tags" -> "s3_accounts": "ondelete=CASCADE"
+"s3_account_tags" -> "tag_definitions": "ondelete=CASCADE"
+"s3_connection_tags" -> "s3_connections": "ondelete=CASCADE"
+"s3_connection_tags" -> "tag_definitions": "ondelete=CASCADE"
+"s3_user_tags" -> "s3_users": "ondelete=CASCADE"
+"s3_user_tags" -> "tag_definitions": "ondelete=CASCADE"
+"storage_endpoint_tags" -> "storage_endpoints": "ondelete=CASCADE"
+"storage_endpoint_tags" -> "tag_definitions": "ondelete=CASCADE"
+"ui_group_s3_accounts" -> "s3_accounts"
+"ui_group_s3_accounts" -> "ui_groups"
+"ui_group_s3_connections" -> "ui_groups"
+"ui_group_s3_connections" -> "s3_connections"
+"ui_group_s3_users" -> "ui_groups"
+"ui_group_s3_users" -> "s3_users"
+"user_notifications" -> "s3_accounts"
+"user_notifications" -> "s3_users"
+"user_notifications" -> "storage_endpoints"
+"user_notifications" -> "users": "ondelete=CASCADE"
+"user_s3_accounts" -> "s3_accounts"
+"user_s3_accounts" -> "users"
+"user_s3_connections" -> "s3_connections"
+"user_s3_connections" -> "users"
+"user_s3_users" -> "s3_users"
+"user_s3_users" -> "users"
+"bucket_migration_events" -> "bucket_migration_items"
+"bucket_migration_events" -> "bucket_migrations"
+"portal_storage_space_grants" -> "users"
+"portal_storage_space_grants" -> "portal_storage_space_metadata": "ondelete=CASCADE"
+"portal_storage_space_grants" -> "users": "ondelete=CASCADE"

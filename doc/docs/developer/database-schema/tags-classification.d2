@@ -1,0 +1,113 @@
+# Generated from backend/app/db SQLAlchemy models via app.db.Base.metadata.
+# Scope: Tags and classification slice with local columns and cross-domain FK stubs.
+# Column flags: PK=primary key, FK=foreign key, NN=not nullable, UQ=single-column unique.
+# Composite constraints and indexes are available as table tooltips in rendered D2 output.
+direction: right
+classes: {
+  table: {
+    shape: sql_table
+  }
+  external: {
+    shape: rectangle
+    style.fill: "#fff7ed"
+    style.stroke: "#fdba74"
+  }
+}
+
+Legend: {
+  shape: text
+  label: "Local tables show full columns. Orange boxes are cross-domain references defined in another slice."
+}
+
+"Tags and classification": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "tag_definitions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_tag_definitions_domain_owner(domain_kind, owner_user_id) [index]; ix_tag_definitions_id(id) [index]; uq_tag_definitions_domain_global_label(domain_kind, label_key) [unique]; uq_tag_definitions_domain_owner_label(domain_kind, owner_user_id, label_key) [unique]"
+    "id": "INTEGER [PK, NN]"
+    "domain_kind": "VARCHAR [NN]"
+    "owner_user_id": "INTEGER [FK]"
+    "label": "VARCHAR [NN]"
+    "label_key": "VARCHAR [NN]"
+    "color_key": "VARCHAR [NN]"
+    "scope": "VARCHAR [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "storage_endpoint_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]; ix_storage_endpoint_tags_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "storage_endpoint_id": "INTEGER [FK, NN]"
+    "tag_definition_id": "INTEGER [FK, NN]"
+    "position": "INTEGER [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "s3_account_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "account_id": "INTEGER [FK, NN]"
+    "tag_definition_id": "INTEGER [FK, NN]"
+    "position": "INTEGER [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "s3_user_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_id(id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
+    "id": "INTEGER [PK, NN]"
+    "s3_user_id": "INTEGER [FK, NN]"
+    "tag_definition_id": "INTEGER [FK, NN]"
+    "position": "INTEGER [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "s3_connection_tags": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "s3_connection_id": "INTEGER [FK, NN]"
+    "tag_definition_id": "INTEGER [FK, NN]"
+    "position": "INTEGER [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+}
+
+"External references": {
+  style.fill: "#fff7ed"
+  style.stroke: "#fdba74"
+  "s3_accounts": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "s3_connections": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "s3_users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "storage_endpoints": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/identity-ui-access.d2"
+  }
+}
+
+"tag_definitions"."owner_user_id" -> "users"
+"s3_account_tags"."account_id" -> "s3_accounts": "ondelete=CASCADE"
+"s3_account_tags"."tag_definition_id" -> "tag_definitions"."id": "ondelete=CASCADE"
+"s3_connection_tags"."s3_connection_id" -> "s3_connections": "ondelete=CASCADE"
+"s3_connection_tags"."tag_definition_id" -> "tag_definitions"."id": "ondelete=CASCADE"
+"s3_user_tags"."s3_user_id" -> "s3_users": "ondelete=CASCADE"
+"s3_user_tags"."tag_definition_id" -> "tag_definitions"."id": "ondelete=CASCADE"
+"storage_endpoint_tags"."storage_endpoint_id" -> "storage_endpoints": "ondelete=CASCADE"
+"storage_endpoint_tags"."tag_definition_id" -> "tag_definitions"."id": "ondelete=CASCADE"

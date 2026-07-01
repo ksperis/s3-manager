@@ -1,0 +1,276 @@
+# Generated from backend/app/db SQLAlchemy models via app.db.Base.metadata.
+# Scope: Identity and UI access slice with local columns and cross-domain FK stubs.
+# Column flags: PK=primary key, FK=foreign key, NN=not nullable, UQ=single-column unique.
+# Composite constraints and indexes are available as table tooltips in rendered D2 output.
+direction: right
+classes: {
+  table: {
+    shape: sql_table
+  }
+  external: {
+    shape: rectangle
+    style.fill: "#fff7ed"
+    style.stroke: "#fdba74"
+  }
+}
+
+Legend: {
+  shape: text
+  label: "Local tables show full columns. Orange boxes are cross-domain references defined in another slice."
+}
+
+"Identity and UI access": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_users_email(email); uq_users_provider_subject(auth_provider, auth_provider_subject)\nIndexes: ix_users_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "email": "VARCHAR [NN]"
+    "full_name": "VARCHAR"
+    "display_name": "VARCHAR"
+    "picture_url": "VARCHAR"
+    "hashed_password": "VARCHAR"
+    "is_active": "BOOLEAN"
+    "role": "VARCHAR [NN]"
+    "is_root": "BOOLEAN [NN]"
+    "can_access_ceph_admin": "BOOLEAN [NN]"
+    "can_access_storage_ops": "BOOLEAN [NN]"
+    "can_access_manager_bucket_compare": "BOOLEAN [NN]"
+    "can_access_manager_bucket_integrity_check": "BOOLEAN [NN]"
+    "can_access_manager_bucket_migration": "BOOLEAN [NN]"
+    "can_access_manager_feature_rules": "BOOLEAN [NN]"
+    "can_access_manager_bucket_quota": "BOOLEAN [NN]"
+    "can_access_manager_bucket_purge": "BOOLEAN [NN]"
+    "can_access_manager_ceph_s3_user_keys": "BOOLEAN [NN]"
+    "browser_advanced_features_enabled": "BOOLEAN [NN]"
+    "auth_provider": "VARCHAR"
+    "auth_provider_subject": "VARCHAR"
+    "created_at": "DATETIME"
+    "updated_at": "DATETIME [NN]"
+    "last_login_at": "DATETIME"
+    "ui_language": "VARCHAR"
+    "quota_alerts_enabled": "BOOLEAN [NN]"
+    "quota_alerts_global_watch": "BOOLEAN [NN]"
+    "ui_preferences_json": "TEXT [NN]"
+  }
+  "ui_groups": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_ui_groups_name(name)\nIndexes: ix_ui_groups_id(id) [index]; ix_ui_groups_name(name) [index]"
+    "id": "INTEGER [PK, NN]"
+    "name": "VARCHAR [NN]"
+    "description": "TEXT"
+    "can_access_ceph_admin": "BOOLEAN [NN]"
+    "can_access_storage_ops": "BOOLEAN [NN]"
+    "can_access_manager_bucket_compare": "BOOLEAN [NN]"
+    "can_access_manager_bucket_integrity_check": "BOOLEAN [NN]"
+    "can_access_manager_bucket_migration": "BOOLEAN [NN]"
+    "can_access_manager_feature_rules": "BOOLEAN [NN]"
+    "can_access_manager_bucket_quota": "BOOLEAN [NN]"
+    "can_access_manager_bucket_purge": "BOOLEAN [NN]"
+    "can_access_manager_ceph_s3_user_keys": "BOOLEAN [NN]"
+    "browser_advanced_features_enabled": "BOOLEAN [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "user_ui_groups": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_user_ui_group(user_id, group_id)\nIndexes: ix_user_ui_groups_group_user(group_id, user_id) [index]; ix_user_ui_groups_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "group_id": "INTEGER [FK, NN]"
+    "created_at": "DATETIME [NN]"
+  }
+  "api_tokens": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_api_tokens_created_at(created_at) [index]; ix_api_tokens_id(id) [index]; ix_api_tokens_jti(jti) [unique]; ix_api_tokens_revoked_by_user_id(revoked_by_user_id) [index]; ix_api_tokens_token_hash(token_hash) [unique]; ix_api_tokens_user_id(user_id) [index]"
+    "id": "VARCHAR [PK, NN]"
+    "jti": "VARCHAR [NN, UQ]"
+    "token_hash": "VARCHAR [NN, UQ]"
+    "user_id": "INTEGER [FK, NN]"
+    "revoked_by_user_id": "INTEGER [FK]"
+    "name": "VARCHAR [NN]"
+    "created_at": "DATETIME [NN]"
+    "last_used_at": "DATETIME"
+    "last_ip": "VARCHAR"
+    "last_user_agent": "VARCHAR"
+    "expires_at": "DATETIME [NN]"
+    "revoked_at": "DATETIME"
+    "revoked_reason": "VARCHAR"
+  }
+  "refresh_sessions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_refresh_sessions_id(id) [index]; ix_refresh_sessions_revoked_by_user_id(revoked_by_user_id) [index]; ix_refresh_sessions_s3_session_id(s3_session_id) [index]; ix_refresh_sessions_token_hash(token_hash) [unique]; ix_refresh_sessions_user_id(user_id) [index]"
+    "id": "VARCHAR [PK, NN]"
+    "token_hash": "VARCHAR [NN, UQ]"
+    "user_id": "INTEGER [FK]"
+    "revoked_by_user_id": "INTEGER [FK]"
+    "s3_session_id": "VARCHAR [FK]"
+    "auth_type": "VARCHAR"
+    "created_at": "DATETIME [NN]"
+    "last_used_at": "DATETIME [NN]"
+    "last_ip": "VARCHAR"
+    "last_user_agent": "VARCHAR"
+    "expires_at": "DATETIME [NN]"
+    "revoked_at": "DATETIME"
+    "revoked_reason": "VARCHAR"
+  }
+  "s3_sessions": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_s3_sessions_access_key_hash(access_key_hash) [index]; ix_s3_sessions_id(id) [index]"
+    "id": "VARCHAR [PK, NN]"
+    "access_key_enc": "VARCHAR [NN]"
+    "secret_key_enc": "VARCHAR [NN]"
+    "access_key_hash": "VARCHAR [NN]"
+    "actor_type": "VARCHAR [NN]"
+    "role": "VARCHAR [NN]"
+    "account_id": "VARCHAR"
+    "account_name": "VARCHAR"
+    "user_uid": "VARCHAR"
+    "capabilities": "TEXT"
+    "created_at": "DATETIME [NN]"
+    "last_used_at": "DATETIME [NN]"
+  }
+  "oidc_providers": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_oidc_providers_id(id) [index]; ix_oidc_providers_provider_id(provider_id) [unique]"
+    "id": "INTEGER [PK, NN]"
+    "provider_id": "VARCHAR [NN, UQ]"
+    "display_name": "VARCHAR [NN]"
+    "discovery_url": "VARCHAR [NN]"
+    "client_id": "VARCHAR [NN]"
+    "client_secret": "VARCHAR"
+    "redirect_uri": "VARCHAR [NN]"
+    "scopes_json": "TEXT [NN]"
+    "prompt": "VARCHAR"
+    "enabled": "BOOLEAN [NN]"
+    "icon_url": "VARCHAR"
+    "use_pkce": "BOOLEAN [NN]"
+    "use_nonce": "BOOLEAN [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "oidc_login_states": {
+    class: table
+    tooltip: "PK: state\nIndexes: ix_oidc_login_states_created_at(created_at) [index]; ix_oidc_login_states_state(state) [index]"
+    "state": "VARCHAR [PK, NN]"
+    "provider": "VARCHAR [NN]"
+    "code_verifier": "VARCHAR [NN]"
+    "nonce": "VARCHAR"
+    "redirect_path": "VARCHAR"
+    "created_at": "DATETIME [NN]"
+  }
+  "ldap_providers": {
+    class: table
+    tooltip: "PK: id\nIndexes: ix_ldap_providers_id(id) [index]; ix_ldap_providers_provider_id(provider_id) [unique]"
+    "id": "INTEGER [PK, NN]"
+    "provider_id": "VARCHAR [NN, UQ]"
+    "display_name": "VARCHAR [NN]"
+    "url": "VARCHAR [NN]"
+    "bind_dn": "VARCHAR [NN]"
+    "bind_password": "VARCHAR [NN]"
+    "user_base_dn": "VARCHAR [NN]"
+    "user_filter": "TEXT [NN]"
+    "email_attribute": "VARCHAR [NN]"
+    "name_attribute": "VARCHAR"
+    "subject_attribute": "VARCHAR"
+    "start_tls": "BOOLEAN [NN]"
+    "tls_verify": "BOOLEAN [NN]"
+    "tls_ca_file": "VARCHAR"
+    "timeout_seconds": "FLOAT [NN]"
+    "enabled": "BOOLEAN [NN]"
+    "allow_insecure": "BOOLEAN [NN]"
+    "allow_email_linking": "BOOLEAN [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+}
+
+"External references": {
+  style.fill: "#fff7ed"
+  style.stroke: "#fdba74"
+  "account_iam_users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "audit_logs": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/operations-audit.d2"
+  }
+  "bucket_migrations": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/operations-audit.d2"
+  }
+  "portal_public_links": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/portal.d2"
+  }
+  "portal_storage_space_grants": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/portal.d2"
+  }
+  "portal_storage_space_metadata": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/portal.d2"
+  }
+  "s3_connections": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "tag_definitions": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/tags-classification.d2"
+  }
+  "ui_group_s3_accounts": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "ui_group_s3_connections": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "ui_group_s3_users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "user_notifications": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/operations-audit.d2"
+  }
+  "user_s3_accounts": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "user_s3_connections": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "user_s3_users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+}
+
+"api_tokens"."revoked_by_user_id" -> "users"."id"
+"api_tokens"."user_id" -> "users"."id"
+"bucket_migrations" -> "users"."id"
+"refresh_sessions"."revoked_by_user_id" -> "users"."id"
+"refresh_sessions"."s3_session_id" -> "s3_sessions"."id"
+"refresh_sessions"."user_id" -> "users"."id"
+"s3_connections" -> "users"."id"
+"tag_definitions" -> "users"."id"
+"user_ui_groups"."group_id" -> "ui_groups"."id"
+"user_ui_groups"."user_id" -> "users"."id"
+"account_iam_users" -> "users"."id"
+"audit_logs" -> "users"."id"
+"portal_public_links" -> "users"."id"
+"portal_storage_space_metadata" -> "users"."id"
+"ui_group_s3_accounts" -> "ui_groups"."id"
+"ui_group_s3_connections" -> "ui_groups"."id"
+"ui_group_s3_users" -> "ui_groups"."id"
+"user_notifications" -> "users"."id": "ondelete=CASCADE"
+"user_s3_accounts" -> "users"."id"
+"user_s3_connections" -> "users"."id"
+"user_s3_users" -> "users"."id"
+"portal_storage_space_grants" -> "users"."id"
+"portal_storage_space_grants" -> "users"."id": "ondelete=CASCADE"

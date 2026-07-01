@@ -1,0 +1,93 @@
+# Generated from backend/app/db SQLAlchemy models via app.db.Base.metadata.
+# Scope: Portal slice with local columns and cross-domain FK stubs.
+# Column flags: PK=primary key, FK=foreign key, NN=not nullable, UQ=single-column unique.
+# Composite constraints and indexes are available as table tooltips in rendered D2 output.
+direction: right
+classes: {
+  table: {
+    shape: sql_table
+  }
+  external: {
+    shape: rectangle
+    style.fill: "#fff7ed"
+    style.stroke: "#fdba74"
+  }
+}
+
+Legend: {
+  shape: text
+  label: "Local tables show full columns. Orange boxes are cross-domain references defined in another slice."
+}
+
+"Portal": {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  "portal_storage_space_metadata": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_metadata_account_bucket(account_id, bucket_name)\nCheck: ck_portal_storage_space_metadata_account_member_role: account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor'); ck_portal_storage_space_metadata_share_scope: share_scope IN ('restricted', 'account')\nIndexes: ix_portal_storage_space_metadata_account(account_id) [index]; ix_portal_storage_space_metadata_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "account_id": "INTEGER [FK, NN]"
+    "bucket_name": "VARCHAR [NN]"
+    "display_name": "VARCHAR"
+    "description": "TEXT"
+    "owner_label": "VARCHAR"
+    "owner_user_id": "INTEGER [FK]"
+    "visibility": "VARCHAR [NN]"
+    "share_scope": "VARCHAR [NN]"
+    "account_member_role": "VARCHAR"
+    "project_key": "VARCHAR"
+    "dataset_label": "VARCHAR"
+    "origin": "VARCHAR [NN]"
+    "name_editable": "BOOLEAN [NN]"
+    "archived_at": "DATETIME"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "portal_storage_space_grants": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_grants_space_user(storage_space_metadata_id, user_id)\nCheck: ck_portal_storage_space_grants_role: role IN ('Viewer', 'Editor', 'Owner')\nIndexes: ix_portal_storage_space_grants_id(id) [index]; ix_portal_storage_space_grants_space(storage_space_metadata_id) [index]; ix_portal_storage_space_grants_user(user_id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "storage_space_metadata_id": "INTEGER [FK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "role": "VARCHAR [NN]"
+    "created_by_user_id": "INTEGER [FK]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
+  "portal_public_links": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_portal_public_links_token(token)\nIndexes: ix_portal_public_links_account_bucket(account_id, bucket_name) [index]; ix_portal_public_links_expires(expires_at) [index]; ix_portal_public_links_id(id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "token": "VARCHAR [NN]"
+    "account_id": "INTEGER [FK, NN]"
+    "bucket_name": "VARCHAR [NN]"
+    "object_key": "TEXT [NN]"
+    "label": "VARCHAR"
+    "created_by_user_id": "INTEGER [FK]"
+    "created_by_email": "VARCHAR"
+    "expires_at": "DATETIME"
+    "revoked_at": "DATETIME"
+    "created_at": "DATETIME [NN]"
+  }
+}
+
+"External references": {
+  style.fill: "#fff7ed"
+  style.stroke: "#fdba74"
+  "s3_accounts": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/storage-s3-execution.d2"
+  }
+  "users": {
+    class: external
+    tooltip: "Full definition: doc/docs/developer/database-schema/identity-ui-access.d2"
+  }
+}
+
+"portal_public_links"."account_id" -> "s3_accounts": "ondelete=CASCADE"
+"portal_public_links"."created_by_user_id" -> "users"
+"portal_storage_space_metadata"."account_id" -> "s3_accounts": "ondelete=CASCADE"
+"portal_storage_space_metadata"."owner_user_id" -> "users"
+"portal_storage_space_grants"."created_by_user_id" -> "users"
+"portal_storage_space_grants"."storage_space_metadata_id" -> "portal_storage_space_metadata"."id": "ondelete=CASCADE"
+"portal_storage_space_grants"."user_id" -> "users": "ondelete=CASCADE"
