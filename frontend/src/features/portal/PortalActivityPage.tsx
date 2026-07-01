@@ -66,9 +66,9 @@ export default function PortalActivityPage() {
             ))}
           </select>
         </div>
-        <div className="overflow-x-auto">
-          <table className="ui-data-table min-w-[760px]">
-            <thead>
+        <div className="overflow-x-auto max-md:overflow-visible">
+          <table className="ui-data-table min-w-[760px] max-md:block max-md:w-full max-md:min-w-0">
+            <thead className="max-md:hidden">
               <tr>
                 <th>{t({ en: "Time", fr: "Heure", de: "Zeit" })}</th>
                 <th>{t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}</th>
@@ -78,18 +78,33 @@ export default function PortalActivityPage() {
                 <th className="text-right">{t({ en: "Details", fr: "Détails", de: "Details" })}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block max-md:w-full max-md:space-y-3">
               {rows.map((item) => {
                 const expanded = expandedActivityId === item.id;
                 return (
                   <Fragment key={item.id}>
-                    <tr>
-                      <td>{item.timeLabel}</td>
-                      <td className={uiTitleTextClass}>{item.actor}</td>
-                      <td>{item.action}</td>
-                      <td>{item.target}</td>
-                      <td>{item.spaceName}</td>
-                      <td className="text-right">
+                    <tr className="max-md:block max-md:w-full max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
+                      <td className="max-md:block max-md:border-0 max-md:p-0">
+                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Time", fr: "Heure", de: "Zeit" })}</span>
+                        {item.timeLabel}
+                      </td>
+                      <td className={cx("max-md:mt-2 max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
+                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}</span>
+                        {item.actor}
+                      </td>
+                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Action", fr: "Action", de: "Aktion" })}</span>
+                        {item.action}
+                      </td>
+                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Resource", fr: "Ressource", de: "Ressource" })}</span>
+                        {item.target}
+                      </td>
+                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
+                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                        {item.spaceName}
+                      </td>
+                      <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
                         <button
                           type="button"
                           onClick={() => setExpandedActivityId(expanded ? null : item.id)}
@@ -100,8 +115,8 @@ export default function PortalActivityPage() {
                       </td>
                     </tr>
                     {expanded ? (
-                      <tr>
-                        <td colSpan={6}>
+                      <tr className="max-md:block max-md:w-full">
+                        <td colSpan={6} className="max-md:block max-md:border-0 max-md:p-0">
                           <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
                             <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "IP address", fr: "Adresse IP", de: "IP-Adresse" })}</dt>
                             <dd className={uiTitleTextClass}>{item.ipAddress || "-"}</dd>
@@ -113,8 +128,8 @@ export default function PortalActivityPage() {
                 );
               })}
               {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                <tr className="max-md:block max-md:w-full">
+                  <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
                     {t({ en: "No activity to display.", fr: "Aucune activité à afficher.", de: "Keine Aktivität zum Anzeigen." })}
                   </td>
                 </tr>

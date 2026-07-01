@@ -37,6 +37,7 @@ describe("PortalActivityPage", () => {
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com").closest("tr")).toHaveClass("max-md:block");
     expect(screen.getAllByText("Uploaded").length).toBeGreaterThan(0);
     expect(screen.getByText("report.csv")).toBeInTheDocument();
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);

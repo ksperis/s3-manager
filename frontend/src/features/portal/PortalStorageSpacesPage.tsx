@@ -374,9 +374,9 @@ export default function PortalStorageSpacesPage() {
             <option value="-object_count">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</option>
           </select>
         </div>
-        <div className="overflow-x-auto">
-          <table className="ui-data-table min-w-[840px]">
-            <thead>
+        <div className="overflow-x-auto max-md:overflow-visible">
+          <table className="ui-data-table min-w-[840px] max-md:block max-md:w-full max-md:min-w-0">
+            <thead className="max-md:hidden">
               <tr>
                 <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
                 <th>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</th>
@@ -387,12 +387,13 @@ export default function PortalStorageSpacesPage() {
                 <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-md:block max-md:w-full max-md:space-y-3">
               {filteredSpaces.map((space) => {
                 const status = visibleStatus(space);
                 return (
-                  <tr key={space.id}>
-                    <td>
+                  <tr key={space.id} className="max-md:block max-md:w-full max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
+                    <td className="max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
                       <Link
                         to={storageSpacePath(space)}
                         className={cx(
@@ -404,23 +405,40 @@ export default function PortalStorageSpacesPage() {
                       </Link>
                       <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
                     </td>
-                    <td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
                       <div className="flex flex-wrap items-center gap-2">
                         <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
                         {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
                       </div>
                     </td>
-                    <td>{formatCompactNumber(space.objectCount)}</td>
-                    <td>{formatBytes(space.usedBytes)}</td>
-                    <td>{space.createdLabel}</td>
-                    <td>{space.region}</td>
-                    <td className="text-right"><Link to={storageSpacePath(space)}>{t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}</Link></td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</span>
+                      {formatCompactNumber(space.objectCount)}
+                    </td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Size", fr: "Taille", de: "Größe" })}</span>
+                      {formatBytes(space.usedBytes)}
+                    </td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</span>
+                      {space.createdLabel}
+                    </td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Region", fr: "Région", de: "Region" })}</span>
+                      {space.region}
+                    </td>
+                    <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
+                      <Link to={storageSpacePath(space)} className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">
+                        {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}
               {filteredSpaces.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                <tr className="max-md:block max-md:w-full">
+                  <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
                     {t({ en: "No Storage Spaces to display.", fr: "Aucun espace de stockage à afficher.", de: "Keine Speicherbereiche zum Anzeigen." })}
                   </td>
                 </tr>
