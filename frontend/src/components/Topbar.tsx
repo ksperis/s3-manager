@@ -830,6 +830,7 @@ export default function Topbar({
                 ref={accountMenuTriggerRef}
                 type="button"
                 onClick={() => setAccountMenuOpen((open) => !open)}
+                aria-label={`Account actions for ${accountDisplay}`}
                 aria-haspopup="menu"
                 aria-expanded={accountMenuOpen}
                 aria-controls={accountMenuOpen ? accountMenuId : undefined}
@@ -838,7 +839,7 @@ export default function Topbar({
                   event.preventDefault();
                   setAccountMenuOpen(true);
                 }}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-transparent bg-transparent px-1.5 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="inline-flex h-9 items-center gap-0 rounded-lg border border-transparent bg-transparent px-1 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:gap-2 sm:px-1.5"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-[12px] font-semibold text-primary-700 dark:bg-primary-900/45 dark:text-primary-100">
                   {accountInitial}
@@ -847,7 +848,7 @@ export default function Topbar({
                   {accountDisplay}
                 </span>
                 <ChevronDownIcon
-                  className={`shell-icon-muted h-4 w-4 transition-transform ${
+                  className={`shell-icon-muted hidden h-4 w-4 transition-transform sm:block ${
                     accountMenuOpen ? "rotate-180" : ""
                   }`}
                 />

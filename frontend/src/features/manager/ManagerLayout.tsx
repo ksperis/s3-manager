@@ -13,7 +13,7 @@ import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storage
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
-  TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
   TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
@@ -127,8 +127,6 @@ function ManagerShell() {
     navigate({ pathname: "/manager", search: nextParams.toString() ? `?${nextParams.toString()}` : "" });
   };
 
-  const compactAccountControlWidthClass = TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS;
-
   const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
     if (mode === "icon") {
       return (
@@ -136,14 +134,10 @@ function ManagerShell() {
           type="button"
           aria-label={`Account context ${selectedLabel}`}
           title={identityLabel ?? selectedLabel}
-          className={`shell-control inline-flex h-10 ${compactAccountControlWidthClass} items-center rounded-lg border px-2 text-left`}
+          className={`shell-control inline-flex h-9 ${TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS} items-center justify-center rounded-lg border text-left`}
         >
-          <span className="min-w-0 flex-1 leading-tight">
-            <span className="shell-muted-text block truncate text-[10px] font-medium">Account</span>
-            <span className="mt-0.5 block truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]">
-              {selectedLabel}
-            </span>
-          </span>
+          <AccountControlIcon className="shell-icon-muted h-4 w-4" />
+          <span className="sr-only">{selectedLabel}</span>
         </button>
       );
     }
@@ -170,7 +164,7 @@ function ManagerShell() {
       icon: <AccountControlIcon className="h-4 w-4" />,
       selectedLabel,
       priority: 10,
-      estimatedIconWidth: 96,
+      estimatedIconWidth: 36,
       estimatedLabelWidth: TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
       renderControl: (mode) =>
         requiresS3AccountSelection && showSelector ? (
@@ -182,8 +176,9 @@ function ManagerShell() {
             identityLabel={identityLabel}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
-            widthClassName={mode === "icon" ? compactAccountControlWidthClass : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
-            triggerMode={mode === "icon" ? "icon_label" : mode}
+            widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
+            icon={<AccountControlIcon className="h-4 w-4" />}
+            triggerMode={mode}
             showTriggerTags={mode !== "icon"}
           />
         ) : (

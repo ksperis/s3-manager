@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SidebarSection } from "../../components/Sidebar";
 import {
-  TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS,
+  TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS,
   TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
 } from "../../components/topbarControlWidths";
 import ManagerLayout from "./ManagerLayout";
@@ -570,7 +570,7 @@ describe("ManagerLayout", () => {
     expect(capturedTopbarControlDescriptors.map((descriptor) => descriptor.id)).toEqual(["account"]);
     expect(capturedAccountSelectorProps).toEqual(expect.objectContaining({ selectedContextId: "ctx-1", selectedLabel: "Context" }));
     expect(capturedAccountSelectorProps?.widthClassName).toBe(TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS);
-    expect(capturedTopbarControlDescriptors[0]?.estimatedIconWidth).toBe(96);
+    expect(capturedTopbarControlDescriptors[0]?.estimatedIconWidth).toBe(36);
 
     render(<>{capturedTopbarControlDescriptors[0]?.renderControl("icon")}</>);
 
@@ -578,10 +578,10 @@ describe("ManagerLayout", () => {
       expect.objectContaining({
         selectedContextId: "ctx-1",
         selectedLabel: "Context",
-        triggerMode: "icon_label",
+        triggerMode: "icon",
         showTriggerTags: false,
       })
     );
-    expect(capturedAccountSelectorProps?.widthClassName).toBe(TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS);
+    expect(capturedAccountSelectorProps?.widthClassName).toBe(TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS);
   });
 });
