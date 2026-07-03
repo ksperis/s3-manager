@@ -210,7 +210,12 @@ export function buildPortalWorkspaceModel({
     const contentRole = optionalRoleFromStorageSpace(storageSpace.content_role) ?? (canBrowse ? role : null);
     const name = storageSpace.name || prettyName(storageSpace.id);
     const visibility = visibilityFromStorageSpace(storageSpace);
-    const shareScope = visibility === "shared" && storageSpace.share_scope === "account" ? "account" : "restricted";
+    const shareScope: PortalStorageSpaceShareScope =
+      visibility === "shared" && storageSpace.share_scope === "account" ? "account" : "restricted";
+    const status: PortalWorkspaceStatus | "Archived" = storageSpace.archived_at
+      ? "Archived"
+      : statusFromStorageSpace(storageSpace);
+    const access: PortalWorkspaceAccess = visibility === "shared" ? "Shared" : "Private";
     return {
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
@@ -228,8 +233,8 @@ export function buildPortalWorkspaceModel({
       role,
       contentRole,
       canBrowse,
-      status: storageSpace.archived_at ? "Archived" : statusFromStorageSpace(storageSpace),
-      access: visibility === "shared" ? "Shared" : "Private",
+      status,
+      access,
       region: storageSpace.region ?? null,
       createdLabel: createdLabel(storageSpace.created_at, locale),
       usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,

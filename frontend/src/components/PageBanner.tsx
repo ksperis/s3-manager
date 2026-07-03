@@ -5,7 +5,7 @@
 import { ReactNode } from "react";
 import { UiTone, cx, uiToneBannerClasses } from "./ui/styles";
 
-type PageBannerTone = "info" | "success" | "warning" | "error";
+export type PageBannerTone = "info" | "success" | "warning" | "error";
 
 type PageBannerProps = {
   tone?: PageBannerTone;

@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CLIENT_STORAGE_KEYS,
   clearAuthStorage,
-  migrateClientStorageKey,
   readClientJson,
   readClientStorage,
-  readClientStorageWithFallback,
   removeClientStorage,
   writeClientJson,
   writeClientStorage,
@@ -55,22 +53,4 @@ describe("clientStorage", () => {
     expect(readClientStorage(CLIENT_STORAGE_KEYS.theme)).toBeNull();
   });
 
-  it("reads legacy keys without overwriting current storage", () => {
-    window.localStorage.setItem("legacyWorkspace", "manager");
-
-    expect(readClientStorageWithFallback(CLIENT_STORAGE_KEYS.selectedWorkspace, ["legacyWorkspace"])).toBe("manager");
-    expect(readClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace)).toBeNull();
-
-    writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "portal");
-
-    expect(readClientStorageWithFallback(CLIENT_STORAGE_KEYS.selectedWorkspace, ["legacyWorkspace"])).toBe("portal");
-  });
-
-  it("migrates legacy keys when explicitly requested", () => {
-    window.localStorage.setItem("legacyPortalAccountId", "42");
-
-    expect(migrateClientStorageKey(CLIENT_STORAGE_KEYS.selectedPortalAccount, ["legacyPortalAccountId"], { removeLegacy: true })).toBe("42");
-    expect(readClientStorage(CLIENT_STORAGE_KEYS.selectedPortalAccount)).toBe("42");
-    expect(window.localStorage.getItem("legacyPortalAccountId")).toBeNull();
-  });
 });

@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { PortalStorageSpaceVisibility } from "../../api/portal";
-import PageBanner from "../../components/PageBanner";
+import PageBanner, { type PageBannerTone } from "../../components/PageBanner";
 import { translate, type I18nMessage } from "../../i18n";
 import type { UiTone } from "../../components/ui/styles";
 import type {
@@ -19,7 +19,7 @@ export function PortalPageState({
   tone = "info",
   children,
 }: {
-  tone?: UiTone;
+  tone?: PageBannerTone;
   children: ReactNode;
 }) {
   return (

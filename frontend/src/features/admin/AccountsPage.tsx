@@ -693,7 +693,7 @@ export default function S3AccountsPage() {
     [extractError]
   );
 
-  const columns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
+  const columns: { label: string; field: SortField | null; align?: "left" | "right" }[] = [
     { label: "Name", field: "name" },
     { label: "RGW ID", field: "rgw_account_id" },
     { label: "Endpoint", field: null },
@@ -2482,7 +2482,7 @@ export default function S3AccountsPage() {
                 {columns.map((col, idx) => (
                   <th
                     key={col.label}
-                    onClick={col.field ? () => toggleSort(col.field) : undefined}
+                    onClick={col.field ? () => toggleSort(col.field as SortField) : undefined}
                     className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                       idx === 0
                         ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"

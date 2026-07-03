@@ -52,25 +52,35 @@ export function buildLatencyChartPoints(
 
   if (mode === "rollup") {
     const points = series.series
-      .map((point) => ({
-        timestampMs: toTimestampMs(point.timestamp),
-        latency_ms: point.latency_ms ?? null,
-        p95_latency_ms: null,
-        status: point.status ?? "unknown",
-      }))
-      .filter((point): point is LatencyChartPoint => point.timestampMs != null)
+      .flatMap((point): LatencyChartPoint[] => {
+        const timestampMs = toTimestampMs(point.timestamp);
+        if (timestampMs == null) return [];
+        return [
+          {
+            timestampMs,
+            latency_ms: point.latency_ms ?? null,
+            p95_latency_ms: null,
+            status: point.status ?? "unknown",
+          },
+        ];
+      })
       .sort((a, b) => a.timestampMs - b.timestampMs);
     return { mode, points };
   }
 
   const points = series.daily
-    .map((point) => ({
-      timestampMs: toTimestampMs(point.day),
-      latency_ms: point.avg_latency_ms ?? null,
-      p95_latency_ms: point.p95_latency_ms ?? null,
-      status: deriveDailyStatusFromCounts(point.ok_count, point.degraded_count, point.down_count),
-    }))
-    .filter((point): point is LatencyChartPoint => point.timestampMs != null)
+    .flatMap((point): LatencyChartPoint[] => {
+      const timestampMs = toTimestampMs(point.day);
+      if (timestampMs == null) return [];
+      return [
+        {
+          timestampMs,
+          latency_ms: point.avg_latency_ms ?? null,
+          p95_latency_ms: point.p95_latency_ms ?? null,
+          status: deriveDailyStatusFromCounts(point.ok_count, point.degraded_count, point.down_count),
+        },
+      ];
+    })
     .sort((a, b) => a.timestampMs - b.timestampMs);
   return { mode, points };
 }

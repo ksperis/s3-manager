@@ -205,7 +205,7 @@ export default function TopicsPage() {
       setLoading(false);
       return;
     }
-    fetchTopics(accountIdForApi);
+    fetchTopics(accountIdForApi ?? null);
   }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   const openCreateModal = () => {
@@ -233,13 +233,13 @@ export default function TopicsPage() {
     setCreateError(null);
     setCreating(true);
     try {
-      await createTopic(accountIdForApi, {
+      await createTopic(accountIdForApi ?? null, {
         name: trimmedName,
       });
       setShowCreateModal(false);
       setNewTopicName("");
       setActionMessage(`Topic '${trimmedName}' created.`);
-      await fetchTopics(accountIdForApi);
+      await fetchTopics(accountIdForApi ?? null);
     } catch (err) {
       setCreateError(extractError(err));
     } finally {
@@ -251,9 +251,9 @@ export default function TopicsPage() {
     if (needsS3AccountSelection) return;
     if (!confirmDeletion("topic", name)) return;
     try {
-      await deleteTopic(accountIdForApi, topicArn);
+      await deleteTopic(accountIdForApi ?? null, topicArn);
       setActionMessage(`Topic '${name}' deleted.`);
-      await fetchTopics(accountIdForApi);
+      await fetchTopics(accountIdForApi ?? null);
     } catch (err) {
       setError(extractError(err));
     }

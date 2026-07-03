@@ -9,6 +9,7 @@ import type { PaginatedResponse } from "./types";
 export type UiGroupSummary = {
   id: number;
   name: string;
+  description?: string | null;
 };
 
 export type UiGroupUserDetail = {

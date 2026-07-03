@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import type { AxiosProgressEvent } from "axios";
 
 export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
 
@@ -859,7 +860,7 @@ export async function proxyUpload(
   bucketName: string,
   key: string,
   file: Blob,
-  onUploadProgress?: (event: ProgressEvent) => void,
+  onUploadProgress?: (event: AxiosProgressEvent) => void,
   signal?: AbortSignal,
   sseCustomerKeyBase64?: string | null,
   fileName?: string,

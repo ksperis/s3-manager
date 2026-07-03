@@ -781,9 +781,6 @@ export default function CephAdminAccountsPage() {
       }
       return `${FILTER_COST_LABEL.medium}: numeric filters are active and rely on usage/quota counters.`;
     }
-    if (advancedDraftGlobalCostLevel === "low") {
-      return `${FILTER_COST_LABEL.low}: only text filters are active.`;
-    }
     return FILTER_COST_LABEL.none;
   }, [advancedDraftGlobalCostLevel, advancedDraftNumericCount, advancedDraftTextCount]);
 

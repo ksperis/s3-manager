@@ -39,14 +39,16 @@ export default function OidcCallbackPage() {
       setError("Incomplete authentication response.");
       return;
     }
+    const codeValue = code;
+    const stateValue = state;
 
     async function finalizeLogin() {
       try {
-        const res = await completeOidcLogin(providerId, code, state);
+        const res = await completeOidcLogin(providerId, codeValue, stateValue);
         if (cancelled) return;
         writeClientStorage(CLIENT_STORAGE_KEYS.authToken, res.access_token);
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
-        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...sessionUser, authProvider: provider });
+        writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...sessionUser, authProvider: providerId });
         setLanguagePreference(res.user.ui_language ?? "auto");
         if (res.user.ui_preferences?.theme === "light" || res.user.ui_preferences?.theme === "dark") {
           setTheme(res.user.ui_preferences.theme);

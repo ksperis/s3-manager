@@ -11,7 +11,6 @@ describe("bucketOpsSurface", () => {
 
     expect(surface.breadcrumb).toEqual({ label: "Ceph Admin", to: "/ceph-admin" });
     expect(surface.storageKeys.columns).toBe("ceph-admin.bucket_list.columns.v2");
-    expect(surface.storageKeys.legacyUiTags).toBe("ceph-admin.bucket_list.ui_tags.v1");
     expect(surface.defaultVisibleColumns).toEqual(["ui_tags", "owner", "used_bytes", "object_count"]);
     expect(surface.scopeDisplayName).toBe("Endpoint");
     expect(surface.exportScopeKey).toBe("endpoint");
@@ -23,7 +22,6 @@ describe("bucketOpsSurface", () => {
 
     expect(surface.breadcrumb).toEqual({ label: "Storage Ops", to: "/storage-ops" });
     expect(surface.storageKeys.columns).toBe("storage-ops.bucket_list.columns.v2");
-    expect(surface.storageKeys.legacyUiTags).toBeUndefined();
     expect(surface.defaultVisibleColumns).toEqual(["context_name", "ui_tags", "used_bytes", "object_count"]);
     expect(surface.scopeDisplayName).toBe("Scope");
     expect(surface.exportScopeKey).toBe("scope");

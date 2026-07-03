@@ -793,7 +793,7 @@ export type BucketLifecycleConfig = { rules: Record<string, unknown>[] };
 export type BucketCors = { rules: Record<string, unknown>[] };
 export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
 export type BucketPolicy = { policy: Record<string, unknown> | null };
-export type BucketTag = { key: string; value: string };
+export type { BucketTag };
 export type BucketReplicationConfiguration = { configuration: Record<string, unknown> };
 
 export type BucketObjectLockConfiguration = {

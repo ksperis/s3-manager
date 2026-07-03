@@ -17,7 +17,7 @@ type Action = {
 
 type PageHeaderProps = {
   title: string;
-  description?: string;
+  description?: ReactNode;
   breadcrumbs?: PageBreadcrumb[];
   actions?: Action[];
   inlineContent?: ReactNode;

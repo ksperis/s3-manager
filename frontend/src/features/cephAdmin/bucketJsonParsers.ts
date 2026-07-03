@@ -13,30 +13,35 @@ export const stableStringify = (value: unknown): string => {
   return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
 };
 
-export const parseLifecycleRules = (raw: string) => {
+export type ParseLifecycleRulesResult = { rules: JsonRecord[] } | { error: string };
+export type ParseNotificationConfigurationResult = { configuration: JsonRecord } | { error: string };
+export type ParseCorsRulesResult = { rules: JsonRecord[] } | { error: string };
+export type ParsePolicyStatementsResult = { policy: JsonRecord; statements: JsonRecord[] } | { error: string };
+
+export const parseLifecycleRules = (raw: string): ParseLifecycleRulesResult => {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: "Provide lifecycle rules in JSON format." } as const;
+    return { error: "Provide lifecycle rules in JSON format." };
   }
 
   try {
     const parsed = JSON.parse(trimmed);
     if (!isJsonObject(parsed) && !Array.isArray(parsed)) {
-      return { error: "Lifecycle rules must be a JSON object or array." } as const;
+      return { error: "Lifecycle rules must be a JSON object or array." };
     }
     if (Array.isArray(parsed)) {
       if (parsed.length === 0) {
-        return { error: "Provide at least one lifecycle rule." } as const;
+        return { error: "Provide at least one lifecycle rule." };
       }
       const invalidIndex = parsed.findIndex((rule) => !isJsonObject(rule));
       if (invalidIndex >= 0) {
-        return { error: `Lifecycle rule at index ${invalidIndex} must be a JSON object.` } as const;
+        return { error: `Lifecycle rule at index ${invalidIndex} must be a JSON object.` };
       }
-      return { rules: parsed as JsonRecord[] } as const;
+      return { rules: parsed as JsonRecord[] };
     }
-    return { rules: [parsed] } as const;
+    return { rules: [parsed] };
   } catch {
-    return { error: "Invalid JSON." } as const;
+    return { error: "Invalid JSON." };
   }
 };
 
@@ -106,16 +111,16 @@ export const isNotificationConfigurationEmpty = (configuration: unknown) => {
   return !hasArrayConfig && !Object.prototype.hasOwnProperty.call(normalized, NOTIFICATION_EVENTBRIDGE_KEY);
 };
 
-export const parseNotificationConfiguration = (raw: string) => {
+export const parseNotificationConfiguration = (raw: string): ParseNotificationConfigurationResult => {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: "Provide notification configuration in JSON format." } as const;
+    return { error: "Provide notification configuration in JSON format." };
   }
 
   try {
     const parsed = JSON.parse(trimmed);
     if (!isJsonObject(parsed)) {
-      return { error: "Notification configuration must be a JSON object." } as const;
+      return { error: "Notification configuration must be a JSON object." };
     }
 
     for (const type of NOTIFICATION_ARRAY_TYPES) {
@@ -123,25 +128,25 @@ export const parseNotificationConfiguration = (raw: string) => {
       if (!(key in parsed)) continue;
       const rawEntries = parsed[key];
       if (!Array.isArray(rawEntries)) {
-        return { error: `${key} must be an array.` } as const;
+        return { error: `${key} must be an array.` };
       }
       const invalidIndex = rawEntries.findIndex((entry) => !isJsonObject(entry));
       if (invalidIndex >= 0) {
-        return { error: `${key} entry at index ${invalidIndex} must be a JSON object.` } as const;
+        return { error: `${key} entry at index ${invalidIndex} must be a JSON object.` };
       }
     }
 
     if (NOTIFICATION_EVENTBRIDGE_KEY in parsed && !isJsonObject(parsed[NOTIFICATION_EVENTBRIDGE_KEY])) {
-      return { error: `${NOTIFICATION_EVENTBRIDGE_KEY} must be a JSON object.` } as const;
+      return { error: `${NOTIFICATION_EVENTBRIDGE_KEY} must be a JSON object.` };
     }
 
     const configuration = normalizeNotificationConfigurationForBulk(parsed);
     if (isNotificationConfigurationEmpty(configuration)) {
-      return { error: "Provide at least one notification configuration." } as const;
+      return { error: "Provide at least one notification configuration." };
     }
-    return { configuration } as const;
+    return { configuration };
   } catch {
-    return { error: "Invalid JSON." } as const;
+    return { error: "Invalid JSON." };
   }
 };
 
@@ -252,76 +257,76 @@ export const deleteNotificationConfigurations = (
   return { configuration: next, changes };
 };
 
-export const parseCorsRules = (raw: string) => {
+export const parseCorsRules = (raw: string): ParseCorsRulesResult => {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: "Provide CORS rules in JSON format." } as const;
+    return { error: "Provide CORS rules in JSON format." };
   }
 
   try {
     const parsed = JSON.parse(trimmed);
     if (!isJsonObject(parsed) && !Array.isArray(parsed)) {
-      return { error: "CORS rules must be a JSON object or array." } as const;
+      return { error: "CORS rules must be a JSON object or array." };
     }
     if (Array.isArray(parsed)) {
       if (parsed.length === 0) {
-        return { error: "Provide at least one CORS rule." } as const;
+        return { error: "Provide at least one CORS rule." };
       }
       const invalidIndex = parsed.findIndex((rule) => !isJsonObject(rule));
       if (invalidIndex >= 0) {
-        return { error: `CORS rule at index ${invalidIndex} must be a JSON object.` } as const;
+        return { error: `CORS rule at index ${invalidIndex} must be a JSON object.` };
       }
-      return { rules: parsed as JsonRecord[] } as const;
+      return { rules: parsed as JsonRecord[] };
     }
-    return { rules: [parsed] } as const;
+    return { rules: [parsed] };
   } catch {
-    return { error: "Invalid JSON." } as const;
+    return { error: "Invalid JSON." };
   }
 };
 
-export const parsePolicyStatements = (raw: string) => {
+export const parsePolicyStatements = (raw: string): ParsePolicyStatementsResult => {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { error: "Provide a policy in JSON format." } as const;
+    return { error: "Provide a policy in JSON format." };
   }
 
   try {
     const parsed = JSON.parse(trimmed);
     if (!isJsonObject(parsed) && !Array.isArray(parsed)) {
-      return { error: "Policy must be a JSON object or array." } as const;
+      return { error: "Policy must be a JSON object or array." };
     }
 
     if (Array.isArray(parsed)) {
       if (parsed.length === 0) {
-        return { error: "Provide at least one policy statement." } as const;
+        return { error: "Provide at least one policy statement." };
       }
       const invalidIndex = parsed.findIndex((statement) => !isJsonObject(statement));
       if (invalidIndex >= 0) {
-        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` } as const;
+        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` };
       }
-      return { policy: { Statement: parsed }, statements: parsed as JsonRecord[] } as const;
+      return { policy: { Statement: parsed }, statements: parsed as JsonRecord[] };
     }
 
     const parsedObj = parsed as JsonRecord;
     const rawStatements = parsedObj.Statement;
     if (Array.isArray(rawStatements)) {
       if (rawStatements.length === 0) {
-        return { error: "Provide at least one policy statement." } as const;
+        return { error: "Provide at least one policy statement." };
       }
       const invalidIndex = rawStatements.findIndex((statement) => !isJsonObject(statement));
       if (invalidIndex >= 0) {
-        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` } as const;
+        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` };
       }
-      return { policy: parsedObj, statements: rawStatements as JsonRecord[] } as const;
+      return { policy: parsedObj, statements: rawStatements as JsonRecord[] };
     }
 
     if (isJsonObject(rawStatements)) {
-      return { policy: { ...parsedObj, Statement: [rawStatements] }, statements: [rawStatements] } as const;
+      return { policy: { ...parsedObj, Statement: [rawStatements] }, statements: [rawStatements] };
     }
 
-    return { policy: { Statement: [parsedObj] }, statements: [parsedObj] } as const;
+    return { policy: { Statement: [parsedObj] }, statements: [parsedObj] };
   } catch {
-    return { error: "Invalid JSON." } as const;
+    return { error: "Invalid JSON." };
   }
 };
 

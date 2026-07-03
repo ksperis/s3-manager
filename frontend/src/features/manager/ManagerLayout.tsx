@@ -240,7 +240,7 @@ function ManagerShell() {
   }
 
   if (canManageBuckets) {
-    const toolsLinks: SidebarSection[number]["links"] = [];
+    const toolsLinks: SidebarSection["links"] = [];
     if (canAccessFeatureRulesForUser) {
       toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules", iconName: "rules" });
     }

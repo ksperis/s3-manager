@@ -318,9 +318,13 @@ export default function BrowserOperationsPanel({
       );
     }
 
+    const activeCount =
+      entry.type === "download"
+        ? entry.group.counts.downloading
+        : entry.type === "delete"
+          ? entry.group.counts.deleting
+          : entry.group.counts.copying;
     const { group } = entry;
-    const activeKey = entry.type === "download" ? "downloading" : entry.type === "delete" ? "deleting" : "copying";
-    const activeCount = group.counts[activeKey] ?? 0;
     const queuedCount = group.counts.queued;
     const completedCount = group.items.filter((item) => item.status === "done" || item.status === "cancelled").length;
     const failedCount = group.items.filter((item) => item.status === "failed").length;

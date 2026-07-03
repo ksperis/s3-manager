@@ -32,6 +32,9 @@ export type SessionUser = {
   browser_advanced_features_enabled?: boolean | null;
   effective_access?: EffectiveUserAccess | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
+  actorType?: string | null;
+  accountId?: string | null;
+  accountName?: string | null;
   account_links?: {
     account_id: number;
     account_admin?: boolean | null;

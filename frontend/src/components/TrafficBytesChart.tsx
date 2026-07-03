@@ -130,7 +130,7 @@ function formatXAxisTimestamp(value: string | number, window: TrafficWindow) {
   if (Number.isNaN(date.getTime())) {
     return String(value);
   }
-  const options =
+  const options: Intl.DateTimeFormatOptions =
     window === "week" || window === "month"
       ? { day: "2-digit", month: "short" }
       : { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" };

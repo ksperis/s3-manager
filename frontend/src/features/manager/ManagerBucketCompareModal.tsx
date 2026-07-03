@@ -588,17 +588,19 @@ export default function ManagerBucketCompareModal({
             );
             return;
           }
-          setItems((prev) =>
-            prev.map((item, itemIdx) =>
-              itemIdx === index
-                ? {
-                    ...item,
-                    status: "failed",
-                    error: extractError(result.reason),
-                  }
-                : item
-            )
-          );
+          if (result.status === "rejected") {
+            setItems((prev) =>
+              prev.map((item, itemIdx) =>
+                itemIdx === index
+                  ? {
+                      ...item,
+                      status: "failed",
+                      error: extractError(result.reason),
+                    }
+                  : item
+              )
+            );
+          }
         }
       );
     } catch (err) {

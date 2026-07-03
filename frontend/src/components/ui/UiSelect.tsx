@@ -13,7 +13,7 @@ const uiSelectSizeClasses: Record<UiSelectSize, string> = {
   md: "px-3 py-2 ui-body",
 };
 
-type UiSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
+type UiSelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> & {
   label?: ReactNode;
   hint?: ReactNode;
   error?: ReactNode;

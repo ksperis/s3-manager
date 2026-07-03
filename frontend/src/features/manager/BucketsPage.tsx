@@ -278,7 +278,7 @@ export default function BucketsPage() {
   const fetchRequestRef = useRef(0);
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
   const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
-  const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);

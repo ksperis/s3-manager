@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -512,17 +513,19 @@ export default function CephAdminBucketCompareModal({
           );
           return;
         }
-        setItems((prev) =>
-          prev.map((item, itemIdx) =>
-            itemIdx === index
-              ? {
-                  ...item,
-                  status: "failed",
-                  error: extractError(result.reason),
-                }
-              : item
-          )
-        );
+        if (result.status === "rejected") {
+          setItems((prev) =>
+            prev.map((item, itemIdx) =>
+              itemIdx === index
+                ? {
+                    ...item,
+                    status: "failed",
+                    error: extractError(result.reason),
+                  }
+                : item
+            )
+          );
+        }
       }
     );
     requestControllersRef.current.forEach((controller) => controller.abort());

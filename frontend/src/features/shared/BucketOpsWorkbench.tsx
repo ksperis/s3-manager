@@ -411,6 +411,7 @@ type PublicAccessBlockState = {
 };
 
 type PublicAccessBlockOptionKey = keyof PublicAccessBlockState;
+type NullablePublicAccessBlockState = Partial<Record<PublicAccessBlockOptionKey, boolean | null>>;
 
 const PUBLIC_ACCESS_BLOCK_OPTIONS: Array<{ key: PublicAccessBlockOptionKey; label: string }> = [
   { key: "block_public_acls", label: "BlockPublicAcls" },
@@ -419,7 +420,7 @@ const PUBLIC_ACCESS_BLOCK_OPTIONS: Array<{ key: PublicAccessBlockOptionKey; labe
   { key: "restrict_public_buckets", label: "RestrictPublicBuckets" },
 ];
 
-const normalizePublicAccessBlockState = (value?: Partial<PublicAccessBlockState> | null): PublicAccessBlockState => ({
+const normalizePublicAccessBlockState = (value?: NullablePublicAccessBlockState | null): PublicAccessBlockState => ({
   block_public_acls: Boolean(value?.block_public_acls),
   ignore_public_acls: Boolean(value?.ignore_public_acls),
   block_public_policy: Boolean(value?.block_public_policy),
@@ -1125,8 +1126,11 @@ const formatStorageOpsContextKindLabel = (kind: StorageOpsContextFilterKind | Ex
   return "Any";
 };
 
-const toStorageOpsContextKind = (kind: ExecutionContext["kind"]): StorageOpsContextFilterKind =>
-  kind === "legacy_user" ? "s3_user" : kind;
+const toStorageOpsContextKind = (kind: ExecutionContext["kind"]): StorageOpsContextFilterKind => {
+  if (kind === "legacy_user") return "s3_user";
+  if (kind === "portal_account") return "account";
+  return kind;
+};
 
 export type AdvancedFilterState = {
   contextIds: string[];
@@ -1956,13 +1960,11 @@ const normalizeUiTagValues = (values: string[]) => {
 
 const loadUiTags = (
   endpointId: number | null | undefined,
-  namespace: string,
-  legacyStorageKey?: string
+  namespace: string
 ): BucketUiTags => {
   if (typeof window === "undefined" || !endpointId) return {};
   const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
-  const legacyRaw = legacyStorageKey ? localStorage.getItem(legacyStorageKey) : null;
-  if (!raw && !legacyRaw) return {};
+  if (!raw) return {};
   try {
     let tags: BucketUiTags = {};
     if (raw) {
@@ -1970,12 +1972,6 @@ const loadUiTags = (
       if (parsed && typeof parsed === "object") {
         const namespaceStore = parsed[namespace] ?? {};
         tags = namespaceStore[String(endpointId)] ?? {};
-      }
-    }
-    if (!raw && legacyRaw) {
-      const parsedLegacy = JSON.parse(legacyRaw) as Record<string, BucketUiTags> | null;
-      if (parsedLegacy && typeof parsedLegacy === "object") {
-        tags = parsedLegacy[String(endpointId)] ?? {};
       }
     }
     const cleaned: BucketUiTags = {};
@@ -1998,8 +1994,7 @@ const loadUiTags = (
 const persistUiTags = (
   endpointId: number | null | undefined,
   namespace: string,
-  value: BucketUiTags,
-  legacyStorageKey?: string
+  value: BucketUiTags
 ) => {
   if (typeof window === "undefined" || !endpointId) return;
   const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
@@ -2008,9 +2003,6 @@ const persistUiTags = (
   namespaceStore[String(endpointId)] = value;
   store[namespace] = namespaceStore;
   localStorage.setItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY, JSON.stringify(store));
-  if (legacyStorageKey) {
-    localStorage.removeItem(legacyStorageKey);
-  }
 };
 
 type BucketListState = {
@@ -2363,7 +2355,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   const columnsStorageKey = surface.storageKeys.columns;
   const uiTagsNamespace = surface.uiTagsNamespace;
-  const legacyUiTagsStorageKey = surface.storageKeys.legacyUiTags;
   const bucketsStateStorageKey = surface.storageKeys.bucketListState;
   const bulkClipboardStorageKey = surface.storageKeys.bulkConfigClipboard;
   const defaultVisibleColumns = useMemo(() => [...surface.defaultVisibleColumns] as ColumnId[], [surface]);
@@ -2415,7 +2406,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [storageOpsContextFilter, setStorageOpsContextFilter] = useState("");
   const [storageOpsEndpointFilter, setStorageOpsEndpointFilter] = useState("");
   const [uiTags, setUiTags] = useState<BucketUiTags>(() =>
-    loadUiTags(selectedEndpointId, uiTagsNamespace, legacyUiTagsStorageKey)
+    loadUiTags(selectedEndpointId, uiTagsNamespace)
   );
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">("any");
@@ -2512,11 +2503,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
   const ownerTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [ownerTooltipState, setOwnerTooltipState] = useState<Record<string, OwnerTooltipState>>({});
-  const ownerTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const ownerTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
   const ownerNameCacheRef = useRef<Record<string, string | null>>({});
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
   const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
-  const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
   const [activeActionMenuKey, setActiveActionMenuKey] = useState<string | null>(null);
   const actionMenuAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -2812,7 +2803,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [showAdvancedFilter]);
 
   useEffect(() => {
-    setUiTags(loadUiTags(selectedEndpointId, uiTagsNamespace, legacyUiTagsStorageKey));
+    setUiTags(loadUiTags(selectedEndpointId, uiTagsNamespace));
     setEditingBucketName(null);
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
@@ -2875,11 +2866,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setPageSize(DEFAULT_PAGE_SIZE);
       setSort(DEFAULT_SORT);
     }
-  }, [bucketsStateStorageKey, legacyUiTagsStorageKey, ownerQueryFilter, selectedEndpointId, uiTagsNamespace]);
+  }, [bucketsStateStorageKey, ownerQueryFilter, selectedEndpointId, uiTagsNamespace]);
 
   useEffect(() => {
-    persistUiTags(selectedEndpointId, uiTagsNamespace, uiTags, legacyUiTagsStorageKey);
-  }, [legacyUiTagsStorageKey, uiTags, uiTagsNamespace, selectedEndpointId]);
+    persistUiTags(selectedEndpointId, uiTagsNamespace, uiTags);
+  }, [uiTags, uiTagsNamespace, selectedEndpointId]);
 
   useEffect(() => {
     persistBulkConfigClipboard(bulkClipboardStorageKey, bulkConfigClipboard);
@@ -3503,7 +3494,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const parsed = parseUiTags(value);
     if (parsed.length === 0) return;
     setTagFilters((prev) => mergeUiTags(prev, parsed));
-    setTagFilterInput("");
     setPage(1);
   };
 
@@ -4232,7 +4222,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         });
         return;
       }
-      const featureColumn = featureColumnById.get(col);
+      const featureColumn = featureColumnById.get(col as FeatureKey);
       if (featureColumn) {
         exportColumns.push({
           id: col,
@@ -4529,14 +4519,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       changed,
       before: [
         { text: `State: ${beforeState}`, tone: changed ? "removed" : undefined },
-        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => ({
+        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option): BulkPreviewLine => ({
           text: `${option.label}: ${formatPublicAccessBlockFlag(current[option.key])}`,
           tone: current[option.key] !== target[option.key] ? "removed" : undefined,
         })),
       ],
       after: [
         { text: `State: ${afterState}`, tone: changed ? "added" : undefined },
-        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => ({
+        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option): BulkPreviewLine => ({
           text: `${option.label}: ${formatPublicAccessBlockFlag(target[option.key])}`,
           tone: current[option.key] !== target[option.key] ? "added" : undefined,
         })),

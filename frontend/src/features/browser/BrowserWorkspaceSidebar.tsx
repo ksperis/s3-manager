@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { RefObject } from "react";
+import type { Ref } from "react";
 import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
@@ -41,8 +41,8 @@ type BrowserWorkspaceSidebarProps = {
   usageSummary: BrowserUsageSummary | null;
   usageLoading: boolean;
   usageError: string | null;
-  panelViewportRef?: RefObject<HTMLDivElement | null>;
-  loadMoreSentinelRef?: RefObject<HTMLDivElement | null>;
+  panelViewportRef?: Ref<HTMLDivElement>;
+  loadMoreSentinelRef?: Ref<HTMLDivElement>;
   closeMobile: () => void;
   onBucketFilterChange: (value: string) => void;
   onRetryBuckets: () => void;

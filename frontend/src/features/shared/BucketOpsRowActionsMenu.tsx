@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 
 import type { CephAdminBucket } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
@@ -13,8 +13,8 @@ type BucketOpsRowActionsMenuProps = {
   actionMenuKey: string;
   activeActionMenuKey: string | null;
   setActiveActionMenuKey: Dispatch<SetStateAction<string | null>>;
-  actionMenuAnchorRefs: RefObject<Record<string, HTMLButtonElement | null>>;
-  actionMenuSurfaceRef: RefObject<HTMLDivElement | null>;
+  actionMenuAnchorRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>;
+  actionMenuSurfaceRef: MutableRefObject<HTMLDivElement | null>;
   bucket: CephAdminBucket;
   isStorageOps: boolean;
   selectedEndpointId: number | null | undefined;

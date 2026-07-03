@@ -13,7 +13,6 @@ export type BucketOpsSurfaceContract = {
     columns: string;
     bucketListState: string;
     bulkConfigClipboard: string;
-    legacyUiTags?: string;
   };
   uiTagsNamespace: string;
   defaultVisibleColumns: readonly string[];
@@ -33,7 +32,6 @@ const BUCKET_OPS_SURFACES: Record<BucketOpsMode, BucketOpsSurfaceContract> = {
       columns: "ceph-admin.bucket_list.columns.v2",
       bucketListState: "ceph-admin.bucket_list.state.v1",
       bulkConfigClipboard: "ceph-admin.bucket_list.bulk_config_clipboard.v1",
-      legacyUiTags: "ceph-admin.bucket_list.ui_tags.v1",
     },
     uiTagsNamespace: "ceph-admin",
     defaultVisibleColumns: ["ui_tags", "owner", "used_bytes", "object_count"],

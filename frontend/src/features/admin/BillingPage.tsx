@@ -209,6 +209,8 @@ export default function BillingPage() {
     if (!detail || !selectedEndpointId) {
       return;
     }
+    const endpointId = selectedEndpointId;
+    const currentDetail = detail;
     let cancelled = false;
     async function reloadDetail() {
       setDetailLoading(true);
@@ -216,9 +218,9 @@ export default function BillingPage() {
       try {
         const data = await getBillingSubjectDetail(
           month,
-          selectedEndpointId,
-          detail.subject_type as "account" | "s3_user",
-          detail.subject_id
+          endpointId,
+          currentDetail.subject_type as "account" | "s3_user",
+          currentDetail.subject_id
         );
         if (!cancelled) {
           setDetail(data);

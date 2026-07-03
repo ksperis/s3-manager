@@ -1955,7 +1955,7 @@ export default function UsersPage() {
                 ].map((col) => (
                   <th
                     key={col.label}
-                    onClick={col.field ? () => toggleSort(col.field) : undefined}
+                    onClick={col.field ? () => toggleSort(col.field as SortField) : undefined}
                     className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                       col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : "text-right"
                     }`}

@@ -46,7 +46,7 @@ export function buildCephAdminQuotaPatch<
   initialQuota: CephAdminRgwQuotaConfig | null | undefined,
   current: QuotaPatchState
 ): QuotaPatchResult<TEnabled, TMaxSize, TMaxObjects> {
-  const patch: QuotaPatchResult<TEnabled, TMaxSize, TMaxObjects> = {};
+  const patch: Record<string, boolean | number | null> = {};
   const initialEnabled = normalizeQuotaEnabled(initialQuota);
   const initialMaxSizeBytes = normalizeNullableNumber(initialQuota?.max_size_bytes);
   const initialMaxObjects = normalizeNullableNumber(initialQuota?.max_objects);
@@ -61,5 +61,5 @@ export function buildCephAdminQuotaPatch<
     patch[fields.maxObjects] = current.maxObjects;
   }
 
-  return patch;
+  return patch as QuotaPatchResult<TEnabled, TMaxSize, TMaxObjects>;
 }

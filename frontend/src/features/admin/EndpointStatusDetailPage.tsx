@@ -298,8 +298,8 @@ export default function EndpointStatusDetailPage() {
       label,
     }: {
       active?: boolean;
-      payload?: Array<{ payload: LatencyChartPoint }>;
-      label?: number;
+      payload?: readonly { payload?: LatencyChartPoint }[];
+      label?: unknown;
     }) => {
       if (!active || !payload || payload.length === 0) return null;
       const point = payload[0]?.payload;

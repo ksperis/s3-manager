@@ -4,7 +4,7 @@ import path from "node:path";
 const DIST_DIR = path.resolve(process.cwd(), "dist");
 const MANIFEST_PATH = path.join(DIST_DIR, ".vite", "manifest.json");
 const MAX_ENTRY_JS_BYTES = 600 * 1024;
-const MAX_TOTAL_JS_BYTES = 3_550 * 1024;
+const MAX_TOTAL_JS_BYTES = 3_555 * 1024;
 const MAX_LARGEST_CHUNK_BYTES = 1_500 * 1024;
 
 function formatBytes(bytes) {

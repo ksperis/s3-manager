@@ -466,7 +466,7 @@ export function usePortalWorkspaceData({
       setLocalTransfers([]);
       return () => undefined;
     }
-    const refresh = () => setLocalTransfers(listPortalLocalTransfers(accountIdForApi));
+    const refresh = () => setLocalTransfers(listPortalLocalTransfers(String(accountIdForApi)));
     refresh();
     return subscribePortalTransferUpdates(refresh);
   }, [accountIdForApi]);
@@ -547,6 +547,7 @@ export function usePortalWorkspaceData({
     healthAlerts,
     workspace,
     loading: accountLoading || stateLoading || storageSpacesLoading,
+    accountLoading,
     stateLoading,
     storageSpacesLoading,
     usageLoading,
@@ -557,6 +558,7 @@ export function usePortalWorkspaceData({
     transfersLoading,
     alertsLoading,
     error: accountError ?? stateError ?? storageSpacesError,
+    accountError,
     stateError,
     storageSpacesError,
     usageError,

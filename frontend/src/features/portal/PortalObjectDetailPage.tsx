@@ -288,7 +288,7 @@ export default function PortalObjectDetailPage() {
   const handleDownload = async () => {
     if (!accountIdForApi || downloading) return;
     const transferId = startPortalTransfer({
-      accountId: accountIdForApi,
+      accountId: String(accountIdForApi),
       spaceId: space.id,
       spaceName: space.name,
       name: object.name || objectName(object.path),

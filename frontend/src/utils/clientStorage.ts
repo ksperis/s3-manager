@@ -21,7 +21,7 @@ export const CLIENT_STORAGE_KEYS = {
 } as const;
 
 export type ClientStorageKey = (typeof CLIENT_STORAGE_KEYS)[keyof typeof CLIENT_STORAGE_KEYS];
-export type LegacyClientStorageKey = string;
+export type ClientStorageRawKey = string;
 
 function resolveLocalStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
@@ -51,50 +51,6 @@ export function removeClientStorage(key: ClientStorageKey): void {
   }
 }
 
-export function readLegacyClientStorage(key: LegacyClientStorageKey): string | null {
-  try {
-    return resolveLocalStorage()?.getItem(key) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function readClientStorageWithFallback(
-  key: ClientStorageKey,
-  legacyKeys: LegacyClientStorageKey[] = []
-): string | null {
-  const current = readClientStorage(key);
-  if (current !== null) return current;
-  for (const legacyKey of legacyKeys) {
-    const legacyValue = readLegacyClientStorage(legacyKey);
-    if (legacyValue !== null) return legacyValue;
-  }
-  return null;
-}
-
-export function migrateClientStorageKey(
-  key: ClientStorageKey,
-  legacyKeys: LegacyClientStorageKey[],
-  options: { removeLegacy?: boolean } = {}
-): string | null {
-  const current = readClientStorage(key);
-  if (current !== null) return current;
-  for (const legacyKey of legacyKeys) {
-    const legacyValue = readLegacyClientStorage(legacyKey);
-    if (legacyValue === null) continue;
-    writeClientStorage(key, legacyValue);
-    if (options.removeLegacy) {
-      try {
-        resolveLocalStorage()?.removeItem(legacyKey);
-      } catch {
-        // Ignore storage failures in private mode or disabled storage.
-      }
-    }
-    return legacyValue;
-  }
-  return null;
-}
-
 export function readClientJson<T>(key: ClientStorageKey): T | null {
   const raw = readClientStorage(key);
   if (!raw) return null;
@@ -109,7 +65,7 @@ export function writeClientJson(key: ClientStorageKey, value: unknown): void {
   writeClientStorage(key, JSON.stringify(value));
 }
 
-export function readClientJsonFromKey<T>(key: ClientStorageKey | LegacyClientStorageKey): T | null {
+export function readClientJsonFromKey<T>(key: ClientStorageKey | ClientStorageRawKey): T | null {
   const raw = readClientStorageKey(key);
   if (!raw) return null;
   try {
@@ -119,11 +75,11 @@ export function readClientJsonFromKey<T>(key: ClientStorageKey | LegacyClientSto
   }
 }
 
-export function writeClientJsonToKey(key: ClientStorageKey | LegacyClientStorageKey, value: unknown): void {
+export function writeClientJsonToKey(key: ClientStorageKey | ClientStorageRawKey, value: unknown): void {
   writeClientStorageKey(key, JSON.stringify(value));
 }
 
-export function readClientStorageKey(key: ClientStorageKey | LegacyClientStorageKey): string | null {
+export function readClientStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
   try {
     return resolveLocalStorage()?.getItem(key) ?? null;
   } catch {
@@ -131,7 +87,7 @@ export function readClientStorageKey(key: ClientStorageKey | LegacyClientStorage
   }
 }
 
-export function writeClientStorageKey(key: ClientStorageKey | LegacyClientStorageKey, value: string): void {
+export function writeClientStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
   try {
     resolveLocalStorage()?.setItem(key, value);
   } catch {

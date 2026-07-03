@@ -68,6 +68,8 @@ export type UpdateS3UserPayload = {
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
   tags?: TagDefinitionInput[] | null;
+  allow_manager_bucket_quota?: boolean | null;
+  allow_manager_ceph_s3_user_keys?: boolean | null;
 };
 
 export type S3UserAccessKey = {

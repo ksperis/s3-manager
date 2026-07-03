@@ -153,6 +153,7 @@ import {
   buildBucketDetailBreadcrumbs,
   resolveBucketDetailSurface,
   resolveBucketDetailTabs,
+  type BucketDetailTabId,
   type BucketDetailMode,
 } from "./bucketDetail/bucketDetailSurface";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
@@ -467,7 +468,7 @@ export default function BucketDetailPage({
   const [usageStatsLoading, setUsageStatsLoading] = useState(false);
   const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
   const [usageStatsRecalculating, setUsageStatsRecalculating] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState<BucketDetailTabId>("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
@@ -525,7 +526,7 @@ export default function BucketDetailPage({
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
-      setActiveTab(availableTabs[0]);
+      setActiveTab(availableTabs[0] ?? "overview");
     }
   }, [activeTab, availableTabs]);
   const staticWebsiteEnabled = useMemo(() => {
@@ -718,7 +719,15 @@ export default function BucketDetailPage({
           with_stats: usageFeatureEnabled,
         });
         const found = response.items.find((b) => b.name === bucketName) ?? null;
-        setBucket(found ?? null);
+        setBucket(
+          found
+            ? {
+                ...found,
+                used_bytes: found.used_bytes ?? undefined,
+                object_count: found.object_count ?? undefined,
+              }
+            : null,
+        );
       } else {
         const data = await listBuckets(accountId, { with_stats: usageFeatureEnabled });
         const found = data.find((b) => b.name === bucketName) ?? null;
@@ -2897,7 +2906,7 @@ export default function BucketDetailPage({
 
       <PageTabs
         activeTab={activeTab}
-        onChange={setActiveTab}
+        onChange={(id) => setActiveTab(id as BucketDetailTabId)}
         headerActions={
           <button
             type="button"
@@ -4771,7 +4780,7 @@ export default function BucketDetailPage({
                 },
               ]
             : []),
-        ].sort((a, b) => availableTabs.indexOf(a.id) - availableTabs.indexOf(b.id))}
+        ].sort((a, b) => availableTabs.indexOf(a.id as BucketDetailTabId) - availableTabs.indexOf(b.id as BucketDetailTabId))}
       />
 
     </div>

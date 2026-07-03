@@ -24,7 +24,7 @@ import {
 } from "react-router-dom";
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
-import axios from "axios";
+import axios, { type AxiosProgressEvent } from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -4277,7 +4277,7 @@ export default function BrowserPage({
     return "";
   }, [filter, normalizedPrefix, searchScope]);
 
-  const items = useMemo(() => {
+  const items = useMemo<BrowserItem[]>(() => {
     const activePrefixSet = new Set(prefixes);
     const combinedPrefixes = [...prefixes];
     deletedPrefixes.forEach((prefixKey) => {
@@ -7589,7 +7589,7 @@ export default function BrowserPage({
       if (!items) return prev;
       const nextItems = items.map((item) =>
         item.status === "queued" || item.status === "downloading"
-          ? { ...item, status: "cancelled", errorMessage: undefined }
+          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
           : item,
       );
       return { ...prev, [operationId]: nextItems };
@@ -7602,7 +7602,7 @@ export default function BrowserPage({
       if (!items) return prev;
       const nextItems = items.map((item) =>
         item.status === "queued" || item.status === "copying"
-          ? { ...item, status: "cancelled", errorMessage: undefined }
+          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
           : item,
       );
       return { ...prev, [operationId]: nextItems };
@@ -7615,7 +7615,7 @@ export default function BrowserPage({
       if (!items) return prev;
       const nextItems = items.map((item) =>
         item.status === "queued" || item.status === "deleting"
-          ? { ...item, status: "cancelled", errorMessage: undefined }
+          ? { ...item, status: "cancelled" as const, errorMessage: undefined }
           : item,
       );
       return { ...prev, [operationId]: nextItems };
@@ -7687,7 +7687,7 @@ export default function BrowserPage({
         relativePath,
         key,
         bucket: bucketName,
-        accountId: accountIdForApi,
+        accountId: String(accountIdForApi),
         groupId: grouping.groupId,
         groupLabel: grouping.groupLabel,
         groupKind: grouping.groupKind,
@@ -7713,7 +7713,7 @@ export default function BrowserPage({
     bucket: string,
     file: File,
     key: string,
-    onProgress: (event: ProgressEvent) => void,
+    onProgress: (event: AxiosProgressEvent) => void,
     controller?: AbortController,
   ) => {
     if (useProxyTransfers) {
@@ -7957,7 +7957,7 @@ export default function BrowserPage({
           controller,
         );
       } else {
-        const onProgress = (event: ProgressEvent) => {
+        const onProgress = (event: AxiosProgressEvent) => {
           const total = event.total ?? file.size;
           const progress = total ? Math.round((event.loaded / total) * 100) : 0;
           setOperations((prev) =>
@@ -8524,8 +8524,9 @@ export default function BrowserPage({
       };
 
       const flushPart = async (partBytes: Uint8Array) => {
+        const partBuffer = new Uint8Array(partBytes).buffer;
         await uploadPartBlob(
-          new Blob([partBytes], {
+          new Blob([partBuffer], {
             type: contentType || "application/octet-stream",
           }),
           partNumber,
@@ -9099,7 +9100,7 @@ export default function BrowserPage({
         let fileStream:
           | (WritableStream<Uint8Array> & { abort?: () => Promise<void> })
           | null = null;
-        let zipWriter: ZipWriter | null = null;
+        let zipWriter: ZipWriter<Uint8Array> | null = null;
         try {
           const handle = (await saveFilePicker({
             suggestedName: `${folderLabel}.zip`,
@@ -9335,6 +9336,7 @@ export default function BrowserPage({
     );
     const controller = createOperationController(operationId);
     let completionStatus: OperationCompletionStatus = "done";
+    let completionError: string | undefined;
     const downloadTargets = files.map((item) => ({
       item,
       detailId: makeId(),
@@ -9904,7 +9906,7 @@ export default function BrowserPage({
             bucketName,
             {
               key,
-              mode: bulkRetentionMode,
+              mode: bulkRetentionMode || null,
               retain_until: retentionIso,
               bypass_governance: bulkRetentionBypass,
             },
@@ -11810,7 +11812,7 @@ export default function BrowserPage({
             id: item.id,
             label: item.itemLabel ?? item.path,
             path: item.path,
-            state: item.status,
+            state: item.status === "downloading" || item.status === "copying" || item.status === "deleting" ? "uploading" : item.status,
             progress: item.progress,
             sizeBytes: item.sizeBytes,
             errorMessage: item.errorMessage,
@@ -11830,7 +11832,7 @@ export default function BrowserPage({
             id: item.id,
             label: item.itemLabel ?? item.relativePath ?? item.key,
             path: `${item.bucket}/${item.key}`,
-            state: "queued",
+            state: "queued" as const,
             progress: 0,
             sizeBytes: item.file.size,
             errorMessage: undefined,
@@ -12339,7 +12341,7 @@ export default function BrowserPage({
     return (
       <button
         type="button"
-        onClick={() => handleSortToggle(column.sortable)}
+        onClick={() => handleSortToggle(column.sortable as BrowserSortKey)}
         className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
       >
         <span>{column.label}</span>

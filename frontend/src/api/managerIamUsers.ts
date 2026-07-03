@@ -40,7 +40,7 @@ export async function listIamUsers(accountId?: S3AccountSelector): Promise<IAMUs
 }
 
 export async function createIamUser(
-  accountId?: S3AccountSelector,
+  accountId: S3AccountSelector,
   name: string,
   createKey = false,
   groups?: string[],
