@@ -346,6 +346,7 @@ type BrowserPageProps = {
   hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
+  onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
   transferReporter?: BrowserTransferReporter;
 };
 
@@ -909,6 +910,7 @@ export default function BrowserPage({
   hiddenActionIds = [],
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
+  onCreatePublicLinkForObject,
   transferReporter,
 }: BrowserPageProps = {}) {
   const browserContext = useBrowserContext();
@@ -927,6 +929,7 @@ export default function BrowserPage({
   const isPortalBrowserSurface = workspaceSurface === "portal";
   const isPortalBasicProfile = actionProfile === "portal-basic";
   const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
+  const canCreateRoutedPublicLink = Boolean(onCreatePublicLinkForObject);
   const resolvedLockedBucketName = lockedBucketName?.trim() ?? "";
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
@@ -5074,6 +5077,7 @@ export default function BrowserPage({
           clipboardMode: clipboard?.mode ?? null,
           copyUrlDisabled: sseActive,
           copyUrlDisabledReason,
+          publicLinkAvailable: canCreateRoutedPublicLink,
           inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
         }),
         actionProfile,
@@ -5089,6 +5093,7 @@ export default function BrowserPage({
     canUseInspectorPanel,
     clipboard?.mode,
     copyUrlDisabledReason,
+    canCreateRoutedPublicLink,
     hasS3AccountContext,
     hiddenActionIds,
     isVersioningEnabled,
@@ -5191,6 +5196,15 @@ export default function BrowserPage({
       return;
     }
     openObjectDetails(item, "preview");
+  };
+
+  const createPublicLinkForItem = (item: BrowserItem) => {
+    if (!onCreatePublicLinkForObject || item.type !== "file" || item.isDeleted) return;
+    onCreatePublicLinkForObject({
+      bucketName,
+      key: item.key,
+      name: item.name || item.key,
+    });
   };
 
   const startPanelResize = useCallback(
@@ -11124,6 +11138,7 @@ export default function BrowserPage({
           clipboardMode: clipboard?.mode ?? null,
           copyUrlDisabled: sseActive,
           copyUrlDisabledReason,
+          publicLinkAvailable: canCreateRoutedPublicLink,
           inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
         }),
         actionProfile,
@@ -12155,6 +12170,7 @@ export default function BrowserPage({
     open: <OpenIcon className="h-3.5 w-3.5" />,
     preview: <EyeIcon className="h-3.5 w-3.5" />,
     download: <DownloadIcon className="h-3.5 w-3.5" />,
+    createPublicLink: <LinkIcon className="h-3.5 w-3.5" />,
     copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
     copy: <CopyIcon className="h-3.5 w-3.5" />,
     cut: <CutIcon className="h-3.5 w-3.5" />,
@@ -13973,6 +13989,20 @@ export default function BrowserPage({
                                 >
                                   <DownloadIcon />
                                 </button>
+                                {item.type === "file" &&
+                                  !isDeleted &&
+                                  itemActionStates.createPublicLink.visible && (
+                                    <button
+                                      type="button"
+                                      className={`${rowActionButtonClasses} ${!itemActionStates.createPublicLink.enabled ? "opacity-50" : ""}`}
+                                      aria-label="Create public link"
+                                      title="Create public link"
+                                      onClick={() => createPublicLinkForItem(item)}
+                                      disabled={!itemActionStates.createPublicLink.enabled}
+                                    >
+                                      <LinkIcon />
+                                    </button>
+                                  )}
                                 <button
                                   type="button"
                                   className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
@@ -14901,6 +14931,7 @@ export default function BrowserPage({
         canPaste={canPaste}
         copyUrlDisabled={sseActive}
         copyUrlDisabledReason={copyUrlDisabledReason}
+        publicLinkAvailable={canCreateRoutedPublicLink}
         actionProfile={actionProfile}
         hiddenActionIds={hiddenActionIds}
         clipboard={clipboard}
@@ -14912,6 +14943,7 @@ export default function BrowserPage({
         onOpenPrefixVersions={() => setShowPrefixVersions(true)}
         onOpenCleanupVersions={openCleanupModal}
         onDownloadTarget={handleDownloadTarget}
+        onCreatePublicLink={createPublicLinkForItem}
         onPreviewItem={handlePreviewItem}
         onCopyUrl={handleCopyUrl}
         onCopyPath={(path) => {

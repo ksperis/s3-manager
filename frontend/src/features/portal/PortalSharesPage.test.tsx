@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSharesPage from "./PortalSharesPage";
 
 const mocks = vi.hoisted(() => ({
-  createPublicLinkMock: vi.fn(),
   listSharesMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
   listPublicLinksMock: vi.fn(),
@@ -43,7 +42,6 @@ vi.mock("./usePortalWorkspaceData", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
-  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   listPortalStorageSpacePublicLinks: (...args: unknown[]) => mocks.listPublicLinksMock(...args),
   listPortalStorageSpaceShares: (...args: unknown[]) => mocks.listSharesMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
@@ -242,15 +240,25 @@ describe("PortalSharesPage", () => {
 
   it("loads public links from real portal endpoints", async () => {
     const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
 
     render(<PortalSharesPage />);
 
     await user.click(await screen.findByRole("button", { name: "Public links" }));
     expect(await screen.findByText("report.csv")).toBeInTheDocument();
     expect(screen.getByText("/api/portal/public-links/token/download")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create a public link" })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("path/to/object.ext")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.listPublicLinksMock).toHaveBeenCalledWith("101", "research-data", { includeRevoked: true });
     });
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith("/api/portal/public-links/token/download");
+    expect(await screen.findByText("Link copied.")).toBeInTheDocument();
   });
 
   it("shows empty states when shares and public links are absent", async () => {

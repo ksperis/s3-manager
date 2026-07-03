@@ -273,6 +273,7 @@ type RenderPageOptions = {
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
+  onCreatePublicLinkForObject?: ComponentProps<typeof BrowserPage>["onCreatePublicLinkForObject"];
 };
 
 function renderPageElement({
@@ -287,6 +288,7 @@ function renderPageElement({
   lockedBucketName,
   lockedBucketLabel,
   onOpenObjectDetailsRoute,
+  onCreatePublicLinkForObject,
 }: RenderPageOptions = {}) {
   return (
     <BrowserSidebarTestHost>
@@ -302,6 +304,7 @@ function renderPageElement({
           lockedBucketName={lockedBucketName}
           lockedBucketLabel={lockedBucketLabel}
           onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
+          onCreatePublicLinkForObject={onCreatePublicLinkForObject}
         />
         <LocationProbe />
       </MemoryRouter>
@@ -870,6 +873,7 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
     expect(within(rowA).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
     expect(within(rowA).getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(within(rowA).queryByRole("button", { name: "Create public link" })).not.toBeInTheDocument();
     expect(within(rowA).getByRole("button", { name: "Delete" })).toBeInTheDocument();
 
     fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
@@ -880,6 +884,9 @@ describe("BrowserPage interactions", () => {
     expect(
       within(nativeContextMenu).getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
+    expect(
+      within(nativeContextMenu).queryByRole("button", { name: "Create public link" }),
+    ).not.toBeInTheDocument();
     expect(
       within(nativeContextMenu).getByRole("button", { name: "Delete" }),
     ).toBeInTheDocument();
@@ -913,6 +920,34 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
+  });
+
+  it("runs the Portal public-link action for a selected Browser file", async () => {
+    const user = userEvent.setup();
+    const createPublicLinkForObject = vi.fn();
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+      onCreatePublicLinkForObject: createPublicLinkForObject,
+    });
+
+    const rowA = await findRowByLabel("a.txt");
+    await user.click(within(rowA).getByRole("button", { name: "Create public link" }));
+    expect(createPublicLinkForObject).toHaveBeenCalledWith({
+      bucketName: "portal-bucket",
+      key: "a.txt",
+      name: "a.txt",
+    });
+
+    fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
+    const nativeContextMenu = await screen.findByRole("menu");
+    expect(
+      within(nativeContextMenu).getByRole("button", { name: "Create public link" }),
+    ).toBeInTheDocument();
   });
 
   it("uses minimal visible columns by default", async () => {

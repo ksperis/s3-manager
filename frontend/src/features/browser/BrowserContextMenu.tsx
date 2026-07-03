@@ -60,6 +60,7 @@ type BrowserContextMenuProps = {
   canPaste: boolean;
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
+  publicLinkAvailable?: boolean;
   actionProfile?: BrowserActionProfile;
   hiddenActionIds?: readonly BrowserActionId[];
   clipboard: ClipboardState | null;
@@ -71,6 +72,7 @@ type BrowserContextMenuProps = {
   onOpenPrefixVersions: () => void;
   onOpenCleanupVersions: () => void;
   onDownloadTarget: (item: BrowserItem) => void;
+  onCreatePublicLink: (item: BrowserItem) => void;
   onPreviewItem: (item: BrowserItem) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
   onCopyPath: (path: string) => void;
@@ -110,6 +112,7 @@ export default function BrowserContextMenu({
   canPaste,
   copyUrlDisabled = false,
   copyUrlDisabledReason,
+  publicLinkAvailable = false,
   actionProfile = "full",
   hiddenActionIds = [],
   clipboard,
@@ -121,6 +124,7 @@ export default function BrowserContextMenu({
   onOpenPrefixVersions,
   onOpenCleanupVersions,
   onDownloadTarget,
+  onCreatePublicLink,
   onPreviewItem,
   onCopyUrl,
   onCopyPath,
@@ -179,6 +183,7 @@ export default function BrowserContextMenu({
           clipboardMode: clipboard?.mode ?? null,
           copyUrlDisabled,
           copyUrlDisabledReason,
+          publicLinkAvailable,
           inspectorAvailable: allowInspectorPanel,
         }),
         actionProfile,
@@ -275,6 +280,9 @@ export default function BrowserContextMenu({
       case "download":
         onDownloadTarget(contextItem);
         return;
+      case "createPublicLink":
+        onCreatePublicLink(contextItem);
+        return;
       case "copyUrl":
         onCopyUrl(contextItem);
         return;
@@ -366,6 +374,7 @@ export default function BrowserContextMenu({
     open: <OpenIcon className="h-3.5 w-3.5" />,
     preview: <EyeIcon className="h-3.5 w-3.5" />,
     download: <DownloadIcon className="h-3.5 w-3.5" />,
+    createPublicLink: <LinkIcon className="h-3.5 w-3.5" />,
     copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
     copy: <CopyIcon className="h-3.5 w-3.5" />,
     cut: <CutIcon className="h-3.5 w-3.5" />,

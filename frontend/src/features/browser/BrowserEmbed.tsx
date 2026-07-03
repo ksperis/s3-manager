@@ -21,6 +21,7 @@ type BrowserEmbedProps = {
   hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
+  onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
   transferReporter?: BrowserTransferReporter;
 };
 
@@ -38,6 +39,7 @@ export default function BrowserEmbed({
   hiddenActionIds,
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
+  onCreatePublicLinkForObject,
   transferReporter,
 }: BrowserEmbedProps) {
   return (
@@ -58,6 +60,7 @@ export default function BrowserEmbed({
       showPanelToggles={false}
       onSelectedBucketNameChange={onSelectedBucketNameChange}
       onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
+      onCreatePublicLinkForObject={onCreatePublicLinkForObject}
       transferReporter={transferReporter}
     />
   );

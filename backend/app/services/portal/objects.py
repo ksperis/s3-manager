@@ -73,6 +73,19 @@ class PortalObjectsMixin:
         normalized = key.rstrip("/")
         return os.path.basename(normalized) or normalized or key
 
+    def _head_storage_space_object(self, client, bucket_name: str, space_id: str, target_key: str) -> dict:
+        try:
+            return client.head_object(Bucket=bucket_name, Key=target_key)
+        except ClientError as exc:
+            error = exc.response.get("Error") or {}
+            code = str(error.get("Code") or "").lower()
+            status_code = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            if code in {"404", "nosuchkey", "notfound"} or status_code == 404:
+                raise RuntimeError(f"Object '{target_key}' not found in storage space '{space_id}'.") from exc
+            raise RuntimeError(f"Unable to load object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        except BotoCoreError as exc:
+            raise RuntimeError(f"Unable to load object '{target_key}' in storage space '{space_id}': {exc}") from exc
+
     def download_storage_space_object(
         self,
         user: User,
@@ -143,10 +156,7 @@ class PortalObjectsMixin:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_content_role(user, access, bucket_name)
         client = self._portal_object_client(user, access.account)
-        try:
-            resp = client.head_object(Bucket=bucket_name, Key=target_key)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to load object '{target_key}' in storage space '{space_id}': {exc}") from exc
+        resp = self._head_storage_space_object(client, bucket_name, space_id, target_key)
         content_type = resp.get("ContentType")
         preview_type, preview_text, preview_reason = self._safe_content_preview(client, bucket_name, target_key, content_type)
         return PortalStorageObjectDetail(

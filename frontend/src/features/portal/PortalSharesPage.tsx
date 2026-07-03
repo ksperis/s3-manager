@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  createPortalStorageSpacePublicLink,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
@@ -21,13 +20,14 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
-import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { PortalShareCandidatePicker, selectedPortalShares } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import type { PortalWorkspaceRole } from "./portalWorkspaceModel";
@@ -178,8 +178,7 @@ export default function PortalSharesPage() {
   const [shareCandidatesLoading, setShareCandidatesLoading] = useState(false);
   const [selectedShareRolesByUserId, setSelectedShareRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
-  const [publicObjectKey, setPublicObjectKey] = useState("");
-  const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
+  const [sharesMessage, setSharesMessage] = useState<string | null>(null);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(null);
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
@@ -413,30 +412,20 @@ export default function PortalSharesPage() {
     }
   };
 
-  const handleCreatePublicLink = async () => {
-    if (!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim()) return;
-    setBusyShareId("public-link");
-    setSharesError(null);
-    try {
-      const link = await createPortalStorageSpacePublicLink(accountIdForApi, selectedSpaceId, {
-        object_key: publicObjectKey.trim(),
-        label: publicObjectKey.trim().split("/").filter(Boolean).at(-1) ?? publicObjectKey.trim(),
-        expires_at: publicLinkExpiration ? new Date(publicLinkExpiration).toISOString() : null,
-      });
-      setPublicLinks((current) => [link, ...current.filter((item) => item.id !== link.id)]);
-      setPublicObjectKey("");
-      setActiveTab("links");
-    } catch (err) {
-      console.error(err);
-      setSharesError(extractApiError(err, t({ en: "Unable to create public link.", fr: "Impossible de créer le lien public.", de: "Öffentlicher Link kann nicht erstellt werden." })));
-    } finally {
-      setBusyShareId(null);
-    }
-  };
-
   const handleRevokePublicLink = async (link: PortalPublicLink) => {
     if (!accountIdForApi) return;
     setPendingAction({ type: "revoke-public-link", link });
+  };
+
+  const copyPublicLink = async (link: PortalPublicLink) => {
+    setSharesMessage(null);
+    setSharesError(null);
+    try {
+      await copyTextToClipboard(link.url);
+      setSharesMessage(t({ en: "Link copied.", fr: "Lien copié.", de: "Link kopiert." }));
+    } catch {
+      setSharesMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
+    }
   };
 
   const confirmRevokePublicLink = async (link: PortalPublicLink) => {
@@ -484,6 +473,7 @@ export default function PortalSharesPage() {
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }) })}
       />
       {sharesError ? <PageBanner tone="warning">{sharesError}</PageBanner> : null}
+      {sharesMessage ? <PageBanner tone="info">{sharesMessage}</PageBanner> : null}
       <UiCard>
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
@@ -534,16 +524,21 @@ export default function PortalSharesPage() {
                       {link.url}
                     </td>
                     <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
-                      {link.status === "Active" ? (
-                        <button
-                          type="button"
-                          disabled={busyShareId === `public-link-${link.id}`}
-                          onClick={() => handleRevokePublicLink(link)}
-                          className={tableDeleteActionClasses}
-                        >
-                          {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+                      <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
+                        <button type="button" onClick={() => copyPublicLink(link)} className={tableActionButtonClasses}>
+                          {t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
                         </button>
-                      ) : null}
+                        {link.status === "Active" ? (
+                          <button
+                            type="button"
+                            disabled={busyShareId === `public-link-${link.id}`}
+                            onClick={() => handleRevokePublicLink(link)}
+                            className={tableDeleteActionClasses}
+                          >
+                            {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -622,25 +617,6 @@ export default function PortalSharesPage() {
                 });
               }}
             />
-          </div>
-        </UiCard>
-      ) : activeTab === "links" ? (
-        <UiCard title={t({ en: "Create a public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })}>
-          <div className="grid gap-3 md:grid-cols-[180px_1fr_220px_auto]">
-            <select className="ui-control h-8 py-1.5 text-xs" value={selectedSpaceId} onChange={(event) => setSelectedSpaceId(event.target.value)}>
-              {activeSharedOwnerSpaces.map((space) => (
-                <option key={space.id} value={space.id}>{space.name}</option>
-              ))}
-            </select>
-            <input className="ui-control h-8 text-xs" value={publicObjectKey} onChange={(event) => setPublicObjectKey(event.target.value)} placeholder="path/to/object.ext" />
-            <input type="datetime-local" className="ui-control h-8 text-xs" value={publicLinkExpiration} onChange={(event) => setPublicLinkExpiration(event.target.value)} aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })} />
-            <UiButton
-              disabled={!accountIdForApi || !selectedSpaceId || !publicObjectKey.trim() || busyShareId === "public-link" || activeSharedOwnerSpaces.length === 0}
-              onClick={handleCreatePublicLink}
-              className="h-8 px-3 py-1.5"
-            >
-              {t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
-            </UiButton>
           </div>
         </UiCard>
       ) : null}

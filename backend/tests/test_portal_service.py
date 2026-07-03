@@ -10,6 +10,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from botocore.exceptions import ClientError
 from fastapi import HTTPException
 
 from app.db import (
@@ -3003,6 +3004,17 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
     )
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
+    class FakeClient:
+        def __init__(self):
+            self.head_calls = []
+
+        def head_object(self, **kwargs):
+            self.head_calls.append(kwargs)
+            return {"ContentLength": 1024}
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: fake_client)
+
     link = service.create_storage_space_public_link(
         owner,
         access,
@@ -3020,6 +3032,71 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
     assert link.url.startswith("/api/portal/public-links/")
     assert [(item.id, item.status) for item in links] == [(link.id, "Active")]
     assert [(item.id, item.status) for item in revoked] == [(link.id, "Revoked")]
+    assert fake_client.head_calls == [{"Bucket": "research-data", "Key": "raw-data/report.csv"}]
+
+    with pytest.raises(RuntimeError, match="expiration must be in the future"):
+        service.create_storage_space_public_link(
+            owner,
+            access,
+            "research-data",
+            object_key="raw-data/old-report.csv",
+            expires_at=utcnow() - timedelta(seconds=1),
+        )
+
+
+def test_public_link_creation_rejects_missing_objects(monkeypatch, db_session):
+    account = S3Account(name="portal-public-link-missing-object", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-public-missing@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="research-data",
+            display_name="Research Data",
+            owner_user_id=owner.id,
+            visibility="shared",
+        )
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="research-data",
+                name="Research Data",
+                role="Owner",
+                internal_bucket_name="research-data",
+            )
+        ],
+    )
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    class FakeClient:
+        def head_object(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "NoSuchKey", "Message": "Not found"},
+                    "ResponseMetadata": {"HTTPStatusCode": 404},
+                },
+                "HeadObject",
+            )
+
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: FakeClient())
+
+    with pytest.raises(RuntimeError, match="Object 'raw-data/missing.csv' not found"):
+        service.create_storage_space_public_link(
+            owner,
+            access,
+            "research-data",
+            object_key="raw-data/missing.csv",
+            expires_at=utcnow() + timedelta(days=1),
+        )
+
+    assert db_session.query(PortalPublicLink).count() == 0
 
 
 def test_private_storage_space_blocks_new_shares_and_public_links(monkeypatch, db_session):

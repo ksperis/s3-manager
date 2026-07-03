@@ -5,12 +5,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  createPortalStorageSpacePublicLink,
   fetchPortalStorageSpaceAccessSummary,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
   revokePortalStorageSpaceShare,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
+  type PortalPublicLink,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceAccessSummary,
   type PortalStorageSpaceRole,
@@ -19,6 +21,7 @@ import {
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
@@ -28,6 +31,7 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import type { BrowserActionId } from "../browser/browserActions";
@@ -70,6 +74,12 @@ const VIEWER_HIDDEN_BROWSER_ACTION_IDS: readonly BrowserActionId[] = [
 type PendingAccessChange = {
   mode: PortalAccessMode;
   accountMemberRole: PortalStorageSpaceAccountMemberRole;
+};
+
+type PublicLinkTarget = {
+  bucketName: string;
+  key: string;
+  name: string;
 };
 
 function ObjectMetricCard({
@@ -119,6 +129,12 @@ export default function PortalStorageSpaceDetailPage() {
   const [pendingAccessChange, setPendingAccessChange] = useState<PendingAccessChange | null>(null);
   const [pendingAccessRevoke, setPendingAccessRevoke] = useState<PortalStorageSpaceShare | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [publicLinkTarget, setPublicLinkTarget] = useState<PublicLinkTarget | null>(null);
+  const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
+  const [publicLinkBusy, setPublicLinkBusy] = useState(false);
+  const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
+  const [createdPublicLink, setCreatedPublicLink] = useState<PortalPublicLink | null>(null);
+  const [publicLinkCopyMessage, setPublicLinkCopyMessage] = useState<string | null>(null);
   const {
     workspace,
     loading,
@@ -379,6 +395,73 @@ export default function PortalStorageSpaceDetailPage() {
       ? space.usedBytes / space.objectCount
       : null;
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
+  const canCreatePublicLinks = Boolean(
+    canBrowse &&
+    space.role === "Owner" &&
+    contentRole === "Owner" &&
+    space.visibility === "shared" &&
+    accessSummary?.can_create_public_links
+  );
+
+  const openPublicLinkDialog = (target: PublicLinkTarget) => {
+    if (target.bucketName !== lockedBucketName || !canCreatePublicLinks) return;
+    setPublicLinkTarget(target);
+    setPublicLinkExpiration("");
+    setPublicLinkError(null);
+    setCreatedPublicLink(null);
+    setPublicLinkCopyMessage(null);
+  };
+
+  const closePublicLinkDialog = () => {
+    if (publicLinkBusy) return;
+    setPublicLinkTarget(null);
+    setPublicLinkExpiration("");
+    setPublicLinkError(null);
+    setCreatedPublicLink(null);
+    setPublicLinkCopyMessage(null);
+  };
+
+  const handleCreatePublicLink = async () => {
+    if (!publicLinkTarget || !accountIdForApi || publicLinkBusy || !canCreatePublicLinks) return;
+    let expiresAt: string | null = null;
+    if (publicLinkExpiration) {
+      const expiration = new Date(publicLinkExpiration);
+      if (Number.isNaN(expiration.getTime())) {
+        setPublicLinkError(t({ en: "Choose a valid expiration date.", fr: "Choisissez une date d'expiration valide.", de: "Wählen Sie ein gültiges Ablaufdatum." }));
+        return;
+      }
+      expiresAt = expiration.toISOString();
+    }
+    setPublicLinkBusy(true);
+    setPublicLinkError(null);
+    setPublicLinkCopyMessage(null);
+    try {
+      const link = await createPortalStorageSpacePublicLink(accountIdForApi, space.id, {
+        object_key: publicLinkTarget.key,
+        label: publicLinkTarget.name,
+        expires_at: expiresAt,
+      });
+      setCreatedPublicLink(link);
+      setMessage(t({ en: "Public link created.", fr: "Lien public créé.", de: "Öffentlicher Link erstellt." }));
+      void loadAccessSummary();
+    } catch (err) {
+      console.error(err);
+      setPublicLinkError(extractApiError(err, t({ en: "Unable to create public link.", fr: "Impossible de créer le lien public.", de: "Öffentlicher Link kann nicht erstellt werden." })));
+    } finally {
+      setPublicLinkBusy(false);
+    }
+  };
+
+  const copyCreatedPublicLink = async () => {
+    if (!createdPublicLink?.url) return;
+    try {
+      await copyTextToClipboard(createdPublicLink.url);
+      setPublicLinkCopyMessage(t({ en: "Link copied.", fr: "Lien copié.", de: "Link kopiert." }));
+    } catch {
+      setPublicLinkCopyMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
+    }
+  };
+
   const storageSpaceSettingsCard = space.role === "Owner" ? (
     <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
       <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
@@ -651,6 +734,7 @@ export default function PortalStorageSpaceDetailPage() {
               if (target.bucketName !== lockedBucketName) return;
               navigate(storageSpaceObjectPath(space, target.key));
             }}
+            onCreatePublicLinkForObject={canCreatePublicLinks ? openPublicLinkDialog : undefined}
             transferReporter={{
               start: (transfer) => {
                 if (transfer.bucketName !== lockedBucketName) return null;
@@ -673,6 +757,72 @@ export default function PortalStorageSpaceDetailPage() {
           {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour ce workspace.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
         </PageBanner>
       )}
+
+      {publicLinkTarget ? (
+        <Modal
+          title={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })}
+          onClose={closePublicLinkDialog}
+          closeOnBackdropClick={!publicLinkBusy}
+          closeOnEscape={!publicLinkBusy}
+        >
+          <div className="space-y-4">
+            {publicLinkError ? <PageBanner tone="warning">{publicLinkError}</PageBanner> : null}
+            {publicLinkCopyMessage ? <PageBanner tone="info">{publicLinkCopyMessage}</PageBanner> : null}
+            <dl className="grid gap-3 text-xs">
+              <div className="grid grid-cols-[130px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</dt>
+                <dd className={cx("min-w-0 break-all font-bold", uiTitleTextClass)}>{publicLinkTarget.name}</dd>
+              </div>
+              <div className="grid grid-cols-[130px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Path", fr: "Chemin", de: "Pfad" })}</dt>
+                <dd className="min-w-0 break-all font-mono text-[11px]">{publicLinkTarget.key}</dd>
+              </div>
+              <div className="grid grid-cols-[130px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</dt>
+                <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
+              </div>
+            </dl>
+            <label className="grid gap-1 text-xs font-semibold">
+              <span className={uiMutedTextClass}>{t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}</span>
+              <input
+                type="datetime-local"
+                className="ui-control h-9 text-xs"
+                value={publicLinkExpiration}
+                disabled={publicLinkBusy || Boolean(createdPublicLink)}
+                onChange={(event) => setPublicLinkExpiration(event.target.value)}
+                aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
+              />
+            </label>
+            {createdPublicLink ? (
+              <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-3">
+                <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+                  {t({ en: "Public link", fr: "Lien public", de: "Öffentlicher Link" })}
+                </div>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <code className="min-w-0 flex-1 break-all rounded-md bg-[var(--ui-surface)] px-2 py-1 text-[11px]">{createdPublicLink.url}</code>
+                  <UiButton size="sm" variant="secondary" onClick={copyCreatedPublicLink}>
+                    {t({ en: "Copy link", fr: "Copier le lien", de: "Link kopieren" })}
+                  </UiButton>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton variant="secondary" onClick={closePublicLinkDialog} disabled={publicLinkBusy}>
+                {createdPublicLink ? t({ en: "Done", fr: "Terminer", de: "Fertig" }) : t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton
+                onClick={handleCreatePublicLink}
+                loading={publicLinkBusy}
+                disabled={Boolean(createdPublicLink) || !canCreatePublicLinks}
+              >
+                {publicLinkBusy
+                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
+                  : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {pendingAccessChange ? (
         <ConfirmActionDialog

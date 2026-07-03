@@ -21,6 +21,7 @@ export type BrowserActionId =
   | "open"
   | "preview"
   | "download"
+  | "createPublicLink"
   | "copyUrl"
   | "copy"
   | "cut"
@@ -53,6 +54,7 @@ export type ResolveBrowserActionsInput = {
   clipboardMode?: ClipboardState["mode"] | null;
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
+  publicLinkAvailable?: boolean;
   inspectorAvailable?: boolean;
   currentPath?: string;
   showFolderItems?: boolean;
@@ -82,6 +84,7 @@ export const CONTEXT_MENU_ITEM_ACTION_IDS: BrowserActionId[] = [
   "properties",
   "open",
   "download",
+  "createPublicLink",
   "copyUrl",
   "copy",
   "cut",
@@ -172,6 +175,7 @@ const ALL_ACTION_IDS: BrowserActionId[] = [
   "open",
   "preview",
   "download",
+  "createPublicLink",
   "copyUrl",
   "copy",
   "cut",
@@ -196,6 +200,7 @@ const defaultSectionByActionId: Record<BrowserActionId, BrowserActionSection> = 
   open: "selection",
   preview: "selection",
   download: "selection",
+  createPublicLink: "selection",
   copyUrl: "selection",
   copy: "selection",
   cut: "selection",
@@ -225,6 +230,7 @@ const PORTAL_BASIC_PATH_ACTION_IDS = new Set<BrowserActionId>([
 const PORTAL_BASIC_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
   "details",
   "download",
+  "createPublicLink",
   "delete",
 ]);
 
@@ -281,6 +287,7 @@ export const resolveBrowserActions = ({
   clipboardMode = null,
   copyUrlDisabled = false,
   copyUrlDisabledReason,
+  publicLinkAvailable = false,
   inspectorAvailable = false,
   currentPath = "",
   showFolderItems = true,
@@ -414,6 +421,13 @@ export const resolveBrowserActions = ({
       });
     }
     if (isPrimaryFile && !isPrimaryDeleted) {
+      if (publicLinkAvailable) {
+        setState("createPublicLink", {
+          label: "Create public link",
+          visible: true,
+          enabled: canUseContextActions,
+        });
+      }
       setState("copyUrl", {
         label: "Copy URL",
         visible: true,

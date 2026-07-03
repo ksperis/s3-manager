@@ -546,6 +546,8 @@ class PortalSharingMixin:
         expires_at = self._normalize_storage_space_datetime(expires_at)
         if expires_at is not None and expires_at <= utcnow():
             raise RuntimeError("Public link expiration must be in the future.")
+        client = self._portal_object_client(user, access.account)
+        self._head_storage_space_object(client, bucket_name, space_id, target_key)
         token = secrets.token_urlsafe(32)
         link = DBPortalPublicLink(
             token=token,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ComponentProps } from "react";
@@ -6,6 +6,7 @@ import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
 import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
+  createPublicLinkMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
@@ -98,6 +99,7 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
@@ -174,6 +176,17 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.grantShareMock.mockResolvedValue({ id: "research-data:13" });
     mocks.revokeShareMock.mockResolvedValue([]);
     mocks.updateShareMock.mockResolvedValue({ id: "research-data:12", role: "Editor" });
+    mocks.createPublicLinkMock.mockResolvedValue({
+      id: 42,
+      storage_space_id: "research-data",
+      storage_space_name: "Research Data",
+      object_key: "raw-data/report.csv",
+      object_name: "report.csv",
+      url: "/api/portal/public-links/token/download",
+      status: "Active",
+      created_at: "2026-06-01T10:00:00Z",
+      expires_at: null,
+    });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].role = "Owner";
@@ -240,6 +253,50 @@ describe("PortalStorageSpaceDetailPage", () => {
       "newFolder",
       "delete",
     ]);
+    expect(embedProps.onCreatePublicLinkForObject).toBeUndefined();
+  });
+
+  it("creates a public link from a Browser-selected file", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      const latestProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed> | undefined;
+      expect(latestProps?.onCreatePublicLinkForObject).toEqual(expect.any(Function));
+    });
+
+    const latestProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed>;
+    act(() => {
+      latestProps.onCreatePublicLinkForObject?.({
+        bucketName: "research-data-internal",
+        key: "raw-data/report.csv",
+        name: "report.csv",
+      });
+    });
+
+    expect(screen.getByRole("dialog", { name: "Create public link" })).toBeInTheDocument();
+    expect(screen.getByText("raw-data/report.csv")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Public link expiration"), {
+      target: { value: "2026-06-10T10:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+
+    await waitFor(() => {
+      expect(mocks.createPublicLinkMock).toHaveBeenCalledWith("101", "research-data", {
+        object_key: "raw-data/report.csv",
+        label: "report.csv",
+        expires_at: expect.any(String),
+      });
+    });
+    expect(await screen.findByText("/api/portal/public-links/token/download")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("/api/portal/public-links/token/download");
+    expect(await screen.findByText("Link copied.")).toBeInTheDocument();
   });
 
   it("shows a disabled state when the Portal Browser kill switch is off", () => {
