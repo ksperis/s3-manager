@@ -37,6 +37,7 @@ Unavailable metrics do not always mean the Storage Space is broken. Ask an admin
 
 - [Workspace: Portal](workspace-portal.md)
 - [Portal: Storage Spaces](portal-storage-spaces.md)
+- [Portal: Settings](portal-settings.md)
 - [Feature: Bucket usage stats](feature-bucket-usage-stats.md)
 - [Troubleshooting](troubleshooting.md)
 

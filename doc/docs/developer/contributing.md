@@ -5,6 +5,7 @@
 - Keep IAM-aligned behavior.
 - Avoid introducing hidden authorization layers.
 - Update documentation when behavior changes.
+- Start with [First contribution](first-contribution.md) when you are new to the codebase.
 
 ## AI-authored commit messages
 

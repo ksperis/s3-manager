@@ -20,11 +20,25 @@ The AWS type enables S3, STS, IAM, static website, and SSE capabilities by defau
 - Browser workflows usually work with standard S3 compatibility.
 - Manager IAM workflows require real IAM support from backend.
 - Account-centric workflows may be limited when no account model exists.
+- Portal Storage Spaces require an account model and Portal orchestration that can project grants to storage-side enforcement.
+- Usage, billing, metrics, RGW SNS topics, and Ceph Admin pages may stay unavailable even when object browsing works.
 
 ## Recommendation
 
 Maintain an internal support matrix by backend and version for production usage.
 
+Minimum matrix columns:
+
+| Column | Why |
+|---|---|
+| Backend and version | S3-compatible behavior changes by product and release. |
+| Endpoint type | AWS, Ceph, or Other determines default capabilities. |
+| Browser read/write | Confirms baseline object operations. |
+| IAM support | Determines Manager IAM availability. |
+| Usage/metrics | Determines Admin, Manager, and Portal analytics reliability. |
+| Known unsupported features | Prevents users from treating hidden actions as permission issues. |
+
 ## Related pages
 
 - [Backends: compatibility matrix](backends-compatibility.md)
+- [Feature availability](../user/feature-availability.md)

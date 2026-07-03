@@ -85,6 +85,8 @@ warnings.
 ## Related pages
 
 - [Configuration](configuration.md)
+- [Production readiness](production-readiness.md)
+- [Backup and restore](backup-restore.md)
 - [Operations: healthchecks](operations-healthchecks.md)
 - [Operations: billing](operations-billing.md)
 - [Operations: quota monitoring and history](operations-quota-monitoring.md)

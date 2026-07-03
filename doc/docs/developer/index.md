@@ -22,5 +22,6 @@ This section documents architecture and design intent at high level.
 5. [Workspace surface separation](workspace-surface-separation.md)
 6. [Product design guidelines](product-design-guidelines.md)
 7. [Local development](local-development.md)
-8. [UI theme guidelines](ui-theme-guidelines.md)
-9. [Docs maintenance](docs-maintenance.md)
+8. [First contribution](first-contribution.md)
+9. [UI theme guidelines](ui-theme-guidelines.md)
+10. [Docs maintenance](docs-maintenance.md)

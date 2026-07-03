@@ -11,17 +11,18 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 
 1. [Start here](start-here.md)
 2. [Common tasks for storage users](common-tasks-storage-user.md) or [common tasks for storage administrators](common-tasks-storage-admin.md)
-3. [User profile](profile.md)
-4. [Glossary and search tips](glossary.md) when a term is unclear.
-5. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
-6. Feature pages for the exact action you need.
+3. [Storage admin runbook](admin-runbook-storage-admin.md) when you need to prepare a team handover.
+4. [User profile](profile.md)
+5. [Glossary and search tips](glossary.md) when a term is unclear.
+6. Workspace pages (`Admin`, `Manager`, `Portal`, `Browser`, then optional `Ceph Admin` and `Storage Ops`)
+7. Feature pages for the exact action you need.
 
 ## Choose your path
 
 | If you are... | Read next | Good first outcome |
 |---|---|---|
 | A storage user | [Common tasks for storage users](common-tasks-storage-user.md) | You know where to browse files, manage simple access, and report missing permissions. |
-| A storage administrator | [Common tasks for storage administrators](common-tasks-storage-admin.md) | You can map endpoint, account, bucket, IAM, and usage tasks to the right workspace. |
+| A storage administrator | [Storage admin runbook](admin-runbook-storage-admin.md) | You can configure the first endpoint, context, workspace, validation, and handover evidence. |
 | A Portal user | [Workspace: Portal](workspace-portal.md) | You understand Storage Spaces, files, sharing, usage, and access keys. |
 | A Browser user | [Workspace: Browser](workspace-browser.md) | You can select the right context and act on objects safely. |
 

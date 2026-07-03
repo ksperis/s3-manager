@@ -26,7 +26,9 @@ Use this page when a term in the UI or documentation is unclear.
 | files, folders | Browser, object operations, Portal files, Storage Spaces |
 | permissions, denied, forbidden | AccessDenied, IAM, feature availability, execution context |
 | access key, secret key, credentials | Portal Access Keys, IAM, S3 connection |
-| quota, capacity, usage | usage stats, quota monitoring, Portal usage, billing |
+| activity, history, audit | Portal Activity, Admin audit, usage history |
+| transfer, upload progress, queue | Portal Transfers, Browser object operations, bucket migration |
+| quota, capacity, usage | Admin Usage and Metrics, usage stats, quota monitoring, Portal usage, billing |
 | sharing, collaborator, public link | Portal sharing, Viewer, Editor, Owner |
 | delete, empty bucket, purge | Bucket purge, safe destructive operations, object delete |
 | migrate, sync, copy bucket | Bucket migration, Bucket compare |

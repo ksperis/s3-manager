@@ -19,7 +19,7 @@ The database schema diagrams are generated from the SQLAlchemy metadata in
 `backend/app/db`. The overview keeps all tables and foreign-key topology in a
 single readable image; detailed slices show full column lists.
 
-[![Database schema overview](../../assets/diagrams/database-schema/overview.svg)](../../assets/diagrams/database-schema/overview.svg)
+[![Database schema overview](../assets/diagrams/database-schema/overview.svg)](../assets/diagrams/database-schema/overview.svg)
 
 ### Detailed slices
 

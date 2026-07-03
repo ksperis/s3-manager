@@ -65,6 +65,7 @@ nav:
       - Start here: user/start-here.md
       - "Common tasks: storage users": user/common-tasks-storage-user.md
       - "Common tasks: storage administrators": user/common-tasks-storage-admin.md
+      - "Storage admin runbook": user/admin-runbook-storage-admin.md
       - User profile: user/profile.md
       - Use cases (storage admin): user/use-cases-storage-admin.md
       - Use cases (storage user): user/use-cases-storage-user.md
@@ -73,6 +74,9 @@ nav:
       - "Workspace: Admin": user/workspace-admin.md
       - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
       - "Feature: Billing in Admin": user/feature-billing-admin.md
+      - "Feature: Admin Usage and Metrics": user/feature-admin-metrics.md
+      - "Feature: Usage History in Admin": user/feature-usage-history-admin.md
+      - "Feature: Key Rotation in Admin": user/feature-key-rotation-admin.md
       - "Workspace: Manager": user/workspace-manager.md
       - "Workspace: Portal": user/workspace-portal.md
       - "Portal: Storage Spaces": user/portal-storage-spaces.md
@@ -80,6 +84,9 @@ nav:
       - "Portal: Sharing": user/portal-sharing.md
       - "Portal: Access Keys": user/portal-access-keys.md
       - "Portal: Usage and Alerts": user/portal-usage-alerts.md
+      - "Portal: Activity": user/portal-activity.md
+      - "Portal: Transfers": user/portal-transfers.md
+      - "Portal: Settings": user/portal-settings.md
       - "Workspace: Browser": user/workspace-browser.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Workspace: Storage Ops": user/workspace-storage-ops.md
@@ -105,6 +112,8 @@ nav:
       - Deploy with Docker Compose: ops/deploy-docker-compose.md
       - Deploy with Helm: ops/deploy-helm.md
       - Configuration: ops/configuration.md
+      - Production readiness: ops/production-readiness.md
+      - Backup and restore: ops/backup-restore.md
       - "Operations: healthchecks": ops/operations-healthchecks.md
       - "Operations: billing": ops/operations-billing.md
       - "Operations: quota monitoring and history": ops/operations-quota-monitoring.md
@@ -130,6 +139,7 @@ nav:
       - Workspace surface separation: developer/workspace-surface-separation.md
       - Repository layout: developer/repo-layout.md
       - Local development: developer/local-development.md
+      - First contribution: developer/first-contribution.md
       - Contributing: developer/contributing.md
       - API reference: developer/api-reference.md
       - Listings feature matrix: developer/listings-feature-matrix.md

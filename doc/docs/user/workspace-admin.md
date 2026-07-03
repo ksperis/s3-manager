@@ -17,7 +17,7 @@ Use **Admin** for platform governance and global configuration.
 5. Use **Storage Backends** for endpoints and endpoint status.
 6. Use **Usage & Metrics** to review endpoint-scoped storage, usage composition, usage history, and traffic from tabbed categories.
 7. Use **Audit & Reporting** for billing, stored usage-history snapshots, and audit trail.
-8. If superadmin, use **Settings** pages for global behavior, including authentication options and UI-managed OIDC/LDAP providers.
+8. If superadmin, use **Settings** pages for global behavior, authentication options, UI-managed OIDC/LDAP providers, and key rotation.
 
 ## Expected result
 
@@ -48,6 +48,10 @@ Platform and tenant-entry resources are configured and auditable.
 
 - [Feature: Endpoint Status in Admin](feature-endpoint-status-admin.md)
 - [Feature: Billing in Admin](feature-billing-admin.md)
+- [Feature: Admin Usage and Metrics](feature-admin-metrics.md)
+- [Feature: Usage History in Admin](feature-usage-history-admin.md)
+- [Feature: Key Rotation in Admin](feature-key-rotation-admin.md)
+- [Storage admin runbook](admin-runbook-storage-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Ops / Configuration](../ops/configuration.md)
 - [Ops / Security](../ops/operations-security.md)

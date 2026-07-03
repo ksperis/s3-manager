@@ -24,7 +24,10 @@ s3-manager shows an action only when all required conditions are true:
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
 | Bucket compare, integrity, purge, migration | Manager tools | Global Manager setting plus per-user or inherited Manager tool access. |
+| Feature rule inventory | Manager tools | Per-user or inherited Manager tool access and selected context capability. |
 | Usage, quota, traffic, and billing | Admin, Manager, Portal | Collection jobs, endpoint capabilities, and feature flags. |
+| Key rotation | Admin settings | `ui_superadmin` access and eligible managed endpoint credentials. |
+| Portal activity, transfers, and settings | Portal | Portal account link, visible Storage Space scope, and Portal feature flags. |
 
 ## What to do first
 
@@ -43,6 +46,7 @@ You can identify whether the missing action is caused by workspace visibility, u
 - [Start here](start-here.md)
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
+- [Storage admin runbook](admin-runbook-storage-admin.md)
 - [Troubleshooting](troubleshooting.md)
 
 ## Visual example

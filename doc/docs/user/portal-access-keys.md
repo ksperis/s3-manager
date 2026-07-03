@@ -35,6 +35,7 @@ Ask an admin whether Portal user access-key creation is enabled and whether your
 
 - [Workspace: Portal](workspace-portal.md)
 - [Portal: Storage Spaces](portal-storage-spaces.md)
+- [Portal: Settings](portal-settings.md)
 - [Feature availability](feature-availability.md)
 
 ## Visual example

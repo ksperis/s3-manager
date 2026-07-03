@@ -102,5 +102,7 @@ Secret detection is managed by the GitLab analyzer template in CI. To validate i
 ## Related pages
 
 - [Configuration](configuration.md)
+- [Production readiness](production-readiness.md)
+- [Backup and restore](backup-restore.md)
 - [Operations: observability](operations-observability.md)
 - [Developer: principles](../developer/principles.md)

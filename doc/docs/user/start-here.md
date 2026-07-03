@@ -80,7 +80,7 @@ You know which workspace to use and can start from the correct context.
 - For file work, continue with [Workspace: Browser](workspace-browser.md) or [Feature: Object operations in Browser](feature-objects-browser.md).
 - For self-service storage, continue with [Workspace: Portal](workspace-portal.md).
 - For bucket and IAM administration, continue with [Workspace: Manager](workspace-manager.md).
-- For platform setup, continue with [Workspace: Admin](workspace-admin.md).
+- For platform setup or team handover, continue with [Storage admin runbook](admin-runbook-storage-admin.md) and [Workspace: Admin](workspace-admin.md).
 - If a term is unclear, use [Glossary and search tips](glossary.md).
 
 ## Visual example

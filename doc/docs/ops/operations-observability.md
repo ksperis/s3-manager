@@ -37,4 +37,5 @@ Collect backend logs centrally and include:
 - [Operations: healthchecks](operations-healthchecks.md)
 - [Operations: billing](operations-billing.md)
 - [Operations: quota monitoring and history](operations-quota-monitoring.md)
+- [Production readiness](production-readiness.md)
 - [User troubleshooting](../user/troubleshooting.md)

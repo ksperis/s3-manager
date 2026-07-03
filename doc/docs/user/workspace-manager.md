@@ -21,7 +21,9 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
    - Feature rules inventory (if authorized)
    - Bucket Compare (if enabled)
    - Bucket Integrity (if enabled)
+   - Bucket Purge (if enabled and authorized)
    - Bucket Migration (if enabled and authorized)
+   - Ceph S3 User keys (if enabled and authorized)
 
 ## Expected result
 

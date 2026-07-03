@@ -11,6 +11,9 @@ s3-manager targets S3-compatible backends, with deeper integration for Ceph RGW 
 | Public access block | Partial | N/A | N/A | Some S3-compatible backends, including StorageGRID endpoints, may return not implemented |
 | IAM users/roles/policies | N/A | Yes | N/A | Not universal among S3-compatible products |
 | Accounts model | N/A | Yes | Yes | Strongly aligned with Ceph RGW modern accounts |
+| Usage and quota history | N/A | N/A | Partial | Requires backend metrics/usage support and scheduled collection |
+| Bucket notifications / topics | Partial | N/A | Partial | RGW SNS and S3 notification behavior differ by backend |
+| Admin key rotation | N/A | N/A | Partial | Only for supported managed credential flows |
 
 ## AWS preset
 
@@ -29,3 +32,4 @@ AWS endpoints keep Ceph-only capabilities disabled: Admin Ops, account API, usag
 
 - [Backends: Ceph RGW](backends-ceph-rgw.md)
 - [Backends: Other S3 implementations](backends-others.md)
+- [Feature availability](../user/feature-availability.md)

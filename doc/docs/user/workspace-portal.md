@@ -41,6 +41,9 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 | Share with collaborators or understand roles | [Portal: Sharing](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
 | Create credentials for external S3 tools | [Portal: Access Keys](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
 | Understand quota, usage, traffic, and alerts | [Portal: Usage and Alerts](portal-usage-alerts.md) | Storage used, per-space usage, history, billing source, and unavailable metrics. |
+| Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible Storage Space and file events. |
+| Follow file operations | [Portal: Transfers](portal-transfers.md) | Queued, running, completed, and failed transfers. |
+| Adjust preferences | [Portal: Settings](portal-settings.md) | Simple account, security, and preference cards. |
 
 ## Portal model in one minute
 
@@ -89,6 +92,9 @@ collaborator grants as their source of truth.
 - [Portal: Sharing](portal-sharing.md)
 - [Portal: Access Keys](portal-access-keys.md)
 - [Portal: Usage and Alerts](portal-usage-alerts.md)
+- [Portal: Activity](portal-activity.md)
+- [Portal: Transfers](portal-transfers.md)
+- [Portal: Settings](portal-settings.md)
 - [Workspace: Browser](workspace-browser.md)
 - [Use cases for storage users](use-cases-storage-user.md)
 

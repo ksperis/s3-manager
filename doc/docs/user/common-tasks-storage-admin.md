@@ -8,10 +8,12 @@ Use this page when you manage storage access, bucket configuration, or operation
 |---|---|---|
 | Configure endpoints and global features | [Workspace: Admin](workspace-admin.md) | You have `ui_admin` or `ui_superadmin`. |
 | Check endpoint health, incidents, or latency | [Feature: Endpoint Status in Admin](feature-endpoint-status-admin.md) | Endpoint Status is enabled. |
+| Prepare a team handover | [Storage admin runbook](admin-runbook-storage-admin.md) | Endpoint, account/context, workspace, and support evidence are ready. |
 | Create or inspect account buckets | [Workspace: Manager](workspace-manager.md) | The correct account context is selected. |
 | Configure bucket features | [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md) | The backend supports the feature. |
 | Manage IAM users, groups, roles, and policies | [Feature: IAM](feature-iam.md) | IAM capability is available for the endpoint. |
-| Review usage, quota, traffic, and billing | [Feature: Bucket usage stats](feature-bucket-usage-stats.md) and [Feature: Billing in Admin](feature-billing-admin.md) | Collection jobs and feature flags are enabled. |
+| Review platform usage, quota, traffic, and billing | [Feature: Admin Usage and Metrics](feature-admin-metrics.md), [Feature: Usage History in Admin](feature-usage-history-admin.md), and [Feature: Billing in Admin](feature-billing-admin.md) | Collection jobs and feature flags are enabled. |
+| Rotate managed storage keys | [Feature: Key Rotation in Admin](feature-key-rotation-admin.md) | You are a superadmin and have a maintenance plan. |
 | Compare, verify, migrate, purge, or bulk-edit buckets | [Safe destructive and bulk operations](safe-destructive-operations.md) | You have the required Manager tool access and understand the confirmation flow. |
 | Work at Ceph RGW cluster scope | [Workspace: Ceph Admin](workspace-ceph-admin.md) | The Ceph Admin entitlement and endpoint are selected. |
 | Run cross-context bucket campaigns | [Workspace: Storage Ops](workspace-storage-ops.md) | Storage Ops is enabled and the target contexts are authorized. |
@@ -35,6 +37,7 @@ Check [feature availability](feature-availability.md) before changing permission
 ## Related pages
 
 - [Start here](start-here.md)
+- [Storage admin runbook](admin-runbook-storage-admin.md)
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Troubleshooting](troubleshooting.md)

@@ -140,4 +140,6 @@ Admin can set:
 
 - [Operations: security](operations-security.md)
 - [Operations: quota monitoring and history](operations-quota-monitoring.md)
+- [Production readiness](production-readiness.md)
+- [Backup and restore](backup-restore.md)
 - [Developer: identity and execution model](../developer/identity-and-execution-model.md)
