@@ -13,7 +13,6 @@ theme:
     - navigation.instant
     - navigation.tracking
     - navigation.sections
-    - navigation.expand
     - navigation.top
     - toc.follow
     - content.code.copy
@@ -61,86 +60,101 @@ extra_javascript:
 nav:
   - Home: index.md
   - User Guide:
-      - Overview: user/index.md
-      - Start here: user/start-here.md
-      - "Common tasks: storage users": user/common-tasks-storage-user.md
-      - "Common tasks: storage administrators": user/common-tasks-storage-admin.md
-      - "Storage admin runbook": user/admin-runbook-storage-admin.md
-      - User profile: user/profile.md
-      - Use cases (storage admin): user/use-cases-storage-admin.md
-      - Use cases (storage user): user/use-cases-storage-user.md
-      - Feature availability: user/feature-availability.md
-      - Glossary and search tips: user/glossary.md
-      - "Workspace: Admin": user/workspace-admin.md
-      - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
-      - "Feature: Billing in Admin": user/feature-billing-admin.md
-      - "Feature: Admin Usage and Metrics": user/feature-admin-metrics.md
-      - "Feature: Usage History in Admin": user/feature-usage-history-admin.md
-      - "Feature: Key Rotation in Admin": user/feature-key-rotation-admin.md
-      - "Workspace: Manager": user/workspace-manager.md
-      - "Workspace: Portal": user/workspace-portal.md
-      - "Portal: Storage Spaces": user/portal-storage-spaces.md
-      - "Portal: Files": user/portal-files.md
-      - "Portal: Sharing": user/portal-sharing.md
-      - "Portal: Access Keys": user/portal-access-keys.md
-      - "Portal: Usage and Alerts": user/portal-usage-alerts.md
-      - "Portal: Activity": user/portal-activity.md
-      - "Portal: Transfers": user/portal-transfers.md
-      - "Portal: Settings": user/portal-settings.md
-      - "Workspace: Browser": user/workspace-browser.md
-      - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
-      - "Workspace: Storage Ops": user/workspace-storage-ops.md
-      - "Screenshots by workspace": user/screenshots-gallery.md
-      - "Feature: Buckets": user/feature-buckets.md
-      - "How-to: Configure a bucket from Manager": user/howto-manager-bucket-configuration.md
-      - "Feature: IAM": user/feature-iam.md
-      - "Feature: Object operations in Browser": user/feature-objects-browser.md
-      - "Feature: Object versions in Browser": user/feature-object-versions-browser.md
-      - "Feature: SNS topics": user/feature-topics.md
-      - "How-to: Ceph Admin advanced filter": user/howto-ceph-advanced-filter.md
-      - "How-to: Ceph Admin UI tags": user/howto-ceph-ui-tags.md
-      - "How-to: Storage Ops UI tags": user/howto-storage-ops-ui-tags.md
-      - "Feature: Bucket compare": user/feature-bucket-compare.md
-      - "Feature: Bucket integrity check": user/feature-bucket-integrity-check.md
-      - "Feature: Bucket purge": user/feature-bucket-purge.md
-      - "Safe destructive and bulk operations": user/safe-destructive-operations.md
-      - "Feature: Bucket usage stats": user/feature-bucket-usage-stats.md
-      - "Feature: Bucket migration": user/feature-bucket-migration.md
-      - Troubleshooting: user/troubleshooting.md
+      - Start:
+          - Overview: user/index.md
+          - Start here: user/start-here.md
+          - "Common tasks: storage users": user/common-tasks-storage-user.md
+          - "Common tasks: storage administrators": user/common-tasks-storage-admin.md
+          - "Storage admin runbook": user/admin-runbook-storage-admin.md
+          - User profile: user/profile.md
+      - Workspaces:
+          - "Workspace: Admin": user/workspace-admin.md
+          - "Workspace: Manager": user/workspace-manager.md
+          - "Workspace: Portal": user/workspace-portal.md
+          - "Workspace: Browser": user/workspace-browser.md
+          - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
+          - "Workspace: Storage Ops": user/workspace-storage-ops.md
+      - Portal:
+          - "Portal: Storage Spaces": user/portal-storage-spaces.md
+          - "Portal: Files": user/portal-files.md
+          - "Portal: Sharing": user/portal-sharing.md
+          - "Portal: Access Keys": user/portal-access-keys.md
+          - "Portal: Usage and Alerts": user/portal-usage-alerts.md
+          - "Portal: Activity": user/portal-activity.md
+          - "Portal: Transfers": user/portal-transfers.md
+          - "Portal: Settings": user/portal-settings.md
+      - Admin Features:
+          - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
+          - "Feature: Billing in Admin": user/feature-billing-admin.md
+          - "Feature: Admin Usage and Metrics": user/feature-admin-metrics.md
+          - "Feature: Usage History in Admin": user/feature-usage-history-admin.md
+          - "Feature: Key Rotation in Admin": user/feature-key-rotation-admin.md
+      - Manager / Browser Features:
+          - "Feature: Buckets": user/feature-buckets.md
+          - "How-to: Configure a bucket from Manager": user/howto-manager-bucket-configuration.md
+          - "Feature: IAM": user/feature-iam.md
+          - "Feature: Object operations in Browser": user/feature-objects-browser.md
+          - "Feature: Object versions in Browser": user/feature-object-versions-browser.md
+          - "Feature: SNS topics": user/feature-topics.md
+          - "Feature: Bucket compare": user/feature-bucket-compare.md
+          - "Feature: Bucket integrity check": user/feature-bucket-integrity-check.md
+          - "Feature: Bucket purge": user/feature-bucket-purge.md
+          - "Feature: Bucket usage stats": user/feature-bucket-usage-stats.md
+          - "Feature: Bucket migration": user/feature-bucket-migration.md
+      - Ceph / Storage Ops How-tos:
+          - "How-to: Ceph Admin advanced filter": user/howto-ceph-advanced-filter.md
+          - "How-to: Ceph Admin UI tags": user/howto-ceph-ui-tags.md
+          - "How-to: Storage Ops UI tags": user/howto-storage-ops-ui-tags.md
+      - Reference and Help:
+          - Use cases (storage admin): user/use-cases-storage-admin.md
+          - Use cases (storage user): user/use-cases-storage-user.md
+          - Feature availability: user/feature-availability.md
+          - "Screenshots by workspace": user/screenshots-gallery.md
+          - "Safe destructive and bulk operations": user/safe-destructive-operations.md
+          - Troubleshooting: user/troubleshooting.md
+          - Glossary and search tips: user/glossary.md
   - Ops / Sysadmin Guide:
-      - Overview: ops/index.md
-      - Deploy with Docker Compose: ops/deploy-docker-compose.md
-      - Deploy with Helm: ops/deploy-helm.md
-      - Configuration: ops/configuration.md
-      - Production readiness: ops/production-readiness.md
-      - Backup and restore: ops/backup-restore.md
-      - "Operations: healthchecks": ops/operations-healthchecks.md
-      - "Operations: billing": ops/operations-billing.md
-      - "Operations: quota monitoring and history": ops/operations-quota-monitoring.md
-      - "Operations: API tokens": ops/operations-api-tokens.md
-      - "Operations: admin automation API": ops/operations-admin-automation.md
-      - "Operations: security": ops/operations-security.md
-      - "Operations: observability": ops/operations-observability.md
-      - "Operations: upgrade and compatibility": ops/operations-upgrade-compatibility.md
-      - "Backends: compatibility matrix": ops/backends-compatibility.md
-      - "Backends: Ceph RGW": ops/backends-ceph-rgw.md
-      - "Backends: other S3 implementations": ops/backends-others.md
+      - Deployment:
+          - Overview: ops/index.md
+          - Deploy with Docker Compose: ops/deploy-docker-compose.md
+          - Deploy with Helm: ops/deploy-helm.md
+          - Configuration: ops/configuration.md
+      - Operations:
+          - "Operations: healthchecks": ops/operations-healthchecks.md
+          - "Operations: billing": ops/operations-billing.md
+          - "Operations: quota monitoring and history": ops/operations-quota-monitoring.md
+          - "Operations: API tokens": ops/operations-api-tokens.md
+          - "Operations: admin automation API": ops/operations-admin-automation.md
+          - "Operations: observability": ops/operations-observability.md
+          - "Operations: upgrade and compatibility": ops/operations-upgrade-compatibility.md
+      - Security and Recovery:
+          - Production readiness: ops/production-readiness.md
+          - Backup and restore: ops/backup-restore.md
+          - "Operations: security": ops/operations-security.md
+      - Backends:
+          - "Backends: compatibility matrix": ops/backends-compatibility.md
+          - "Backends: Ceph RGW": ops/backends-ceph-rgw.md
+          - "Backends: other S3 implementations": ops/backends-others.md
   - Developer Guide:
-      - Overview: developer/index.md
-      - Architecture overview: developer/architecture-overview.md
-      - "Architecture: backend": developer/architecture-backend.md
-      - "Architecture: frontend": developer/architecture-frontend.md
-      - "Architecture: database": developer/architecture-database.md
-      - Principles: developer/principles.md
-      - Product design guidelines: developer/product-design-guidelines.md
-      - UI theme guidelines: developer/ui-theme-guidelines.md
-      - AI assistant guidelines: developer/ai-assistant-guidelines.md
-      - Identity and execution model: developer/identity-and-execution-model.md
-      - Workspace surface separation: developer/workspace-surface-separation.md
-      - Repository layout: developer/repo-layout.md
-      - Local development: developer/local-development.md
-      - First contribution: developer/first-contribution.md
-      - Contributing: developer/contributing.md
-      - API reference: developer/api-reference.md
-      - Listings feature matrix: developer/listings-feature-matrix.md
-      - Docs maintenance: developer/docs-maintenance.md
+      - Architecture:
+          - Overview: developer/index.md
+          - Architecture overview: developer/architecture-overview.md
+          - "Architecture: backend": developer/architecture-backend.md
+          - "Architecture: frontend": developer/architecture-frontend.md
+          - "Architecture: database": developer/architecture-database.md
+          - Identity and execution model: developer/identity-and-execution-model.md
+      - Design and Surface Contracts:
+          - Principles: developer/principles.md
+          - Product design guidelines: developer/product-design-guidelines.md
+          - UI theme guidelines: developer/ui-theme-guidelines.md
+          - Workspace surface separation: developer/workspace-surface-separation.md
+      - Contribution:
+          - Local development: developer/local-development.md
+          - First contribution: developer/first-contribution.md
+          - Contributing: developer/contributing.md
+          - AI assistant guidelines: developer/ai-assistant-guidelines.md
+          - Docs maintenance: developer/docs-maintenance.md
+      - Reference:
+          - Repository layout: developer/repo-layout.md
+          - API reference: developer/api-reference.md
+          - Listings feature matrix: developer/listings-feature-matrix.md
