@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, Optional, Tuple
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -456,8 +457,7 @@ class BillingCollector:
             existing.ops_breakdown = payload
             existing.collected_at = now
         else:
-            self.db.add(
-                BillingUsageDaily(
+            row = BillingUsageDaily(
                     day=day,
                     storage_endpoint_id=endpoint_id,
                     s3_account_id=s3_account_id,
@@ -469,7 +469,29 @@ class BillingCollector:
                     source="rgw_admin_usage",
                     collected_at=now,
                 )
-            )
+            try:
+                with self.db.begin_nested():
+                    self.db.add(row)
+                    self.db.flush()
+            except IntegrityError:
+                existing = (
+                    self.db.query(BillingUsageDaily)
+                    .filter(
+                        BillingUsageDaily.day == day,
+                        BillingUsageDaily.storage_endpoint_id == endpoint_id,
+                        BillingUsageDaily.s3_account_id == s3_account_id,
+                        BillingUsageDaily.s3_user_id == s3_user_id,
+                        BillingUsageDaily.source == "rgw_admin_usage",
+                    )
+                    .first()
+                )
+                if existing is None:
+                    raise
+                existing.bytes_in = bytes_in
+                existing.bytes_out = bytes_out
+                existing.ops_total = ops_total
+                existing.ops_breakdown = payload
+                existing.collected_at = now
         self.db.commit()
 
     def _upsert_storage(
@@ -502,8 +524,7 @@ class BillingCollector:
             existing.by_bucket = payload
             existing.collected_at = now
         else:
-            self.db.add(
-                BillingStorageDaily(
+            row = BillingStorageDaily(
                     day=day,
                     storage_endpoint_id=endpoint_id,
                     s3_account_id=s3_account_id,
@@ -514,7 +535,28 @@ class BillingCollector:
                     source="rgw_admin_bucket_stats",
                     collected_at=now,
                 )
-            )
+            try:
+                with self.db.begin_nested():
+                    self.db.add(row)
+                    self.db.flush()
+            except IntegrityError:
+                existing = (
+                    self.db.query(BillingStorageDaily)
+                    .filter(
+                        BillingStorageDaily.day == day,
+                        BillingStorageDaily.storage_endpoint_id == endpoint_id,
+                        BillingStorageDaily.s3_account_id == s3_account_id,
+                        BillingStorageDaily.s3_user_id == s3_user_id,
+                        BillingStorageDaily.source == "rgw_admin_bucket_stats",
+                    )
+                    .first()
+                )
+                if existing is None:
+                    raise
+                existing.total_bytes = total_bytes
+                existing.total_objects = total_objects
+                existing.by_bucket = payload
+                existing.collected_at = now
         self.db.commit()
 
 

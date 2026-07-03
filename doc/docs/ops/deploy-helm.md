@@ -21,6 +21,7 @@ helm install s3-manager helm/s3-manager \
 - Optional Ingress.
 - Built-in CronJobs for billing, healthchecks, quota monitoring, and usage history collection.
 - Optional bundled PostgreSQL in values (evaluate for your environment policies).
+- CronJobs render with `concurrencyPolicy: Forbid`; the backend also uses database leases so a manual trigger and a CronJob cannot run the same collection at the same time.
 
 Cron values blocks:
 
@@ -37,6 +38,29 @@ Secrets or your external secret manager rather than plain values files. Use
 provider keys matching `[a-z0-9_-]+`; `TLS_VERIFY=false`,
 `ALLOW_INSECURE=true`, and `ALLOW_EMAIL_LINKING=true` emit startup security
 warnings.
+
+## Multi-backend profile
+
+Running more than one backend replica is supported only with PostgreSQL as the
+shared database source of truth. SQLite remains useful for local development and
+single-backend deployments, but it is not a multi-backend contract.
+
+For `backend.replicas > 1`:
+
+- Enable `.Values.postgresql.enabled=true` or set `backend.env.DATABASE_URL` to
+  a PostgreSQL URL.
+- Prefer `backend.persistence.enabled=false`; the database stores live app
+  settings and operational coordination. Keep backend persistence only for
+  legacy imports or files that are explicitly shared.
+- If backend persistence is enabled, use `ReadWriteMany`. The chart rejects
+  `ReadWriteOnce` with multiple backend replicas.
+- Enable each billing, healthcheck, quota-monitor, and usage-history CronJob
+  once per release. The chart-level `concurrencyPolicy: Forbid` and backend DB
+  leases protect against overlapping runs.
+
+The chart injects `BACKEND_REPLICAS` into the backend container unless you set it
+explicitly in `backend.env`; startup logs warn if multiple replicas are run on
+SQLite outside Helm safeguards.
 
 ## Container images
 

@@ -108,6 +108,11 @@ def _startup_security_warnings() -> list[str]:
             "Prefer PostgreSQL for long-running migrations; if you stay on SQLite, "
             "back up the .db, -wal and -shm files regularly."
         )
+    if is_sqlite_url(settings.database_url) and int(settings.backend_replicas or 1) > 1:
+        warnings.append(
+            "SQLite is configured with BACKEND_REPLICAS greater than 1. "
+            "Multi-backend deployments require PostgreSQL; SQLite is only supported for mono-backend deployments."
+        )
     return warnings
 
 

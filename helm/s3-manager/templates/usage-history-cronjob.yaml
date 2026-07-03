@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/component: usage-history-cron
 spec:
   schedule: {{ .Values.usageHistoryCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.usageHistoryCronJob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.usageHistoryCronJob.failedJobsHistoryLimit }}
   jobTemplate:

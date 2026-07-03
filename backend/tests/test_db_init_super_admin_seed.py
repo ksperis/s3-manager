@@ -3,6 +3,7 @@
 from app.core import db_init
 from app.core.security import verify_password
 from app.db import User, UserRole
+from sqlalchemy.exc import IntegrityError
 
 
 def _set_seed_config(monkeypatch, *, mode: str, email: str = "admin@example.com", password: str = "verystrongpass123") -> None:
@@ -96,3 +97,22 @@ def test_seed_super_admin_if_empty_does_not_duplicate_existing_seed_user(db_sess
 
     db_session.refresh(existing)
     assert existing.hashed_password == "already-hashed"
+
+
+def test_seed_super_admin_handles_concurrent_unique_conflict(db_session, monkeypatch):
+    _set_seed_config(monkeypatch, mode="if_empty")
+    calls = {"count": 0}
+    original_commit = db_session.commit
+
+    def flaky_commit():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise IntegrityError("insert users", {}, Exception("unique"))
+        return original_commit()
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    seeded = db_init._seed_super_admin_if_needed(db_session)
+
+    assert seeded is False
+    assert db_session.query(User).count() == 0

@@ -21,11 +21,12 @@ Primary source of truth: `backend/app/core/config.py`.
 Key areas:
 
 - Security and auth: JWT keys, credential keys, refresh cookie settings, OIDC/LDAP environment providers.
-- Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`).
+- Database: `DATABASE_URL` (SQLite defaults to `backend/app.db`; relative SQLite paths are normalized against `backend/`). Multi-backend deployments require PostgreSQL.
 - CORS: `CORS_ORIGINS`.
 - Feature force-locks: `FEATURE_MANAGER_ENABLED`, `FEATURE_PORTAL_ENABLED`, `FEATURE_BROWSER_ENABLED`, `FEATURE_CEPH_ADMIN_ENABLED`, `FEATURE_STORAGE_OPS_ENABLED`, `FEATURE_BILLING_ENABLED`, `FEATURE_ENDPOINT_STATUS_ENABLED`.
 - Internal scheduler auth: `INTERNAL_CRON_TOKEN`.
 - Billing, quota monitoring, usage history collection, and healthcheck behavior.
+- Backend replica and lease coordination: `BACKEND_REPLICAS`, `OPERATION_LEASE_TTL_SECONDS`, and `BILLING_OPERATION_LEASE_TTL_SECONDS`.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
 - Quota SMTP secret: `SMTP_PASSWORD`.
 
@@ -81,6 +82,13 @@ LDAP only authenticates the UI identity. First LDAP login creates a user with
 ## App settings (persisted)
 
 Primary model: `backend/app/models/app_settings.py`.
+Persistence source: the `app_settings` database table.
+
+`APP_SETTINGS_PATH` is now a legacy import and fallback path. On startup or first
+settings read, a deployment with an empty `app_settings` table imports the JSON
+file once, then live reads and writes go through the database. Environment
+force-locks such as `FEATURE_PORTAL_ENABLED` still override the effective value
+without changing the persisted setting.
 
 Managed from Admin UI:
 
@@ -92,9 +100,9 @@ Managed from Admin UI:
 - Migration/compare flags and manager behavior.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
 
-On a fresh deployment with no persisted `app_settings.json`, `Endpoint Status`
-and `Usage history` are enabled by default. `Quota alerts` remains disabled
-until explicitly enabled and configured.
+On a fresh deployment with no persisted app settings, `Endpoint Status` and
+`Usage history` are enabled by default. `Quota alerts` remains disabled until
+explicitly enabled and configured.
 
 The Browser workspace is enabled on root `/browser` and in Portal storage spaces
 (`/portal/storage-spaces/:spaceId`) by default. Manager and Ceph Admin Browser
@@ -102,8 +110,8 @@ integrations remain disabled until explicitly enabled.
 
 Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
 **Settings > Authentication**. The four access-key login options remain in
-`AppSettings.general` and are persisted in `app_settings.json`; UI-managed OIDC
-and LDAP providers are persisted separately in the database.
+`AppSettings.general` and are persisted in the database; UI-managed OIDC and
+LDAP providers are persisted separately in their own database tables.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 

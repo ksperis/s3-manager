@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/component: quota-monitor-cron
 spec:
   schedule: {{ .Values.quotaMonitorCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.failedJobsHistoryLimit }}
   jobTemplate:

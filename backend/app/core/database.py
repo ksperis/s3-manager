@@ -18,6 +18,11 @@ def is_sqlite_url(url: str | None) -> bool:
     return text.startswith("sqlite")
 
 
+def is_postgresql_url(url: str | None) -> bool:
+    text = str(url or "").strip().lower()
+    return text.startswith("postgresql") or text.startswith("postgres")
+
+
 def is_sqlite_malformed_database_error(exc: BaseException) -> bool:
     current: BaseException | None = exc
     seen: set[int] = set()

@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/component: billing-cron
 spec:
   schedule: {{ .Values.billingCronJob.schedule | quote }}
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.billingCronJob.successfulJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.billingCronJob.failedJobsHistoryLimit }}
   jobTemplate:

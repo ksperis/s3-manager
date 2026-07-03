@@ -336,6 +336,21 @@ class Settings(BaseSettings):
         None,
         description="Shared secret for internal cron endpoints (INTERNAL_CRON_TOKEN)",
     )
+    backend_replicas: int = Field(
+        1,
+        ge=1,
+        description="Expected number of backend replicas for startup safety warnings (BACKEND_REPLICAS)",
+    )
+    operation_lease_ttl_seconds: int = Field(
+        1800,
+        ge=15,
+        description="Default backend operation lease TTL in seconds (OPERATION_LEASE_TTL_SECONDS)",
+    )
+    billing_operation_lease_ttl_seconds: int = Field(
+        7200,
+        ge=60,
+        description="Billing collection operation lease TTL in seconds (BILLING_OPERATION_LEASE_TTL_SECONDS)",
+    )
     billing_default_rate_card_name: Optional[str] = Field(
         None,
         description="Default billing rate card name when no explicit assignment exists",

@@ -16,6 +16,7 @@ from typing import Any, Literal, Optional
 import requests
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -787,13 +788,44 @@ class HealthCheckService:
             )
             .first()
         )
-        if entry is None:
+        created = entry is None
+        if created:
             entry = EndpointHealthLatest(
                 storage_endpoint_id=result.endpoint_id,
                 check_mode=result.check_mode,
                 check_type=DEFAULT_CHECK_TYPE,
                 scope=DEFAULT_SCOPE,
             )
+        self._apply_latest_entry_values(entry, result, latencies, availability_24h)
+        if created:
+            try:
+                with self.db.begin_nested():
+                    self.db.add(entry)
+                    self.db.flush()
+                return
+            except IntegrityError:
+                entry = (
+                    self.db.query(EndpointHealthLatest)
+                    .filter(
+                        EndpointHealthLatest.storage_endpoint_id == result.endpoint_id,
+                        EndpointHealthLatest.check_mode == result.check_mode,
+                        EndpointHealthLatest.check_type == DEFAULT_CHECK_TYPE,
+                        EndpointHealthLatest.scope == DEFAULT_SCOPE,
+                    )
+                    .first()
+                )
+                if entry is None:
+                    raise
+                self._apply_latest_entry_values(entry, result, latencies, availability_24h)
+        self.db.add(entry)
+
+    @staticmethod
+    def _apply_latest_entry_values(
+        entry: EndpointHealthLatest,
+        result: HealthCheckResult,
+        latencies: list[int],
+        availability_24h: Optional[int],
+    ) -> None:
         entry.checked_at = result.checked_at
         entry.status = result.status.value
         entry.latency_ms = result.latency_ms
@@ -805,7 +837,6 @@ class HealthCheckService:
         entry.latency_sample_count = len(latencies)
         entry.availability_24h = availability_24h
         entry.updated_at = utcnow()
-        self.db.add(entry)
 
     def _update_status_segment(self, result: HealthCheckResult) -> None:
         active = (
@@ -911,7 +942,8 @@ class HealthCheckService:
             )
             .first()
         )
-        if entry is None:
+        created = entry is None
+        if created:
             entry = EndpointHealthRollup(
                 storage_endpoint_id=result.endpoint_id,
                 check_mode=result.check_mode,
@@ -920,6 +952,37 @@ class HealthCheckService:
                 resolution_seconds=resolution_seconds,
                 bucket_start=bucket_start,
             )
+        self._apply_rollup_values(entry, counts, latencies)
+        if created:
+            try:
+                with self.db.begin_nested():
+                    self.db.add(entry)
+                    self.db.flush()
+                return
+            except IntegrityError:
+                entry = (
+                    self.db.query(EndpointHealthRollup)
+                    .filter(
+                        EndpointHealthRollup.storage_endpoint_id == result.endpoint_id,
+                        EndpointHealthRollup.check_mode == result.check_mode,
+                        EndpointHealthRollup.check_type == DEFAULT_CHECK_TYPE,
+                        EndpointHealthRollup.scope == DEFAULT_SCOPE,
+                        EndpointHealthRollup.resolution_seconds == resolution_seconds,
+                        EndpointHealthRollup.bucket_start == bucket_start,
+                    )
+                    .first()
+                )
+                if entry is None:
+                    raise
+                self._apply_rollup_values(entry, counts, latencies)
+        self.db.add(entry)
+
+    @staticmethod
+    def _apply_rollup_values(
+        entry: EndpointHealthRollup,
+        counts: dict[str, int],
+        latencies: list[int],
+    ) -> None:
         entry.up_count = counts.get(HealthCheckStatus.UP.value, 0)
         entry.degraded_count = counts.get(HealthCheckStatus.DEGRADED.value, 0)
         entry.down_count = counts.get(HealthCheckStatus.DOWN.value, 0)
@@ -930,7 +993,6 @@ class HealthCheckService:
         entry.latency_max_ms = max(latencies) if latencies else None
         entry.latency_p95_ms = _percentile(latencies, 0.95) if latencies else None
         entry.updated_at = utcnow()
-        self.db.add(entry)
 
     def _resolve_healthcheck_profile(self, endpoint: StorageEndpoint) -> HealthCheckProfile:
         features = normalize_features_config(endpoint.provider, endpoint.features_config)

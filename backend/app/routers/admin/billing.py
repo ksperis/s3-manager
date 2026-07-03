@@ -15,6 +15,11 @@ from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
+from app.services.operation_lease_service import (
+    OperationLeaseService,
+    billing_daily_operation_name,
+    billing_operation_lease_ttl_seconds,
+)
 from app.utils.http_headers import build_attachment_content_disposition
 
 router = APIRouter(prefix="/admin/billing", tags=["admin-billing"])
@@ -72,11 +77,26 @@ def billing_collect_daily(
 ) -> dict:
     _ensure_billing_enabled()
     parsed = _parse_day(day)
+    operation_name = billing_daily_operation_name(parsed.isoformat())
+    lease_service = OperationLeaseService(db)
+    lease = lease_service.acquire(
+        operation_name,
+        ttl_seconds=billing_operation_lease_ttl_seconds(),
+        lease_context={"source": "admin", "day": parsed.isoformat(), "user_id": current_user.id},
+    )
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A billing collection is already running for this day.",
+        )
     collector = BillingCollector(db)
     try:
         result = collector.collect_daily(parsed)
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    finally:
+        lease_service.release(lease)
     audit_service.record_action(
         user=current_user,
         scope="admin",

@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.routers.dependencies import require_internal_cron_token
 from app.services.billing_service import BillingCollector
+from app.services.operation_lease_service import (
+    OperationLeaseService,
+    billing_daily_operation_name,
+    billing_operation_lease_ttl_seconds,
+)
 from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/internal/billing", tags=["internal-billing"])
@@ -29,8 +34,20 @@ def collect_daily(
     db: Session = Depends(get_db),
 ) -> dict:
     parsed = _parse_day(day)
+    operation_name = billing_daily_operation_name(parsed.isoformat())
+    lease_service = OperationLeaseService(db)
+    lease = lease_service.acquire(
+        operation_name,
+        ttl_seconds=billing_operation_lease_ttl_seconds(),
+        lease_context={"source": "internal", "day": parsed.isoformat()},
+    )
+    if lease is None:
+        return {"status": "skipped", "reason": "already_running", "operation": operation_name}
     collector = BillingCollector(db)
     try:
         return collector.collect_daily(parsed)
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    finally:
+        lease_service.release(lease)

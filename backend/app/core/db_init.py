@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import is_sqlite_url, sqlite_integrity_status
+from app.core.database import is_postgresql_url, is_sqlite_url, sqlite_integrity_status
 from app.core.security import get_password_hash
 from app.db import User, UserRole
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -19,6 +22,7 @@ from app.services.storage_endpoints_service import StorageEndpointsService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+_POSTGRES_STARTUP_LOCK_ID = 2_026_070_300_001
 
 
 def _alembic_config() -> Config:
@@ -79,7 +83,16 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
         can_access_manager_ceph_s3_user_keys=True,
     )
     db.add(admin_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.info(
+            "Super-admin seed skipped after concurrent insert (mode=%s, email=%s)",
+            settings.seed_super_admin_mode,
+            settings.seed_super_admin_email,
+        )
+        return False
     logger.info(
         "Super-admin seed executed (mode=%s, email=%s, reason=%s)",
         settings.seed_super_admin_mode,
@@ -94,7 +107,22 @@ def _seed_super_admin_if_needed(db: Session) -> bool:
     return True
 
 
-def init_db(engine, session_factory) -> None:
+@contextmanager
+def _postgres_startup_lock(engine):
+    if not is_postgresql_url(str(engine.url)):
+        yield
+        return
+    with engine.connect() as connection:
+        logger.info("Acquiring PostgreSQL startup advisory lock %s", _POSTGRES_STARTUP_LOCK_ID)
+        connection.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": _POSTGRES_STARTUP_LOCK_ID})
+        try:
+            yield
+        finally:
+            connection.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": _POSTGRES_STARTUP_LOCK_ID})
+            logger.info("Released PostgreSQL startup advisory lock %s", _POSTGRES_STARTUP_LOCK_ID)
+
+
+def _init_db_locked(engine, session_factory) -> None:
     integrity_ok, integrity_details = sqlite_integrity_status(engine)
     if is_sqlite_url(settings.database_url) and not integrity_ok:
         raise RuntimeError(
@@ -126,3 +154,8 @@ def init_db(engine, session_factory) -> None:
             storage_service.ensure_default_endpoint()
     finally:
         db.close()
+
+
+def init_db(engine, session_factory) -> None:
+    with _postgres_startup_lock(engine):
+        _init_db_locked(engine, session_factory)

@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from app.db import (
     BillingAssignment,
@@ -468,6 +469,42 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     assert synced[0].latitude == 43.6047
     assert synced[0].longitude == 1.4442
     assert calls["count"] == 0
+
+
+def test_sync_env_endpoints_retries_after_concurrent_unique_conflict(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.settings.env_storage_endpoints",
+        json.dumps(
+            [
+                {
+                    "name": "ceph-env",
+                    "endpoint_url": "https://ceph-env.example.test",
+                    "provider": "ceph",
+                    "features_config": "features:\n  admin:\n    enabled: false\n",
+                    "is_default": True,
+                }
+            ]
+        ),
+        raising=False,
+    )
+    calls = {"count": 0}
+    original_commit = db_session.commit
+
+    def flaky_commit():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise IntegrityError("insert storage_endpoints", {}, Exception("unique"))
+        return original_commit()
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    service = StorageEndpointsService(db_session)
+    synced = service.sync_env_endpoints()
+
+    assert len(synced) == 1
+    assert synced[0].name == "ceph-env"
+    assert db_session.query(StorageEndpoint).count() == 1
+    assert calls["count"] == 2
 
 
 def test_update_endpoint_clearing_access_keys_also_clears_secrets(db_session):

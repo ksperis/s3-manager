@@ -10,9 +10,13 @@ import tempfile
 import fcntl
 
 from app.core.config import get_settings
+from app.db import AppSetting
 from app.models.app_settings import AppSettings, GeneralFeatureLock, GeneralFeatureLocks
+from app.utils.time import utcnow
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[1] / "data" / "app_settings.json"
+APP_SETTINGS_DB_KEY = "default"
 _GENERAL_FEATURE_FIELDS = (
     "manager_enabled",
     "ceph_admin_enabled",
@@ -78,6 +82,78 @@ def _write_settings_to_disk(settings_path: Path, settings: AppSettings) -> None:
             os.unlink(tmp_file.name)
 
 
+def _open_settings_session():
+    from app.core.database import SessionLocal
+
+    return SessionLocal()
+
+
+def _parse_settings_payload(payload: str | None) -> AppSettings:
+    if not payload:
+        return AppSettings()
+    try:
+        data = json.loads(payload)
+        if isinstance(data, dict):
+            return AppSettings(**data)
+    except Exception:
+        return AppSettings()
+    return AppSettings()
+
+
+def _settings_to_json(settings: AppSettings) -> str:
+    return settings.model_dump_json(indent=2)
+
+
+def _save_persisted_settings_to_db(db, settings: AppSettings) -> None:
+    now = utcnow()
+    payload_json = _settings_to_json(settings)
+    row = db.query(AppSetting).filter(AppSetting.key == APP_SETTINGS_DB_KEY).first()
+    if row is None:
+        row = AppSetting(
+            key=APP_SETTINGS_DB_KEY,
+            payload_json=payload_json,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+        try:
+            db.commit()
+            return
+        except IntegrityError:
+            db.rollback()
+            row = db.query(AppSetting).filter(AppSetting.key == APP_SETTINGS_DB_KEY).first()
+            if row is None:
+                raise
+    row.payload_json = payload_json
+    row.updated_at = now
+    db.commit()
+
+
+def _load_persisted_settings_from_db(db) -> AppSettings:
+    row = db.query(AppSetting).filter(AppSetting.key == APP_SETTINGS_DB_KEY).first()
+    if row is not None:
+        return _parse_settings_payload(row.payload_json)
+
+    imported = _load_persisted_settings_from_disk(_settings_path())
+    _save_persisted_settings_to_db(db, imported)
+    return imported
+
+
+def _load_persisted_settings_legacy_fallback() -> AppSettings:
+    settings_path = _settings_path()
+    lock_path = _settings_lock_path(settings_path)
+    with _settings_lock(lock_path, shared=True):
+        return _load_persisted_settings_from_disk(settings_path)
+
+
+def _save_persisted_settings_legacy_fallback(settings: AppSettings) -> AppSettings:
+    settings_path = _settings_path()
+    lock_path = _settings_lock_path(settings_path)
+    with _settings_lock(lock_path, shared=False):
+        _write_settings_to_disk(settings_path, settings)
+    return settings
+
+
 def get_general_feature_locks() -> GeneralFeatureLocks:
     settings = get_settings()
     locks = GeneralFeatureLocks()
@@ -114,10 +190,11 @@ def _apply_general_feature_overrides(settings: AppSettings) -> AppSettings:
 
 
 def load_persisted_app_settings() -> AppSettings:
-    settings_path = _settings_path()
-    lock_path = _settings_lock_path(settings_path)
-    with _settings_lock(lock_path, shared=True):
-        return _load_persisted_settings_from_disk(settings_path)
+    try:
+        with _open_settings_session() as db:
+            return _load_persisted_settings_from_db(db)
+    except SQLAlchemyError:
+        return _load_persisted_settings_legacy_fallback()
 
 
 def load_default_app_settings() -> AppSettings:
@@ -129,15 +206,24 @@ def load_app_settings() -> AppSettings:
 
 
 def save_app_settings(settings: AppSettings) -> AppSettings:
-    settings_path = _settings_path()
-    lock_path = _settings_lock_path(settings_path)
-    with _settings_lock(lock_path, shared=False):
-        persisted = _load_persisted_settings_from_disk(settings_path)
+    try:
+        with _open_settings_session() as db:
+            persisted = _load_persisted_settings_from_db(db)
+            to_save = settings.model_copy(deep=True)
+            locks = get_general_feature_locks()
+            for field_name in _GENERAL_FEATURE_FIELDS:
+                lock = getattr(locks, field_name)
+                if lock.forced:
+                    setattr(to_save.general, field_name, getattr(persisted.general, field_name))
+            _save_persisted_settings_to_db(db, to_save)
+            return _apply_general_feature_overrides(to_save)
+    except SQLAlchemyError:
+        persisted = _load_persisted_settings_legacy_fallback()
         to_save = settings.model_copy(deep=True)
         locks = get_general_feature_locks()
         for field_name in _GENERAL_FEATURE_FIELDS:
             lock = getattr(locks, field_name)
             if lock.forced:
                 setattr(to_save.general, field_name, getattr(persisted.general, field_name))
-        _write_settings_to_disk(settings_path, to_save)
-    return _apply_general_feature_overrides(to_save)
+        _save_persisted_settings_legacy_fallback(to_save)
+        return _apply_general_feature_overrides(to_save)

@@ -11,9 +11,10 @@ from unittest.mock import patch
 
 from botocore.exceptions import ClientError
 from botocore.parsers import ResponseParserError
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem, S3Account, S3User, StorageEndpoint, User, UserRole
+from app.db import Base, BucketMigration, BucketMigrationEvent, BucketMigrationItem, S3Account, S3User, StorageEndpoint, User, UserRole
 from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigrationCreateRequest
 from app.services.bucket_migration_service import (
     BucketMigrationService,
@@ -4164,57 +4165,70 @@ def test_fail_migration_fatal_is_idempotent_for_final_status(db_session):
 
 
 
-def test_worker_marks_migration_failed_on_fatal_exception(db_session, monkeypatch):
-    migration = BucketMigration(
-        source_context_id="10",
-        target_context_id="20",
-        mode="one_shot",
-        copy_bucket_settings=False,
-        delete_source=False,
-        lock_target_writes=True,
-        use_same_endpoint_copy=False,
-        auto_grant_source_read_for_copy=False,
-        status="queued",
-        precheck_status="passed",
-        parallelism_max=4,
-        total_items=1,
+def test_worker_marks_migration_failed_on_fatal_exception(tmp_path, monkeypatch):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'worker.db'}",
+        connect_args={"check_same_thread": False},
     )
-    db_session.add(migration)
-    db_session.flush()
-    db_session.add(
-        BucketMigrationItem(
-            migration_id=migration.id,
-            source_bucket="bucket-a",
-            target_bucket="bucket-a-dst",
-            status="pending",
-            step="create_bucket",
-        )
-    )
-    db_session.commit()
+    Base.metadata.create_all(bind=engine)
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    worker = None
 
-    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
-
-    def _explode_run_migration(self, migration_id: int, *, worker_id=None, lease_seconds=None):
-        raise RuntimeError(f"fatal-{migration_id}")
-
-    monkeypatch.setattr(BucketMigrationService, "run_migration", _explode_run_migration)
-
-    worker = BucketMigrationWorker(test_session_factory, poll_interval_seconds=0.05, lease_seconds=60)
-    worker.start()
-    deadline = time.time() + 2.0
-    last_status = None
-    while time.time() < deadline:
+    try:
         with test_session_factory() as db:
-            row = db.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
-            assert row is not None
-            last_status = row.status
-            if row.status == "failed":
-                break
-        time.sleep(0.05)
-    worker.stop(timeout=1.0)
+            migration = BucketMigration(
+                source_context_id="10",
+                target_context_id="20",
+                mode="one_shot",
+                copy_bucket_settings=False,
+                delete_source=False,
+                lock_target_writes=True,
+                use_same_endpoint_copy=False,
+                auto_grant_source_read_for_copy=False,
+                status="queued",
+                precheck_status="passed",
+                parallelism_max=4,
+                total_items=1,
+            )
+            db.add(migration)
+            db.flush()
+            db.add(
+                BucketMigrationItem(
+                    migration_id=migration.id,
+                    source_bucket="bucket-a",
+                    target_bucket="bucket-a-dst",
+                    status="pending",
+                    step="create_bucket",
+                )
+            )
+            db.commit()
+            migration_id = int(migration.id)
 
-    with test_session_factory() as db:
-        row = db.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
-        assert row is not None
-        assert row.status == "failed", f"unexpected status={last_status}"
-        assert row.error_message and "Fatal migration worker error" in row.error_message
+        def _explode_run_migration(self, migration_id: int, *, worker_id=None, lease_seconds=None):
+            raise RuntimeError(f"fatal-{migration_id}")
+
+        monkeypatch.setattr(BucketMigrationService, "run_migration", _explode_run_migration)
+
+        worker = BucketMigrationWorker(test_session_factory, poll_interval_seconds=0.05, lease_seconds=60)
+        worker.start()
+        deadline = time.time() + 2.0
+        last_status = None
+        while time.time() < deadline:
+            with test_session_factory() as db:
+                row = db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+                assert row is not None
+                last_status = row.status
+                if row.status == "failed":
+                    break
+            time.sleep(0.05)
+        worker.stop(timeout=1.0)
+
+        with test_session_factory() as db:
+            row = db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+            assert row is not None
+            assert row.status == "failed", f"unexpected status={last_status}"
+            assert row.error_message and "Fatal migration worker error" in row.error_message
+    finally:
+        if worker is not None:
+            worker.stop(timeout=1.0)
+        engine.dispose()

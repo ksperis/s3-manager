@@ -27,6 +27,7 @@ from .healthcheck import (
 from .bucket_migration import BucketMigration, BucketMigrationEvent, BucketMigrationItem
 from .bucket_usage_stats import BucketUsageStatsSnapshot
 from .portal import PortalPublicLink, PortalStorageSpaceGrant, PortalStorageSpaceMetadata
+from .backend_coordination import AppSetting, BackendOperationLease
 
 __all__ = [
     "Base",
@@ -81,4 +82,6 @@ __all__ = [
     "PortalStorageSpaceMetadata",
     "PortalStorageSpaceGrant",
     "PortalPublicLink",
+    "AppSetting",
+    "BackendOperationLease",
 ]

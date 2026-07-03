@@ -1,3 +1,12 @@
+{{- $backendReplicas := int (.Values.backend.replicas | default 1) -}}
+{{- $databaseURL := lower (toString (get .Values.backend.env "DATABASE_URL" | default "")) -}}
+{{- $backendAccessMode := lower (toString (.Values.backend.persistence.accessMode | default "ReadWriteOnce")) -}}
+{{- if and (gt $backendReplicas 1) (not (or .Values.postgresql.enabled (hasPrefix "postgres" $databaseURL))) -}}
+{{- fail "backend.replicas > 1 requires PostgreSQL; enable postgresql or set backend.env.DATABASE_URL to a PostgreSQL URL." -}}
+{{- end -}}
+{{- if and (gt $backendReplicas 1) .Values.backend.persistence.enabled (ne $backendAccessMode "readwritemany") -}}
+{{- fail "backend.replicas > 1 cannot use backend.persistence with ReadWriteOnce; disable backend.persistence.enabled or set backend.persistence.accessMode=ReadWriteMany." -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,6 +37,10 @@ spec:
             {{- range $key, $value := .Values.backend.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
+            {{- end }}
+            {{- if not (hasKey .Values.backend.env "BACKEND_REPLICAS") }}
+            - name: BACKEND_REPLICAS
+              value: {{ .Values.backend.replicas | quote }}
             {{- end }}
             {{- if and .Values.billingCronJob.internalToken (not (hasKey .Values.backend.env "INTERNAL_CRON_TOKEN")) }}
             - name: INTERNAL_CRON_TOKEN

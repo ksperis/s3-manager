@@ -6,6 +6,7 @@ import re
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -426,7 +427,7 @@ class StorageEndpointsService:
 
         return result
 
-    def sync_env_endpoints(self) -> list[StorageEndpointSchema]:
+    def sync_env_endpoints(self, *, _retry_on_integrity: bool = True) -> list[StorageEndpointSchema]:
         env_endpoints = self._load_env_endpoints()
         if not env_endpoints:
             return []
@@ -557,7 +558,14 @@ class StorageEndpointsService:
                     endpoint.is_default = False
                     self.db.add(endpoint)
 
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            if not _retry_on_integrity:
+                raise
+            logger.info("ENV_STORAGE_ENDPOINTS sync hit a concurrent insert; reloading existing endpoints.")
+            return self.sync_env_endpoints(_retry_on_integrity=False)
         synced: list[StorageEndpointSchema] = []
         for endpoint_url in seen_urls:
             endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url == endpoint_url).first()

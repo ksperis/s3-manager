@@ -14,6 +14,11 @@ from app.models.usage_history import UsageHistoryResponse, UsageHistoryTrendResp
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
+from app.services.operation_lease_service import (
+    OperationLeaseService,
+    USAGE_HISTORY_COLLECT_OPERATION,
+    default_operation_lease_ttl_seconds,
+)
 from app.services.quota_monitoring_service import QuotaMonitoringService
 from app.services.usage_history_service import UsageHistoryService
 from app.routers.http_errors import sanitize_error_detail
@@ -100,11 +105,25 @@ def collect_usage_history(
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_usage_history_enabled()
+    lease_service = OperationLeaseService(db)
+    lease = lease_service.acquire(
+        USAGE_HISTORY_COLLECT_OPERATION,
+        ttl_seconds=default_operation_lease_ttl_seconds(),
+        lease_context={"source": "admin", "user_id": current_user.id},
+    )
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Usage history collection is already running.",
+        )
     service = QuotaMonitoringService(db)
     try:
         result = service.run_monitor(include_quota_alerts=False, include_usage_history=True)
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    finally:
+        lease_service.release(lease)
 
     audit_service.record_action(
         user=current_user,

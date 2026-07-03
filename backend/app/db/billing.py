@@ -4,7 +4,20 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -28,10 +41,30 @@ class BillingUsageDaily(Base):
             "s3_account_id",
         ),
         Index(
+            "uq_billing_usage_daily_account",
+            "day",
+            "storage_endpoint_id",
+            "s3_account_id",
+            "source",
+            unique=True,
+            postgresql_where=text("s3_account_id IS NOT NULL AND s3_user_id IS NULL"),
+            sqlite_where=text("s3_account_id IS NOT NULL AND s3_user_id IS NULL"),
+        ),
+        Index(
             "ix_billing_usage_daily_endpoint_day_user",
             "storage_endpoint_id",
             "day",
             "s3_user_id",
+        ),
+        Index(
+            "uq_billing_usage_daily_user",
+            "day",
+            "storage_endpoint_id",
+            "s3_user_id",
+            "source",
+            unique=True,
+            postgresql_where=text("s3_user_id IS NOT NULL AND s3_account_id IS NULL"),
+            sqlite_where=text("s3_user_id IS NOT NULL AND s3_account_id IS NULL"),
         ),
     )
 
@@ -70,10 +103,30 @@ class BillingStorageDaily(Base):
             "s3_account_id",
         ),
         Index(
+            "uq_billing_storage_daily_account",
+            "day",
+            "storage_endpoint_id",
+            "s3_account_id",
+            "source",
+            unique=True,
+            postgresql_where=text("s3_account_id IS NOT NULL AND s3_user_id IS NULL"),
+            sqlite_where=text("s3_account_id IS NOT NULL AND s3_user_id IS NULL"),
+        ),
+        Index(
             "ix_billing_storage_daily_endpoint_day_user",
             "storage_endpoint_id",
             "day",
             "s3_user_id",
+        ),
+        Index(
+            "uq_billing_storage_daily_user",
+            "day",
+            "storage_endpoint_id",
+            "s3_user_id",
+            "source",
+            unique=True,
+            postgresql_where=text("s3_user_id IS NOT NULL AND s3_account_id IS NULL"),
+            sqlite_where=text("s3_user_id IS NOT NULL AND s3_account_id IS NULL"),
         ),
     )
 

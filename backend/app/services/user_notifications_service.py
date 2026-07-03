@@ -7,6 +7,7 @@ import json
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import AccountRole, User, UserNotification, UserRole
@@ -51,8 +52,7 @@ class UserNotificationsService:
         for user_id in clean_user_ids:
             if user_id in existing_user_ids:
                 continue
-            self.db.add(
-                UserNotification(
+            row = UserNotification(
                     user_id=user_id,
                     notification_type="quota_alert",
                     severity=severity,
@@ -66,7 +66,12 @@ class UserNotificationsService:
                     payload_json=payload_json,
                     created_at=created_at,
                 )
-            )
+            try:
+                with self.db.begin_nested():
+                    self.db.add(row)
+                    self.db.flush()
+            except IntegrityError:
+                continue
             created += 1
         return created
 

@@ -22,6 +22,11 @@ from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_service import HealthCheckService, HealthWindow
+from app.services.operation_lease_service import (
+    HEALTHCHECK_RUN_OPERATION,
+    OperationLeaseService,
+    default_operation_lease_ttl_seconds,
+)
 
 router = APIRouter(prefix="/admin/health", tags=["admin-healthchecks"])
 
@@ -153,11 +158,25 @@ def run_healthchecks(
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_endpoint_status_enabled()
+    lease_service = OperationLeaseService(db)
+    lease = lease_service.acquire(
+        HEALTHCHECK_RUN_OPERATION,
+        ttl_seconds=default_operation_lease_ttl_seconds(),
+        lease_context={"source": "admin", "user_id": current_user.id},
+    )
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Endpoint health checks are already running.",
+        )
     service = HealthCheckService(db)
     try:
         result = service.run_checks()
     except ValueError as exc:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    finally:
+        lease_service.release(lease)
     audit_service.record_action(
         user=current_user,
         scope="admin",

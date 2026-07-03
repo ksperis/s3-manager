@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
+from app.db import AppSetting
 from app.models.app_settings import AppSettings, BrandingSettings
 from app.services import app_settings_service
 
@@ -29,7 +31,20 @@ def _runtime_settings(**overrides):
     return SimpleNamespace(**defaults)
 
 
-def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
+def _use_settings_db(monkeypatch, db_session) -> None:
+    @contextmanager
+    def _session():
+        yield db_session
+
+    monkeypatch.setattr(app_settings_service, "_open_settings_session", _session)
+
+
+def _raw_db_settings(db_session) -> dict:
+    row = db_session.query(AppSetting).filter(AppSetting.key == app_settings_service.APP_SETTINGS_DB_KEY).one()
+    return json.loads(row.payload_json)
+
+
+def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     persisted = AppSettings()
     persisted.general.manager_enabled = False
@@ -39,6 +54,7 @@ def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
 
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -55,9 +71,10 @@ def test_load_app_settings_applies_feature_env_overrides(monkeypatch, tmp_path):
     assert effective.general.portal_enabled is True
     # Not forced: persisted value is preserved.
     assert effective.general.ceph_admin_enabled is True
+    assert _raw_db_settings(db_session)["general"]["ceph_admin_enabled"] is True
 
 
-def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch, tmp_path):
+def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     persisted = AppSettings()
     persisted.general.manager_enabled = False
@@ -65,6 +82,7 @@ def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch
     settings_path.write_text(persisted.model_dump_json(indent=2), encoding="utf-8")
 
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -76,13 +94,32 @@ def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch
     payload.general.billing_enabled = False
     saved_effective = app_settings_service.save_app_settings(payload)
 
-    raw = json.loads(settings_path.read_text(encoding="utf-8"))
+    raw = _raw_db_settings(db_session)
     # Locked fields keep persisted values in storage.
     assert raw["general"]["manager_enabled"] is False
     assert raw["general"]["billing_enabled"] is True
     # Returned settings expose effective forced values.
     assert saved_effective.general.manager_enabled is True
     assert saved_effective.general.billing_enabled is False
+
+
+def test_legacy_app_settings_json_imports_once_to_db(monkeypatch, tmp_path, db_session):
+    settings_path = tmp_path / "app_settings.json"
+    legacy = AppSettings()
+    legacy.general.browser_enabled = False
+    settings_path.write_text(legacy.model_dump_json(indent=2), encoding="utf-8")
+
+    monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
+    monkeypatch.setattr(app_settings_service, "get_settings", lambda: _runtime_settings())
+
+    imported = app_settings_service.load_persisted_app_settings()
+    assert imported.general.browser_enabled is False
+
+    settings_path.unlink()
+    loaded_again = app_settings_service.load_persisted_app_settings()
+    assert loaded_again.general.browser_enabled is False
+    assert db_session.query(AppSetting).count() == 1
 
 
 def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
@@ -185,9 +222,10 @@ def test_portal_browser_flag_default_enabled():
     assert settings.general.browser_portal_enabled is True
 
 
-def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):
+def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -198,16 +236,17 @@ def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):
     payload.general.manager_ceph_s3_user_keys_enabled = True
     saved = app_settings_service.save_app_settings(payload)
     loaded = app_settings_service.load_app_settings()
-    raw = json.loads(settings_path.read_text(encoding="utf-8"))
+    raw = _raw_db_settings(db_session)
 
     assert saved.general.manager_ceph_s3_user_keys_enabled is True
     assert loaded.general.manager_ceph_s3_user_keys_enabled is True
     assert raw["general"]["manager_ceph_s3_user_keys_enabled"] is True
 
 
-def test_bucket_integrity_check_flag_persists(monkeypatch, tmp_path):
+def test_bucket_integrity_check_flag_persists(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -218,16 +257,17 @@ def test_bucket_integrity_check_flag_persists(monkeypatch, tmp_path):
     payload.general.bucket_integrity_check_enabled = True
     saved = app_settings_service.save_app_settings(payload)
     loaded = app_settings_service.load_app_settings()
-    raw = json.loads(settings_path.read_text(encoding="utf-8"))
+    raw = _raw_db_settings(db_session)
 
     assert saved.general.bucket_integrity_check_enabled is True
     assert loaded.general.bucket_integrity_check_enabled is True
     assert raw["general"]["bucket_integrity_check_enabled"] is True
 
 
-def test_bucket_purge_flag_persists(monkeypatch, tmp_path):
+def test_bucket_purge_flag_persists(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    _use_settings_db(monkeypatch, db_session)
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -238,7 +278,7 @@ def test_bucket_purge_flag_persists(monkeypatch, tmp_path):
     payload.general.bucket_purge_enabled = True
     saved = app_settings_service.save_app_settings(payload)
     loaded = app_settings_service.load_app_settings()
-    raw = json.loads(settings_path.read_text(encoding="utf-8"))
+    raw = _raw_db_settings(db_session)
 
     assert saved.general.bucket_purge_enabled is True
     assert loaded.general.bucket_purge_enabled is True
