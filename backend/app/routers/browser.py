@@ -15,8 +15,7 @@ The endpoints reuse the existing `account_id` selector and context resolution
 logic implemented in :func:`app.routers.dependencies.get_account_context`.
 """
 
-from typing import Any, NoReturn, Optional, Union
-from urllib.parse import quote
+from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -93,7 +92,7 @@ from app.routers.browser_common import (
     require_replication_feature as _common_require_replication_feature,
     require_sse_feature as _common_require_sse_feature,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.routers.http_errors import raise_bad_gateway_from_runtime, sanitized_error_log_detail
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
@@ -109,6 +108,7 @@ from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_accounts_service import S3AccountsService
 from app.services.s3_users_service import S3UsersService
+from app.utils.http_headers import build_attachment_content_disposition
 from app.utils.size_units import size_to_bytes
 router = APIRouter(
     prefix="/browser",
@@ -116,11 +116,6 @@ router = APIRouter(
     dependencies=[Depends(require_portal_browser_basic_route)],
 )
 
-
-def _build_attachment_content_disposition(filename: str) -> str:
-    fallback = "".join(char if 0x20 <= ord(char) <= 0x7E else "_" for char in filename).replace('"', '\\"')
-    encoded = quote(filename, safe="")
-    return f'attachment; filename="{fallback or "download"}"; filename*=UTF-8\'\'{encoded}'
 
 BrowserActor = Union[User, ManagerSessionPrincipal]
 
@@ -188,13 +183,6 @@ def _invalidate_browser_listing_cache(
     browser_service.invalidate_bucket_list_cache_for_account(account)
     if bucket_name:
         browser_service.invalidate_object_list_cache_for_account(account, bucket_name)
-
-
-def _raise_legacy_route_removed(*, canonical: str) -> NoReturn:
-    raise HTTPException(
-        status_code=status.HTTP_410_GONE,
-        detail=f"Legacy browser route removed. Use '{canonical}'.",
-    )
 
 
 @router.get("/settings", response_model=BrowserSettings)
@@ -1698,61 +1686,6 @@ def put_object_retention(
         raise_bad_gateway_from_runtime(exc)
 
 
-@router.post("/buckets/{bucket_name}/objects/delete")
-def delete_objects_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/delete")
-
-
-@router.post("/buckets/{bucket_name}/objects/copy")
-def copy_object_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/copy")
-
-
-@router.post("/buckets/{bucket_name}/folder")
-def create_folder_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/folders")
-
-
-@router.post("/buckets/{bucket_name}/upload/proxy")
-def upload_via_proxy_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/proxy-upload")
-
-
-@router.get("/buckets/{bucket_name}/proxy-download")
-def download_object_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/download")
-
-
-@router.post("/buckets/{bucket_name}/multipart/init")
-def multipart_init_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/multipart/initiate")
-
-
-@router.get("/buckets/{bucket_name}/multipart/uploads")
-def list_multipart_uploads_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/multipart")
-
-
-@router.get("/buckets/{bucket_name}/multipart/parts")
-def list_parts_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/multipart/{{upload_id}}/parts")
-
-
-@router.post("/buckets/{bucket_name}/multipart/presign")
-def presign_part_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/multipart/{{upload_id}}/presign")
-
-
-@router.post("/buckets/{bucket_name}/multipart/complete")
-def multipart_complete_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/multipart/{{upload_id}}/complete")
-
-
-@router.post("/buckets/{bucket_name}/cleanup")
-def cleanup_object_versions_legacy_tombstone(bucket_name: str) -> None:
-    _raise_legacy_route_removed(canonical=f"/browser/buckets/{bucket_name}/versions/cleanup")
-
-
 @router.post("/buckets/{bucket_name}/delete", response_model=dict)
 def delete_objects(
     bucket_name: str,
@@ -1795,7 +1728,7 @@ def delete_objects(
             portal_entity_id=f"{bucket_name}/{portal_target_key}" if portal_target_key else bucket_name,
             metadata={"count": len(payload.objects)},
             status="failure",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         raise_bad_gateway_from_runtime(exc)
 
@@ -1871,7 +1804,7 @@ def create_folder(
             portal_entity_id=f"{bucket_name}/{payload.prefix}",
             metadata={"prefix": payload.prefix},
             status="failure",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         raise_bad_gateway_from_runtime(exc)
 
@@ -1924,7 +1857,7 @@ def upload_via_proxy(
             entity_id=f"{bucket_name}/{key}",
             portal_action="upload_object",
             status="failure",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         raise_bad_gateway_from_runtime(exc)
 
@@ -1954,7 +1887,7 @@ def download_object(
         )
         headers = {}
         if filename:
-            headers["Content-Disposition"] = _build_attachment_content_disposition(filename)
+            headers["Content-Disposition"] = build_attachment_content_disposition(filename)
         _record_browser_or_portal_action(
             audit_service,
             actor=actor,
@@ -1977,7 +1910,7 @@ def download_object(
             entity_id=f"{bucket_name}/{key}",
             metadata={"version_id": version_id} if version_id else None,
             status="failure",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         raise_bad_gateway_from_runtime(exc)
 
@@ -2132,7 +2065,7 @@ def complete_multipart_upload(
             entity_id=f"{bucket_name}/{key}",
             portal_action="upload_object",
             status="failure",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         raise_bad_gateway_from_runtime(exc)
 

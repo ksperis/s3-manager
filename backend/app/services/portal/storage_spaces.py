@@ -73,10 +73,10 @@ class PortalStorageSpacesMixin:
         return candidate
 
     def _storage_space_origin(self, metadata: PortalStorageSpaceMetadata | None) -> str:
-        value = metadata.origin if metadata and metadata.origin else "legacy"
-        if value in {"legacy", "portal_generic", "portal_named", "imported"}:
+        value = metadata.origin if metadata and metadata.origin else "imported"
+        if value in {"portal_generic", "portal_named", "imported"}:
             return value
-        return "legacy"
+        return "imported"
 
     def _storage_space_role(self, access: "AccountAccess") -> PortalStorageSpaceRole:
         if access.capabilities.can_manage_buckets or access.role == AccountRole.PORTAL_MANAGER.value:

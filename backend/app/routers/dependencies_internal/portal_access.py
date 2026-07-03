@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.effective_access_service import EffectiveAccountLink
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -143,7 +144,7 @@ def _resolve_portal_browser_context(
     try:
         access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     if not access_key or not secret_key:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -153,7 +154,7 @@ def _resolve_portal_browser_context(
     try:
         visible_spaces = portal_service.list_storage_spaces(user, portal_access)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     browse_spaces = [space for space in visible_spaces if space.can_browse]
     allowed_buckets = {
         space.internal_bucket_name or space.id

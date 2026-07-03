@@ -102,7 +102,7 @@ export type PortalStorageSpaceSummary = {
   quota_max_objects?: number | null;
   internal_bucket_name?: string | null;
   archived_at?: string | null;
-  origin?: "legacy" | "portal_generic" | "portal_named" | "imported";
+  origin?: "portal_generic" | "portal_named" | "imported";
   name_editable?: boolean;
 };
 

@@ -63,6 +63,18 @@ def _build_endpoint(
         ceph_admin_access_key="ADMIN-AK",
         ceph_admin_secret_key="ADMIN-SK",
         tags_json='["prod","rgw-a"]',
+        tag_links=[
+            SimpleNamespace(
+                id=1,
+                position=0,
+                tag_definition=SimpleNamespace(id=1, label="prod", color_key="neutral", scope="standard"),
+            ),
+            SimpleNamespace(
+                id=2,
+                position=1,
+                tag_definition=SimpleNamespace(id=2, label="rgw-a", color_key="neutral", scope="standard"),
+            ),
+        ],
     )
 
 

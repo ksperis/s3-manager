@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import json
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -54,6 +53,7 @@ from app.models.ceph_admin import (
     CephAdminBucketSummary,
     PaginatedCephAdminBucketsResponse,
 )
+from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
 from app.routers.ceph_admin.listing_common import (
     ListingCancelled as _BucketListingCancelled,
@@ -61,9 +61,12 @@ from app.routers.ceph_admin.listing_common import (
     ListingProgressSnapshot as _BucketListingProgressSnapshot,
     interpolate_progress_percent as _common_interpolate_progress_percent,
     invoke_cancel_check as _invoke_cancel_check,
+    normalize_optional_str as _common_normalize_optional_str,
+    normalize_text as _common_normalize_text,
+    serialize_filter as _common_serialize_filter,
     stream_listing_response as _common_stream_listing_response,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
 from app.services import bucket_config_actions
 from app.services.bucket_notification_state import (
     account_sns_feature_enabled,
@@ -269,6 +272,30 @@ def _build_endpoint_account_from_credentials(endpoint_id: int, endpoint, access_
     return account
 
 
+def _record_bucket_config_mutation(
+    ctx: CephAdminContext,
+    bucket_name: str,
+    *,
+    config_area: str,
+    operation: Literal["update", "delete"],
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    audit_metadata: dict[str, Any] = {
+        "config_area": config_area,
+        "operation": operation,
+    }
+    if metadata:
+        audit_metadata.update(metadata)
+    record_ceph_admin_action(
+        ctx,
+        action=f"bucket_config.{config_area}.{operation}",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        metadata=audit_metadata,
+    )
+
+
 def _split_tenant_uid(value: str) -> tuple[str | None, str]:
     if "$" in value:
         tenant, uid = value.split("$", 1)
@@ -277,10 +304,7 @@ def _split_tenant_uid(value: str) -> tuple[str | None, str]:
 
 
 def _normalize_optional_str(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
+    return _common_normalize_optional_str(value)
 
 
 def _owner_kind_from_owner(owner_id: str | None) -> Literal["account", "user"] | None:
@@ -534,7 +558,7 @@ def _resolve_owner_names_for_buckets(
 
 
 def _normalize_text(value: str) -> str:
-    return value.strip().lower()
+    return _common_normalize_text(value)
 
 
 def _coerce_number(value: object) -> float | None:
@@ -2317,10 +2341,7 @@ def _feature_status_active(state: str) -> BucketFeatureStatus:
 
 
 def _serialize_filter(query: CephAdminBucketFilterQuery | None) -> str | None:
-    if not query:
-        return None
-    payload = query.model_dump(mode="json") if hasattr(query, "model_dump") else query.dict()
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return _common_serialize_filter(query)
 
 
 def _clone_bucket(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
@@ -3289,13 +3310,19 @@ def update_versioning(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.update_bucket_versioning_config(
+    response, audit_metadata = bucket_config_actions.update_bucket_versioning_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="versioning",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3326,9 +3353,20 @@ def update_quota(
     try:
         service.set_bucket_quota(bucket_name, account, payload, rgw_admin=ctx.rgw_admin)
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        record_ceph_admin_action(
+            ctx,
+            action="bucket_quota.update",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            metadata={
+                "owner_account_id": owner_account_id,
+                "owner_uid": owner_uid,
+                "quota": payload.model_dump(exclude_none=True),
+            },
+        )
         return {"message": "Bucket quota updated"}
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -3355,13 +3393,19 @@ def put_lifecycle(
 ) -> BucketLifecycleConfig:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_lifecycle_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_lifecycle_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="lifecycle",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3377,7 +3421,7 @@ def delete_lifecycle(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="lifecycle", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3403,13 +3447,19 @@ def put_cors(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_cors_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_cors_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="cors",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3425,7 +3475,7 @@ def delete_cors(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="cors", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3451,13 +3501,19 @@ def put_policy(
 ) -> BucketPolicyOut:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_policy_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_policy_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="policy",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3473,7 +3529,7 @@ def delete_policy(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="policy", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3499,13 +3555,19 @@ def put_notifications(
 ) -> BucketNotificationConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_notifications_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_notifications_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="notifications",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3521,7 +3583,7 @@ def delete_notifications(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="notifications", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3549,13 +3611,19 @@ def put_replication(
     _require_replication_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_replication_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_replication_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="replication",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3572,7 +3640,7 @@ def delete_replication(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="replication", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3598,13 +3666,19 @@ def put_logging(
 ) -> BucketLoggingConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_logging_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_logging_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="logging",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3620,7 +3694,7 @@ def delete_logging(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="logging", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3646,13 +3720,19 @@ def put_website(
 ) -> BucketWebsiteConfiguration:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_website_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_website_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="website",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3668,7 +3748,7 @@ def delete_website(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="website", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3694,13 +3774,19 @@ def put_tags(
 ):
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_tags_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_tags_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="tags",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3716,7 +3802,7 @@ def delete_tags(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="tags", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -3742,13 +3828,19 @@ def put_acl(
 ) -> BucketAcl:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_acl_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_acl_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="acl",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3774,13 +3866,19 @@ def put_public_access_block(
 ) -> BucketPublicAccessBlock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_public_access_block_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_public_access_block_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="public_access_block",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3806,13 +3904,19 @@ def put_object_lock(
 ) -> BucketObjectLock:
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_object_lock_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_object_lock_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="object_lock",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3840,13 +3944,19 @@ def put_bucket_encryption(
     _require_sse_feature(ctx)
     service = BucketsService()
     account = _build_endpoint_account(ctx)
-    response, _audit_metadata = bucket_config_actions.put_bucket_encryption_config(
+    response, audit_metadata = bucket_config_actions.put_bucket_encryption_config(
         service=service,
         account=account,
         bucket_name=bucket_name,
         payload=payload,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(
+        ctx,
+        bucket_name,
+        config_area="encryption",
+        operation="update",
+        metadata=audit_metadata,
+    )
     return response
 
 
@@ -3863,5 +3973,5 @@ def delete_bucket_encryption(
         account=account,
         bucket_name=bucket_name,
     )
-    _invalidate_bucket_listing_cache(ctx.endpoint.id)
+    _record_bucket_config_mutation(ctx, bucket_name, config_area="encryption", operation="delete")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.db import S3Account, S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
+from app.services.tags_service import TagsService
 
 
 @pytest.fixture
@@ -232,19 +233,23 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
             is_root=False,
         )
     )
-    db_session.add(
-        S3Connection(
-            created_by_user_id=user.id,
-            name="contract-execution-context-connection",
-            storage_endpoint_id=endpoint.id,
-            access_manager=False,
-            access_browser=True,
-            access_key_id="AK-CONN-CTX",
-            secret_access_key="SK-CONN-CTX",
-            capabilities_json=json.dumps({"can_manage_iam": False}),
-            tags_json=json.dumps(["connection-shared"]),
-        )
+    connection = S3Connection(
+        created_by_user_id=user.id,
+        name="contract-execution-context-connection",
+        storage_endpoint_id=endpoint.id,
+        access_manager=False,
+        access_browser=True,
+        access_key_id="AK-CONN-CTX",
+        secret_access_key="SK-CONN-CTX",
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        tags_json=json.dumps(["connection-shared"]),
     )
+    db_session.add(connection)
+    db_session.flush()
+    tags = TagsService(db_session)
+    tags.replace_storage_endpoint_tags(endpoint, ["endpoint-prod", "ceph-a"])
+    tags.replace_account_tags(account, ["account-finance"])
+    tags.replace_connection_tags(connection, ["connection-shared"])
     db_session.commit()
 
     response = client.get("/api/me/execution-contexts?workspace=browser")

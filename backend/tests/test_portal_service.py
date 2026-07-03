@@ -2031,8 +2031,8 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     assert grant.role == "Editor"
 
 
-@pytest.mark.parametrize("origin", ["legacy", "imported"])
-def test_update_storage_space_locked_names_reject_rename_but_accept_description(origin, monkeypatch, db_session):
+def test_update_storage_space_locked_names_reject_rename_but_accept_description(monkeypatch, db_session):
+    origin = "imported"
     account = S3Account(name=f"portal-storage-update-{origin}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email=f"portal-storage-update-{origin}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])

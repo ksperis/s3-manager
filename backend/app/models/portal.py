@@ -77,7 +77,7 @@ class PortalUsage(BaseModel):
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
-PortalStorageSpaceOrigin = Literal["legacy", "portal_generic", "portal_named", "imported"]
+PortalStorageSpaceOrigin = Literal["portal_generic", "portal_named", "imported"]
 PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
 PortalStorageSpaceVisibility = Literal["private", "shared"]
 PortalStorageSpaceShareScope = Literal["restricted", "account"]
@@ -112,7 +112,7 @@ class PortalStorageSpaceSummary(BaseModel):
     quota_max_objects: Optional[int] = None
     internal_bucket_name: Optional[str] = None
     archived_at: Optional[datetime] = None
-    origin: PortalStorageSpaceOrigin = "legacy"
+    origin: PortalStorageSpaceOrigin = "imported"
     name_editable: bool = False
 
 

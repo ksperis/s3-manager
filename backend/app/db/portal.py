@@ -35,7 +35,7 @@ class PortalStorageSpaceMetadata(Base):
     account_member_role = Column(String, nullable=True)
     project_key = Column(String, nullable=True)
     dataset_label = Column(String, nullable=True)
-    origin = Column(String, nullable=False, default="legacy")
+    origin = Column(String, nullable=False, default="imported")
     name_editable = Column(Boolean, nullable=False, default=False)
     archived_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)

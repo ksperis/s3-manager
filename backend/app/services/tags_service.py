@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import S3Account, S3AccountTag, S3Connection, S3ConnectionTag, S3User, S3UserTag, StorageEndpoint, StorageEndpointTag, TagDefinition
 from app.models.tagging import TagDefinitionSummary
-from app.utils.normalize import dump_string_list_json, parse_string_list_json
+from app.utils.normalize import dump_string_list_json
 from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
     DEFAULT_TAG_SCOPE,
@@ -138,14 +138,6 @@ class TagsService:
         domain_kind: str,
         owner_user_id: Optional[int],
     ) -> list[TagDefinitionSummary]:
-        if getattr(parent, "tag_links", None) is None:
-            return self._legacy_summaries_from_json(getattr(parent, "tags_json", None))
-        self._ensure_links_from_legacy_tags(
-            parent,
-            link_cls=link_cls,
-            domain_kind=domain_kind,
-            owner_user_id=owner_user_id,
-        )
         links = sorted(
             list(getattr(parent, "tag_links", []) or []),
             key=lambda item: (int(getattr(item, "position", 0) or 0), int(getattr(item, "id", 0) or 0)),
@@ -192,53 +184,6 @@ class TagsService:
         self.db.flush()
         self.cleanup_orphan_definitions()
         return [self._to_summary(definition) for definition in definitions]
-
-    def _ensure_links_from_legacy_tags(
-        self,
-        parent: object,
-        *,
-        link_cls: type[object],
-        domain_kind: str,
-        owner_user_id: Optional[int],
-    ) -> None:
-        if getattr(parent, "tag_links", None) is None:
-            return
-        if list(getattr(parent, "tag_links", []) or []):
-            return
-        legacy_labels = parse_string_list_json(getattr(parent, "tags_json", None))
-        if not legacy_labels:
-            return
-        definitions = [
-            self._resolve_definition(
-                domain_kind=domain_kind,
-                owner_user_id=owner_user_id,
-                label=label,
-                color_key=DEFAULT_TAG_COLOR_KEY,
-                scope=DEFAULT_TAG_SCOPE,
-            )
-            for label in legacy_labels
-        ]
-        next_links = []
-        for position, definition in enumerate(definitions):
-            link = link_cls(tag_definition_id=definition.id, position=position)
-            link.tag_definition = definition
-            next_links.append(link)
-        setattr(parent, "tag_links", next_links)
-        self.db.add(parent)
-        self.db.flush()
-
-    @staticmethod
-    def _legacy_summaries_from_json(raw_tags_json: object) -> list[TagDefinitionSummary]:
-        legacy_labels = parse_string_list_json(raw_tags_json)
-        return [
-            TagDefinitionSummary(
-                id=-(position + 1),
-                label=label,
-                color_key=DEFAULT_TAG_COLOR_KEY,
-                scope=DEFAULT_TAG_SCOPE,
-            )
-            for position, label in enumerate(legacy_labels)
-        ]
 
     def _resolve_definition(
         self,

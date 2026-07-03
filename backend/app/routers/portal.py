@@ -3,7 +3,6 @@
 from app.utils.time import utcnow
 import logging
 from typing import Optional
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
@@ -48,7 +47,12 @@ from app.routers.dependencies import (
     get_current_account_user,
     get_portal_account_access,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.routers.http_errors import (
+    raise_bad_gateway_from_runtime,
+    raise_http_exception_from_exception,
+    sanitize_error_detail,
+    sanitized_error_log_detail,
+)
 from app.services.audit_service import AuditService
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
@@ -76,42 +80,39 @@ from app.services.app_settings_service import load_app_settings
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.usage_history_service import UsageHistoryService
 from app.models.billing import BillingSubjectDetail
+from app.utils.http_headers import build_attachment_content_disposition
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-def _build_attachment_content_disposition(filename: str) -> str:
-    fallback = "".join(char if 0x20 <= ord(char) <= 0x7E else "_" for char in filename).replace('"', '\\"')
-    encoded = quote(filename, safe="")
-    return f'attachment; filename="{fallback or "download"}"; filename*=UTF-8\'\'{encoded}'
-
-
 def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
     detail = str(exc)
+    safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if "not found or not allowed" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
     if "not found" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
     if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered or "cannot be changed" in lowered:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
 
 def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
     detail = str(exc)
+    safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if isinstance(exc, PortalAccessKeyManagementDisabled):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     if isinstance(exc, PortalAccessKeyLimitExceeded):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=safe_detail) from exc
     if isinstance(exc, PortalAccessKeyProtected):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=safe_detail) from exc
     if "not found" in lowered or "introuvable" in lowered:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
     if "not allowed" in lowered or "not provisioned" in lowered:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
 
@@ -534,7 +535,7 @@ def portal_billing_me(
     try:
         return service.subject_detail(month, account.storage_endpoint_id, "account", account.id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
 
 
 @router.get("/storage-spaces", response_model=list[PortalStorageSpaceSummary])
@@ -773,7 +774,7 @@ def portal_delete_storage_space_object(
             account=access.account,
             metadata={"storage_space_id": space_id},
             status="failed",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         _raise_portal_storage_runtime(exc)
 
@@ -802,7 +803,7 @@ def portal_download_storage_space_object(
         )
         headers = {}
         if filename:
-            headers["Content-Disposition"] = _build_attachment_content_disposition(filename)
+            headers["Content-Disposition"] = build_attachment_content_disposition(filename)
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
     except RuntimeError as exc:
         audit_service.record_action(
@@ -814,7 +815,7 @@ def portal_download_storage_space_object(
             account=access.account,
             metadata={"storage_space_id": space_id},
             status="failed",
-            message=str(exc),
+            message=sanitized_error_log_detail(exc),
         )
         _raise_portal_storage_runtime(exc)
 
@@ -922,7 +923,7 @@ def download_portal_public_link(
         if "expired" in lowered or "revoked" in lowered or "archived" in lowered or "suspended" in lowered:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail=detail) from exc
         raise_bad_gateway_from_runtime(exc)
-    headers = {"Content-Disposition": _build_attachment_content_disposition(filename)}
+    headers = {"Content-Disposition": build_attachment_content_disposition(filename)}
     return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
 
 
@@ -1127,6 +1128,6 @@ def portal_traffic(
     try:
         return traffic_service.get_traffic(window=window, bucket=bucket, bucket_filters=bucket_filters)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=502, detail=f"Unable to fetch traffic logs: {exc}") from exc
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)

@@ -9,6 +9,7 @@ from app.models.app_settings import AppSettings, GeneralFeatureLocks, QuotaNotif
 from app.models.ldap import LDAPProviderAdminItem, LDAPProviderAdminPayload
 from app.models.oidc import OIDCProviderAdminItem, OIDCProviderAdminPayload
 from app.routers.dependencies import get_audit_logger, get_current_ui_superadmin
+from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.app_settings_service import (
     get_general_feature_locks,
@@ -55,8 +56,21 @@ def get_general_feature_locks_route(_: None = Depends(get_current_ui_superadmin)
 
 
 @router.put("", response_model=AppSettings)
-def update_settings(payload: AppSettings, _: None = Depends(get_current_ui_superadmin)) -> AppSettings:
-    return save_app_settings(payload)
+def update_settings(
+    payload: AppSettings,
+    current_user: User = Depends(get_current_ui_superadmin),
+    audit: AuditService = Depends(get_audit_logger),
+) -> AppSettings:
+    saved = save_app_settings(payload)
+    audit.record_action(
+        user=current_user,
+        scope="admin",
+        action="settings.update",
+        entity_type="app_settings",
+        entity_id="global",
+        metadata={"sections": sorted(saved.model_dump().keys())},
+    )
+    return saved
 
 
 @router.get("/oidc/providers", response_model=list[OIDCProviderAdminItem])
@@ -77,11 +91,11 @@ def create_oidc_provider_settings(
     try:
         item = create_oidc_provider(db, payload)
     except OIDCProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except OIDCProviderAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -105,11 +119,11 @@ def update_oidc_provider_settings(
     try:
         item = update_oidc_provider(db, provider_id, payload)
     except OIDCProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except AdminOIDCProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -132,11 +146,11 @@ def delete_oidc_provider_settings(
     try:
         delete_oidc_provider(db, provider_id)
     except OIDCProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except AdminOIDCProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -167,11 +181,11 @@ def create_ldap_provider_settings(
     try:
         item = create_ldap_provider(db, payload)
     except LDAPProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except LDAPProviderAlreadyExistsError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -195,11 +209,11 @@ def update_ldap_provider_settings(
     try:
         item = update_ldap_provider(db, provider_id, payload)
     except LDAPProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except AdminLDAPProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -222,11 +236,11 @@ def delete_ldap_provider_settings(
     try:
         delete_ldap_provider(db, provider_id)
     except LDAPProviderManagedByEnvironmentError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_409_CONFLICT, exc)
     except AdminLDAPProviderNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
     audit.record_action(
         user=current_user,
@@ -252,7 +266,7 @@ def send_quota_notifications_test_email(
             recipient_email=current_user.email,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
 
 
 def _secret_update_action(payload: OIDCProviderAdminPayload) -> str:

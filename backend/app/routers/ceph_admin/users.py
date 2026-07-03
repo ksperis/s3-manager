@@ -51,6 +51,7 @@ from app.routers.ceph_admin.listing_common import (
     invoke_cancel_check as _common_invoke_cancel_check,
     stream_listing_response as _common_stream_listing_response,
 )
+from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
@@ -1062,6 +1063,18 @@ def create_rgw_user(
         keys=keys,
     )
     generated_key = _extract_generated_key_from_payload(create_result, ctx.rgw_admin)
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_user.create",
+        entity_type="rgw_user",
+        entity_id=f"{lookup_tenant}${uid}" if lookup_tenant else uid,
+        metadata={
+            "account_id": account_id,
+            "tenant": lookup_tenant,
+            "generate_key": bool(payload.generate_key),
+            "fields": sorted(field_set),
+        },
+    )
     return CephAdminRgwUserCreateResponse(detail=detail, generated_key=generated_key)
 
 
@@ -1197,6 +1210,13 @@ def update_rgw_user_config(
         ),
     )
     keys = _serialize_access_keys(ctx.rgw_admin.list_user_keys(uid, tenant=tenant))
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_user.update",
+        entity_type="rgw_user",
+        entity_id=f"{tenant}${uid}" if tenant else uid,
+        metadata={"fields": sorted(field_set)},
+    )
     return _build_user_detail(
         payload,
         uid_fallback=uid,
@@ -1264,6 +1284,13 @@ def create_rgw_user_key(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="RGW did not return access credentials for this key",
         )
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_user_key.create",
+        entity_type="rgw_user",
+        entity_id=f"{tenant}${uid}" if tenant else uid,
+        metadata={"access_key_suffix": access_key[-4:]},
+    )
     return CephAdminRgwGeneratedAccessKey(access_key=access_key, secret_key=secret_key)
 
 
@@ -1287,8 +1314,22 @@ def update_rgw_user_key_status(
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     for key in _serialize_access_keys(keys):
         if key.access_key == normalized_key:
+            record_ceph_admin_action(
+                ctx,
+                action="rgw_user_key.update_status",
+                entity_type="rgw_user",
+                entity_id=f"{tenant}${uid}" if tenant else uid,
+                metadata={"access_key_suffix": normalized_key[-4:], "active": update.active},
+            )
             return key
     # Fallback when RGW does not return key details after status update.
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_user_key.update_status",
+        entity_type="rgw_user",
+        entity_id=f"{tenant}${uid}" if tenant else uid,
+        metadata={"access_key_suffix": normalized_key[-4:], "active": update.active},
+    )
     return CephAdminRgwAccessKey(
         access_key=normalized_key,
         status="enabled" if update.active else "suspended",
@@ -1312,4 +1353,11 @@ def delete_rgw_user_key(
         ctx.rgw_admin.delete_access_key(uid, normalized_key, tenant=tenant)
     except RGWAdminError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_user_key.delete",
+        entity_type="rgw_user",
+        entity_id=f"{tenant}${uid}" if tenant else uid,
+        metadata={"access_key_suffix": normalized_key[-4:]},
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

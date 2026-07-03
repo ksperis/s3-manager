@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
+from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import (
@@ -28,6 +29,8 @@ class CephAdminContext:
     region: Optional[str]
     access_key: str
     secret_key: str
+    actor: Optional[User] = None
+    audit_service: Optional[AuditService] = None
 
 
 def _to_bool(value: object) -> bool:
@@ -157,6 +160,8 @@ def get_ceph_admin_context(
         region=region,
         access_key=access_key,
         secret_key=secret_key,
+        actor=_,
+        audit_service=AuditService(db),
     )
 
 

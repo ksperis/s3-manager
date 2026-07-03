@@ -13,7 +13,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.bucket_purge import BucketPurgeProgress, BucketPurgeResult
-from app.routers.http_errors import sanitize_error_detail
+from app.routers.ceph_admin.listing_common import normalize_http_error_detail
 from app.routers.sse_worker import wait_for_cancellable_worker
 from app.services.bucket_purge_service import BucketPurgeCancelled
 
@@ -27,10 +27,6 @@ def format_sse_event(event: str, payload: dict[str, object]) -> str:
         lines.append(f"data: {line}")
     lines.append("")
     return "\n".join(lines) + "\n"
-
-
-def _normalize_http_error_detail(detail: object) -> object:
-    return sanitize_error_detail(detail)
 
 
 def stream_bucket_purge(
@@ -76,7 +72,7 @@ def stream_bucket_purge(
                     on_cancel(request_id)
                 push_message(format_sse_event("done", {"request_id": request_id, "status": "canceled"}))
             except HTTPException as exc:
-                detail = _normalize_http_error_detail(exc.detail)
+                detail = normalize_http_error_detail(exc.detail)
                 if on_error:
                     on_error(request_id, str(detail))
                 push_message(

@@ -13,6 +13,7 @@ from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, Bi
 from app.routers.dependencies import get_current_super_admin
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
+from app.utils.http_headers import build_attachment_content_disposition
 
 router = APIRouter(prefix="/admin/billing", tags=["admin-billing"])
 
@@ -128,5 +129,5 @@ def billing_export_csv(
         filename, payload = service.export_csv(month, endpoint_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    headers = {"Content-Disposition": f"attachment; filename=\"{filename}\""}
+    headers = {"Content-Disposition": build_attachment_content_disposition(filename)}
     return Response(content=payload, media_type="text/csv", headers=headers)

@@ -211,16 +211,6 @@ def normalize_features_config(
                 if url is not None and not isinstance(url, str):
                     raise ValueError("Feature 'healthcheck.url' must be a string.")
                 features[key]["url"] = _normalize_url(url)
-            # Backward compatibility with older key naming.
-            if "endpoint" in value and "url" not in value and "healthcheck_url" not in value:
-                endpoint = value.get("endpoint")
-                if endpoint is not None and not isinstance(endpoint, str):
-                    raise ValueError("Feature 'healthcheck.endpoint' must be a string.")
-                features[key]["url"] = _normalize_url(endpoint)
-
-    if normalized_provider == StorageProvider.CEPH and "account" not in raw_features:
-        # Backward compatibility for endpoints saved before the "account" feature existed.
-        features["account"]["enabled"] = bool(features.get("admin", {}).get("enabled"))
 
     if normalized_provider != StorageProvider.CEPH:
         for key in ("admin", "account", "usage", "metrics", "sns", "replication"):

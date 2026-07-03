@@ -19,8 +19,36 @@ SIGNAL_FIELDS = {
     "account": "account=",
     "metadata": "metadata=",
     "delegated_browser_audit": "_common_record_browser_action(",
+    "delegated_ceph_admin_audit": "record_ceph_admin_action(",
+    "delegated_ceph_admin_bucket_config_audit": "_record_bucket_config_mutation(",
     "delegated_purge_stream": "stream_bucket_purge(",
     "delegated_integrity_stream": "stream_bucket_integrity_check(",
+}
+
+ALLOWLISTED_UNAUDITED_ROUTES: dict[tuple[str, str, str, str], str] = {
+    ("POST", "app/routers/admin/s3_connections.py", "validate_s3_connection_credentials", "/validate-credentials"): "credential validation probe",
+    ("POST", "app/routers/admin/storage_endpoints.py", "detect_storage_endpoint_features", "/detect-features"): "feature detection probe",
+    ("POST", "app/routers/admin/usage_stats.py", "stream_admin_managed_usage_stats_aggregate", "/admin/usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/browser.py", "get_object_columns", "/buckets/{bucket_name}/objects/columns"): "object metadata probe",
+    ("POST", "app/routers/browser.py", "presign", "/buckets/{bucket_name}/presign"): "presigned URL generation",
+    ("POST", "app/routers/browser.py", "presign_part_for_upload", "/buckets/{bucket_name}/multipart/{upload_id}/presign"): "presigned multipart URL generation",
+    ("POST", "app/routers/ceph_admin/buckets.py", "refresh_bucket_listing_cache", "/cache/refresh"): "cache refresh",
+    ("POST", "app/routers/ceph_admin/buckets.py", "compare_bucket_pair", "/compare"): "read-only comparison",
+    ("POST", "app/routers/ceph_admin/buckets.py", "query_buckets", "/query"): "read-only query",
+    ("POST", "app/routers/ceph_admin/usage_stats.py", "stream_ceph_admin_bucket_usage_stats", "/ceph-admin/endpoints/{endpoint_id}/bucket-usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/ceph_admin/usage_stats.py", "stream_ceph_admin_bucket_usage_stats_for_bucket", "/ceph-admin/endpoints/{endpoint_id}/buckets/{bucket_name}/usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/ceph_admin/usage_stats.py", "stream_ceph_admin_usage_stats_aggregate", "/ceph-admin/endpoints/{endpoint_id}/usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/connections.py", "validate_connection_credentials", "/validate-credentials"): "credential validation probe",
+    ("POST", "app/routers/internal/billing_collect.py", "collect_daily", "/collect/daily"): "internal token-protected job",
+    ("POST", "app/routers/internal/healthchecks.py", "run_healthchecks", "/run"): "internal token-protected job",
+    ("POST", "app/routers/internal/quota_monitor.py", "run_quota_monitor", "/run"): "internal token-protected job",
+    ("POST", "app/routers/internal/s3_connections.py", "cleanup_temporary_connections", "/cleanup"): "internal token-protected cleanup",
+    ("POST", "app/routers/internal/usage_history.py", "collect_usage_history", "/collect"): "internal token-protected job",
+    ("POST", "app/routers/manager/buckets.py", "compare_bucket_pair", "/compare"): "read-only comparison",
+    ("POST", "app/routers/manager/usage_stats.py", "stream_manager_bucket_usage_stats_for_bucket", "/manager/buckets/{bucket_name}/usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/manager/usage_stats.py", "stream_manager_usage_stats_aggregate", "/manager/usage-stats/stream"): "read-only stream",
+    ("POST", "app/routers/storage_ops/buckets.py", "refresh_storage_ops_bucket_listing_cache", "/cache/refresh"): "cache refresh",
+    ("POST", "app/routers/storage_ops/buckets.py", "query_storage_ops_buckets", "/query"): "read-only query",
 }
 
 
@@ -35,6 +63,10 @@ class RouteAuditRow:
     @property
     def has_any_audit_signal(self) -> bool:
         return any(self.signals.values())
+
+    def allowlist_reason(self, backend_root: Path) -> str | None:
+        key = (self.method, str(self.file.relative_to(backend_root)), self.function, self.path)
+        return ALLOWLISTED_UNAUDITED_ROUTES.get(key)
 
 
 def _decorator_route(decorator: ast.AST) -> tuple[str, str] | None:
@@ -87,12 +119,23 @@ def collect_rows(backend_root: Path) -> list[RouteAuditRow]:
 
 def render_markdown(backend_root: Path) -> str:
     rows = collect_rows(backend_root)
-    no_signal = [row for row in rows if not row.has_any_audit_signal]
+    allowlisted_no_signal = [
+        row
+        for row in rows
+        if not row.has_any_audit_signal and row.allowlist_reason(backend_root)
+    ]
+    no_signal = [
+        row
+        for row in rows
+        if not row.has_any_audit_signal and not row.allowlist_reason(backend_root)
+    ]
     with_record = [row for row in rows if row.signals["record_action"]]
     delegated = [
         row
         for row in rows
         if row.signals["delegated_browser_audit"]
+        or row.signals["delegated_ceph_admin_audit"]
+        or row.signals["delegated_ceph_admin_bucket_config_audit"]
         or row.signals["delegated_purge_stream"]
         or row.signals["delegated_integrity_stream"]
     ]
@@ -103,6 +146,7 @@ def render_markdown(backend_root: Path) -> str:
         f"- Mutating routes: {len(rows)}",
         f"- Routes with direct `record_action`: {len(with_record)}",
         f"- Routes with delegated audit/stream signal: {len(delegated)}",
+        f"- Allowlisted routes without static audit signal: {len(allowlisted_no_signal)}",
         f"- Routes without static audit signal: {len(no_signal)}",
         "",
         "## Routes without static audit signal",
@@ -116,6 +160,19 @@ def render_markdown(backend_root: Path) -> str:
     lines.extend(
         [
             "",
+            "## Allowlisted Routes Without Audit Signal",
+            "",
+            "| Method | File | Function | Path | Reason |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in allowlisted_no_signal:
+        reason = row.allowlist_reason(backend_root) or ""
+        lines.append(f"| {row.method} | `{row.file.relative_to(backend_root)}` | `{row.function}` | `{row.path}` | {reason} |")
+
+    lines.extend(
+        [
+            "",
             "## Full mutating route matrix",
             "",
             "| Method | File | Function | Path | Direct audit | Actor | Scope | Entity | Account | Metadata | Delegated |",
@@ -123,7 +180,12 @@ def render_markdown(backend_root: Path) -> str:
         ]
     )
     for row in rows:
-        delegated_signal = row.signals["delegated_browser_audit"] or row.signals["delegated_purge_stream"] or row.signals["delegated_integrity_stream"]
+        delegated_signal = (
+            row.signals["delegated_browser_audit"]
+            or row.signals["delegated_ceph_admin_audit"]
+            or row.signals["delegated_purge_stream"]
+            or row.signals["delegated_integrity_stream"]
+        )
         lines.append(
             "| {method} | `{file}` | `{function}` | `{path}` | {direct} | {actor} | {scope} | {entity} | {account} | {metadata} | {delegated} |".format(
                 method=row.method,

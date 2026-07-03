@@ -13,7 +13,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.bucket_usage_stats import BucketUsageStatsProgress, BucketUsageStatsResult
-from app.routers.http_errors import sanitize_error_detail
+from app.routers.ceph_admin.listing_common import normalize_http_error_detail
 from app.routers.sse_worker import wait_for_cancellable_worker
 from app.services.bucket_usage_stats_service import BucketUsageStatsCancelled
 
@@ -27,10 +27,6 @@ def format_sse_event(event: str, payload: dict[str, object]) -> str:
         lines.append(f"data: {line}")
     lines.append("")
     return "\n".join(lines) + "\n"
-
-
-def _normalize_http_error_detail(detail: object) -> object:
-    return sanitize_error_detail(detail)
 
 
 def stream_bucket_usage_stats(
@@ -71,7 +67,7 @@ def stream_bucket_usage_stats(
                         "error",
                         {
                             "request_id": request_id,
-                            "detail": _normalize_http_error_detail(exc.detail),
+                            "detail": normalize_http_error_detail(exc.detail),
                             "status_code": exc.status_code,
                         },
                     )

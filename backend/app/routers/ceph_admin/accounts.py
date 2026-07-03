@@ -49,6 +49,7 @@ from app.routers.ceph_admin.listing_common import (
     invoke_cancel_check as _common_invoke_cancel_check,
     stream_listing_response as _common_stream_listing_response,
 )
+from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.rgw_admin import RGWAdminError
@@ -867,6 +868,21 @@ def create_rgw_account(
     _invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     account_payload = _load_account_payload(account_id, ctx)
     account_detail = _build_account_detail(account_payload, account_id_fallback=account_id)
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_account.create",
+        entity_type="rgw_account",
+        entity_id=account_id,
+        metadata={
+            "requested_account_id": requested_account_id,
+            "quota_updated": payload.quota_enabled is not None
+            or payload.quota_max_size_bytes is not None
+            or payload.quota_max_objects is not None,
+            "bucket_quota_updated": payload.bucket_quota_enabled is not None
+            or payload.bucket_quota_max_size_bytes is not None
+            or payload.bucket_quota_max_objects is not None,
+        },
+    )
     return CephAdminRgwAccountCreateResponse(account=account_detail)
 
 
@@ -1005,6 +1021,13 @@ def update_rgw_account_config(
 
     _invalidate_accounts_listing_cache(int(getattr(ctx.endpoint, "id", 0) or 0))
     payload = _load_account_payload(normalized_account_id, ctx)
+    record_ceph_admin_action(
+        ctx,
+        action="rgw_account.update",
+        entity_type="rgw_account",
+        entity_id=normalized_account_id,
+        metadata={"fields": sorted(field_set)},
+    )
     return _build_account_detail(payload, account_id_fallback=normalized_account_id)
 
 

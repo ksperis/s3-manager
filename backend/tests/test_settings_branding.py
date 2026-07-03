@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from app.db import User, UserRole
+from app.db import AuditLog, User, UserRole
 from app.main import app
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
@@ -60,7 +60,7 @@ def test_put_admin_settings_rejects_invalid_branding_logo_url(client, monkeypatc
     assert response.status_code == 422, response.text
 
 
-def test_put_admin_settings_persists_branding_color(client, monkeypatch, tmp_path):
+def test_put_admin_settings_persists_branding_color(client, monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     settings_path.write_text(AppSettings().model_dump_json(indent=2), encoding="utf-8")
     monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
@@ -78,3 +78,18 @@ def test_put_admin_settings_persists_branding_color(client, monkeypatch, tmp_pat
     raw = json.loads(settings_path.read_text(encoding="utf-8"))
     assert raw["branding"]["primary_color"] == "#0057b8"
     assert raw["branding"]["login_logo_url"] == "https://cdn.example.com/logo.svg"
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "settings.update")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.entity_type == "app_settings"
+    assert audit.entity_id == "global"
+    assert audit.user_email == "superadmin@example.com"
+    metadata = json.loads(audit.metadata_json or "{}")
+    assert "branding" in metadata["sections"]
+    assert "#0057b8" not in audit.metadata_json
+    assert "logo.svg" not in audit.metadata_json

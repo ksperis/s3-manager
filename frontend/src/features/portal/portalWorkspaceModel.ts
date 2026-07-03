@@ -38,7 +38,7 @@ export type PortalWorkspaceSpace = {
   id: string;
   name: string;
   internalName: string | null;
-  origin: "legacy" | "portal_generic" | "portal_named" | "imported";
+  origin: "portal_generic" | "portal_named" | "imported";
   nameEditable: boolean;
   description: string;
   ownerLabel: string | null;
@@ -215,7 +215,7 @@ export function buildPortalWorkspaceModel({
       id: storageSpace.id,
       name: usageSpace?.name ?? name,
       internalName: storageSpace.internal_bucket_name ?? null,
-      origin: storageSpace.origin ?? "legacy",
+      origin: storageSpace.origin ?? "imported",
       nameEditable: Boolean(storageSpace.name_editable),
       description: storageSpace.description ?? t({ en: `${name} storage space`, fr: `Espace de stockage ${name}`, de: `Speicherbereich ${name}` }),
       ownerLabel: storageSpace.owner_label ?? null,

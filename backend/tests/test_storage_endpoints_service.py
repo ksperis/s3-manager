@@ -333,6 +333,26 @@ def test_replication_feature_defaults_to_disabled_and_can_be_enabled_for_ceph():
     assert enabled_features["replication"]["enabled"] is True
 
 
+def test_features_config_requires_canonical_account_and_healthcheck_keys():
+    admin_only_features = normalize_features_config(
+        StorageProvider.CEPH,
+        "features:\n"
+        "  admin:\n"
+        "    enabled: true\n",
+    )
+    assert admin_only_features["admin"]["enabled"] is True
+    assert admin_only_features["account"]["enabled"] is False
+
+    legacy_healthcheck_features = normalize_features_config(
+        StorageProvider.CEPH,
+        "features:\n"
+        "  healthcheck:\n"
+        "    enabled: true\n"
+        "    endpoint: https://health.example.test\n",
+    )
+    assert legacy_healthcheck_features["healthcheck"]["url"] is None
+
+
 def test_aws_features_reject_ceph_only_capabilities():
     with pytest.raises(ValueError, match="only available for Ceph"):
         normalize_features_config(
