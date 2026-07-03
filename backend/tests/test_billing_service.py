@@ -112,6 +112,8 @@ def test_billing_summary_and_cost(db_session):
     assert summary.usage.ops_total == 1500
     assert summary.storage.avg_bytes == 200
     assert summary.coverage.days_collected == 2
+    assert summary.coverage.storage_days_collected == 2
+    assert summary.coverage.usage_days_collected == 2
 
     assert summary.cost is not None
     assert summary.cost.currency == "EUR"
@@ -155,9 +157,63 @@ def test_billing_subject_detail_and_export(db_session):
     assert detail.usage.bytes_out == 1024
     assert detail.storage.avg_bytes == 2048
     assert detail.coverage.days_collected == 1
+    assert detail.coverage.storage_days_collected == 1
+    assert detail.coverage.usage_days_collected == 1
     assert len(detail.daily) == 1
 
     filename, payload = service.export_csv("2026-01", endpoint.id)
     assert filename.startswith("billing-2026-01")
     assert "subject_type" in payload
     assert str(account.id) in payload
+
+
+def test_billing_coverage_tracks_storage_and_usage_days_separately(db_session):
+    endpoint = _seed_endpoint(db_session)
+    account = _seed_account(db_session, endpoint.id)
+
+    db_session.add_all(
+        [
+            BillingUsageDaily(
+                day=date(2026, 1, 5),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                bytes_in=100,
+                bytes_out=200,
+                ops_total=10,
+                source="rgw_admin_usage",
+                collected_at=utcnow(),
+            ),
+            BillingUsageDaily(
+                day=date(2026, 1, 6),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                bytes_in=300,
+                bytes_out=400,
+                ops_total=20,
+                source="rgw_admin_usage",
+                collected_at=utcnow(),
+            ),
+            BillingStorageDaily(
+                day=date(2026, 1, 5),
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account.id,
+                total_bytes=2048,
+                total_objects=5,
+                source="rgw_admin_bucket_stats",
+                collected_at=utcnow(),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = BillingService(db_session)
+
+    summary = service.summary("2026-01", endpoint.id)
+    assert summary.coverage.days_collected == 2
+    assert summary.coverage.storage_days_collected == 1
+    assert summary.coverage.usage_days_collected == 2
+
+    detail = service.subject_detail("2026-01", endpoint.id, "account", account.id)
+    assert detail.coverage.days_collected == 2
+    assert detail.coverage.storage_days_collected == 1
+    assert detail.coverage.usage_days_collected == 2

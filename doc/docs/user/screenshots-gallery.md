@@ -37,8 +37,8 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="Billing">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/admin-billing.light.png" alt="Admin Billing page with monthly summary, subject totals, and selected account detail charts" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/admin-billing.dark.png" alt="Admin Billing page with monthly summary, subject totals, and selected account detail charts" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/admin-billing.light.png" alt="Admin Billing page with scope controls, manual collection, monthly summary, and subject totals" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/admin-billing.dark.png" alt="Admin Billing page with scope controls, manual collection, monthly summary, and subject totals" loading="lazy">
     </div>
     <figcaption><strong>Billing.</strong> Billing analytics summarize monthly usage and estimated cost per account or user on billing-enabled Ceph endpoints.</figcaption>
   </figure>
@@ -202,8 +202,8 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="Usage">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
     </div>
     <figcaption><strong>Usage.</strong> Usage & Analytics consolidates storage, traffic, requests, and billing source signals in end-user language.</figcaption>
   </figure>

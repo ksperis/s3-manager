@@ -531,6 +531,8 @@ const billingSummaryRule: MockRule = {
       days_collected: 27,
       days_in_month: 31,
       coverage_ratio: 27 / 31,
+      storage_days_collected: 27,
+      usage_days_collected: 27,
     },
     cost: {
       currency: "EUR",
@@ -572,7 +574,7 @@ const billingSubjectsRule: MockRule = {
     ],
     total: 1,
     page: 1,
-    page_size: 200,
+    page_size: 25,
     has_next: false,
   },
 };
@@ -612,6 +614,8 @@ const billingSubjectDetailRule: MockRule = {
           days_collected: 27,
           days_in_month: 31,
           coverage_ratio: 27 / 31,
+          storage_days_collected: 27,
+          usage_days_collected: 27,
         },
         cost: {
           currency: "EUR",
@@ -645,6 +649,8 @@ const billingSubjectDetailRule: MockRule = {
           days_collected: 27,
           days_in_month: 31,
           coverage_ratio: 27 / 31,
+          storage_days_collected: 27,
+          usage_days_collected: 27,
         },
         cost: {
           currency: "EUR",
@@ -678,6 +684,8 @@ const billingSubjectDetailRule: MockRule = {
           days_collected: 27,
           days_in_month: 31,
           coverage_ratio: 27 / 31,
+          storage_days_collected: 27,
+          usage_days_collected: 27,
         },
         cost: {
           currency: "EUR",
@@ -687,6 +695,44 @@ const billingSubjectDetailRule: MockRule = {
       },
     } as const;
     return detailById[subjectId as keyof typeof detailById] ?? detailById[101];
+  },
+};
+
+const portalBillingMeRule: MockRule = {
+  id: "portal-billing-me",
+  path: /^\/portal\/billing\/me$/,
+  body: {
+    month: "2026-03",
+    subject_type: "account",
+    subject_id: 101,
+    name: "Helios Retail",
+    rgw_identifier: "RGW-HELIOS",
+    daily: [
+      { day: "2026-03-01", storage_bytes: 2_180_000_000, bytes_in: 21_000_000, bytes_out: 78_000_000, ops_total: 430_000 },
+      { day: "2026-03-08", storage_bytes: 2_260_000_000, bytes_in: 24_000_000, bytes_out: 82_000_000, ops_total: 455_000 },
+    ],
+    usage: {
+      bytes_in: 620_000_000,
+      bytes_out: 2_100_000_000,
+      ops_total: 12_450_000,
+    },
+    storage: {
+      avg_bytes: 2_350_000_000,
+      avg_gb_month: 72.8,
+      total_objects: 1_284_000,
+    },
+    coverage: {
+      days_collected: 27,
+      days_in_month: 31,
+      coverage_ratio: 27 / 31,
+      storage_days_collected: 27,
+      usage_days_collected: 27,
+    },
+    cost: {
+      currency: "EUR",
+      total_cost: 96.4,
+      rate_card_name: "Ops rate card",
+    },
   },
 };
 
@@ -852,8 +898,8 @@ export const scenarios: DocScreenshotScenario[] = [
     actions: [
       { type: "wait", selector: "text=Estimated cost" },
       { type: "wait", selector: "tr:has-text('Helios Retail')" },
-      { type: "click", selector: "tr:has-text('Helios Retail')" },
-      { type: "wait", selector: "text=Coverage: 87% (27/31 days)" },
+      { type: "click", selector: "button[aria-label='View billing detail for Helios Retail']" },
+      { type: "wait", selector: "text=87% (27/31 days)" },
     ],
     mockRules: withBaseRules(
       billingEnabledGeneralSettingsRule,
@@ -965,7 +1011,10 @@ export const scenarios: DocScreenshotScenario[] = [
       { type: "wait", selector: "text=Storage Spaces (volume)" },
       { type: "wait", selector: "text=Storage Spaces (objects)" },
     ],
-    mockRules: withBaseRules(),
+    mockRules: withBaseRules(
+      billingEnabledGeneralSettingsRule,
+      portalBillingMeRule,
+    ),
   },
   {
     id: "gallery-portal-access-keys",

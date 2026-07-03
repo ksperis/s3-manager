@@ -1485,6 +1485,11 @@ export function buildBaseRules(): MockRule[] {
       body: LOGIN_SETTINGS,
     },
     {
+      id: "user-notifications",
+      path: /^\/users\/me\/notifications$/,
+      body: { items: [], unread_count: 0 },
+    },
+    {
       id: "execution-contexts",
       path: /^\/me\/execution-contexts$/,
       body: ({ url }) => {

@@ -5,7 +5,7 @@ Use this page when you need to understand storage consumption, traffic, quota, b
 ## Before you start
 
 - Select the right Portal account.
-- Usage, quota, traffic, or billing collection must be enabled by the platform.
+- Usage, quota, traffic, or billing collection must be enabled by the platform for the matching tab to appear.
 - Some metrics may be unavailable even when file access works.
 
 ## What Portal can show
@@ -18,7 +18,7 @@ Use this page when you need to understand storage consumption, traffic, quota, b
 | Other | Anonymous storage used elsewhere in the account. It is not a Storage Space you can open and does not reveal hidden names or identifiers. |
 | Usage history | Stored trend snapshots for the selected Portal account. |
 | Traffic and requests | Traffic metrics or billing-derived values when collection is available. |
-| Billing source | Optional billing data for the selected account and month. |
+| Billing source | Optional billing data for the selected account and month. The Billing tab is hidden when billing is disabled. |
 | Alerts | Deduplicated warnings such as quota near limit, public links, failed transfer, or degraded endpoint. |
 
 Activity and transfer details are shown only for Storage Spaces you can access.
@@ -32,6 +32,7 @@ You can tell whether the selected Portal account is healthy, near quota, missing
 ## If a metric is unavailable
 
 Unavailable metrics do not always mean the Storage Space is broken. Ask an admin to check feature flags, collection jobs, endpoint capability, and the latest backend snapshots.
+If the Billing tab is visible but empty, the page shows the billing source error returned by the backend.
 
 ## Related pages
 
@@ -44,6 +45,6 @@ Unavailable metrics do not always mean the Storage Space is broken. Ask an admin
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with storage, traffic, requests, per-space breakdown, and billing source" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
 </div>

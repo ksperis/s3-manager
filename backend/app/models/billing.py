@@ -11,6 +11,8 @@ class BillingCoverage(BaseModel):
     days_collected: int
     days_in_month: int
     coverage_ratio: float = Field(..., ge=0, le=1)
+    storage_days_collected: Optional[int] = None
+    usage_days_collected: Optional[int] = None
 
 
 class BillingCost(BaseModel):

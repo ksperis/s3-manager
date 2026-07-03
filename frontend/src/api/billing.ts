@@ -9,6 +9,8 @@ export type BillingCoverage = {
   days_collected: number;
   days_in_month: number;
   coverage_ratio: number;
+  storage_days_collected?: number | null;
+  usage_days_collected?: number | null;
 };
 
 export type BillingCost = {

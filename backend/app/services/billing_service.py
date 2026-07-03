@@ -69,6 +69,8 @@ class BillingTotals:
     avg_storage_gb_month: Optional[float]
     total_objects: Optional[int]
     days_with_data: int
+    storage_days_with_data: int = 0
+    usage_days_with_data: int = 0
 
 
 def _parse_month(value: str) -> BillingPeriod:
@@ -87,9 +89,21 @@ def _parse_month(value: str) -> BillingPeriod:
     return BillingPeriod(month=text, start=period_start, end=period_end, days_in_month=days_in_month)
 
 
-def _coverage(days_collected: int, days_in_month: int) -> BillingCoverage:
+def _coverage(
+    days_collected: int,
+    days_in_month: int,
+    *,
+    storage_days_collected: Optional[int] = None,
+    usage_days_collected: Optional[int] = None,
+) -> BillingCoverage:
     ratio = days_collected / days_in_month if days_in_month else 0
-    return BillingCoverage(days_collected=days_collected, days_in_month=days_in_month, coverage_ratio=ratio)
+    return BillingCoverage(
+        days_collected=days_collected,
+        days_in_month=days_in_month,
+        coverage_ratio=ratio,
+        storage_days_collected=storage_days_collected,
+        usage_days_collected=usage_days_collected,
+    )
 
 
 def _bytes_to_gb(value: Optional[int]) -> Optional[float]:
@@ -583,7 +597,12 @@ class BillingService:
                 avg_gb_month=totals.avg_storage_gb_month,
                 total_objects=totals.total_objects,
             ),
-            coverage=_coverage(totals.days_with_data, period.days_in_month),
+            coverage=_coverage(
+                totals.days_with_data,
+                period.days_in_month,
+                storage_days_collected=totals.storage_days_with_data,
+                usage_days_collected=totals.usage_days_with_data,
+            ),
             cost=cost,
         )
 
@@ -712,7 +731,8 @@ class BillingService:
             daily_map[key] = entry
 
         daily = sorted(daily_map.values(), key=lambda entry: entry.day)
-        coverage_days = days_with_storage or len(usage_rows)
+        usage_days = len({row.day for row in usage_rows})
+        coverage_days = max(days_with_storage, usage_days)
         totals = BillingTotals(
             bytes_in=usage_totals.bytes_in,
             bytes_out=usage_totals.bytes_out,
@@ -722,6 +742,8 @@ class BillingService:
             avg_storage_gb_month=storage_totals.avg_gb_month,
             total_objects=storage_totals.total_objects,
             days_with_data=coverage_days,
+            storage_days_with_data=days_with_storage,
+            usage_days_with_data=usage_days,
         )
         cost = _compute_cost(_resolve_rate_card(self.db, endpoint_id, period, subject_type, subject_id), totals)
 
@@ -734,7 +756,12 @@ class BillingService:
             daily=daily,
             usage=usage_totals,
             storage=storage_totals,
-            coverage=_coverage(coverage_days, period.days_in_month),
+            coverage=_coverage(
+                coverage_days,
+                period.days_in_month,
+                storage_days_collected=days_with_storage,
+                usage_days_collected=usage_days,
+            ),
             cost=cost,
         )
 
@@ -833,6 +860,7 @@ class BillingService:
             func.sum(BillingUsageDaily.bytes_in),
             func.sum(BillingUsageDaily.bytes_out),
             func.sum(BillingUsageDaily.ops_total),
+            func.count(func.distinct(BillingUsageDaily.day)),
         ).filter(
             BillingUsageDaily.day >= period.start,
             BillingUsageDaily.day < period.end,
@@ -843,6 +871,7 @@ class BillingService:
         bytes_in = int(usage_row[0] or 0)
         bytes_out = int(usage_row[1] or 0)
         ops_total = int(usage_row[2] or 0)
+        days_with_usage = int(usage_row[3] or 0)
 
         storage_query = self.db.query(
             func.sum(BillingStorageDaily.total_bytes),
@@ -868,7 +897,9 @@ class BillingService:
             avg_storage_bytes=avg_storage_bytes,
             avg_storage_gb_month=_bytes_to_gb(avg_storage_bytes) if avg_storage_bytes is not None else None,
             total_objects=int(total_objects) if total_objects is not None else None,
-            days_with_data=days_with_storage,
+            days_with_data=max(days_with_storage, days_with_usage),
+            storage_days_with_data=days_with_storage,
+            usage_days_with_data=days_with_usage,
         )
 
     def _usage_totals_by_subject(

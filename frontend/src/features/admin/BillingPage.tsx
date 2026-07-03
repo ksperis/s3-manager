@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import ListToolbar from "../../components/ListToolbar";
+import PaginationControls from "../../components/PaginationControls";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
@@ -23,10 +24,20 @@ import PageEmptyState from "../../components/PageEmptyState";
 import StatCards from "../../components/StatCards";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import { toolbarCompactButtonClasses, toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import UiButton from "../../components/ui/UiButton";
+import {
+  cx,
+  uiCardMutedClass,
+  uiDataTableClass,
+  uiMutedTextClass,
+  uiTableContainerClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
+import { DownloadIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   BillingSubjectDetail,
   BillingSubjectSummary,
@@ -77,6 +88,48 @@ function formatCurrency(value?: number | null, currency?: string | null): string
   return `${value.toFixed(2)} ${code}`;
 }
 
+function formatCoverage(coverage?: BillingSummary["coverage"] | BillingSubjectDetail["coverage"] | null): string {
+  if (!coverage) return "-";
+  return `${Math.round(coverage.coverage_ratio * 100)}% (${coverage.days_collected}/${coverage.days_in_month} days)`;
+}
+
+function formatCoverageBreakdown(coverage?: BillingSummary["coverage"] | BillingSubjectDetail["coverage"] | null): string {
+  if (!coverage) return "Coverage unavailable";
+  const storageDays = coverage.storage_days_collected ?? coverage.days_collected;
+  const usageDays = coverage.usage_days_collected ?? coverage.days_collected;
+  return `Storage ${storageDays}d · Usage ${usageDays}d`;
+}
+
+function hasPartialBillingSources(coverage?: BillingSummary["coverage"] | BillingSubjectDetail["coverage"] | null): boolean {
+  if (!coverage) return false;
+  const storageDays = coverage.storage_days_collected ?? coverage.days_collected;
+  const usageDays = coverage.usage_days_collected ?? coverage.days_collected;
+  return storageDays !== usageDays;
+}
+
+function isLowCoverage(coverage?: BillingSummary["coverage"] | BillingSubjectDetail["coverage"] | null): boolean {
+  return Boolean(coverage && coverage.days_collected > 0 && coverage.coverage_ratio < 0.8);
+}
+
+function extractCollectionErrors(result: Record<string, unknown> | null): Array<Record<string, unknown>> {
+  const errors = result?.errors;
+  return Array.isArray(errors) ? errors.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object")) : [];
+}
+
+function formatCollectionResult(result: Record<string, unknown> | null, day: string): string | null {
+  if (!result) return null;
+  const endpoints = Number(result.endpoints ?? 0);
+  const storageRecords = Number(result.storage_records ?? 0);
+  const usageRecords = Number(result.usage_records ?? 0);
+  const errors = extractCollectionErrors(result).length;
+  const prefix = errors > 0 ? "Collection finished with issues" : "Collection completed";
+  return `${prefix} for ${day}: ${endpoints} endpoint${endpoints === 1 ? "" : "s"}, ${storageRecords} storage record${storageRecords === 1 ? "" : "s"}, ${usageRecords} usage record${usageRecords === 1 ? "" : "s"}, ${errors} error${errors === 1 ? "" : "s"}.`;
+}
+
+function isBillingDisabledMessage(message: string): boolean {
+  return message.toLowerCase().includes("billing is disabled");
+}
+
 export default function BillingPage() {
   const [month, setMonth] = useState<string>(currentMonth());
   const [collectDay, setCollectDay] = useState<string>(defaultCollectDay());
@@ -85,6 +138,8 @@ export default function BillingPage() {
   const [subjectType, setSubjectType] = useState<"account" | "s3_user">("account");
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [reloadToken, setReloadToken] = useState(0);
 
   const [summary, setSummary] = useState<BillingSummary | null>(null);
@@ -92,6 +147,7 @@ export default function BillingPage() {
   const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
 
   const [subjects, setSubjects] = useState<BillingSubjectSummary[]>([]);
+  const [subjectsTotal, setSubjectsTotal] = useState<number>(0);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
   const [subjectsLoading, setSubjectsLoading] = useState<boolean>(false);
 
@@ -104,6 +160,7 @@ export default function BillingPage() {
   const [collectLoading, setCollectLoading] = useState<boolean>(false);
   const [collectMessage, setCollectMessage] = useState<string | null>(null);
   const [collectError, setCollectError] = useState<string | null>(null);
+  const [collectResult, setCollectResult] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,9 +209,10 @@ export default function BillingPage() {
         }
       } catch (err) {
         if (!cancelled) {
+          const message = extractApiError(err, "Unable to load billing summary.");
           setSummary(null);
-          setSummaryError(extractApiError(err, "Unable to load billing summary."));
-          setBillingDisabled(true);
+          setSummaryError(message);
+          setBillingDisabled(isBillingDisabledMessage(message));
         }
       } finally {
         if (!cancelled) {
@@ -169,22 +227,31 @@ export default function BillingPage() {
   }, [month, selectedEndpointId, reloadToken]);
 
   useEffect(() => {
+    setPage(1);
+    setDetail(null);
+    setDetailError(null);
+  }, [month, selectedEndpointId, subjectType, sortBy, sortDir]);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadSubjects() {
       if (!selectedEndpointId) {
         setSubjects([]);
+        setSubjectsTotal(0);
         return;
       }
       setSubjectsLoading(true);
       setSubjectsError(null);
       try {
-        const data = await getBillingSubjects(month, selectedEndpointId, subjectType, 1, 200, sortBy, sortDir);
+        const data = await getBillingSubjects(month, selectedEndpointId, subjectType, page, pageSize, sortBy, sortDir);
         if (!cancelled) {
           setSubjects(data.items);
+          setSubjectsTotal(data.total);
         }
       } catch (err) {
         if (!cancelled) {
           setSubjects([]);
+          setSubjectsTotal(0);
           setSubjectsError(extractApiError(err, "Unable to load billing subjects."));
         }
       } finally {
@@ -197,7 +264,7 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [month, selectedEndpointId, subjectType, sortBy, sortDir, reloadToken]);
+  }, [month, page, pageSize, selectedEndpointId, subjectType, sortBy, sortDir, reloadToken]);
 
   useEffect(() => {
     if (!subjects.length) {
@@ -271,7 +338,7 @@ export default function BillingPage() {
       {
         label: "Coverage",
         value: coverage != null ? `${Math.round(coverage * 100)}%` : "-",
-        hint: "Days collected in month",
+        hint: formatCoverageBreakdown(summary?.coverage),
       },
       {
         label: "Estimated cost",
@@ -285,6 +352,13 @@ export default function BillingPage() {
     () => endpoints.find((endpoint) => endpoint.id === selectedEndpointId) ?? null,
     [endpoints, selectedEndpointId]
   );
+  const hasBillingData = Boolean(summary && (summary.coverage.days_collected > 0 || subjectsTotal > 0));
+  const canExport = Boolean(selectedEndpointId && hasBillingData && !summaryLoading && !subjectsLoading && !billingDisabled);
+  const canCollect = Boolean(collectDay && !collectLoading && !billingDisabled);
+  const collectionErrors = extractCollectionErrors(collectResult);
+  const noRateCard = Boolean(summary && summary.coverage.days_collected > 0 && !summary.cost);
+  const lowCoverage = isLowCoverage(summary?.coverage);
+  const partialSources = hasPartialBillingSources(summary?.coverage);
 
   async function handleRowClick(subject: BillingSubjectSummary) {
     if (!selectedEndpointId) return;
@@ -302,7 +376,8 @@ export default function BillingPage() {
   }
 
   async function handleExport() {
-    if (!selectedEndpointId) return;
+    if (!selectedEndpointId || !canExport) return;
+    setPageError(null);
     try {
       const blob = await downloadBillingCsv(month, selectedEndpointId);
       const url = window.URL.createObjectURL(blob);
@@ -319,13 +394,15 @@ export default function BillingPage() {
   }
 
   async function handleCollectDaily() {
-    if (!collectDay) return;
+    if (!canCollect) return;
     setCollectLoading(true);
     setCollectMessage(null);
     setCollectError(null);
+    setCollectResult(null);
     try {
-      await collectBillingDaily(collectDay);
-      setCollectMessage(`Collection completed for ${collectDay}.`);
+      const result = await collectBillingDaily(collectDay);
+      setCollectResult(result);
+      setCollectMessage(formatCollectionResult(result, collectDay));
       setReloadToken((prev) => prev + 1);
     } catch (err) {
       setCollectError(extractApiError(err, "Unable to trigger billing collection."));
@@ -353,14 +430,26 @@ export default function BillingPage() {
         title="Billing"
         description="Monthly usage and cost overview."
         breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Billing" })}
+        rightContent={
+          <UiButton
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleExport()}
+            disabled={!canExport}
+            title={canExport ? "Export the selected month as CSV" : "Select a Ceph endpoint with billing data before exporting"}
+            leftIcon={<DownloadIcon className="h-3.5 w-3.5" />}
+          >
+            Export CSV
+          </UiButton>
+        }
       />
       <PageControlStrip
         label="Billing scope"
         title={selectedEndpoint?.name ?? "No Ceph endpoint selected"}
-        description="Choose the month, Ceph endpoint, and billing subject view used to aggregate costs and traffic."
+        description="Choose the month, Ceph endpoint, subject view, and ordering used to aggregate costs and traffic."
         controls={
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
               Month
               <input
                 type="month"
@@ -369,7 +458,7 @@ export default function BillingPage() {
                 className={toolbarCompactInputClasses}
               />
             </label>
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
               Endpoint
               <select
                 value={selectedEndpointId ?? ""}
@@ -384,7 +473,7 @@ export default function BillingPage() {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
               Subject
               <select
                 value={subjectType}
@@ -398,7 +487,7 @@ export default function BillingPage() {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
               Sort by
               <select
                 value={sortBy}
@@ -412,7 +501,7 @@ export default function BillingPage() {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
+            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
               Direction
               <select
                 value={sortDir}
@@ -423,25 +512,6 @@ export default function BillingPage() {
                 <option value="desc">Descending</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 ui-caption text-slate-600 dark:text-slate-300">
-              Collect day
-              <input
-                type="date"
-                value={collectDay}
-                onChange={(event) => setCollectDay(event.target.value)}
-                className={toolbarCompactInputClasses}
-              />
-            </label>
-            <button type="button" onClick={handleCollectDaily} disabled={collectLoading} className={toolbarCompactButtonClasses}>
-              {collectLoading ? "Collecting..." : "Collect daily"}
-            </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-            >
-              Export CSV
-            </button>
           </div>
         }
         items={[
@@ -453,13 +523,11 @@ export default function BillingPage() {
         alerts={!selectedEndpointId && pageError ? [{ tone: "warning", message: pageError }] : []}
       />
       {pageError && selectedEndpointId != null ? <PageBanner tone="error">{pageError}</PageBanner> : null}
-      {billingDisabled && (
+      {billingDisabled ? (
         <PageBanner tone="warning">
           Billing is disabled. Enable it in General settings to use this page.
         </PageBanner>
-      )}
-      {collectMessage && <PageBanner tone="success">{collectMessage}</PageBanner>}
-      {collectError && <PageBanner tone="error">{collectError}</PageBanner>}
+      ) : null}
       {!selectedEndpointId ? (
         <PageEmptyState
           title="No Ceph endpoint available for billing"
@@ -469,165 +537,249 @@ export default function BillingPage() {
         />
       ) : (
         <>
-      {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
-      {summaryLoading ? <PageBanner tone="info">Loading summary...</PageBanner> : <StatCards stats={stats} columns={3} />}
-
-      <div className="ui-surface-card">
-        <ListToolbar
-          title="Subjects"
-          description={selectedEndpoint ? `Monthly totals for ${selectedEndpoint.name}.` : "Monthly subject totals."}
-          countLabel={`${subjects.length} subject${subjects.length === 1 ? "" : "s"}`}
-        />
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950">
-              <tr>
-                <th className="px-4 py-3 text-left">Name</th>
-                <th className="px-4 py-3 text-left">Storage avg</th>
-                <th className="px-4 py-3 text-left">Egress</th>
-                <th className="px-4 py-3 text-left">Ingress</th>
-                <th className="px-4 py-3 text-left">Requests</th>
-                <th className="px-4 py-3 text-left">Cost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {subjectsTableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading subjects..." />}
-              {subjectsTableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load subjects." tone="error" />}
-              {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects." />}
-              {subjects.map((subject) => (
-                <tr
-                  key={`${subject.subject_type}-${subject.subject_id}`}
-                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                  onClick={() => void handleRowClick(subject)}
+          <section className="ui-surface-card">
+            <div className="flex flex-col gap-3 p-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className={cx("ui-body font-semibold", uiTitleTextClass)}>Manual daily collection</h2>
+                <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                  Run the billing collector for one UTC day when scheduler data is missing or stale.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
+                  Collect day
+                  <input
+                    type="date"
+                    value={collectDay}
+                    onChange={(event) => setCollectDay(event.target.value)}
+                    className={toolbarCompactInputClasses}
+                  />
+                </label>
+                <UiButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void handleCollectDaily()}
+                  loading={collectLoading}
+                  disabled={!canCollect}
+                  leftIcon={<RefreshIcon className={cx("h-3.5 w-3.5", collectLoading && "animate-spin")} />}
                 >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900 dark:text-slate-100">{subject.name}</div>
-                    <div className="text-xs text-slate-500">{subject.rgw_identifier ?? ""}</div>
-                  </td>
-                  <td className="px-4 py-3">{formatBytes(subject.storage.avg_bytes)}</td>
-                  <td className="px-4 py-3">{formatBytes(subject.usage.bytes_out)}</td>
-                  <td className="px-4 py-3">{formatBytes(subject.usage.bytes_in)}</td>
-                  <td className="px-4 py-3">{formatCompactNumber(subject.usage.ops_total)}</td>
-                  <td className="px-4 py-3">
-                    {subject.cost?.total_cost != null
-                      ? formatCurrency(subject.cost.total_cost, subject.cost.currency)
-                      : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  {collectLoading ? "Collecting..." : "Collect daily"}
+                </UiButton>
+              </div>
+            </div>
+            {collectMessage ? <PageBanner tone={collectionErrors.length > 0 ? "warning" : "success"} className="mx-4 mb-4">{collectMessage}</PageBanner> : null}
+            {collectError ? <PageBanner tone="error" className="mx-4 mb-4">{collectError}</PageBanner> : null}
+            {collectionErrors.length > 0 ? (
+              <div className={cx(uiCardMutedClass, "mx-4 mb-4 px-4 py-3")}>
+                <p className={cx("ui-caption font-semibold", uiTitleTextClass)}>Collection issues</p>
+                <ul className={cx("mt-2 space-y-1 ui-caption", uiMutedTextClass)}>
+                  {collectionErrors.slice(0, 5).map((entry, index) => (
+                    <li key={index}>
+                      {String(entry.subject ?? `endpoint ${entry.endpoint_id ?? "-"}`)}
+                      {entry.subject_id != null ? ` #${String(entry.subject_id)}` : ""}: {String(entry.error ?? "Unknown error")}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Subject detail</h3>
-            <p className="text-xs text-slate-500">Daily series for the selected subject.</p>
-          </div>
-          {detail?.name && <div className="text-xs text-slate-500">{detail.name}</div>}
-        </div>
-        {detailLoading && <PageBanner tone="info" className="mt-3">Loading detail...</PageBanner>}
-        {detailError && <PageBanner tone="error" className="mt-3">{detailError}</PageBanner>}
-        {!detailLoading && !detail && <PageBanner tone="info" className="mt-3">Select a subject to view charts.</PageBanner>}
-        {!detailLoading && detail && (
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Storage (daily)</h4>
-              <div className="mt-3 h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dailySeries}>
-                    <defs>
-                      <linearGradient id="storageFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(value) => formatBytes(Number(value) || 0)}
-                      domain={["dataMin", "dataMax"]}
-                    />
-                    <Tooltip formatter={(value) => formatBytes(value as number)} />
-                    <Area type="monotone" dataKey="storage_bytes" stroke="#3b82f6" fill="url(#storageFill)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+          {summaryError ? <PageBanner tone={billingDisabled ? "warning" : "error"}>{summaryError}</PageBanner> : null}
+          {lowCoverage ? (
+            <PageBanner tone="warning">
+              Billing coverage is partial for this month: {formatCoverage(summary?.coverage)}. Treat estimated cost as provisional.
+            </PageBanner>
+          ) : null}
+          {partialSources ? (
+            <PageBanner tone="warning">
+              Storage and usage sources do not cover the same number of days ({formatCoverageBreakdown(summary?.coverage)}).
+            </PageBanner>
+          ) : null}
+          {noRateCard ? (
+            <PageBanner tone="warning">
+              No matching rate card is attached for this scope. Usage totals are available, but estimated cost stays unavailable.
+            </PageBanner>
+          ) : null}
+          {summaryLoading ? <PageBanner tone="info">Loading summary...</PageBanner> : <StatCards stats={stats} columns={3} />}
+
+          <section className="ui-surface-card">
+            <ListToolbar
+              title="Subjects"
+              description={selectedEndpoint ? `Monthly totals for ${selectedEndpoint.name}.` : "Monthly subject totals."}
+              countLabel={`${subjectsTotal} subject${subjectsTotal === 1 ? "" : "s"}`}
+            />
+            {subjectsError ? <PageBanner tone="error" className="mx-4 mb-4">{subjectsError}</PageBanner> : null}
+            <div className={uiTableContainerClass}>
+              <table className={cx(uiDataTableClass, "min-w-[920px]")}>
+                <thead>
+                  <tr>
+                    <th className="text-left">Name</th>
+                    <th className="text-left">Storage avg</th>
+                    <th className="text-left">Egress</th>
+                    <th className="text-left">Ingress</th>
+                    <th className="text-left">Requests</th>
+                    <th className="text-left">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectsTableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading subjects..." />}
+                  {subjectsTableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load subjects." tone="error" />}
+                  {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects for this scope." />}
+                  {subjects.map((subject) => {
+                    const selected = detail?.subject_type === subject.subject_type && detail.subject_id === subject.subject_id;
+                    return (
+                      <tr
+                        key={`${subject.subject_type}-${subject.subject_id}`}
+                        className={cx(selected && "bg-[var(--ui-selected-bg)]")}
+                        aria-current={selected ? "true" : undefined}
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            className="text-left"
+                            onClick={() => void handleRowClick(subject)}
+                            aria-label={`View billing detail for ${subject.name}`}
+                          >
+                            <span className={cx("block font-medium", uiTitleTextClass)}>{subject.name}</span>
+                            <span className={cx("block ui-caption", uiMutedTextClass)}>{subject.rgw_identifier ?? "No RGW identifier"}</span>
+                          </button>
+                        </td>
+                        <td>{formatBytes(subject.storage.avg_bytes)}</td>
+                        <td>{formatBytes(subject.usage.bytes_out)}</td>
+                        <td>{formatBytes(subject.usage.bytes_in)}</td>
+                        <td>{formatCompactNumber(subject.usage.ops_total)}</td>
+                        <td>{subject.cost?.total_cost != null ? formatCurrency(subject.cost.total_cost, subject.cost.currency) : "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Traffic (daily)</h4>
-              <div className="mt-3 h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailySeries}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatBytes(Number(value) || 0)} />
-                    <Tooltip formatter={(value) => formatBytes(value as number)} />
-                    <Bar dataKey="traffic_bytes" fill="#0ea5e9" />
-                  </BarChart>
-                </ResponsiveContainer>
+            <PaginationControls
+              page={page}
+              pageSize={pageSize}
+              total={subjectsTotal}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              pageSizeOptions={[10, 25, 50, 100, 200]}
+              disabled={subjectsLoading}
+            />
+          </section>
+
+          <section className="ui-surface-card p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className={cx("ui-body font-semibold", uiTitleTextClass)}>Subject detail</h2>
+                <p className={cx("ui-caption", uiMutedTextClass)}>Daily storage, traffic, requests, coverage, and cost for the selected subject.</p>
               </div>
+              {detail?.name ? <div className={cx("ui-caption", uiMutedTextClass)}>{detail.name}</div> : null}
             </div>
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Requests (daily)</h4>
-              <div className="mt-3 h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailySeries}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} />
-                    <Tooltip formatter={(value) => formatCompactNumber(value as number)} />
-                    <Bar dataKey="ops_total" fill="#22c55e" />
-                  </BarChart>
-                </ResponsiveContainer>
+            {detailLoading ? <PageBanner tone="info" className="mt-3">Loading detail...</PageBanner> : null}
+            {detailError ? <PageBanner tone="error" className="mt-3">{detailError}</PageBanner> : null}
+            {!detailLoading && !detail ? <PageBanner tone="info" className="mt-3">Select a subject to view charts.</PageBanner> : null}
+            {!detailLoading && detail ? (
+              <div className="mt-4 space-y-4">
+                {hasPartialBillingSources(detail.coverage) ? (
+                  <PageBanner tone="warning">This subject has partial source coverage: {formatCoverageBreakdown(detail.coverage)}.</PageBanner>
+                ) : null}
+                {!detail.cost ? (
+                  <PageBanner tone="warning">No rate card matched this subject, so cost is unavailable.</PageBanner>
+                ) : null}
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {dailySeries.length > 0 ? (
+                    <>
+                      <div className={cx(uiCardMutedClass, "p-3")}>
+                        <h3 className={cx("ui-caption font-semibold", uiTitleTextClass)}>Storage (daily)</h3>
+                        <div className="mt-3 h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={dailySeries}>
+                              <defs>
+                                <linearGradient id="storageFill" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatBytes(Number(value) || 0)} domain={["dataMin", "dataMax"]} />
+                              <Tooltip formatter={(value) => formatBytes(value as number)} />
+                              <Area type="monotone" dataKey="storage_bytes" stroke="#3b82f6" fill="url(#storageFill)" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                      <div className={cx(uiCardMutedClass, "p-3")}>
+                        <h3 className={cx("ui-caption font-semibold", uiTitleTextClass)}>Traffic (daily)</h3>
+                        <div className="mt-3 h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={dailySeries}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatBytes(Number(value) || 0)} />
+                              <Tooltip formatter={(value) => formatBytes(value as number)} />
+                              <Bar dataKey="traffic_bytes" fill="#0ea5e9" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                      <div className={cx(uiCardMutedClass, "p-3")}>
+                        <h3 className={cx("ui-caption font-semibold", uiTitleTextClass)}>Requests (daily)</h3>
+                        <div className="mt-3 h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={dailySeries}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                              <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} />
+                              <Tooltip formatter={(value) => formatCompactNumber(value as number)} />
+                              <Bar dataKey="ops_total" fill="#22c55e" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="lg:col-span-3">
+                      <PageBanner tone="info">No daily billing points are available for this subject and month.</PageBanner>
+                    </div>
+                  )}
+                  <div className={cx(uiCardMutedClass, "p-3 lg:col-span-3")}>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Avg storage</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{formatBytes(detail.storage.avg_bytes)}</p>
+                      </div>
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Egress</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{formatBytes(detail.usage.bytes_out)}</p>
+                      </div>
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Ingress</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{formatBytes(detail.usage.bytes_in)}</p>
+                      </div>
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Requests</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{formatCompactNumber(detail.usage.ops_total)}</p>
+                      </div>
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Cost</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>
+                          {detail.cost?.total_cost != null ? formatCurrency(detail.cost.total_cost, detail.cost.currency) : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>Coverage</p>
+                        <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{formatCoverage(detail.coverage)}</p>
+                        <p className={cx("ui-caption", uiMutedTextClass)}>{formatCoverageBreakdown(detail.coverage)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800 lg:col-span-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <div>
-                  <p className="text-xs text-slate-500">Avg storage</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {formatBytes(detail.storage.avg_bytes)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Egress</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {formatBytes(detail.usage.bytes_out)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Ingress</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {formatBytes(detail.usage.bytes_in)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Requests</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {formatCompactNumber(detail.usage.ops_total)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Cost</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {detail.cost?.total_cost != null
-                      ? formatCurrency(detail.cost.total_cost, detail.cost.currency)
-                      : "-"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 text-xs text-slate-500">
-                Coverage: {Math.round(detail.coverage.coverage_ratio * 100)}% ({detail.coverage.days_collected}/
-                {detail.coverage.days_in_month} days)
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+            ) : null}
+          </section>
         </>
       )}
     </div>

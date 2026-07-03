@@ -51,6 +51,7 @@ export default function PortalUsagePage() {
   const [billing, setBilling] = useState<BillingSubjectDetail | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingUnavailable, setBillingUnavailable] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
   const [usageStatsLoading, setUsageStatsLoading] = useState(false);
   const [usageStatsError, setUsageStatsError] = useState<string | null>(null);
@@ -83,9 +84,9 @@ export default function PortalUsagePage() {
         ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" }) }] : []),
         ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: t({ en: "Usage history", fr: "Historique d'utilisation", de: "Nutzungsverlauf" }) }] : []),
         { id: "traffic" as const, label: t({ en: "Traffic", fr: "Trafic", de: "Traffic" }) },
-        { id: "billing" as const, label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) },
+        ...(generalSettings.billing_enabled ? [{ id: "billing" as const, label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }] : []),
       ],
-    [generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled, t]
+    [generalSettings.billing_enabled, generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled, t]
   );
 
   useEffect(() => {
@@ -156,24 +157,27 @@ export default function PortalUsagePage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi || !month) {
+    if (!generalSettings.billing_enabled || !hasAccountContext || !accountIdForApi || !month) {
       setBilling(null);
       setBillingLoading(false);
       setBillingUnavailable(false);
+      setBillingError(null);
       return () => {
         cancelled = true;
       };
     }
     setBillingLoading(true);
     setBillingUnavailable(false);
+    setBillingError(null);
     getPortalBillingMe(month, accountIdForApi)
       .then((data) => {
         if (!cancelled) setBilling(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setBilling(null);
           setBillingUnavailable(true);
+          setBillingError(extractApiError(err, t({ en: "Unable to load billing source.", fr: "Impossible de charger la source de facturation.", de: "Abrechnungsquelle kann nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -182,7 +186,7 @@ export default function PortalUsagePage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, month]);
+  }, [accountIdForApi, generalSettings.billing_enabled, hasAccountContext, month, t]);
 
   const storageBySpace = useMemo(() => {
     const usageSpaces = usage?.storage_spaces ?? [];
@@ -447,7 +451,7 @@ export default function PortalUsagePage() {
           ) : (
             <MetricsEmptyState>
               {billingUnavailable
-                ? t({ en: "Billing source is disabled or unavailable.", fr: "La source de facturation est désactivée ou indisponible.", de: "Abrechnungsquelle ist deaktiviert oder nicht verfügbar." })
+                ? billingError ?? t({ en: "Billing source is disabled or unavailable.", fr: "La source de facturation est désactivée ou indisponible.", de: "Abrechnungsquelle ist deaktiviert oder nicht verfügbar." })
                 : t({ en: "No billing source data available.", fr: "Aucune donnée de source de facturation disponible.", de: "Keine Daten aus der Abrechnungsquelle verfügbar." })}
             </MetricsEmptyState>
           )}

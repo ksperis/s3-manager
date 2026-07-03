@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   billingMock: vi.fn(),
   usageHistoryMock: vi.fn(),
   usageStatsMock: vi.fn(),
+  generalSettings: {
+    billing_enabled: true,
+    bucket_usage_stats_enabled: true,
+    usage_history_enabled: true,
+  },
   hookArgs: [] as unknown[],
   hookResult: {
     workspace: {
@@ -76,6 +81,10 @@ vi.mock("../../api/billing", () => ({
 vi.mock("../../api/portal", () => ({
   fetchPortalUsageHistoryTrends: (...args: unknown[]) => mocks.usageHistoryMock(...args),
   getPortalUsageStatsAggregate: (...args: unknown[]) => mocks.usageStatsMock(...args),
+}));
+
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({ generalSettings: mocks.generalSettings }),
 }));
 
 vi.mock("./usePortalWorkspaceData", () => ({
@@ -199,6 +208,9 @@ describe("PortalUsagePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hookArgs.length = 0;
+    mocks.generalSettings.billing_enabled = true;
+    mocks.generalSettings.bucket_usage_stats_enabled = true;
+    mocks.generalSettings.usage_history_enabled = true;
     mocks.hookResult.workspace = {
       spaces: [
         {
@@ -357,8 +369,21 @@ describe("PortalUsagePage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Billing" }));
     await waitFor(() => {
-      expect(screen.getByText("Billing source is disabled or unavailable.")).toBeInTheDocument();
+      expect(screen.getByText("billing disabled")).toBeInTheDocument();
     });
+  });
+
+  it("hides billing analytics when the billing feature is disabled", async () => {
+    mocks.generalSettings.billing_enabled = false;
+
+    render(<PortalUsagePage />);
+
+    expect(screen.queryByRole("button", { name: "Billing" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.usageStatsMock).toHaveBeenCalled();
+      expect(mocks.usageHistoryMock).toHaveBeenCalled();
+    });
+    expect(mocks.billingMock).not.toHaveBeenCalled();
   });
 
   it("keeps Other usage out of Storage Space drill-downs", async () => {
