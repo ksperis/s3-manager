@@ -107,8 +107,8 @@ def _sanitize_raw_payload(value: Any) -> Any:
 
 
 def _safe_bucket_feature_error(feature: FeatureRuleInventoryFeature, exc: RuntimeError) -> str:
-    message = str(exc)
-    message_lower = message.lower()
+    detail = str(exc)
+    message_lower = detail.lower()
     for code in SAFE_RUNTIME_ERROR_CODES:
         if code.lower() in message_lower:
             return code

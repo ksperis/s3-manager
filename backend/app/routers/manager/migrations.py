@@ -19,25 +19,32 @@ from app.models.bucket_migration import (
     BucketMigrationActionResponse,
     BucketMigrationCreateRequest,
     BucketMigrationDetail,
-    BucketMigrationEventView,
-    BucketMigrationItemView,
     BucketMigrationListResponse,
-    BucketMigrationView,
 )
 from app.routers.dependencies import (
     BucketMigrationAccessScope,
     get_audit_logger,
     get_current_bucket_migration_scope,
 )
-from app.routers.http_errors import raise_http_exception_from_exception
+from app.routers.http_errors import raise_http_exception_from_exception, sanitized_error_log_detail
 from app.services.audit_service import AuditService
 from app.services.bucket_migration_service import BucketMigrationService, get_bucket_migration_worker
+from app.services.mappers.bucket_migration import (
+    bucket_migration_to_detail as _migration_to_detail,
+    bucket_migration_to_view as _migration_to_view,
+)
 
 router = APIRouter(prefix="/manager/migrations", tags=["manager-migrations"])
 logger = logging.getLogger(__name__)
 
 _MIGRATION_STREAM_POLL_INTERVAL_SECONDS = 1.0
 _MIGRATION_STREAM_KEEPALIVE_INTERVAL_SECONDS = 15.0
+
+
+def _raise_migration_value_error(exc: ValueError) -> None:
+    raw_message = str(exc)
+    error_status = status.HTTP_404_NOT_FOUND if raw_message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+    raise HTTPException(status_code=error_status, detail=sanitized_error_log_detail(exc)) from exc
 
 
 def _format_sse_event(event: str, payload: dict[str, object], *, event_id: Optional[int] = None) -> str:
@@ -77,105 +84,6 @@ def _compute_migration_stream_signature(
         migration_updated_at.isoformat() if migration_updated_at else "",
         max_item_updated_at.isoformat() if max_item_updated_at else "",
         int(max_event_id or 0),
-    )
-
-
-def _load_json(value: Optional[str]) -> Optional[dict]:
-    if not value:
-        return None
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return None
-    return parsed if isinstance(parsed, dict) else {"value": parsed}
-
-
-def _item_to_view(item: BucketMigrationItem) -> BucketMigrationItemView:
-    return BucketMigrationItemView(
-        id=item.id,
-        source_bucket=item.source_bucket,
-        target_bucket=item.target_bucket,
-        status=item.status,
-        step=item.step,
-        pre_sync_done=bool(item.pre_sync_done),
-        read_only_applied=bool(item.read_only_applied),
-        target_lock_applied=bool(item.target_lock_applied),
-        target_bucket_exists=bool(item.target_bucket_exists),
-        objects_copied=int(item.objects_copied or 0),
-        objects_deleted=int(item.objects_deleted or 0),
-        source_count=item.source_count,
-        target_count=item.target_count,
-        matched_count=item.matched_count,
-        different_count=item.different_count,
-        only_source_count=item.only_source_count,
-        only_target_count=item.only_target_count,
-        diff_sample=_load_json(item.diff_sample_json),
-        error_message=item.error_message,
-        started_at=item.started_at,
-        finished_at=item.finished_at,
-        created_at=item.created_at,
-        updated_at=item.updated_at,
-    )
-
-
-def _event_to_view(entry: BucketMigrationEvent) -> BucketMigrationEventView:
-    return BucketMigrationEventView(
-        id=entry.id,
-        item_id=entry.item_id,
-        level=entry.level,
-        message=entry.message,
-        metadata=_load_json(entry.metadata_json),
-        created_at=entry.created_at,
-    )
-
-
-def _migration_to_view(migration: BucketMigration) -> BucketMigrationView:
-    return BucketMigrationView(
-        id=migration.id,
-        created_by_user_id=migration.created_by_user_id,
-        source_context_id=migration.source_context_id,
-        target_context_id=migration.target_context_id,
-        mode=migration.mode,
-        copy_bucket_settings=bool(migration.copy_bucket_settings),
-        delete_source=bool(migration.delete_source),
-        strong_integrity_check=bool(getattr(migration, "strong_integrity_check", False)),
-        lock_target_writes=bool(migration.lock_target_writes),
-        use_same_endpoint_copy=bool(migration.use_same_endpoint_copy),
-        auto_grant_source_read_for_copy=bool(migration.auto_grant_source_read_for_copy),
-        webhook_url=migration.webhook_url,
-        mapping_prefix=migration.mapping_prefix,
-        status=migration.status,
-        pause_requested=bool(migration.pause_requested),
-        cancel_requested=bool(migration.cancel_requested),
-        precheck_status=(migration.precheck_status or "pending"),
-        precheck_report=_load_json(migration.precheck_report_json),
-        precheck_checked_at=migration.precheck_checked_at,
-        parallelism_max=int(migration.parallelism_max or 1),
-        total_items=int(migration.total_items or 0),
-        completed_items=int(migration.completed_items or 0),
-        failed_items=int(migration.failed_items or 0),
-        skipped_items=int(migration.skipped_items or 0),
-        awaiting_items=int(migration.awaiting_items or 0),
-        error_message=migration.error_message,
-        started_at=migration.started_at,
-        finished_at=migration.finished_at,
-        last_heartbeat_at=migration.last_heartbeat_at,
-        created_at=migration.created_at,
-        updated_at=migration.updated_at,
-    )
-
-
-def _migration_to_detail(
-    migration: BucketMigration,
-    *,
-    items: list[BucketMigrationItem],
-    recent_events: list[BucketMigrationEvent],
-) -> BucketMigrationDetail:
-    base = _migration_to_view(migration)
-    return BucketMigrationDetail(
-        **base.model_dump(),
-        items=[_item_to_view(item) for item in items],
-        recent_events=[_event_to_view(event) for event in recent_events],
     )
 
 
@@ -328,9 +236,7 @@ def delete_migration(
     try:
         service.delete_migration(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,
@@ -396,9 +302,7 @@ def update_migration(
     except PermissionError as exc:
         raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,
@@ -437,9 +341,7 @@ def run_migration_precheck(
     except PermissionError as exc:
         raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,
@@ -467,9 +369,7 @@ def start_migration(
     except PermissionError as exc:
         raise_http_exception_from_exception(status.HTTP_403_FORBIDDEN, exc)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -494,9 +394,7 @@ def pause_migration(
     try:
         migration = service.request_pause(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -521,9 +419,7 @@ def resume_migration(
     try:
         migration = service.resume_migration(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -548,9 +444,7 @@ def stop_migration(
     try:
         migration = service.stop_migration(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -575,9 +469,7 @@ def continue_after_presync(
     try:
         migration = service.continue_after_presync(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -602,9 +494,7 @@ def rollback_migration(
     try:
         migration = service.rollback_failed_migration(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,
@@ -628,9 +518,7 @@ def retry_failed_items(
     try:
         migration, retried_count = service.retry_failed_items(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -660,9 +548,7 @@ def rollback_failed_items(
     try:
         migration, rolled_back_count = service.rollback_failed_items(migration_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,
@@ -692,9 +578,7 @@ def retry_item(
     try:
         migration = service.retry_item(migration_id, item_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     _worker_wake_up()
     audit.record_action(
@@ -724,9 +608,7 @@ def rollback_item(
     try:
         migration = service.rollback_item(migration_id, item_id)
     except ValueError as exc:
-        message = str(exc)
-        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=error_status, detail=message) from exc
+        _raise_migration_value_error(exc)
 
     audit.record_action(
         user=current_user,

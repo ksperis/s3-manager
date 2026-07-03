@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.s3_connection import S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
+from app.services.mappers.s3_connection import mask_access_key_id, s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import (
@@ -19,7 +20,6 @@ from app.utils.s3_connection_capabilities import (
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
     parse_custom_endpoint_config,
-    resolve_connection_details,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
 from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
@@ -310,39 +310,14 @@ class S3ConnectionsService:
         return caps
 
     def _to_model(self, row: DBS3Connection) -> S3Connection:
-        masked_access_key = self._mask_access_key_id(row.access_key_id)
-        details = resolve_connection_details(row)
-        return S3Connection(
-            id=row.id,
-            name=row.name,
-            provider_hint=details.provider,
-            storage_endpoint_id=row.storage_endpoint_id,
-            created_by_user_id=row.created_by_user_id,
-            is_shared=bool(row.is_shared),
-            is_active=bool(row.is_active),
-            access_manager=bool(row.access_manager),
-            access_browser=bool(row.access_browser),
-            credential_owner_type=row.credential_owner_type,
-            credential_owner_identifier=row.credential_owner_identifier,
-            endpoint_url=details.endpoint_url or "",
-            region=details.region,
-            access_key_id=masked_access_key,
-            force_path_style=details.force_path_style,
-            verify_tls=details.verify_tls,
+        return s3_connection_from_db(
+            row,
             capabilities=self._capabilities(row),
             tags=self.tags.get_connection_tags(row),
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            last_used_at=row.last_used_at,
         )
 
     def _mask_access_key_id(self, value: str) -> str:
-        if not value:
-            return ""
-        trimmed = value.strip()
-        if len(trimmed) <= 8:
-            return "***" + trimmed[-2:]
-        return f"{trimmed[:4]}***{trimmed[-4:]}"
+        return mask_access_key_id(value)
 
     def _validate_manual_endpoint(self, endpoint_url: Optional[str], verify_tls: bool) -> str:
         normalized = (endpoint_url or "").strip()

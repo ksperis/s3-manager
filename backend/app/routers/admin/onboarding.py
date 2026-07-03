@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.db import User
 from app.models.onboarding import OnboardingStatus
-from app.routers.dependencies import get_current_super_admin
+from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.services.audit_service import AuditService
 from app.services.app_settings_service import load_app_settings, save_app_settings
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.onboarding import seed_login_active
@@ -37,7 +39,8 @@ def get_onboarding_status(
 @router.post("/dismiss", response_model=OnboardingStatus)
 def dismiss_onboarding(
     db: Session = Depends(get_db),
-    _: None = Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
 ) -> OnboardingStatus:
     status = _build_status(db)
     if not status.can_dismiss:
@@ -48,5 +51,15 @@ def dismiss_onboarding(
     settings = load_app_settings()
     settings.onboarding.dismissed = True
     save_app_settings(settings)
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="onboarding.dismiss",
+        entity_type="onboarding",
+        entity_id="global",
+        metadata={
+            "seed_user_configured": status.seed_user_configured,
+            "endpoint_configured": status.endpoint_configured,
+        },
+    )
     return _build_status(db)
-

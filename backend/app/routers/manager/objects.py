@@ -10,6 +10,7 @@ from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
 from app.services.audit_service import AuditService
 from app.services.objects_service import ObjectsService, get_objects_service
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/buckets/{bucket_name}/objects", tags=["manager-objects"])
 
@@ -44,7 +45,7 @@ def list_objects(
     try:
         return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
@@ -86,7 +87,7 @@ async def upload_object(
         )
         return UploadResponse(key=target_key, message="Uploaded")
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/folders", status_code=status.HTTP_201_CREATED)
@@ -111,7 +112,7 @@ def create_folder(
         )
         return {"message": "Folder created", "prefix": payload.prefix}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/delete")
@@ -142,7 +143,7 @@ def delete_objects(
         )
         return {"message": f"Deleted {len(payload.keys)} object(s)"}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/download", response_model=DownloadResponse)
@@ -160,4 +161,4 @@ def get_download_url(
         url = service.generate_download_url(bucket_name, account, key, expires_in=expires_in)
         return DownloadResponse(url=url, expires_in=expires_in)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc

@@ -18,6 +18,7 @@ from app.models.user import ManagerToolAccess
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/groups", tags=["admin-groups"])
 
@@ -102,7 +103,7 @@ def create_group(
         )
         return groups_service.group_to_out(group)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.put("/{group_id}", response_model=UiGroupOut)
@@ -130,7 +131,7 @@ def update_group(
         )
         return groups_service.group_to_out(group)
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if detail.lower() == "ui group not found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -155,4 +156,4 @@ def delete_group(
             metadata={"name": group_name} if group_name else None,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc

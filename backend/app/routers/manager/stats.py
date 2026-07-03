@@ -27,6 +27,7 @@ from app.services.traffic_service import TrafficService, TrafficWindow
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.usage_history_service import UsageHistoryService
 from app.utils.s3_endpoint import resolve_iam_client_options
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 
@@ -171,11 +172,11 @@ def account_traffic(
     try:
         service = TrafficService(account)
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=sanitize_error_detail(str(exc))) from exc
     try:
         return service.get_traffic(window=window, bucket=bucket)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=sanitize_error_detail(str(exc))) from exc
     except RGWAdminError as exc:
         raise HTTPException(status_code=502, detail=f"Unable to fetch traffic logs: {exc}") from exc
 

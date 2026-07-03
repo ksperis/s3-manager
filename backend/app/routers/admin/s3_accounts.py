@@ -28,6 +28,7 @@ from app.services.audit_service import AuditService
 from app.services.portal_service import get_portal_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.tags_service import serialize_tag_summaries
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ def get_account(
     try:
         return service.get_account_detail(account_id, include_usage=include_usage)
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -207,7 +208,7 @@ def create_account(
         )
         return created
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/import", response_model=list[S3Account])
@@ -230,7 +231,7 @@ def import_accounts(
         )
         return imported
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.put("/{account_id}", response_model=S3Account)
@@ -257,7 +258,7 @@ def update_account(
         )
         return updated
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -282,7 +283,7 @@ def delete_account(
             metadata={"delete_rgw": delete_rgw, "account_id": account_id},
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/{account_id}/unlink", status_code=status.HTTP_204_NO_CONTENT)
@@ -304,6 +305,6 @@ def unlink_account(
             metadata={"account_id": account_id},
         )
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc

@@ -26,6 +26,7 @@ from app.models.s3_account import (
     S3AccountSummary,
     S3AccountUpdate,
 )
+from app.services.mappers.s3_account import s3_account_from_db, s3_account_summary_from_db
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -637,17 +638,13 @@ class S3AccountsService:
                 )
                 rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
             results.append(
-                S3AccountSchema(
-                    id=str(account_identifier),
-                    db_id=acc.id,
-                    name=acc.name,
-                    rgw_account_id=acc.rgw_account_id,
-                    rgw_user_uid=acc.rgw_user_uid,
+                s3_account_from_db(
+                    acc,
+                    public_id=str(account_identifier),
                     quota_max_size_gb=quota_max_size_gb,
                     quota_max_objects=quota_max_objects,
                     root_user_email=root_meta[0] if root_meta else None,
                     root_user_id=root_meta[1] if root_meta else None,
-                    email=acc.email,
                     used_bytes=used_bytes,
                     used_objects=used_objects,
                     rgw_user_count=rgw_user_count,
@@ -659,11 +656,8 @@ class S3AccountsService:
                     user_links=user_links_by_account.get(acc.id),
                     group_ids=group_ids_by_account.get(acc.id),
                     group_links=group_links_by_account.get(acc.id),
-                    storage_endpoint_id=endpoint.id if endpoint else None,
-                    storage_endpoint_name=endpoint.name if endpoint else None,
-                    storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                    storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
+                    storage_endpoint=endpoint,
+                    storage_endpoint_capabilities=endpoint_capabilities,
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -678,20 +672,15 @@ class S3AccountsService:
         for acc in db_accounts:
             endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
             summaries.append(
-                S3AccountSummary(
-                    id=acc.rgw_account_id or str(acc.id),
-                    db_id=acc.id,
-                    name=acc.name,
-                    rgw_account_id=acc.rgw_account_id,
+                s3_account_summary_from_db(
+                    acc,
+                    public_id=acc.rgw_account_id or str(acc.id),
                     user_ids=user_ids_by_account.get(acc.id),
                     user_links=user_links_by_account.get(acc.id),
                     group_ids=group_ids_by_account.get(acc.id),
                     group_links=group_links_by_account.get(acc.id),
-                    storage_endpoint_id=endpoint.id if endpoint else None,
-                    storage_endpoint_name=endpoint.name if endpoint else None,
-                    storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    storage_endpoint=endpoint,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-                    allow_manager_bucket_quota=bool(acc.allow_manager_bucket_quota),
                     tags=self.tags.get_account_tags(acc),
                 )
             )
@@ -731,17 +720,13 @@ class S3AccountsService:
                 endpoint_capabilities=endpoint_capabilities,
             )
             rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
-        return S3AccountSchema(
-            id=account_identifier,
-            db_id=account.id,
-            name=account.name,
-            rgw_account_id=account.rgw_account_id,
-            rgw_user_uid=account.rgw_user_uid,
+        return s3_account_from_db(
+            account,
+            public_id=account_identifier,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             root_user_email=root_user[0] if root_user else None,
             root_user_id=root_user[1] if root_user else None,
-            email=account.email,
             used_bytes=used_bytes,
             used_objects=used_objects,
             bucket_count=bucket_count,
@@ -753,11 +738,8 @@ class S3AccountsService:
             user_links=user_links,
             group_ids=group_ids,
             group_links=group_links,
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
+            storage_endpoint=endpoint,
+            storage_endpoint_capabilities=endpoint_capabilities,
             tags=self.tags.get_account_tags(account),
         )
 
@@ -839,25 +821,19 @@ class S3AccountsService:
             self.db.add(account)
             self.db.flush()
             created.append(
-                S3AccountSchema(
-                    id=str(account.id),
-                    db_id=account.id,
-                    name=account.name,
-                    rgw_account_id=account.rgw_account_id,
-                    rgw_user_uid=account.rgw_user_uid,
+                s3_account_from_db(
+                    account,
+                    public_id=str(account.id),
                     root_user_email=root_uid,
                     root_user_id=None,
                     quota_max_size_gb=None,
                     quota_max_objects=None,
-                    email=account.email,
                     user_ids=[],
                     user_links=[],
                     group_ids=[],
                     group_links=[],
-                    storage_endpoint_id=endpoint.id if endpoint else None,
-                    storage_endpoint_name=endpoint.name if endpoint else None,
+                    storage_endpoint=endpoint,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-                    allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
                     tags=[],
                 )
             )
@@ -928,25 +904,19 @@ class S3AccountsService:
 
         self.db.commit()
         self.db.refresh(account)
-        return S3AccountSchema(
-            id=str(account.id),
-            db_id=account.id,
-            name=account.name,
-            rgw_account_id=account.rgw_account_id,
-            rgw_user_uid=account.rgw_user_uid,
+        return s3_account_from_db(
+            account,
+            public_id=str(account.id),
             root_user_email=root_uid,
             root_user_id=None,
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            email=account.email,
             user_ids=[],
             user_links=[],
             group_ids=[],
             group_links=[],
-            storage_endpoint_id=endpoint.id,
-            storage_endpoint_name=endpoint.name,
+            storage_endpoint=endpoint,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 
@@ -1102,25 +1072,19 @@ class S3AccountsService:
         endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
-        return S3AccountSchema(
-            id=str(account.id),
-            db_id=account.id,
-            name=account.name,
-            rgw_account_id=account.rgw_account_id,
-            rgw_user_uid=account.rgw_user_uid,
+        return s3_account_from_db(
+            account,
+            public_id=str(account.id),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
             root_user_email=None,
             root_user_id=None,
-            email=account.email,
             user_ids=user_ids,
             user_links=user_links,
             group_ids=group_ids,
             group_links=group_links,
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
+            storage_endpoint=endpoint,
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-            allow_manager_bucket_quota=bool(account.allow_manager_bucket_quota),
             tags=self.tags.get_account_tags(account),
         )
 

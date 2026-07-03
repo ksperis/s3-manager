@@ -51,6 +51,7 @@ from app.utils.s3_connection_endpoint import (
     resolve_connection_details,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
+from app.routers.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
 logger = logging.getLogger(__name__)
 
@@ -349,7 +350,7 @@ def validate_s3_connection_credentials(
         detail = exc.args[0] if exc.args else "Storage endpoint not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("", response_model=S3ConnectionAdminItem, status_code=status.HTTP_201_CREATED)

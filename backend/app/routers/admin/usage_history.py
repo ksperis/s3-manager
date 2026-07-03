@@ -16,6 +16,7 @@ from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.quota_monitoring_service import QuotaMonitoringService
 from app.services.usage_history_service import UsageHistoryService
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/usage-history", tags=["admin-usage-history"])
 
@@ -103,7 +104,7 @@ def collect_usage_history(
     try:
         result = service.run_monitor(include_quota_alerts=False, include_usage_history=True)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
     audit_service.record_action(
         user=current_user,

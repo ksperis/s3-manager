@@ -20,6 +20,7 @@ from app.models.user import (
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.users_service import UsersService, get_users_service
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -137,7 +138,7 @@ def create_user(
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.put("/{user_id}", response_model=UserOut)
@@ -168,7 +169,7 @@ def update_user(
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if detail.lower() == "user not found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -192,7 +193,7 @@ def delete_user(
             entity_id=str(user_id),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/{user_id}/assign-account", response_model=UserOut)
@@ -226,4 +227,4 @@ def assign_account(
         )
         return users_service.user_to_out(user)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc

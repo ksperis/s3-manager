@@ -18,6 +18,7 @@ from app.models.key_rotation import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
+from app.routers.http_errors import sanitized_error_log_detail
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class KeyRotationService:
                         target_id=str(endpoint.id),
                         target_label=endpoint.name,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 ],
                 0,
@@ -268,7 +269,7 @@ class KeyRotationService:
                         target_id=str(account.id),
                         target_label=account_label,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 )
 
@@ -371,7 +372,7 @@ class KeyRotationService:
                         target_id=str(endpoint.id),
                         target_label=endpoint.name,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 ],
                 0,
@@ -434,7 +435,7 @@ class KeyRotationService:
                         target_id=str(endpoint.id),
                         target_label=endpoint.name,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 ],
                 0,
@@ -525,7 +526,7 @@ class KeyRotationService:
                         target_id=str(s3_user.id),
                         target_label=user_label,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 )
 
@@ -612,7 +613,7 @@ class KeyRotationService:
                         target_id=str(endpoint.id),
                         target_label=endpoint.name,
                         status="failed",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 ],
                 0,

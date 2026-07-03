@@ -21,6 +21,7 @@ SIGNAL_FIELDS = {
     "delegated_browser_audit": "_common_record_browser_action(",
     "delegated_ceph_admin_audit": "record_ceph_admin_action(",
     "delegated_ceph_admin_bucket_config_audit": "_record_bucket_config_mutation(",
+    "delegated_ceph_admin_bucket_config_wrapper": "_run_bucket_config_",
     "delegated_purge_stream": "stream_bucket_purge(",
     "delegated_integrity_stream": "stream_bucket_integrity_check(",
 }
@@ -136,6 +137,7 @@ def render_markdown(backend_root: Path) -> str:
         if row.signals["delegated_browser_audit"]
         or row.signals["delegated_ceph_admin_audit"]
         or row.signals["delegated_ceph_admin_bucket_config_audit"]
+        or row.signals["delegated_ceph_admin_bucket_config_wrapper"]
         or row.signals["delegated_purge_stream"]
         or row.signals["delegated_integrity_stream"]
     ]
@@ -183,6 +185,8 @@ def render_markdown(backend_root: Path) -> str:
         delegated_signal = (
             row.signals["delegated_browser_audit"]
             or row.signals["delegated_ceph_admin_audit"]
+            or row.signals["delegated_ceph_admin_bucket_config_audit"]
+            or row.signals["delegated_ceph_admin_bucket_config_wrapper"]
             or row.signals["delegated_purge_stream"]
             or row.signals["delegated_integrity_stream"]
         )

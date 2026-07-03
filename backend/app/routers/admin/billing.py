@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import StorageEndpoint, StorageProvider
+from app.db import StorageEndpoint, StorageProvider, User
 from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, BillingSummary
-from app.routers.dependencies import get_current_super_admin
+from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.http_errors import sanitize_error_detail
+from app.services.audit_service import AuditService
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
 from app.utils.http_headers import build_attachment_content_disposition
@@ -58,22 +60,36 @@ def billing_summary(
     try:
         return service.summary(month, endpoint_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/collect/daily")
 def billing_collect_daily(
     day: str = Query(..., description="UTC day YYYY-MM-DD"),
-    _: dict = Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_billing_enabled()
     parsed = _parse_day(day)
     collector = BillingCollector(db)
     try:
-        return collector.collect_daily(parsed)
+        result = collector.collect_daily(parsed)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="billing.collect_daily",
+        entity_type="billing_collection",
+        entity_id=parsed.isoformat(),
+        metadata={
+            "day": parsed.isoformat(),
+            "manual_trigger": True,
+            "errors_count": len(result.get("errors") or []) if isinstance(result, dict) else None,
+        },
+    )
+    return result
 
 
 @router.get("/subjects", response_model=BillingSubjectsResponse)
@@ -94,7 +110,7 @@ def billing_subjects(
     try:
         return service.list_subjects(month, endpoint_id, subject_type, page, page_size, sort_by, sort_dir)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/subject/{subject_type}/{subject_id}", response_model=BillingSubjectDetail)
@@ -112,7 +128,7 @@ def billing_subject_detail(
     try:
         return service.subject_detail(month, endpoint_id, subject_type, subject_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/export.csv")
@@ -128,6 +144,6 @@ def billing_export_csv(
     try:
         filename, payload = service.export_csv(month, endpoint_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     headers = {"Content-Disposition": build_attachment_content_disposition(filename)}
     return Response(content=payload, media_type="text/csv", headers=headers)

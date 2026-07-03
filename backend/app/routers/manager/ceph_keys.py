@@ -15,6 +15,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/ceph/keys", tags=["manager-ceph-keys"])
 
@@ -36,7 +37,7 @@ def _resolve_s3_user_id(account: S3Account) -> int:
 
 
 def _translate_s3_user_error(exc: ValueError) -> HTTPException:
-    detail = str(exc)
+    detail = sanitize_error_detail(str(exc))
     code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
     return HTTPException(status_code=code, detail=detail)
 

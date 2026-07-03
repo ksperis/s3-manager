@@ -25,6 +25,7 @@ from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.storage_endpoint_ordering import endpoint_name_order_by
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
 
@@ -224,7 +225,7 @@ def get_ceph_admin_endpoint_info(
     try:
         payload = ctx.rgw_admin.get_info(allow_not_found=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
     if not isinstance(payload, dict) or not payload:
         return CephAdminRgwInfoSummary()
     return _summarize_rgw_info(payload)

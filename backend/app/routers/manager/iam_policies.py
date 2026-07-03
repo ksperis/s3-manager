@@ -11,6 +11,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.policies_service import PoliciesService, get_policies_service
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/iam/policies", tags=["manager-iam-policies"])
 
@@ -19,7 +20,7 @@ def get_account_and_service(account: S3Account) -> tuple[S3Account, PoliciesServ
     try:
         service = get_policies_service(account)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     return account, service
 
 
@@ -32,7 +33,7 @@ def list_policies(
     try:
         return service.list_policies()
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/{policy_arn}", response_model=Policy)
@@ -69,9 +70,9 @@ def create_policy(
         )
         return result
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.delete("/{policy_arn}", status_code=status.HTTP_204_NO_CONTENT)
@@ -93,4 +94,4 @@ def delete_policy(
             account=account,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc

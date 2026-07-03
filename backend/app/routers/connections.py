@@ -22,6 +22,7 @@ from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.utils.tagging import TAG_DOMAIN_PRIVATE_CONNECTION_USER
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -76,7 +77,7 @@ def validate_connection_credentials(
         detail = exc.args[0] if exc.args else "Storage endpoint not found"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("", response_model=S3Connection, status_code=status.HTTP_201_CREATED)
@@ -113,7 +114,7 @@ def create_connection(
         )
         return created
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc)))
     except Exception as exc:
         # Avoid leaking internal details or sensitive hints.
         raise HTTPException(
@@ -163,7 +164,7 @@ def update_connection(
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc)))
 
 
 @router.put("/{connection_id}/credentials", response_model=S3Connection)

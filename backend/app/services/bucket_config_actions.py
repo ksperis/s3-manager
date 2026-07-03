@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, TypeVar
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 
 from app.db import S3Account
 from app.models.bucket import (
@@ -52,6 +52,63 @@ def _map_value_and_runtime_errors(fn: Callable[[], _T]) -> _T:
         raise_bad_request_from_value_error(exc)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+def bucket_config_audit_metadata(
+    *,
+    config_area: str,
+    operation: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    audit_metadata: dict[str, Any] = {
+        "config_area": config_area,
+        "operation": operation,
+    }
+    if metadata:
+        audit_metadata.update(metadata)
+    return audit_metadata
+
+
+def no_content_response() -> Response:
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def apply_bucket_config_update(
+    *,
+    service: BucketsService,
+    account: S3Account,
+    bucket_name: str,
+    action: Callable[..., tuple[_T, dict[str, Any]]],
+    audit_recorder: Callable[[dict[str, Any]], None],
+    **kwargs: Any,
+) -> _T:
+    response, audit_metadata = action(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        **kwargs,
+    )
+    audit_recorder(audit_metadata)
+    return response
+
+
+def apply_bucket_config_delete(
+    *,
+    service: BucketsService,
+    account: S3Account,
+    bucket_name: str,
+    action: Callable[..., None],
+    audit_recorder: Callable[[dict[str, Any]], None],
+    **kwargs: Any,
+) -> Response:
+    action(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        **kwargs,
+    )
+    audit_recorder({})
+    return no_content_response()
 
 
 def list_bucket_configs(

@@ -27,6 +27,7 @@ from app.routers.dependencies import (
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
 from app.services.audit_service import AuditService
 from app.services.tags_service import serialize_tag_summaries
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/s3-users", tags=["admin-s3-users"])
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def create_s3_user(
         )
         return created
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/{user_id}", response_model=S3User)
@@ -109,7 +110,7 @@ def get_s3_user(
     try:
         return service.get_user(user_id, include_buckets=include_buckets, include_quota=include_quota)
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -133,7 +134,7 @@ def import_s3_users(
         )
         return created
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.put("/{user_id}", response_model=S3User)
@@ -156,7 +157,7 @@ def update_s3_user(
         )
         return updated
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -180,7 +181,7 @@ def rotate_s3_user_keys(
         )
         return updated
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -194,7 +195,7 @@ def list_s3_user_keys(
     try:
         return service.list_keys(user_id)
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -218,7 +219,7 @@ def create_s3_user_access_key(
         )
         return key
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -244,7 +245,7 @@ def update_s3_user_access_key_status(
         )
         return updated
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -268,7 +269,7 @@ def delete_s3_user_access_key(
             metadata={"access_key_id": access_key},
         )
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
@@ -292,6 +293,6 @@ def delete_s3_user(
             metadata={"delete_rgw": delete_rgw},
         )
     except ValueError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc

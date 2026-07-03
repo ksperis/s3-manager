@@ -224,8 +224,8 @@ def _is_version_listing_unsupported(exc: Exception) -> bool:
     code = _storage_error_code(exc)
     if code in {"notimplemented", "notsupported", "unsupported", "methodnotallowed", "notallowed"}:
         return True
-    message = str(exc).lower()
-    return any(marker in message for marker in ("not implemented", "not supported", "unsupported operation"))
+    detail = str(exc).lower()
+    return any(marker in detail for marker in ("not implemented", "not supported", "unsupported operation"))
 
 
 def _format_storage_error(exc: Exception) -> str:

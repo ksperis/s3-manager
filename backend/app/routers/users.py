@@ -14,6 +14,7 @@ from app.services.audit_service import AuditService
 from app.services.user_notifications_service import UserNotificationsService
 from app.services.users_service import UsersService, get_users_service
 from app.core.database import get_db
+from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -78,7 +79,7 @@ def update_users_me(
             new_password=payload.new_password,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 
     audit_metadata = payload.model_dump(exclude_none=True)
     if "current_password" in audit_metadata:

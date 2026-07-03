@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.db import S3Account
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketFilterRule, CephAdminBucketSummary
 from app.services.buckets_service import BucketsService
+from app.routers.http_errors import sanitize_error_detail
 
 
 def parse_includes(include: list[str]) -> set[str]:
@@ -59,7 +60,7 @@ def _parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQue
             try:
                 return None, CephAdminBucketFilterQuery.model_validate(parsed)
             except ValidationError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     return text, None
 
 

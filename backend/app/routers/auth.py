@@ -195,13 +195,22 @@ def revoke_api_token(
 def register_admin(
     payload: UserCreate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    _: dict = Depends(get_current_ui_superadmin),
+    current_user: User = Depends(get_current_ui_superadmin),
+    audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
     try:
         user = users_service.create_super_admin(payload)
-        return users_service.user_to_out(user)
     except ValueError as exc:
         raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="register_admin",
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"email": user.email, "role": user.role},
+    )
+    return users_service.user_to_out(user)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -529,17 +538,38 @@ def list_oidc_providers(
 
 @router.post("/oidc/{provider_id}/start", response_model=OIDCStartResponse)
 def start_oidc_login(
+    request: Request,
     provider_id: str,
     payload: Optional[OIDCStartRequest] = None,
     oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
+    audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, str]:
     redirect_path = payload.redirect_path if payload else None
     try:
-        return oidc_service.start_login(provider_id, redirect_path)
+        result = oidc_service.start_login(provider_id, redirect_path)
     except OIDCProviderNotFoundError as exc:
         raise_http_exception_from_exception(status.HTTP_404_NOT_FOUND, exc)
     except OIDCConfigurationError as exc:
         raise_http_exception_from_exception(status.HTTP_400_BAD_REQUEST, exc)
+    ip_address, user_agent, request_id = _request_audit_context(request)
+    provider_key = provider_id.lower()
+    audit_service.record_action(
+        user=None,
+        user_email=f"oidc:{provider_key}",
+        user_role="anonymous",
+        scope="auth",
+        action="start_oidc_login",
+        entity_type="oidc_session",
+        entity_id=provider_key,
+        metadata={
+            "provider": provider_key,
+            "redirect_path_provided": bool(redirect_path),
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
+    return result
 
 
 @router.post("/oidc/{provider_id}/callback", response_model=OidcCallbackResponse)
@@ -590,9 +620,11 @@ def complete_oidc_login(
 
 @router.post("/refresh", response_model=Token)
 def refresh_access_token(
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
     refresh_token: Optional[str] = Cookie(None, alias=settings.refresh_token_cookie_name),
+    audit_service: AuditService = Depends(get_audit_logger),
 ) -> Token:
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
@@ -603,11 +635,20 @@ def refresh_access_token(
             refresh_service.revoke(session)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    audit_user: User | None = None
+    audit_user_email: str | None = None
+    audit_user_role: str | None = None
+    audit_metadata: dict[str, object] = {
+        "auth_type": session.auth_type,
+        "session_kind": "user" if session.user_id else "s3_session" if session.s3_session_id else "unknown",
+    }
     if session.user_id:
         user = db.query(User).filter(User.id == session.user_id).first()
         if not user or not user.is_active:
             refresh_service.revoke(session)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not available")
+        audit_user = user
+        audit_metadata["user_id"] = user.id
         token = create_access_token(
             data={"sub": user.email, "role": user.role, "uid": user.id},
             expires_delta=access_token_expires,
@@ -617,6 +658,10 @@ def refresh_access_token(
         if not principal:
             refresh_service.revoke(session)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
+        audit_user_email, audit_user_role = principal.audit_fallbacks()
+        audit_metadata["s3_session_id"] = principal.session_id
+        audit_metadata["actor_type"] = principal.actor_type
+        audit_metadata["account_id"] = principal.account_id
         token = create_access_token(
             data={"sid": principal.session_id, "auth_type": "s3_session"},
             expires_delta=access_token_expires,
@@ -624,20 +669,68 @@ def refresh_access_token(
     else:
         refresh_service.revoke(session)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    refresh_session_id = session.id
     new_refresh_token = refresh_service.rotate(session)
     _set_refresh_cookie(response, new_refresh_token)
+    ip_address, user_agent, request_id = _request_audit_context(request)
+    audit_service.record_action(
+        user=audit_user,
+        user_email=audit_user_email,
+        user_role=audit_user_role,
+        scope="auth",
+        action="refresh_access_token",
+        entity_type="refresh_session",
+        entity_id=refresh_session_id,
+        metadata=audit_metadata,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
     return Token(access_token=token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
     refresh_token: Optional[str] = Cookie(None, alias=settings.refresh_token_cookie_name),
+    audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     if refresh_token:
         refresh_service = RefreshSessionService(db)
         session = refresh_service.get_by_token(refresh_token)
         if session:
+            audit_user: User | None = None
+            audit_user_email: str | None = None
+            audit_user_role: str | None = None
+            metadata: dict[str, object] = {
+                "auth_type": session.auth_type,
+                "session_kind": "user" if session.user_id else "s3_session" if session.s3_session_id else "unknown",
+            }
+            if session.user_id:
+                audit_user = db.query(User).filter(User.id == session.user_id).first()
+                metadata["user_id"] = session.user_id
+            elif session.s3_session_id:
+                principal = SessionService(db).get_principal(session.s3_session_id)
+                if principal:
+                    audit_user_email, audit_user_role = principal.audit_fallbacks()
+                    metadata["s3_session_id"] = principal.session_id
+                    metadata["actor_type"] = principal.actor_type
+                    metadata["account_id"] = principal.account_id
             refresh_service.revoke(session)
+            ip_address, user_agent, request_id = _request_audit_context(request)
+            audit_service.record_action(
+                user=audit_user,
+                user_email=audit_user_email,
+                user_role=audit_user_role,
+                scope="auth",
+                action="logout",
+                entity_type="refresh_session",
+                entity_id=session.id,
+                metadata=metadata,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                request_id=request_id,
+            )
     _clear_refresh_cookie(response)

@@ -18,6 +18,7 @@ from app.models.bucket_purge import (
 )
 from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
+from app.routers.http_errors import sanitized_error_log_detail
 
 
 ProgressCallback = Callable[[BucketPurgeProgress], None]
@@ -299,7 +300,7 @@ class BucketPurgeService:
                     BucketPurgeFailure(
                         bucket_name=target.bucket_name,
                         stage="list",
-                        message=str(exc),
+                        message=sanitized_error_log_detail(exc),
                     )
                 ],
             )
@@ -446,7 +447,7 @@ class BucketPurgeService:
                     )
                 return failure_result(stage="delete_bucket", message=s3_client._format_delete_failure(exc))
             except BotoCoreError as exc:
-                return failure_result(stage="delete_bucket", message=str(exc))
+                return failure_result(stage="delete_bucket", message=sanitized_error_log_detail(exc))
 
             progress_callback(
                 BucketPurgeProgress(
@@ -482,4 +483,4 @@ class BucketPurgeService:
         except BucketPurgeCancelled:
             raise
         except Exception as exc:  # noqa: BLE001
-            return failure_result(stage="list", message=str(exc))
+            return failure_result(stage="list", message=sanitized_error_log_detail(exc))

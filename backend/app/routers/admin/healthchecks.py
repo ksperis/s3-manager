@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.db import User
 from app.models.healthcheck import (
     EndpointHealthGlobalIncidentsResponse,
     EndpointHealthIncidentsResponse,
@@ -16,7 +17,9 @@ from app.models.healthcheck import (
     EndpointHealthSummaryResponse,
     WorkspaceEndpointHealthOverviewResponse,
 )
-from app.routers.dependencies import get_current_super_admin
+from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.http_errors import sanitize_error_detail
+from app.services.audit_service import AuditService
 from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_service import HealthCheckService, HealthWindow
 
@@ -54,7 +57,7 @@ def health_series(
     try:
         return EndpointHealthSeries(**service.build_series(endpoint_id, window))
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/incidents", response_model=EndpointHealthIncidentsResponse)
@@ -69,7 +72,7 @@ def health_incidents(
     try:
         return EndpointHealthIncidentsResponse(**service.build_incidents(endpoint_id, window))
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/raw-checks", response_model=EndpointHealthRawChecksResponse)
@@ -86,7 +89,7 @@ def health_raw_checks(
     try:
         return EndpointHealthRawChecksResponse(**service.build_raw_checks(endpoint_id, window, page=page, page_size=page_size))
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.get("/overview", response_model=EndpointHealthOverviewResponse)
@@ -140,17 +143,30 @@ def workspace_health_overview(
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.post("/run")
 def run_healthchecks(
-    _: dict = Depends(get_current_super_admin),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     try:
-        return service.run_checks()
+        result = service.run_checks()
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="healthchecks.run",
+        entity_type="healthcheck_run",
+        metadata={
+            "manual_trigger": True,
+            "checks_total": result.get("checks_total") if isinstance(result, dict) else None,
+            "errors_count": len(result.get("errors") or []) if isinstance(result, dict) else None,
+        },
+    )
+    return result

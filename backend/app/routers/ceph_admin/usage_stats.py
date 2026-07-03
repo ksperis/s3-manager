@@ -21,6 +21,7 @@ from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin
 from app.routers.ceph_admin.buckets import _get_cached_rgw_bucket_entries
 from app.routers.ceph_admin.integrity import _build_endpoint_account
 from app.routers.dependencies import get_current_ceph_admin
+from app.routers.http_errors import sanitize_error_detail
 from app.services.bucket_usage_stats_service import (
     BucketUsageStatsOptions,
     BucketUsageStatsResolvedTarget,
@@ -60,7 +61,7 @@ def _list_ceph_bucket_names(ctx: CephAdminContext) -> list[str]:
     try:
         entries = _get_cached_rgw_bucket_entries(ctx, with_stats=False)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
     names: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict):

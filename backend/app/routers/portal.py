@@ -87,7 +87,7 @@ settings = get_settings()
 
 
 def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
-    detail = str(exc)
+    detail = sanitize_error_detail(str(exc))
     safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if "not found or not allowed" in lowered:
@@ -100,7 +100,7 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
 
 
 def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
-    detail = str(exc)
+    detail = sanitize_error_detail(str(exc))
     safe_detail = sanitize_error_detail(detail)
     lowered = detail.lower()
     if isinstance(exc, PortalAccessKeyManagementDisabled):
@@ -916,7 +916,7 @@ def download_portal_public_link(
     try:
         stream, content_type, filename = service.download_public_link(token)
     except RuntimeError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         lowered = detail.lower()
         if "not found" in lowered:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
@@ -1088,7 +1088,7 @@ def portal_storage_space_detail(
     try:
         storage_space = service.get_storage_space(actor, access, space_id)
     except RuntimeError as exc:
-        detail = str(exc)
+        detail = sanitize_error_detail(str(exc))
         if "autorisé" in detail.lower() or "not allowed" in detail.lower():
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
         raise_bad_gateway_from_runtime(exc)
