@@ -12,6 +12,11 @@ function getAuditReportingLink(label: string, options: Parameters<typeof buildAd
   return auditReportingSection?.links.find((link) => link.label === label);
 }
 
+function getManagedTenantsLink(label: string, options: Parameters<typeof buildAdminNav>) {
+  const managedTenantsSection = buildAdminNav(...options).find((section) => section.label === "Managed Tenants");
+  return managedTenantsSection?.links.find((link) => link.label === label);
+}
+
 describe("buildAdminNav", () => {
   it("sets explicit hint for disabled Browser settings link", () => {
     const browserLink = getSettingsLink("Browser", [true, false, false, false, false, true]);
@@ -60,6 +65,12 @@ describe("buildAdminNav", () => {
 
     expect(enabledLink?.to).toBe("/admin/usage-history");
     expect(disabledLink).toBeUndefined();
+  });
+
+  it("sets an explicit icon for Projects", () => {
+    const projectsLink = getManagedTenantsLink("Projects", [true, true, false, false, false, true]);
+
+    expect(projectsLink?.iconName).toBe("stack");
   });
 
   it("groups metrics in overview and billing with audit reporting", () => {

@@ -9,6 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import (
+    Project,
+    ProjectS3Account,
     S3Account,
     S3Connection,
     S3User,
@@ -92,6 +94,20 @@ class AdminMetricsService:
             assigned_s3_users_query = assigned_s3_users_query.filter(S3User.storage_endpoint_id == endpoint_id)
         assigned_s3_users = assigned_s3_users_query.scalar() or 0
         unassigned_s3_users = max(total_s3_users - assigned_s3_users, 0)
+        projects_query = db.query(func.count(Project.id))
+        project_account_links_query = db.query(func.count(ProjectS3Account.id))
+        if endpoint_id is not None:
+            projects_query = (
+                db.query(func.count(func.distinct(Project.id)))
+                .join(ProjectS3Account, ProjectS3Account.project_id == Project.id)
+                .join(S3Account, ProjectS3Account.account_id == S3Account.id)
+                .filter(S3Account.storage_endpoint_id == endpoint_id)
+            )
+            project_account_links_query = project_account_links_query.join(
+                S3Account, ProjectS3Account.account_id == S3Account.id
+            ).filter(S3Account.storage_endpoint_id == endpoint_id)
+        total_projects = projects_query.scalar() or 0
+        total_project_account_links = project_account_links_query.scalar() or 0
         total_ceph_endpoints = (
             db.query(func.count(StorageEndpoint.id))
             .filter(StorageEndpoint.provider == StorageProvider.CEPH.value)
@@ -127,6 +143,8 @@ class AdminMetricsService:
             "unassigned_accounts": unassigned_accounts,
             "assigned_s3_users": assigned_s3_users,
             "unassigned_s3_users": unassigned_s3_users,
+            "total_projects": total_projects,
+            "total_project_account_links": total_project_account_links,
             "total_endpoints": total_ceph_endpoints + total_other_endpoints,
             "total_ceph_endpoints": total_ceph_endpoints,
             "total_other_endpoints": total_other_endpoints,

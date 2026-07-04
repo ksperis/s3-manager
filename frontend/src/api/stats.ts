@@ -169,6 +169,8 @@ export type AdminSummary = {
   unassigned_accounts: number;
   assigned_s3_users: number;
   unassigned_s3_users: number;
+  total_projects: number;
+  total_project_account_links: number;
   total_endpoints: number;
   total_ceph_endpoints: number;
   total_other_endpoints: number;

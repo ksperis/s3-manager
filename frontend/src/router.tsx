@@ -6,6 +6,7 @@ import { Suspense, lazy, useMemo } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements, useLocation } from "react-router-dom";
 import Layout from "./components/Layout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
+import type { SidebarSection } from "./components/Sidebar";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import RouteErrorPage from "./features/shared/RouteErrorPage";
 import {
@@ -130,7 +131,7 @@ export const buildAdminNav = (
   endpointStatusEnabled: boolean,
   isSuperAdmin: boolean,
   settingsExpanded = false
-) => {
+): SidebarSection[] => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/authentication-settings", label: "Authentication" },
@@ -168,7 +169,7 @@ export const buildAdminNav = (
     {
       label: "Managed Tenants",
       links: [
-        { to: "/admin/projects", label: "Projects" },
+        { to: "/admin/projects", label: "Projects", iconName: "stack" },
         { to: "/admin/s3-accounts", label: "RGW Accounts" },
         { to: "/admin/s3-users", label: "RGW Users" },
       ],

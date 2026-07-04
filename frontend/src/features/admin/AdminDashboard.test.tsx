@@ -104,6 +104,8 @@ describe("AdminDashboard feature summary", () => {
       total_endpoints: 0,
       total_none_users: 0,
       total_other_endpoints: 0,
+      total_project_account_links: 0,
+      total_projects: 0,
       total_private_connections: 0,
       total_s3_users: 0,
       total_shared_connections: 0,
@@ -398,6 +400,8 @@ describe("AdminDashboard feature summary", () => {
       total_endpoints: 9,
       total_none_users: 0,
       total_other_endpoints: 1,
+      total_project_account_links: 11,
+      total_projects: 7,
       total_private_connections: 0,
       total_s3_users: 12,
       total_shared_connections: 3,
@@ -409,6 +413,8 @@ describe("AdminDashboard feature summary", () => {
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
+    const projectsCard = screen.getByRole("link", { name: "Projects7Accounts linked: 11" });
+    expect(projectsCard).toHaveAttribute("href", "/admin/projects");
     expect(screen.getByRole("heading", { name: "Endpoint Health" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
     expect(screen.getByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();

@@ -54,6 +54,7 @@ import {
   uiMutedTextClass,
 } from "../../components/ui/styles";
 import {
+  BucketCollectionIcon,
   BucketIcon,
   FolderIcon,
   InfoIcon,
@@ -881,6 +882,15 @@ export default function AdminDashboard() {
         to: "/admin/users",
         tone: "indigo",
         icon: <InfoIcon className="h-5 w-5" />,
+      },
+      {
+        id: "projects",
+        label: "Projects",
+        value: summary?.total_projects ?? 0,
+        hint: `Accounts linked: ${summary?.total_project_account_links ?? 0}`,
+        to: "/admin/projects",
+        tone: "violet",
+        icon: <BucketCollectionIcon className="h-5 w-5" />,
       },
       {
         id: "accounts-primary",
