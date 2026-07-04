@@ -772,6 +772,16 @@ describe("BrowserPage interactions", () => {
     getBucketWebsiteMock.mockResolvedValue({});
   });
 
+  it("exposes a page heading without changing the browser chrome", async () => {
+    renderPage();
+
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "Browser",
+    });
+    expect(heading).toHaveClass("sr-only");
+  });
+
   it("keeps single-click selection stable and applies the same behavior on row label click", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -920,6 +930,30 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps root Browser bucket labels while preserving Portal-scoped requests", async () => {
+    setBrowserContext({
+      selectorForApi: "acc-portal",
+      selectedContextId: "portal-101",
+      selectedContext: makeExecutionContext({
+        id: "portal-101",
+        display_name: "Research Portal",
+      }),
+      selectedKind: "portal_account",
+    });
+
+    renderPage({ initialEntry: "/browser" });
+
+    await findRowByLabel("a.txt");
+    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
+    expect(searchBrowserBucketsMock).toHaveBeenCalledWith(
+      "acc-portal",
+      expect.objectContaining({ workspaceSurface: "portal" }),
+    );
+    expect(screen.getByRole("button", { name: "Select bucket" })).toHaveTextContent("bucket-1");
+    expect(screen.getByTestId("browser-workspace-sidebar")).toHaveAttribute("aria-label", "Buckets");
+    expect(screen.queryByText("Storage Spaces")).not.toBeInTheDocument();
   });
 
   it("runs the Portal public-link action for a selected Browser file", async () => {

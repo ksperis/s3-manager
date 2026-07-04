@@ -11,7 +11,10 @@ from .base import Base
 
 class S3User(Base):
     __tablename__ = "s3_users"
-    __table_args__ = (UniqueConstraint("rgw_user_uid", name="uq_s3_users_uid"),)
+    __table_args__ = (
+        UniqueConstraint("rgw_user_uid", name="uq_s3_users_uid"),
+        Index("ix_s3_users_storage_endpoint", "storage_endpoint_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)

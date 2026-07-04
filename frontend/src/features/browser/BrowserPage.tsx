@@ -916,6 +916,9 @@ export default function BrowserPage({
   const browserContext = useBrowserContext();
   const { setSidebarBody } = useBrowserSidebarSlot();
   const selectedContext = browserContext.selectedContext;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const normalizedPath = location.pathname.replace(/\/+$/, "");
   const workspaceSurface =
     workspaceSurfaceOverride ??
     (selectedContext?.kind === "portal_account" ? "portal" : "browser");
@@ -923,9 +926,6 @@ export default function BrowserPage({
     actionProfileOverride ?? (workspaceSurface === "portal" ? "portal-basic" : "full");
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
-  const location = useLocation();
-  const navigate = useNavigate();
-  const normalizedPath = location.pathname.replace(/\/+$/, "");
   const isPortalBrowserSurface = workspaceSurface === "portal";
   const isPortalBasicProfile = actionProfile === "portal-basic";
   const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
@@ -943,6 +943,10 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser") ||
     (isPortalBrowserSurface && !isMainBrowserPath);
+  const usePortalWorkspaceLabels = isPortalBrowserSurface && !isMainBrowserPath;
+  const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
+  const workspaceNounPlural = `${workspaceNoun}s`;
+  const workspaceNounTitle = usePortalWorkspaceLabels ? "Storage Spaces" : "Buckets";
   const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
   const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
   const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
@@ -2906,7 +2910,7 @@ export default function BrowserPage({
         }
       } catch (err) {
         bucketSearchValueRef.current = "";
-        setBucketError(extractBucketListError(err, isPortalBrowserSurface));
+        setBucketError(extractBucketListError(err, usePortalWorkspaceLabels));
         setBucketMenuItems([]);
         setBucketMenuPage(1);
         setBucketMenuHasNext(false);
@@ -2935,11 +2939,11 @@ export default function BrowserPage({
       hasS3AccountContext,
       isCephAdminContext,
       isMainBrowserPath,
-      isPortalBrowserSurface,
       requestedBucket,
       requestedPrefix,
       resolvedLockedBucketName,
       resetBucketAccessQueue,
+      usePortalWorkspaceLabels,
     ],
   );
 
@@ -3004,7 +3008,7 @@ export default function BrowserPage({
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
         }
-        setBucketError(extractBucketListError(err, isPortalBrowserSurface));
+        setBucketError(extractBucketListError(err, usePortalWorkspaceLabels));
         if (!append) {
           setBucketMenuItems([]);
           setBucketMenuPage(1);
@@ -3026,9 +3030,9 @@ export default function BrowserPage({
       accountIdForApi,
       browserRequestOptions,
       hasS3AccountContext,
-      isPortalBrowserSurface,
       resolvedLockedBucketName,
       resetBucketAccessQueue,
+      usePortalWorkspaceLabels,
     ],
   );
 
@@ -4472,7 +4476,7 @@ export default function BrowserPage({
     const next = new Map<string, string>();
     bucketMenuItems.forEach((bucket) => {
       const displayName =
-        isPortalBrowserSurface
+        usePortalWorkspaceLabels
           ? bucket.display_name?.trim() || bucket.workspace_label?.trim() || bucket.name
           : bucket.display_name?.trim() || bucket.name;
       next.set(bucket.name, displayName);
@@ -4481,23 +4485,24 @@ export default function BrowserPage({
       next.set(resolvedLockedBucketName, lockedBucketLabel.trim());
     }
     return next;
-  }, [bucketMenuItems, isPortalBrowserSurface, lockedBucketLabel, resolvedLockedBucketName]);
+  }, [bucketMenuItems, lockedBucketLabel, resolvedLockedBucketName, usePortalWorkspaceLabels]);
   const bucketButtonLabel = useMemo(() => {
     if (resolvedLockedBucketName) {
       return lockedBucketLabel?.trim() || resolvedLockedBucketName;
     }
     if (bucketName) return bucketDisplayNameByName.get(bucketName) ?? bucketName;
-    if (loadingBuckets) return isPortalBrowserSurface ? "Loading storage spaces..." : "Loading buckets...";
-    if (bucketTotalCount === 0) return isPortalBrowserSurface ? "No storage spaces" : "No buckets";
-    return isPortalBrowserSurface ? "Select storage space" : "Select bucket";
+    if (loadingBuckets) return `Loading ${workspaceNounPlural}...`;
+    if (bucketTotalCount === 0) return `No ${workspaceNounPlural}`;
+    return `Select ${workspaceNoun}`;
   }, [
     bucketDisplayNameByName,
     bucketName,
     bucketTotalCount,
-    isPortalBrowserSurface,
     loadingBuckets,
     lockedBucketLabel,
     resolvedLockedBucketName,
+    workspaceNoun,
+    workspaceNounPlural,
   ]);
   const bucketSelectorNeedsAttention =
     hasS3AccountContext && !bucketName && bucketTotalCount > 0;
@@ -4507,6 +4512,7 @@ export default function BrowserPage({
       ? "border-amber-300 bg-amber-50 text-amber-800 ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
       : "border-slate-200 bg-white text-slate-700 hover:border-primary/60 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800",
   );
+  const bucketButtonActionLabel = resolvedLockedBucketName ? `Selected ${workspaceNoun}` : `Select ${workspaceNoun}`;
   const useBucketsPanel = showWorkspaceSidebar;
   const { currentBucket: currentBucketPanelItem } = useMemo(
     () => splitBucketPanelBuckets(bucketName, bucketMenuItems),
@@ -6368,7 +6374,7 @@ export default function BrowserPage({
         compact={compact}
         variant={variant}
         closeMobile={closeMobile}
-        isPortalContext={isPortalBrowserSurface}
+        isPortalContext={usePortalWorkspaceLabels}
         rows={workspaceSidebarRows}
         activeBucketName={bucketName}
         bucketFilter={bucketFilter}
@@ -6409,13 +6415,13 @@ export default function BrowserPage({
       canLoadMoreBucketResults,
       handleBucketChange,
       handleBucketMenuLoadMore,
-      isPortalBrowserSurface,
       loadingBuckets,
       openCreateBucketDialog,
       refreshBucketList,
       usageSummary,
       usageSummaryError,
       usageSummaryLoading,
+      usePortalWorkspaceLabels,
       workspaceAccountAction,
       workspaceSidebarRows,
     ],
@@ -12624,6 +12630,7 @@ export default function BrowserPage({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <h1 className="sr-only">{isPortalBrowserSurface ? "Portal browser" : "Browser"}</h1>
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
         <div className={browserShellClasses}>
         <div className={browserChromeShellClasses}>
@@ -12649,16 +12656,8 @@ export default function BrowserPage({
                     disabled={!hasS3AccountContext}
                     aria-haspopup={resolvedLockedBucketName ? undefined : "listbox"}
                     aria-expanded={resolvedLockedBucketName ? undefined : showBucketMenu}
-                    aria-label={
-                      resolvedLockedBucketName || isPortalBrowserSurface
-                        ? "Selected storage space"
-                        : "Select bucket"
-                    }
-                    title={
-                      resolvedLockedBucketName || isPortalBrowserSurface
-                        ? "Selected storage space"
-                        : "Select bucket"
-                    }
+                    aria-label={bucketButtonActionLabel}
+                    title={bucketButtonActionLabel}
                   >
                     <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
                     <span className="max-w-[200px] truncate sm:max-w-[260px]">
@@ -12676,7 +12675,7 @@ export default function BrowserPage({
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           <div className="min-w-0">
                             <p className={browserSectionEyebrowClasses}>
-                              {isPortalBrowserSurface ? "Storage Spaces" : "Buckets"}
+                              {workspaceNounTitle}
                             </p>
                           </div>
                         </div>
@@ -12704,7 +12703,7 @@ export default function BrowserPage({
                               setBucketFilter(event.target.value)
                             }
                             placeholder={
-                              isPortalBrowserSurface ? "Filter storage spaces" : "Filter buckets"
+                              `Filter ${workspaceNounPlural}`
                             }
                             className={`${browserInputClasses} pl-9`}
                             spellCheck={false}
@@ -12714,18 +12713,14 @@ export default function BrowserPage({
                       <div className="max-h-56 overflow-y-auto px-1 pb-1">
                         {loadingBuckets && bucketOptions.length === 0 ? (
                           <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {isPortalBrowserSurface ? "Loading storage spaces..." : "Loading buckets..."}
+                            {`Loading ${workspaceNounPlural}...`}
                           </div>
                         ) : bucketTotalCount === 0 ? (
                           <div className="space-y-2 px-2 py-2">
                             <div className="ui-caption text-slate-500 dark:text-slate-400">
                               {bucketError
-                                ? isPortalBrowserSurface
-                                  ? "Unable to load storage spaces."
-                                  : "Unable to load buckets."
-                                : isPortalBrowserSurface
-                                  ? "No storage spaces available."
-                                  : "No buckets available."}
+                                ? `Unable to load ${workspaceNounPlural}.`
+                                : `No ${workspaceNounPlural} available.`}
                             </div>
                             <button
                               type="button"
@@ -12738,9 +12733,7 @@ export default function BrowserPage({
                           </div>
                         ) : bucketOptions.length === 0 ? (
                           <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {isPortalBrowserSurface
-                              ? "No storage spaces match this filter."
-                              : "No buckets match this filter."}
+                            {`No ${workspaceNounPlural} match this filter.`}
                           </div>
                         ) : (
                           bucketMenuItems.map((bucket) => {
@@ -12776,9 +12769,7 @@ export default function BrowserPage({
                       {!loadingBuckets && bucketTotalCount > 0 && (
                         <div className="border-t border-slate-200 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
                           {`${bucketOptions.length} of ${bucketMenuTotal} ${
-                            isPortalBrowserSurface
-                              ? `storage space${bucketMenuTotal === 1 ? "" : "s"}`
-                              : `bucket${bucketMenuTotal === 1 ? "" : "s"}`
+                            `${workspaceNoun}${bucketMenuTotal === 1 ? "" : "s"}`
                           }`}
                         </div>
                       )}
@@ -13551,7 +13542,7 @@ export default function BrowserPage({
                 activePrefix={normalizedPrefix}
                 currentBucketAccess={currentBucketAccess}
                 treeRootNode={treeRootNode}
-                workspaceNoun={isPortalBrowserSurface ? "storage space" : "bucket"}
+                workspaceNoun={workspaceNoun}
                 onRefresh={handleRefresh}
                 onSelectPrefix={handleSelectPrefix}
                 onToggleTreeNode={handleToggleTreeNode}

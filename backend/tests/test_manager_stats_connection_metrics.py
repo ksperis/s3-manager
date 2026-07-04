@@ -13,6 +13,7 @@ from app.db import QuotaUsageDaily, QuotaUsageHourly, S3Account, S3Connection, S
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from app.routers.manager import stats as manager_stats_router
+from app.services.rgw_admin import RGWAdminError
 from app.services import usage_history_service
 from app.services.traffic_service import TrafficWindow
 
@@ -92,6 +93,30 @@ def test_manager_stats_overview_allows_connection_with_resolved_identity(db_sess
     assert payload["total_objects"] == 0
 
 
+def test_manager_stats_overview_sanitizes_bucket_error_details():
+    account = S3Account(name="stats-error-account", rgw_account_id="rgw-stats-error")
+
+    class _LeakyBucketsService:
+        def list_buckets(self, target_account):
+            raise RuntimeError(
+                "GET https://rgw.internal.local/admin?X-Amz-Signature=abcdef "
+                "failed with access_key=AKIAIOSFODNN7EXAMPLE and secret_key=top-secret"
+            )
+
+    with pytest.raises(HTTPException) as exc:
+        manager_stats_router.account_stats(account=account, bucket_service=_LeakyBucketsService(), _={})
+
+    detail = str(exc.value.detail)
+    assert exc.value.status_code == 502
+    assert detail.startswith("Unable to fetch buckets:")
+    assert "<redacted-url>" in detail
+    assert "access_key=<redacted>" in detail
+    assert "secret_key=<redacted>" in detail
+    assert "rgw.internal.local" not in detail
+    assert "AKIAIOSFODNN7EXAMPLE" not in detail
+    assert "top-secret" not in detail
+
+
 def test_manager_stats_traffic_allows_connection_with_resolved_identity(db_session, monkeypatch):
     user = User(
         email="manager-stats-conn-traffic@example.com",
@@ -158,6 +183,40 @@ def test_manager_stats_traffic_allows_connection_with_resolved_identity(db_sessi
     assert captured["uid"] == "rgw-account$traffic"
     assert payload["window"] == "week"
     assert payload["totals"]["ops"] == 0
+
+
+def test_manager_stats_traffic_sanitizes_rgw_error_details(monkeypatch):
+    account = S3Account(
+        name="traffic-error-account",
+        rgw_account_id="rgw-traffic-error",
+        rgw_access_key="ak",
+        rgw_secret_key="sk",
+    )
+
+    class _LeakyTrafficService:
+        def __init__(self, target_account):
+            pass
+
+        def get_traffic(self, window, bucket=None):
+            raise RGWAdminError(
+                "RGW admin error 403 from https://rgw.internal.local/admin "
+                "with token=secret-token and signature=abcdef"
+            )
+
+    monkeypatch.setattr(manager_stats_router, "TrafficService", _LeakyTrafficService)
+
+    with pytest.raises(HTTPException) as exc:
+        manager_stats_router.account_traffic(window=TrafficWindow.WEEK, bucket=None, account=account, _={})
+
+    detail = str(exc.value.detail)
+    assert exc.value.status_code == 502
+    assert detail.startswith("Unable to fetch traffic logs:")
+    assert "<redacted-url>" in detail
+    assert "token=<redacted>" in detail
+    assert "signature=<redacted>" in detail
+    assert "rgw.internal.local" not in detail
+    assert "secret-token" not in detail
+    assert "abcdef" not in detail
 
 
 def test_manager_stats_dependency_rejects_connection_without_resolved_identity(db_session, monkeypatch):

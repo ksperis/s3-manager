@@ -86,6 +86,7 @@ type BucketRankingRow = {
 };
 
 type ActivityRow = {
+  id: number;
   label: string;
   detail: string;
   time: string;
@@ -234,6 +235,7 @@ function buildActivityRows(logs: ManagerActivityEntry[]): ActivityRow[] {
   return logs.map((log) => {
     const presentation = activityPresentation(log);
     return {
+      id: log.id,
       ...presentation,
       detail: log.entity_id || log.account_name || log.user_email,
       time: formatRelativeTime(log.created_at),
@@ -406,7 +408,7 @@ function RecentActivityCard({
           </div>
         ) : (
           rows.map((activity) => (
-            <div key={`${activity.label}-${activity.detail}-${activity.time}`} className="flex items-start justify-between gap-3">
+            <div key={activity.id} className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
                 <IconBubble tone={activity.tone} className="h-7 w-7 rounded-md">
                   {activity.icon}

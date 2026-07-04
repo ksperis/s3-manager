@@ -11,6 +11,7 @@ from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.sensitive_data import sanitize_audit_metadata
 from app.db import S3Account, AuditLog, User
 
 logger = logging.getLogger(__name__)
@@ -175,10 +176,11 @@ class AuditService:
     def _serialize_metadata(self, metadata: Optional[dict[str, Any]]) -> Optional[str]:
         if not metadata:
             return None
+        sanitized_metadata = sanitize_audit_metadata(metadata)
         try:
-            serialized = json.dumps(metadata, default=self._fallback_encoder)
+            serialized = json.dumps(sanitized_metadata, default=self._fallback_encoder)
         except (TypeError, ValueError):
-            serialized = json.dumps({"raw": str(metadata)})
+            serialized = json.dumps({"raw": sanitize_audit_metadata(str(metadata))})
         # Guard against overly large payloads in SQLite/Text columns
         if len(serialized) > 16384:
             truncated = serialized[:16380] + "..."

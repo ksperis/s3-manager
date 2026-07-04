@@ -836,6 +836,69 @@ describe("manager shell pages", () => {
     expect(screen.getByText("research-data")).toBeInTheDocument();
   });
 
+  it("keeps duplicate-looking recent activity rows keyed by audit id", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const createdAt = new Date().toISOString();
+    listManagerActivityMock.mockResolvedValue([
+      {
+        id: 101,
+        created_at: createdAt,
+        action: "create_iam_user",
+        entity_type: "iam_user",
+        entity_id: "browser",
+        account_id: 1,
+        account_name: "Account Alpha",
+        status: "success",
+        user_email: "manager@example.com",
+      },
+      {
+        id: 102,
+        created_at: createdAt,
+        action: "create_iam_user",
+        entity_type: "iam_user",
+        entity_id: "browser",
+        account_id: 1,
+        account_name: "Account Alpha",
+        status: "success",
+        user_email: "manager@example.com",
+      },
+    ]);
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "account-1",
+          name: "Account Alpha",
+          type: "account",
+          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true },
+        },
+      ],
+      selectedS3AccountId: "account-1",
+      requiresS3AccountSelection: false,
+      sessionS3AccountName: null,
+      selectedS3AccountType: "account",
+      hasS3AccountContext: true,
+      accountIdForApi: "account-1",
+      accessMode: "default",
+      managerStatsEnabled: false,
+      managerStatsMessage: null,
+      managerBrowserEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findAllByText("IAM user created")).toHaveLength(2);
+    expect(
+      consoleErrorSpy.mock.calls.some((call) =>
+        call.some((part) => String(part).includes("Encountered two children with the same key"))
+      )
+    ).toBe(false);
+    consoleErrorSpy.mockRestore();
+  });
+
   it("shows an empty recent activity state only after an empty successful response", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [

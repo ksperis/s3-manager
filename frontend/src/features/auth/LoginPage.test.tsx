@@ -101,6 +101,16 @@ describe("LoginPage LDAP", () => {
     });
   });
 
+  it("associates password sign-in labels and autocomplete hints", async () => {
+    renderLoginPage();
+
+    const emailInput = await screen.findByLabelText("Email");
+    const passwordInput = screen.getByLabelText("Password");
+
+    expect(emailInput).toHaveAttribute("autocomplete", "username");
+    expect(passwordInput).toHaveAttribute("autocomplete", "current-password");
+  });
+
   it("shows directory login when LDAP providers exist and stores ldap auth type", async () => {
     const user = userEvent.setup();
     renderLoginPage();

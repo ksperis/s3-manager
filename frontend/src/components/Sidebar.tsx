@@ -150,6 +150,9 @@ export default function Sidebar({
       : "shell-sidebar flex h-full flex-col border-r";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
   const iconClasses = "h-4 w-4";
+  const navSpacingClasses = compact
+    ? `gap-1.5 px-2 pt-3 ${variant === "desktop" && onCollapseToggle ? "pb-12" : "pb-3"}`
+    : `gap-2 px-2.5 pt-3 ${variant === "desktop" && onCollapseToggle ? "pb-14" : "pb-3"}`;
   const rootStyle: CSSProperties | undefined =
     variant === "desktop"
       ? {
@@ -178,7 +181,7 @@ export default function Sidebar({
         <>
           <nav
             ref={navRef}
-            className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${compact ? "gap-1.5 px-2 py-3" : "gap-2 px-2.5 py-3"}`}
+            className={`shell-sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${navScrolling ? "shell-sidebar-scroll-active" : ""} ${navSpacingClasses}`}
             onScroll={handleNavScroll}
             aria-label={`${title} navigation`}
           >

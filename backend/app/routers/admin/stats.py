@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
 from app.routers.dependencies import get_current_super_admin
+from app.routers.http_errors import sanitized_error_log_detail
 from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import TrafficWindow
@@ -116,7 +117,10 @@ def account_stats(
     try:
         payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Unable to fetch buckets: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
+        ) from exc
 
     buckets = extract_bucket_list(payload)
     bucket_usage: list[dict] = []
@@ -194,7 +198,10 @@ def s3_user_stats(
     try:
         payload = rgw_admin.get_all_buckets(uid=s3_user.rgw_user_uid, with_stats=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Unable to fetch buckets: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
+        ) from exc
 
     buckets = extract_bucket_list(payload)
     bucket_usage: list[dict] = []

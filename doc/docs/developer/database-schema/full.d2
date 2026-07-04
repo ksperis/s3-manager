@@ -217,7 +217,7 @@ Legend: {
   }
   "s3_accounts": {
     class: table
-    tooltip: "PK: id\nUnique: unnamed(name); unnamed(rgw_account_id)\nIndexes: ix_s3_accounts_id(id) [index]"
+    tooltip: "PK: id\nUnique: unnamed(name); unnamed(rgw_account_id)\nIndexes: ix_s3_accounts_id(id) [index]; ix_s3_accounts_storage_endpoint(storage_endpoint_id) [index]"
     "id": "INTEGER [PK, NN]"
     "name": "VARCHAR [NN, UQ]"
     "rgw_account_id": "VARCHAR [UQ]"
@@ -246,7 +246,7 @@ Legend: {
   }
   "account_iam_users": {
     class: table
-    tooltip: "PK: id\nUnique: uq_account_iam_user(user_id, account_id); uq_account_iam_user_id(iam_user_id)\nIndexes: ix_account_iam_users_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_account_iam_user(user_id, account_id); uq_account_iam_user_id(iam_user_id)\nIndexes: ix_account_iam_users_account_user(account_id, user_id) [index]; ix_account_iam_users_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "user_id": "INTEGER [FK, NN]"
     "account_id": "INTEGER [FK, NN]"
@@ -258,7 +258,7 @@ Legend: {
   }
   "s3_users": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_users_uid(rgw_user_uid)\nIndexes: ix_s3_users_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_users_uid(rgw_user_uid)\nIndexes: ix_s3_users_id(id) [index]; ix_s3_users_storage_endpoint(storage_endpoint_id) [index]"
     "id": "INTEGER [PK, NN]"
     "name": "VARCHAR [NN]"
     "rgw_user_uid": "VARCHAR [NN]"
@@ -362,7 +362,7 @@ Legend: {
   }
   "storage_endpoint_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]; ix_storage_endpoint_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_definition(tag_definition_id) [index]; ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]; ix_storage_endpoint_tags_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "storage_endpoint_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -372,7 +372,7 @@ Legend: {
   }
   "s3_account_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_definition(tag_definition_id) [index]; ix_s3_account_tags_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "account_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -382,7 +382,7 @@ Legend: {
   }
   "s3_user_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_id(id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_definition(tag_definition_id) [index]; ix_s3_user_tags_id(id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
     "id": "INTEGER [PK, NN]"
     "s3_user_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -392,7 +392,7 @@ Legend: {
   }
   "s3_connection_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_definition(tag_definition_id) [index]; ix_s3_connection_tags_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "s3_connection_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -459,7 +459,7 @@ Legend: {
   style.stroke: "#cbd5e1"
   "audit_logs": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_audit_logs_account_id_id(account_id, id) [index]; ix_audit_logs_created_at(created_at) [index]; ix_audit_logs_id(id) [index]; ix_audit_logs_request_id(request_id) [index]; ix_audit_logs_scope_id(scope, id) [index]; ix_audit_logs_user_role_id(user_role, id) [index]"
+    tooltip: "PK: id\nIndexes: ix_audit_logs_account_id_id(account_id, id) [index]; ix_audit_logs_created_at(created_at) [index]; ix_audit_logs_id(id) [index]; ix_audit_logs_request_id(request_id) [index]; ix_audit_logs_scope_id(scope, id) [index]; ix_audit_logs_user_id_id(user_id, id) [index]; ix_audit_logs_user_role_id(user_role, id) [index]"
     "id": "INTEGER [PK, NN]"
     "created_at": "DATETIME [NN]"
     "user_id": "INTEGER [FK]"

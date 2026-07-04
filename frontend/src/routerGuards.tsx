@@ -27,6 +27,29 @@ function getStoredUser(): SessionUser | null {
   return readStoredUser();
 }
 
+function unauthorizedRoute() {
+  return <Navigate to="/unauthorized" replace />;
+}
+
+function renderWorkspaceFeature(loading: boolean, enabled: boolean, feature: string) {
+  if (loading) return <RouteFallback />;
+  if (!enabled) return <FeatureDisabledPage feature={feature} />;
+  return <Outlet />;
+}
+
+function renderManagerToolFeature(
+  loading: boolean,
+  enabled: boolean,
+  feature: string,
+  canAccess: boolean,
+  requiresS3AccountSelection = true,
+) {
+  if (loading) return <RouteFallback />;
+  if (!enabled) return <FeatureDisabledPage feature={feature} />;
+  if (!requiresS3AccountSelection || !canAccess) return unauthorizedRoute();
+  return <Outlet />;
+}
+
 export function RouteFallback() {
   return (
     <div className="shell-page flex min-h-screen items-center justify-center px-4">
@@ -47,30 +70,31 @@ export function RequireAuth() {
 export function RequireRole({ roles }: { roles: string[] }) {
   const user = getStoredUser();
   if (!user || !user.role) return <Navigate to="/login" replace />;
-  if (!roles.includes(user.role)) return <Navigate to="/unauthorized" replace />;
+  if (!roles.includes(user.role)) return unauthorizedRoute();
   return <Outlet />;
 }
 
 export function RoleRedirect() {
   const user = getStoredUser();
-  const { generalSettings } = useGeneralSettings();
-  const destination = resolvePostLoginPath(user, generalSettings);
+  const { generalSettings, loading } = useGeneralSettings();
+  const destination = loading ? null : resolvePostLoginPath(user, generalSettings);
   useEffect(() => {
+    if (!destination) return;
     prefetchWorkspaceBranch(destination);
   }, [destination]);
+  if (!destination) {
+    return <RouteFallback />;
+  }
   return <Navigate to={destination} replace />;
 }
 
 export function RequireManagerFeature() {
-  const { generalSettings } = useGeneralSettings();
-  if (!generalSettings.manager_enabled) {
-    return <FeatureDisabledPage feature="Manager" />;
-  }
-  return <Outlet />;
+  const { generalSettings, loading } = useGeneralSettings();
+  return renderWorkspaceFeature(loading, generalSettings.manager_enabled, "Manager");
 }
 
 export function RequirePortalAccess() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(() => getStoredUser());
   const [refreshingSession, setRefreshingSession] = useState(() => {
     const storedUser = getStoredUser();
@@ -83,7 +107,7 @@ export function RequirePortalAccess() {
   });
 
   useEffect(() => {
-    if (!generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
+    if (loading || !generalSettings.portal_enabled || hasPortalWorkspaceAccess(sessionUser)) return;
     if (typeof window === "undefined" || !readClientStorage(CLIENT_STORAGE_KEYS.authToken)) return;
     let cancelled = false;
     setRefreshingSession(true);
@@ -103,8 +127,11 @@ export function RequirePortalAccess() {
     return () => {
       cancelled = true;
     };
-  }, [generalSettings.portal_enabled, sessionUser]);
+  }, [generalSettings.portal_enabled, loading, sessionUser]);
 
+  if (loading) {
+    return <RouteFallback />;
+  }
   if (!generalSettings.portal_enabled) {
     return <FeatureDisabledPage feature="Portal" />;
   }
@@ -115,34 +142,28 @@ export function RequirePortalAccess() {
     return <RouteFallback />;
   }
   if (!hasPortalWorkspaceAccess(sessionUser)) {
-    return <Navigate to="/unauthorized" replace />;
+    return unauthorizedRoute();
   }
   return <Outlet />;
 }
 
 export function RequireCephAdminFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const user = getStoredUser();
   if (!user || !isAdminLikeRole(user.role) || !user.can_access_ceph_admin) {
-    return <Navigate to="/unauthorized" replace />;
+    return unauthorizedRoute();
   }
-  if (!generalSettings.ceph_admin_enabled) {
-    return <FeatureDisabledPage feature="Ceph Admin" />;
-  }
-  return <Outlet />;
+  return renderWorkspaceFeature(loading, generalSettings.ceph_admin_enabled, "Ceph Admin");
 }
 
 export function RequireStorageOpsFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const user = getStoredUser();
   const canUseStorageOpsRole = Boolean(user && (isAdminLikeRole(user.role) || user.role === USER_ROLE));
   if (!user || !canUseStorageOpsRole || !user.can_access_storage_ops) {
-    return <Navigate to="/unauthorized" replace />;
+    return unauthorizedRoute();
   }
-  if (!generalSettings.storage_ops_enabled) {
-    return <FeatureDisabledPage feature="Storage Ops" />;
-  }
-  return <Outlet />;
+  return renderWorkspaceFeature(loading, generalSettings.storage_ops_enabled, "Storage Ops");
 }
 
 export type BrowserSurface = "root" | "manager" | "ceph_admin";
@@ -155,8 +176,9 @@ export function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surfac
 }
 
 export function RequireBrowserSurface({ surface }: { surface: BrowserSurface }) {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const user = getStoredUser();
+  if (loading) return <RouteFallback />;
   const portalBrowserRootEnabled =
     surface === "root" &&
     generalSettings.browser_enabled &&
@@ -217,63 +239,53 @@ export function canAccessManagerFeatureRules(user: SessionUser | null): boolean 
 }
 
 export function RequireManagerMigrationFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const user = getStoredUser();
-  if (!generalSettings.bucket_migration_enabled) {
-    return <FeatureDisabledPage feature="Bucket Migration" />;
-  }
-  if (canAccessManagerMigration(generalSettings, user)) {
-    return <Outlet />;
-  }
-  return <Navigate to="/unauthorized" replace />;
+  return renderManagerToolFeature(
+    loading,
+    generalSettings.bucket_migration_enabled,
+    "Bucket Migration",
+    canAccessManagerMigration(generalSettings, user),
+  );
 }
 
 export function RequireManagerBucketCompareFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
   const user = getStoredUser();
-  if (!generalSettings.bucket_compare_enabled) {
-    return <FeatureDisabledPage feature="Bucket Compare" />;
-  }
-  if (!requiresS3AccountSelection) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  if (canAccessManagerBucketCompare(generalSettings, user)) {
-    return <Outlet />;
-  }
-  return <Navigate to="/unauthorized" replace />;
+  return renderManagerToolFeature(
+    loading,
+    generalSettings.bucket_compare_enabled,
+    "Bucket Compare",
+    canAccessManagerBucketCompare(generalSettings, user),
+    requiresS3AccountSelection,
+  );
 }
 
 export function RequireManagerBucketIntegrityFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
   const user = getStoredUser();
-  if (!generalSettings.bucket_integrity_check_enabled) {
-    return <FeatureDisabledPage feature="Bucket Integrity" />;
-  }
-  if (!requiresS3AccountSelection) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  if (canAccessManagerBucketIntegrity(generalSettings, user)) {
-    return <Outlet />;
-  }
-  return <Navigate to="/unauthorized" replace />;
+  return renderManagerToolFeature(
+    loading,
+    generalSettings.bucket_integrity_check_enabled,
+    "Bucket Integrity",
+    canAccessManagerBucketIntegrity(generalSettings, user),
+    requiresS3AccountSelection,
+  );
 }
 
 export function RequireManagerBucketPurgeFeature() {
-  const { generalSettings } = useGeneralSettings();
+  const { generalSettings, loading } = useGeneralSettings();
   const { requiresS3AccountSelection } = useS3AccountContext();
   const user = getStoredUser();
-  if (!generalSettings.bucket_purge_enabled) {
-    return <FeatureDisabledPage feature="Bucket Purge" />;
-  }
-  if (!requiresS3AccountSelection) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-  if (canAccessManagerBucketPurge(generalSettings, user)) {
-    return <Outlet />;
-  }
-  return <Navigate to="/unauthorized" replace />;
+  return renderManagerToolFeature(
+    loading,
+    generalSettings.bucket_purge_enabled,
+    "Bucket Purge",
+    canAccessManagerBucketPurge(generalSettings, user),
+    requiresS3AccountSelection,
+  );
 }
 
 export function RequireManagerFeatureRulesTool() {
@@ -281,5 +293,5 @@ export function RequireManagerFeatureRulesTool() {
   if (canAccessManagerFeatureRules(user)) {
     return <Outlet />;
   }
-  return <Navigate to="/unauthorized" replace />;
+  return unauthorizedRoute();
 }

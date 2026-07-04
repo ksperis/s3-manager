@@ -24,7 +24,7 @@ Legend: {
   style.stroke: "#cbd5e1"
   "audit_logs": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_audit_logs_account_id_id(account_id, id) [index]; ix_audit_logs_created_at(created_at) [index]; ix_audit_logs_id(id) [index]; ix_audit_logs_request_id(request_id) [index]; ix_audit_logs_scope_id(scope, id) [index]; ix_audit_logs_user_role_id(user_role, id) [index]"
+    tooltip: "PK: id\nIndexes: ix_audit_logs_account_id_id(account_id, id) [index]; ix_audit_logs_created_at(created_at) [index]; ix_audit_logs_id(id) [index]; ix_audit_logs_request_id(request_id) [index]; ix_audit_logs_scope_id(scope, id) [index]; ix_audit_logs_user_id_id(user_id, id) [index]; ix_audit_logs_user_role_id(user_role, id) [index]"
     "id": "INTEGER [PK, NN]"
     "created_at": "DATETIME [NN]"
     "user_id": "INTEGER [FK]"

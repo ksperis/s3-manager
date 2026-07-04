@@ -13,6 +13,9 @@ from .enums import AccountRole
 
 class S3Account(Base):
     __tablename__ = "s3_accounts"
+    __table_args__ = (
+        Index("ix_s3_accounts_storage_endpoint", "storage_endpoint_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
@@ -109,6 +112,7 @@ class AccountIAMUser(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "account_id", name="uq_account_iam_user"),
         UniqueConstraint("iam_user_id", name="uq_account_iam_user_id"),
+        Index("ix_account_iam_users_account_user", "account_id", "user_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

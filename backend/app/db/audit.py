@@ -13,6 +13,7 @@ class AuditLog(Base):
     __table_args__ = (
         Index("ix_audit_logs_scope_id", "scope", "id"),
         Index("ix_audit_logs_account_id_id", "account_id", "id"),
+        Index("ix_audit_logs_user_id_id", "user_id", "id"),
         Index("ix_audit_logs_user_role_id", "user_role", "id"),
     )
 

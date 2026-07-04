@@ -48,7 +48,7 @@ const GeneralSettingsContext = createContext<GeneralSettingsContextValue>({
 
 export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
   const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(readClientStorage(CLIENT_STORAGE_KEYS.authToken)));
 
   const refresh = useCallback(async () => {
     const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);

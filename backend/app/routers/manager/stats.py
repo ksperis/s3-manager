@@ -27,7 +27,7 @@ from app.services.traffic_service import TrafficService, TrafficWindow
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.usage_history_service import UsageHistoryService
 from app.utils.s3_endpoint import resolve_iam_client_options
-from app.routers.http_errors import sanitize_error_detail
+from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 
@@ -57,7 +57,10 @@ def account_stats(
         buckets = bucket_service.list_buckets(account)
         total_buckets = len(buckets)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Unable to fetch buckets: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
+        ) from exc
 
     caps = getattr(account, "_manager_capabilities", None)
     users: list = []
@@ -178,7 +181,10 @@ def account_traffic(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=sanitize_error_detail(str(exc))) from exc
     except RGWAdminError as exc:
-        raise HTTPException(status_code=502, detail=f"Unable to fetch traffic logs: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to fetch traffic logs: {sanitized_error_log_detail(exc)}",
+        ) from exc
 
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)

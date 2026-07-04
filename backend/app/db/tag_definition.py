@@ -52,6 +52,7 @@ class StorageEndpointTag(Base):
     __table_args__ = (
         UniqueConstraint("storage_endpoint_id", "tag_definition_id", name="uq_storage_endpoint_tag"),
         Index("ix_storage_endpoint_tags_endpoint_position", "storage_endpoint_id", "position"),
+        Index("ix_storage_endpoint_tags_definition", "tag_definition_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -70,6 +71,7 @@ class S3AccountTag(Base):
     __table_args__ = (
         UniqueConstraint("account_id", "tag_definition_id", name="uq_s3_account_tag"),
         Index("ix_s3_account_tags_account_position", "account_id", "position"),
+        Index("ix_s3_account_tags_definition", "tag_definition_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -88,6 +90,7 @@ class S3UserTag(Base):
     __table_args__ = (
         UniqueConstraint("s3_user_id", "tag_definition_id", name="uq_s3_user_tag"),
         Index("ix_s3_user_tags_user_position", "s3_user_id", "position"),
+        Index("ix_s3_user_tags_definition", "tag_definition_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -106,6 +109,7 @@ class S3ConnectionTag(Base):
     __table_args__ = (
         UniqueConstraint("s3_connection_id", "tag_definition_id", name="uq_s3_connection_tag"),
         Index("ix_s3_connection_tags_connection_position", "s3_connection_id", "position"),
+        Index("ix_s3_connection_tags_definition", "tag_definition_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

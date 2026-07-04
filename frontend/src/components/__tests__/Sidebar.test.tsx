@@ -164,6 +164,7 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByRole("navigation", { name: "s3-manager navigation" })).toHaveClass("pb-14");
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });

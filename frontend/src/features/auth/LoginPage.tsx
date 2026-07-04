@@ -411,6 +411,7 @@ export default function LoginPage() {
                   <input
                     id="ldap-username"
                     type="text"
+                    autoComplete="username"
                     value={ldapUsername}
                     onChange={(e) => setLdapUsername(e.target.value)}
                     className={inputClasses}
@@ -425,6 +426,7 @@ export default function LoginPage() {
                   <input
                     id="ldap-password"
                     type="password"
+                    autoComplete="current-password"
                     value={ldapPassword}
                     onChange={(e) => setLdapPassword(e.target.value)}
                     className={inputClasses}
@@ -444,9 +446,11 @@ export default function LoginPage() {
             ) : mode === "password" || !allowAccessKeys ? (
               <form onSubmit={handlePasswordLogin} className="space-y-4">
                 <div>
-                  <label className="ui-body font-medium text-slate-700">Email</label>
+                  <label htmlFor="login-email" className="ui-body font-medium text-slate-700">Email</label>
                   <input
+                    id="login-email"
                     type="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClasses}
@@ -455,9 +459,11 @@ export default function LoginPage() {
                   />
                 </div>
                 <div>
-                  <label className="ui-body font-medium text-slate-700">Password</label>
+                  <label htmlFor="login-password" className="ui-body font-medium text-slate-700">Password</label>
                   <input
+                    id="login-password"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClasses}
@@ -477,9 +483,11 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={handleKeyLogin} className="space-y-4">
                 <div>
-                  <label className="ui-body font-medium text-slate-700">Access key</label>
+                  <label htmlFor="login-access-key" className="ui-body font-medium text-slate-700">Access key</label>
                   <input
+                    id="login-access-key"
                     type="text"
+                    autoComplete="username"
                     value={accessKey}
                     onChange={(e) => setAccessKey(e.target.value)}
                     className={inputClasses}
@@ -488,9 +496,11 @@ export default function LoginPage() {
                   />
                 </div>
                 <div>
-                  <label className="ui-body font-medium text-slate-700">Secret key</label>
+                  <label htmlFor="login-secret-key" className="ui-body font-medium text-slate-700">Secret key</label>
                   <input
+                    id="login-secret-key"
                     type="password"
+                    autoComplete="current-password"
                     value={secretKey}
                     onChange={(e) => setSecretKey(e.target.value)}
                     className={inputClasses}
@@ -502,8 +512,9 @@ export default function LoginPage() {
                   <div className="space-y-3">
                     {allowEndpointList && (
                       <div>
-                        <label className="ui-body font-medium text-slate-700">Endpoint</label>
+                        <label htmlFor="login-endpoint" className="ui-body font-medium text-slate-700">Endpoint</label>
                         <select
+                          id="login-endpoint"
                           value={selectedEndpoint}
                           onChange={(e) => setSelectedEndpoint(e.target.value)}
                           disabled={endpointLoading}
@@ -529,9 +540,11 @@ export default function LoginPage() {
                     )}
                     {allowCustomEndpoint && (
                       <div>
-                        <label className="ui-body font-medium text-slate-700">Custom endpoint URL (optional)</label>
+                        <label htmlFor="login-custom-endpoint" className="ui-body font-medium text-slate-700">Custom endpoint URL (optional)</label>
                         <input
+                          id="login-custom-endpoint"
                           type="url"
+                          autoComplete="url"
                           value={customEndpoint}
                           onChange={(e) => setCustomEndpoint(e.target.value)}
                           className={inputClasses}
