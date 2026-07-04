@@ -768,11 +768,17 @@ export async function listPortalStorageSpaceShares(
 }
 
 export async function listPortalShareCandidates(
-  accountId: S3AccountSelector
+  accountId: S3AccountSelector,
+  options?: { targetAccountId?: number | string | null }
 ): Promise<PortalStorageSpaceShareCandidate[]> {
   const projectPath = portalProjectPath(accountId, "/share-candidates");
   if (projectPath) {
-    const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(projectPath);
+    const params = options?.targetAccountId != null ? { account_id: options.targetAccountId } : undefined;
+    if (!params) {
+      const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(projectPath);
+      return data;
+    }
+    const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(projectPath, { params });
     return data;
   }
   const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(

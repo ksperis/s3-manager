@@ -34,6 +34,35 @@ describe("ProjectAssociationEditor", () => {
     updateProjectMock.mockResolvedValue(undefined);
   });
 
+  it("loads every project page before offering association choices", async () => {
+    listProjectsMock
+      .mockResolvedValueOnce({
+        items: [makeProject({ id: 61, name: "First Page Project" })],
+        total: 2,
+        page: 1,
+        page_size: 200,
+        has_next: true,
+      })
+      .mockResolvedValueOnce({
+        items: [makeProject({ id: 62, name: "Second Page Project" })],
+        total: 2,
+        page: 2,
+        page_size: 200,
+        has_next: false,
+      });
+
+    render(<ProjectAssociationEditor target={{ kind: "user", id: 7, label: "alice@example.com" }} />);
+
+    await waitFor(() => {
+      expect(listProjectsMock).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add projects" }));
+
+    expect(screen.getByRole("checkbox", { name: /First Page Project/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Second Page Project/ })).toBeInTheDocument();
+  });
+
   it("adds an account to a searched project with a portal label", async () => {
     const projects = [
       makeProject({

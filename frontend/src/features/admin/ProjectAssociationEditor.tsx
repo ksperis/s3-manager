@@ -27,6 +27,7 @@ type ProjectAssociationState = {
 };
 
 const MAX_VISIBLE_OPTIONS = 10;
+const PROJECT_ASSOCIATION_PAGE_SIZE = 200;
 
 const ROLE_OPTIONS: { value: ProjectPortalRole; label: string }[] = [
   { value: "portal_user", label: "Portal user" },
@@ -115,6 +116,24 @@ function targetDescription(target: ProjectAssociationTarget): string {
   return "Grant this UI group Portal access through projects.";
 }
 
+async function listAllAssociationProjects(): Promise<Project[]> {
+  const items: Project[] = [];
+  let page = 1;
+  for (;;) {
+    const response = await listProjects({
+      page,
+      page_size: PROJECT_ASSOCIATION_PAGE_SIZE,
+      sort_by: "name",
+      sort_dir: "asc",
+    });
+    items.push(...response.items);
+    if (!response.has_next || response.items.length === 0) {
+      return items;
+    }
+    page += 1;
+  }
+}
+
 export default function ProjectAssociationEditor({ target }: { target: ProjectAssociationTarget }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -146,9 +165,9 @@ export default function ProjectAssociationEditor({ target }: { target: ProjectAs
     setLoading(true);
     setError(null);
     setMessage(null);
-    listProjects({ page: 1, page_size: 200, sort_by: "name", sort_dir: "asc" })
+    listAllAssociationProjects()
       .then((data) => {
-        if (!cancelled) applyProjects(data.items);
+        if (!cancelled) applyProjects(data);
       })
       .catch((err) => {
         console.error(err);
@@ -272,8 +291,8 @@ export default function ProjectAssociationEditor({ target }: { target: ProjectAs
         }
         await updateProject(project.id, { group_links });
       }
-      const refreshed = await listProjects({ page: 1, page_size: 200, sort_by: "name", sort_dir: "asc" });
-      applyProjects(refreshed.items);
+      const refreshed = await listAllAssociationProjects();
+      applyProjects(refreshed);
       setMessage("Project associations saved.");
     } catch (err) {
       console.error(err);

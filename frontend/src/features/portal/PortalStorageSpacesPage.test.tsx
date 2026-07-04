@@ -267,6 +267,31 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByLabelText("Project account")).not.toBeInTheDocument();
   });
 
+  it("loads restricted share candidates for the selected project account", async () => {
+    mocks.hookResult.accountIdForApi = "proj-42";
+    mocks.hookResult.selectedProjectAccounts = [
+      { account_id: 101, display_name: "Paris", account_name: "Research Paris" },
+      { account_id: 102, display_name: "Lyon", account_name: "Research Lyon" },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+    fireEvent.change(screen.getByLabelText("Storage location"), {
+      target: { value: "102" },
+    });
+    fireEvent.change(screen.getByLabelText("Storage Space access"), {
+      target: { value: "restricted" },
+    });
+
+    expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
+    expect(mocks.listShareCandidatesMock).toHaveBeenLastCalledWith("proj-42", { targetAccountId: "102" });
+  });
+
   it("allows portal users to create Storage Spaces without showing bucket import", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",

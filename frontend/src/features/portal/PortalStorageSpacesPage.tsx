@@ -126,6 +126,17 @@ export default function PortalStorageSpacesPage() {
   const portalMemberCount = shareCandidates.length + 1;
   const requiresProjectAccountChoice = selectedProjectAccounts.length > 1;
   const defaultProjectAccountId = selectedProjectAccounts[0]?.account_id ? String(selectedProjectAccounts[0].account_id) : "";
+  const createNeedsShareCandidates = showCreate && newAccessMode !== "private" && canChooseVisibility;
+  const importNeedsShareCandidates = showImport && importAccessMode !== "private" && canImport;
+  const shareCandidateTargetAccountId = createNeedsShareCandidates
+    ? requiresProjectAccountChoice
+      ? newAccountId
+      : defaultProjectAccountId
+    : importNeedsShareCandidates
+      ? requiresProjectAccountChoice
+        ? importAccountId
+        : defaultProjectAccountId
+      : "";
 
   useEffect(() => {
     if (!selectedProjectAccounts.length) {
@@ -147,12 +158,8 @@ export default function PortalStorageSpacesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const needsCandidates = (
-      showCreate && newAccessMode !== "private" && canChooseVisibility
-    ) || (
-      showImport && importAccessMode !== "private" && canImport
-    );
-    if (!needsCandidates || !accountIdForApi) {
+    const needsCandidates = createNeedsShareCandidates || importNeedsShareCandidates;
+    if (!needsCandidates || !accountIdForApi || (requiresProjectAccountChoice && !shareCandidateTargetAccountId)) {
       setShareCandidates([]);
       setShareCandidatesLoading(false);
       setShareCandidatesError(null);
@@ -162,7 +169,10 @@ export default function PortalStorageSpacesPage() {
     }
     setShareCandidatesLoading(true);
     setShareCandidatesError(null);
-    listPortalShareCandidates(accountIdForApi)
+    listPortalShareCandidates(
+      accountIdForApi,
+      shareCandidateTargetAccountId ? { targetAccountId: shareCandidateTargetAccountId } : undefined
+    )
       .then((candidates) => {
         if (!cancelled) setShareCandidates(candidates);
       })
@@ -179,7 +189,14 @@ export default function PortalStorageSpacesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, canChooseVisibility, canImport, importAccessMode, newAccessMode, showCreate, showImport, t]);
+  }, [
+    accountIdForApi,
+    createNeedsShareCandidates,
+    importNeedsShareCandidates,
+    requiresProjectAccountChoice,
+    shareCandidateTargetAccountId,
+    t,
+  ]);
 
   const updateRestrictedRoles = (
     setter: Dispatch<SetStateAction<Record<number, PortalStorageSpaceRole>>>,
@@ -244,6 +261,16 @@ export default function PortalStorageSpacesPage() {
     }
   };
 
+  const toggleCreateForm = () => {
+    setShowCreate((value) => !value);
+    setShowImport(false);
+  };
+
+  const toggleImportForm = () => {
+    setShowImport((value) => !value);
+    setShowCreate(false);
+  };
+
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -255,9 +282,9 @@ export default function PortalStorageSpacesPage() {
   });
   if (pageState) return pageState;
   const headerActions = [
-    ...(canCreate ? [{ label: t({ en: "Create storage space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" }), onClick: () => setShowCreate((value) => !value) }] : []),
+    ...(canCreate ? [{ label: t({ en: "Create storage space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" }), onClick: toggleCreateForm }] : []),
     ...(canImport
-      ? [{ label: t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" }), onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
+      ? [{ label: t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" }), onClick: toggleImportForm, variant: "secondary" as const }]
       : []),
   ];
 
