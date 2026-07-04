@@ -168,6 +168,101 @@ def test_portal_create_bucket_level_replication_automates_versioning_and_rule(db
     assert replication.target.project_account_label == "Lyon"
 
 
+def test_portal_create_bucket_level_replication_preserves_existing_rules(db_session):
+    user = _user(db_session)
+    endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab")
+    endpoint_z2 = _endpoint(db_session, name="s3-z2", zonegroup="zg-lab")
+    account_z1 = _account(db_session, name="project-z1", endpoint=endpoint_z1)
+    account_z2 = _account(db_session, name="project-z2", endpoint=endpoint_z2)
+    _metadata(db_session, account=account_z1, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_z2, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    bucket_service = _BucketService()
+    bucket_service.replication_by_bucket["research-source"] = {
+        "Role": "arn:aws:iam::000000000000:role/existing-replication",
+        "Rules": [
+            {
+                "ID": "keep-existing-rule",
+                "Status": "Enabled",
+                "Priority": 2,
+                "Filter": {"Prefix": "logs/"},
+                "Destination": {"Bucket": "arn:aws:s3:::audit-target"},
+            }
+        ],
+    }
+    service = PortalService(db_session)
+
+    replication = service.create_replication(
+        user,
+        [
+            PortalReplicationAccountContext(access=_access(account_z1, user), label="Paris"),
+            PortalReplicationAccountContext(access=_access(account_z2, user), label="Lyon"),
+        ],
+        PortalReplicationCreate(
+            source_storage_space_id=f"a{account_z1.id}:research-source",
+            target_storage_space_id=f"a{account_z2.id}:research-target",
+        ),
+        bucket_service=bucket_service,
+    )
+
+    assert len(bucket_service.replication_calls) == 1
+    configuration = bucket_service.replication_calls[0][2]
+    assert configuration["Role"] == "arn:aws:iam::000000000000:role/existing-replication"
+    assert [rule["ID"] for rule in configuration["Rules"]] == ["keep-existing-rule", replication.rule_id]
+    assert configuration["Rules"][0]["Destination"] == {"Bucket": "arn:aws:s3:::audit-target"}
+    assert configuration["Rules"][1]["Destination"] == {"Bucket": "arn:aws:s3:::research-target"}
+    assert configuration["Rules"][1]["Priority"] == 3
+
+
+def test_portal_create_bucket_level_replication_requires_distinct_storage_locations(db_session):
+    user = _user(db_session)
+    endpoint = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab")
+    account_a = _account(db_session, name="project-a", endpoint=endpoint)
+    account_b = _account(db_session, name="project-b", endpoint=endpoint)
+    _metadata(db_session, account=account_a, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_b, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    service = PortalService(db_session)
+    contexts = [
+        PortalReplicationAccountContext(access=_access(account_a, user), label="Paris"),
+        PortalReplicationAccountContext(access=_access(account_b, user), label="Paris copy"),
+    ]
+    bucket_service = _BucketService()
+    bucket_service.replication_by_bucket["research-source"] = {
+        "Role": "arn:aws:iam::000000000000:role/existing-replication",
+        "Rules": [
+            {
+                "ID": "same-endpoint-rule",
+                "Status": "Enabled",
+                "Priority": 1,
+                "Destination": {"Bucket": "arn:aws:s3:::research-target"},
+            }
+        ],
+    }
+    payload = service.list_replications(user, contexts, bucket_service=bucket_service)
+
+    assert payload.can_create is False
+    assert len(payload.replications) == 1
+    assert payload.replications[0].target is None
+    assert payload.replications[0].message == "Destination bucket is not visible in this Portal workspace."
+    try:
+        service.create_replication(
+            user,
+            contexts,
+            PortalReplicationCreate(
+                source_storage_space_id=f"a{account_a.id}:research-source",
+                target_storage_space_id=f"a{account_b.id}:research-target",
+            ),
+            bucket_service=_BucketService(),
+        )
+    except ValueError as exc:
+        assert "different storage locations" in str(exc)
+    else:
+        raise AssertionError("same-endpoint replication should be rejected")
+
+
 def test_portal_create_bucket_level_replication_requires_same_zonegroup(db_session):
     user = _user(db_session)
     endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-a")

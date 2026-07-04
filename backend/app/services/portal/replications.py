@@ -62,6 +62,46 @@ class PortalReplicationsMixin:
         normalized = re.sub(r"[^a-z0-9-]+", "-", raw).strip("-")
         return (normalized[:120].strip("-") or "portal-replication")[:120]
 
+    def _portal_replication_pair_allowed(self, source: _PortalReplicationSpaceContext, target: _PortalReplicationSpaceContext) -> bool:
+        return bool(
+            source.api.can_manage
+            and source.api.bucket_replication_allowed
+            and target.api.bucket_replication_allowed
+            and source.api.storage_endpoint_id
+            and target.api.storage_endpoint_id
+            and source.api.storage_endpoint_id != target.api.storage_endpoint_id
+            and source.api.storage_endpoint_zonegroup
+            and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
+            and source.api.id != target.api.id
+        )
+
+    def _portal_replication_rule_destination(self, rule: dict[str, Any]) -> str | None:
+        destination = rule.get("Destination") if isinstance(rule.get("Destination"), dict) else {}
+        return self._portal_replication_bucket_name_from_arn(destination.get("Bucket"))
+
+    def _portal_replication_summary_from_rule(
+        self,
+        source: _PortalReplicationSpaceContext,
+        target: _PortalReplicationSpaceContext,
+        *,
+        rule: dict[str, Any],
+        role_arn: str | None,
+        message: str,
+    ) -> PortalReplicationSummary:
+        rule_id = str(rule.get("ID") or self._portal_replication_rule_id(source, target))
+        return PortalReplicationSummary(
+            id=f"bucket:{source.api.id}:{rule_id}",
+            mode="bucket_level",
+            status="configured",
+            source=source.api,
+            target=target.api,
+            target_bucket_name=target.bucket_name,
+            zonegroup=source.api.storage_endpoint_zonegroup,
+            rule_id=rule_id,
+            role_arn=role_arn,
+            message=message,
+        )
+
     def _portal_replication_storage_spaces(
         self,
         user: User,
@@ -198,6 +238,7 @@ class PortalReplicationsMixin:
                         candidate
                         for candidate in target_by_zone_bucket.get((source.api.storage_endpoint_zonegroup or "", target_bucket), [])
                         if candidate.api.id != source.api.id
+                        and candidate.api.storage_endpoint_id != source.api.storage_endpoint_id
                     ),
                     None,
                 )
@@ -230,21 +271,12 @@ class PortalReplicationsMixin:
             *self._portal_global_replication_rows(spaces),
             *self._portal_bucket_replication_rows(spaces, bucket_service=bucket_service),
         ]
-        can_create = any(
-            source.api.can_manage
-            and source.api.bucket_replication_allowed
-            and target.api.bucket_replication_allowed
-            and bool(source.api.storage_endpoint_zonegroup)
-            and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
-            and source.api.id != target.api.id
-            for source in spaces
-            for target in spaces
-        )
+        can_create = any(self._portal_replication_pair_allowed(source, target) for source in spaces for target in spaces)
         unavailable_reason = None
         if not spaces:
             unavailable_reason = "No Storage Space is available in this workspace."
         elif not can_create:
-            unavailable_reason = "Bucket-level replication requires a Portal manager role and at least two Storage Spaces."
+            unavailable_reason = "Replication requires a Portal manager role and two compatible storage locations."
         return PortalReplicationList(
             storage_spaces=[space.api for space in spaces],
             replications=replications,
@@ -273,6 +305,10 @@ class PortalReplicationsMixin:
             raise PermissionError("Portal manager role is required to configure bucket replication.")
         if not source.api.bucket_replication_allowed or not target.api.bucket_replication_allowed:
             raise ValueError("Bucket-level replication is not allowed on both selected storage endpoints.")
+        if not source.api.storage_endpoint_id or not target.api.storage_endpoint_id:
+            raise ValueError("Both Storage Spaces must be attached to a storage location.")
+        if source.api.storage_endpoint_id == target.api.storage_endpoint_id:
+            raise ValueError("Choose two Storage Spaces on different storage locations.")
         if not source.api.storage_endpoint_zonegroup or not target.api.storage_endpoint_zonegroup:
             raise ValueError("Both storage endpoints must define a Ceph zonegroup.")
         if source.api.storage_endpoint_zonegroup != target.api.storage_endpoint_zonegroup:
@@ -281,14 +317,48 @@ class PortalReplicationsMixin:
         try:
             bucket_service.set_versioning(source.bucket_name, source.account, enabled=True)
             bucket_service.set_versioning(target.bucket_name, target.account, enabled=True)
+            current = bucket_service.get_bucket_replication(source.bucket_name, source.account)
+            current_configuration = current.configuration if isinstance(current.configuration, dict) else {}
+            existing_rules = [
+                rule
+                for rule in (current_configuration.get("Rules") or [])
+                if isinstance(rule, dict)
+            ]
+            target_rule = next(
+                (
+                    rule
+                    for rule in existing_rules
+                    if rule.get("Status") == "Enabled"
+                    and self._portal_replication_rule_destination(rule) == target.bucket_name
+                ),
+                None,
+            )
+            role_arn = str(current_configuration.get("Role") or "") or None
+            if target_rule is not None:
+                return self._portal_replication_summary_from_rule(
+                    source,
+                    target,
+                    rule=target_rule,
+                    role_arn=role_arn,
+                    message="Bucket-level replication already configured.",
+                )
+
             rule_id = self._portal_replication_rule_id(source, target)
+            priorities = [
+                int(rule.get("Priority"))
+                for rule in existing_rules
+                if isinstance(rule.get("Priority"), int)
+            ]
+            next_priority = (max(priorities) + 1) if priorities else 1
+            preserved_rules = [rule for rule in existing_rules if rule.get("ID") != rule_id]
             configuration = {
-                "Role": _PORTAL_REPLICATION_ROLE_ARN,
+                "Role": role_arn or _PORTAL_REPLICATION_ROLE_ARN,
                 "Rules": [
+                    *preserved_rules,
                     {
                         "ID": rule_id,
                         "Status": "Enabled",
-                        "Priority": 1,
+                        "Priority": next_priority,
                         "Filter": {"Prefix": ""},
                         "DeleteMarkerReplication": {"Status": "Disabled"},
                         "Destination": {"Bucket": f"arn:aws:s3:::{target.bucket_name}"},
@@ -304,16 +374,18 @@ class PortalReplicationsMixin:
             raise RuntimeError(f"Unable to configure bucket replication: {exc}") from exc
         configuration = result.configuration if isinstance(result.configuration, dict) else configuration
         rules = configuration.get("Rules") if isinstance(configuration, dict) else []
-        returned_rule = rules[0] if isinstance(rules, list) and rules and isinstance(rules[0], dict) else {}
-        return PortalReplicationSummary(
-            id=f"bucket:{source.api.id}:{returned_rule.get('ID') or rule_id}",
-            mode="bucket_level",
-            status="configured",
-            source=source.api,
-            target=target.api,
-            target_bucket_name=target.bucket_name,
-            zonegroup=source.api.storage_endpoint_zonegroup,
-            rule_id=str(returned_rule.get("ID") or rule_id),
+        returned_rule = next(
+            (
+                rule
+                for rule in rules
+                if isinstance(rule, dict) and rule.get("ID") == rule_id
+            ),
+            None,
+        )
+        return self._portal_replication_summary_from_rule(
+            source,
+            target,
+            rule=returned_rule if returned_rule is not None else {"ID": rule_id},
             role_arn=str(configuration.get("Role") or _PORTAL_REPLICATION_ROLE_ARN),
             message="Bucket-level replication configured.",
         )

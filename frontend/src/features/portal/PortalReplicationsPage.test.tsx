@@ -26,9 +26,9 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 const paris = {
-  id: "a101:research",
+  id: "a101:raw-research-paris",
   name: "Research",
-  bucket_name: "research",
+  bucket_name: "raw-research-paris",
   account_id: 101,
   account_name: "project-paris",
   project_account_label: "Paris",
@@ -42,8 +42,9 @@ const paris = {
 
 const lyon = {
   ...paris,
-  id: "a102:research",
+  id: "a102:raw-research-lyon",
   account_id: 102,
+  bucket_name: "raw-research-lyon",
   account_name: "project-lyon",
   project_account_label: "Lyon",
   storage_endpoint_id: 12,
@@ -62,7 +63,7 @@ describe("PortalReplicationsPage", () => {
           status: "configured",
           source: paris,
           target: lyon,
-          target_bucket_name: "research",
+          target_bucket_name: "raw-research-lyon",
           zonegroup: "zg-lab",
           message: "Global zonegroup replication applies to this storage pair.",
         },
@@ -76,32 +77,61 @@ describe("PortalReplicationsPage", () => {
       status: "configured",
       source: paris,
       target: lyon,
-      target_bucket_name: "research",
+      target_bucket_name: "raw-research-lyon",
       zonegroup: "zg-lab",
       rule_id: "portal-research",
       message: "Bucket-level replication configured.",
     });
   });
 
-  it("lists global replications and creates a bucket-level replication", async () => {
+  it("lists replications with user-facing labels and creates a workspace replication", async () => {
     render(<PortalReplicationsPage />);
 
     expect(await screen.findByRole("heading", { name: "Replications" })).toBeInTheDocument();
-    expect(screen.getByText("Global")).toBeInTheDocument();
+    expect(screen.getByText("Platform replication")).toBeInTheDocument();
     expect(screen.getAllByText("Research (Paris)").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Research (Lyon)").length).toBeGreaterThan(0);
+    expect(screen.getByText("Managed by the storage platform.")).toBeInTheDocument();
+    expect(screen.queryByText("raw-research-paris")).not.toBeInTheDocument();
+    expect(screen.queryByText("raw-research-lyon")).not.toBeInTheDocument();
+    expect(screen.queryByText("zg-lab")).not.toBeInTheDocument();
+    expect(screen.queryByText("portal-research")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Source storage"), { target: { value: "a101:research" } });
-    fireEvent.change(screen.getByLabelText("Destination storage"), { target: { value: "a102:research" } });
+    fireEvent.change(screen.getByLabelText("Source storage"), { target: { value: "a101:raw-research-paris" } });
+    fireEvent.change(screen.getByLabelText("Destination storage"), { target: { value: "a102:raw-research-lyon" } });
     fireEvent.click(screen.getByRole("button", { name: "Configure" }));
 
     await waitFor(() => {
       expect(mocks.createPortalReplication).toHaveBeenCalledWith("proj-42", {
-        source_storage_space_id: "a101:research",
-        target_storage_space_id: "a102:research",
+        source_storage_space_id: "a101:raw-research-paris",
+        target_storage_space_id: "a102:raw-research-lyon",
       });
     });
     expect(await screen.findByText("Replication configured from Research.")).toBeInTheDocument();
     expect(mocks.listPortalReplications).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not offer a destination on the same storage location", async () => {
+    mocks.listPortalReplications.mockResolvedValueOnce({
+      storage_spaces: [
+        paris,
+        {
+          ...lyon,
+          id: "a102:raw-same-location",
+          bucket_name: "raw-same-location",
+          project_account_label: "Paris copy",
+          storage_endpoint_id: paris.storage_endpoint_id,
+        },
+      ],
+      replications: [],
+      can_create: false,
+      unavailable_reason: "Replication requires a Portal manager role and two compatible storage locations.",
+    });
+
+    render(<PortalReplicationsPage />);
+
+    expect(await screen.findByText("Replication needs manager access and two compatible storage locations in this workspace.")).toBeInTheDocument();
+    expect(screen.getByText("No compatible destination is available for the selected source.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure" })).toBeDisabled();
   });
 });
