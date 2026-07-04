@@ -19,6 +19,7 @@ from app.db import (
 )
 from app.models.storage_endpoint import (
     StorageEndpointBase,
+    StorageEndpointCephZonegroup,
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointFeatureDetectionResult,
     StorageEndpointAdminOpsPermissions,
@@ -62,6 +63,7 @@ class EnvStorageEndpoint(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    ceph_zonegroup: Optional[StorageEndpointCephZonegroup] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     features: Optional[dict[str, dict[str, object]]] = None
@@ -148,6 +150,39 @@ class StorageEndpointsService:
     ) -> tuple[dict[str, dict[str, object]], str]:
         features = normalize_features_config(provider, raw, region)
         return features, dump_features_config(features)
+
+    def _normalize_ceph_zonegroup(
+        self,
+        provider: StorageProvider,
+        zonegroup: Optional[StorageEndpointCephZonegroup],
+    ) -> tuple[Optional[str], bool, bool]:
+        name = self._clean_optional(zonegroup.name) if zonegroup else None
+        global_replication = bool(zonegroup.global_replication_configured) if zonegroup else False
+        bucket_replication = bool(zonegroup.bucket_replication_allowed) if zonegroup else False
+        has_config = bool(name or global_replication or bucket_replication)
+
+        if provider != StorageProvider.CEPH:
+            if has_config:
+                raise ValueError("Ceph zonegroup metadata can only be configured for Ceph endpoints.")
+            return None, False, False
+
+        if not name:
+            if global_replication or bucket_replication:
+                raise ValueError("Ceph zonegroup name is required when replication metadata is enabled.")
+            return None, False, False
+
+        return name, global_replication, bucket_replication
+
+    def _stored_ceph_zonegroup(self, endpoint: StorageEndpoint) -> Optional[StorageEndpointCephZonegroup]:
+        if not getattr(endpoint, "ceph_zonegroup_name", None):
+            return None
+        return StorageEndpointCephZonegroup(
+            name=endpoint.ceph_zonegroup_name,
+            global_replication_configured=bool(
+                getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
+            ),
+            bucket_replication_allowed=bool(getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)),
+        )
 
     @staticmethod
     def _empty_admin_ops_permissions() -> StorageEndpointAdminOpsPermissions:
@@ -481,6 +516,11 @@ class StorageEndpointsService:
                 raw_features = dump_features_config(entry.features)
             features, features_config = self._normalize_features(provider, raw_features, region)
             admin_endpoint = features.get("admin", {}).get("endpoint")
+            (
+                ceph_zonegroup_name,
+                ceph_zonegroup_global_replication,
+                ceph_zonegroup_bucket_replication,
+            ) = self._normalize_ceph_zonegroup(provider, entry.ceph_zonegroup)
 
             (
                 admin_access,
@@ -520,6 +560,9 @@ class StorageEndpointsService:
                 endpoint.ceph_admin_access_key = ceph_admin_access
                 endpoint.ceph_admin_secret_key = ceph_admin_secret
                 endpoint.features_config = features_config
+                endpoint.ceph_zonegroup_name = ceph_zonegroup_name
+                endpoint.ceph_zonegroup_global_replication_configured = ceph_zonegroup_global_replication
+                endpoint.ceph_zonegroup_bucket_replication_allowed = ceph_zonegroup_bucket_replication
                 endpoint.is_default = bool(entry.is_default)
                 endpoint.is_editable = False
                 self.db.add(endpoint)
@@ -543,6 +586,9 @@ class StorageEndpointsService:
                     ceph_admin_access_key=ceph_admin_access,
                     ceph_admin_secret_key=ceph_admin_secret,
                     features_config=features_config,
+                    ceph_zonegroup_name=ceph_zonegroup_name,
+                    ceph_zonegroup_global_replication_configured=ceph_zonegroup_global_replication,
+                    ceph_zonegroup_bucket_replication_allowed=ceph_zonegroup_bucket_replication,
                     is_default=bool(entry.is_default),
                     is_editable=False,
                 )
@@ -622,6 +668,11 @@ class StorageEndpointsService:
         ceph_admin_secret = self._clean_optional(payload.ceph_admin_secret_key)
         features, features_config = self._normalize_features(provider, payload.features_config, region)
         admin_endpoint = features.get("admin", {}).get("endpoint")
+        (
+            ceph_zonegroup_name,
+            ceph_zonegroup_global_replication,
+            ceph_zonegroup_bucket_replication,
+        ) = self._normalize_ceph_zonegroup(provider, payload.ceph_zonegroup)
 
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
@@ -663,6 +714,9 @@ class StorageEndpointsService:
             ceph_admin_access_key=ceph_admin_access,
             ceph_admin_secret_key=ceph_admin_secret,
             features_config=features_config,
+            ceph_zonegroup_name=ceph_zonegroup_name,
+            ceph_zonegroup_global_replication_configured=ceph_zonegroup_global_replication,
+            ceph_zonegroup_bucket_replication_allowed=ceph_zonegroup_bucket_replication,
             is_default=False,
             is_editable=True,
         )
@@ -750,6 +804,17 @@ class StorageEndpointsService:
         raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
         features, features_config = self._normalize_features(provider, raw_features, region)
         admin_endpoint = features.get("admin", {}).get("endpoint")
+        if "ceph_zonegroup" in fields_set:
+            zonegroup_payload = payload.ceph_zonegroup
+        elif provider == StorageProvider.CEPH:
+            zonegroup_payload = self._stored_ceph_zonegroup(endpoint)
+        else:
+            zonegroup_payload = None
+        (
+            ceph_zonegroup_name,
+            ceph_zonegroup_global_replication,
+            ceph_zonegroup_bucket_replication,
+        ) = self._normalize_ceph_zonegroup(provider, zonegroup_payload)
 
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
@@ -792,6 +857,9 @@ class StorageEndpointsService:
         endpoint.ceph_admin_access_key = ceph_admin_access
         endpoint.ceph_admin_secret_key = ceph_admin_secret
         endpoint.features_config = features_config
+        endpoint.ceph_zonegroup_name = ceph_zonegroup_name
+        endpoint.ceph_zonegroup_global_replication_configured = ceph_zonegroup_global_replication
+        endpoint.ceph_zonegroup_bucket_replication_allowed = ceph_zonegroup_bucket_replication
         self.db.add(endpoint)
         self.db.commit()
         self.db.refresh(endpoint)
@@ -874,6 +942,9 @@ class StorageEndpointsService:
         )
         features, features_config = self._normalize_features(provider, settings.seed_s3_endpoint_features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
+        ceph_zonegroup_name = None
+        ceph_zonegroup_global_replication = False
+        ceph_zonegroup_bucket_replication = False
         name = self._env_endpoint_name()
         (
             admin_access,
@@ -908,6 +979,9 @@ class StorageEndpointsService:
             ceph_admin_access_key=ceph_admin_access,
             ceph_admin_secret_key=ceph_admin_secret,
             features_config=features_config,
+            ceph_zonegroup_name=ceph_zonegroup_name,
+            ceph_zonegroup_global_replication_configured=ceph_zonegroup_global_replication,
+            ceph_zonegroup_bucket_replication_allowed=ceph_zonegroup_bucket_replication,
             is_default=True,
             is_editable=True,
         )

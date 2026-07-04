@@ -46,6 +46,10 @@ Check the selected endpoint capability, your effective Manager access, and the g
     capability `sns` is enabled.
     Replication is available only when the selected endpoint capability
     `replication` is enabled.
+    Ceph zonegroup metadata is configured on the storage endpoint and records
+    whether global Ceph replication or bucket-level replication between zones
+    is expected for that zonegroup; it does not replace the endpoint
+    `replication` capability.
 
 ## Related pages
 

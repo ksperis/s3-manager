@@ -5,6 +5,7 @@
 import client from "./client";
 import type { PaginatedResponse } from "./types";
 import type { ManagerTrafficStats, TrafficWindow } from "./stats";
+import type { StorageEndpointCephZonegroup } from "./storageEndpoints";
 import type { TagDefinitionSummary } from "./tags";
 import type {
   BucketFeatureStatus,
@@ -29,6 +30,7 @@ export type CephAdminEndpoint = {
   region?: string | null;
   is_default: boolean;
   capabilities?: Record<string, boolean>;
+  ceph_zonegroup?: StorageEndpointCephZonegroup | null;
   tags: TagDefinitionSummary[];
 };
 

@@ -7,6 +7,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.db import StorageProvider
+from app.models.storage_endpoint import StorageEndpointCephZonegroup
 from app.models.user import ManagerToolAccess
 
 
@@ -39,6 +40,7 @@ class StorageEndpointSpec(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    ceph_zonegroup: Optional[StorageEndpointCephZonegroup] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     set_default: Optional[bool] = None

@@ -157,3 +157,26 @@ features:
     payload = deps.build_ceph_admin_endpoint_payload(endpoint)
 
     assert payload["admin_endpoint"] == "https://rgw-admin.example.test"
+
+
+def test_build_ceph_admin_endpoint_payload_exposes_ceph_zonegroup():
+    endpoint = SimpleNamespace(
+        id=12,
+        name="Ceph endpoint",
+        provider=StorageProvider.CEPH.value,
+        features_config="",
+        endpoint_url="https://s3.example.test",
+        region="us-east-1",
+        is_default=False,
+        ceph_zonegroup_name="zg-a",
+        ceph_zonegroup_global_replication_configured=True,
+        ceph_zonegroup_bucket_replication_allowed=True,
+    )
+
+    payload = deps.build_ceph_admin_endpoint_payload(endpoint)
+
+    assert payload["ceph_zonegroup"] == {
+        "name": "zg-a",
+        "global_replication_configured": True,
+        "bucket_replication_allowed": True,
+    }

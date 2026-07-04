@@ -17,6 +17,10 @@ Single-resource endpoints also exist for targeted automation calls.
 - S3 connections
 - Account links
 
+Storage endpoint specs may include optional Ceph zonegroup metadata:
+`ceph_zonegroup.name`, `ceph_zonegroup.global_replication_configured`, and
+`ceph_zonegroup.bucket_replication_allowed`.
+
 ## Execution model
 
 - `dry_run` for simulation.

@@ -42,6 +42,19 @@ class StorageEndpointAdminOpsPermissions(BaseModel):
     accounts_write: bool = False
 
 
+class StorageEndpointCephZonegroup(BaseModel):
+    name: Optional[str] = None
+    global_replication_configured: bool = False
+    bucket_replication_allowed: bool = False
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def trim_name(cls, value: Optional[str]) -> Optional[str]:
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+
 class StorageEndpointBase(BaseModel):
     name: str
     endpoint_url: str
@@ -57,6 +70,7 @@ class StorageEndpointBase(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    ceph_zonegroup: Optional[StorageEndpointCephZonegroup] = None
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
 
@@ -105,6 +119,7 @@ class StorageEndpointUpdate(BaseModel):
     ceph_admin_access_key: Optional[str] = None
     ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
+    ceph_zonegroup: Optional[StorageEndpointCephZonegroup] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -154,6 +169,7 @@ class StorageEndpoint(StorageEndpointBase):
     )
     features_config: Optional[str] = None
     features: StorageEndpointFeatures = Field(default_factory=StorageEndpointFeatures)
+    ceph_zonegroup: Optional[StorageEndpointCephZonegroup] = None
 
     admin_secret_key: Optional[str] = Field(default=None, exclude=True)
     supervision_secret_key: Optional[str] = Field(default=None, exclude=True)

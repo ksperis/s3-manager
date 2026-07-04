@@ -7,6 +7,7 @@ from app.db import StorageProvider
 from app.models.storage_endpoint import (
     StorageEndpoint,
     StorageEndpointAdminOpsPermissions,
+    StorageEndpointCephZonegroup,
 )
 from app.models.tagging import TagDefinitionSummary
 
@@ -20,6 +21,17 @@ def storage_endpoint_from_db(
     admin_ops_permissions: StorageEndpointAdminOpsPermissions,
     tags: list[TagDefinitionSummary] | None = None,
 ) -> StorageEndpoint:
+    ceph_zonegroup = None
+    if getattr(endpoint, "ceph_zonegroup_name", None):
+        ceph_zonegroup = StorageEndpointCephZonegroup(
+            name=endpoint.ceph_zonegroup_name,
+            global_replication_configured=bool(
+                getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
+            ),
+            bucket_replication_allowed=bool(
+                getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
+            ),
+        )
     return StorageEndpoint(
         id=endpoint.id,
         name=endpoint.name,
@@ -46,4 +58,5 @@ def storage_endpoint_from_db(
         has_ceph_admin_secret=bool(endpoint.ceph_admin_secret_key),
         features_config=endpoint.features_config,
         features=features,
+        ceph_zonegroup=ceph_zonegroup,
     )

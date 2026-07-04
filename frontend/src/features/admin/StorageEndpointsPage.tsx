@@ -52,6 +52,9 @@ type FormState = {
   ceph_admin_secret_key: string;
   has_admin_secret: boolean;
   has_supervision_secret: boolean;
+  ceph_zonegroup_name: string;
+  ceph_zonegroup_global_replication_configured: boolean;
+  ceph_zonegroup_bucket_replication_allowed: boolean;
   features: FeaturesState;
 };
 
@@ -345,6 +348,9 @@ function createEmptyForm(): FormState {
     ceph_admin_secret_key: "",
     has_admin_secret: false,
     has_supervision_secret: false,
+    ceph_zonegroup_name: "",
+    ceph_zonegroup_global_replication_configured: false,
+    ceph_zonegroup_bucket_replication_allowed: false,
     features,
   };
 }
@@ -370,6 +376,9 @@ function createFormFromEndpoint(endpoint: StorageEndpoint): FormState {
     ceph_admin_secret_key: "",
     has_admin_secret: Boolean(endpoint.has_admin_secret),
     has_supervision_secret: Boolean(endpoint.has_supervision_secret),
+    ceph_zonegroup_name: endpoint.ceph_zonegroup?.name ?? "",
+    ceph_zonegroup_global_replication_configured: Boolean(endpoint.ceph_zonegroup?.global_replication_configured),
+    ceph_zonegroup_bucket_replication_allowed: Boolean(endpoint.ceph_zonegroup?.bucket_replication_allowed),
     features: resolveFeatureState(endpoint, endpoint.provider),
   };
 }
@@ -789,6 +798,11 @@ export default function StorageEndpointsPage() {
         supervision_secret_key: provider === "ceph" ? prev.supervision_secret_key : "",
         ceph_admin_access_key: provider === "ceph" ? prev.ceph_admin_access_key : "",
         ceph_admin_secret_key: provider === "ceph" ? prev.ceph_admin_secret_key : "",
+        ceph_zonegroup_name: provider === "ceph" ? prev.ceph_zonegroup_name : "",
+        ceph_zonegroup_global_replication_configured:
+          provider === "ceph" ? prev.ceph_zonegroup_global_replication_configured : false,
+        ceph_zonegroup_bucket_replication_allowed:
+          provider === "ceph" ? prev.ceph_zonegroup_bucket_replication_allowed : false,
         features: constrained,
       };
     });
@@ -915,6 +929,7 @@ export default function StorageEndpointsPage() {
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
     const trimmedCephAdminAccess = form.ceph_admin_access_key.trim();
     const trimmedCephAdminSecret = form.ceph_admin_secret_key.trim();
+    const trimmedCephZonegroupName = form.ceph_zonegroup_name.trim();
     let latitude: number | null;
     let longitude: number | null;
     const featuresSource =
@@ -959,6 +974,20 @@ export default function StorageEndpointsPage() {
     };
 
     if (form.provider === "ceph") {
+      if (
+        !trimmedCephZonegroupName &&
+        (form.ceph_zonegroup_global_replication_configured || form.ceph_zonegroup_bucket_replication_allowed)
+      ) {
+        setFormError("Ceph zonegroup name is required when replication metadata is enabled.");
+        return null;
+      }
+      payload.ceph_zonegroup = trimmedCephZonegroupName
+        ? {
+            name: trimmedCephZonegroupName,
+            global_replication_configured: Boolean(form.ceph_zonegroup_global_replication_configured),
+            bucket_replication_allowed: Boolean(form.ceph_zonegroup_bucket_replication_allowed),
+          }
+        : null;
       if (adminEnabled && !trimmedAdminAccess) {
         setFormError("Admin access key is required when admin is enabled.");
         return null;
@@ -1074,6 +1103,7 @@ export default function StorageEndpointsPage() {
       features.iam.enabled &&
       Boolean(iamEndpointOverride) &&
       iamEndpointOverride !== endpoint.endpoint_url;
+    const cephZonegroup = endpoint.provider === "ceph" ? endpoint.ceph_zonegroup : null;
     const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
     const hasCoordinates = endpoint.latitude != null && endpoint.longitude != null;
 
@@ -1126,6 +1156,11 @@ export default function StorageEndpointsPage() {
             <DetailLine label="Region">
               <span className="font-semibold text-[var(--ui-text)]">{endpoint.region || "Default"}</span>
             </DetailLine>
+            {cephZonegroup?.name && (
+              <DetailLine label="Zonegroup">
+                <span className="font-semibold text-[var(--ui-text)]">{cephZonegroup.name}</span>
+              </DetailLine>
+            )}
           </div>
         </td>
         <td className="min-w-[260px] align-top">
@@ -1151,6 +1186,18 @@ export default function StorageEndpointsPage() {
                 </code>
               )}
             </DetailLine>
+            {cephZonegroup?.name && (
+              <DetailLine label="Zonegroup replication">
+                <span className="font-semibold text-[var(--ui-text)]">
+                  {[
+                    cephZonegroup.global_replication_configured ? "Global" : null,
+                    cephZonegroup.bucket_replication_allowed ? "Bucket" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" + ") || "Metadata only"}
+                </span>
+              </DetailLine>
+            )}
           </div>
         </td>
         <td className="min-w-[360px] align-top">
@@ -1619,6 +1666,49 @@ export default function StorageEndpointsPage() {
                     </pre>
                   </div>
                 )}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Zonegroup</p>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100 sm:col-span-2">
+                      Zonegroup name (optional)
+                      <input
+                        type="text"
+                        value={form.ceph_zonegroup_name}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ceph_zonegroup_name: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="zg-a"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      Global replication configured
+                      <input
+                        type="checkbox"
+                        checked={form.ceph_zonegroup_global_replication_configured}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            ceph_zonegroup_global_replication_configured: e.target.checked,
+                          }))
+                        }
+                        className={uiCheckboxClass}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      Bucket replication allowed
+                      <input
+                        type="checkbox"
+                        checked={form.ceph_zonegroup_bucket_replication_allowed}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            ceph_zonegroup_bucket_replication_allowed: e.target.checked,
+                          }))
+                        }
+                        className={uiCheckboxClass}
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
 

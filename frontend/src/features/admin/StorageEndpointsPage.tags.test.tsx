@@ -120,6 +120,11 @@ describe("StorageEndpointsPage tags", () => {
           replication: { enabled: false },
           healthcheck: { enabled: true, mode: "s3", url: "https://health.ceph.example.test" },
         },
+        ceph_zonegroup: {
+          name: "zg-a",
+          global_replication_configured: true,
+          bucket_replication_allowed: true,
+        },
       }),
     ]);
 
@@ -137,6 +142,8 @@ describe("StorageEndpointsPage tags", () => {
 
     expect(endpointRow.getByText("https://ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getByText("https://admin.ceph.example.test")).toBeInTheDocument();
+    expect(endpointRow.getByText("zg-a")).toBeInTheDocument();
+    expect(endpointRow.getByText("Global + Bucket")).toBeInTheDocument();
     expect(endpointRow.getAllByText("Default")).toHaveLength(2);
     expect(endpointRow.getByText("prod")).toBeInTheDocument();
     expect(endpointRow.getByText("Ceph")).toBeInTheDocument();
@@ -216,6 +223,9 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Ceph Replication" } });
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://ceph-repl.example.test" } });
+    fireEvent.change(screen.getByLabelText("Zonegroup name (optional)"), { target: { value: "zg-a" } });
+    fireEvent.click(screen.getByLabelText("Global replication configured"));
+    fireEvent.click(screen.getByLabelText("Bucket replication allowed"));
     fireEvent.click(screen.getByLabelText("Bucket replication enabled"));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -225,6 +235,11 @@ describe("StorageEndpointsPage tags", () => {
           name: "Ceph Replication",
           endpoint_url: "https://ceph-repl.example.test",
           provider: "ceph",
+          ceph_zonegroup: {
+            name: "zg-a",
+            global_replication_configured: true,
+            bucket_replication_allowed: true,
+          },
         })
       );
     });
@@ -271,6 +286,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(payload.features_config).toContain("sse:\n    enabled: true");
     expect(payload.features_config).toContain("sns:\n    enabled: false");
     expect(payload.features_config).toContain("replication:\n    enabled: false");
+    expect(payload).not.toHaveProperty("ceph_zonegroup");
   });
 
   it("syncs AWS generated endpoints when the region changes", async () => {

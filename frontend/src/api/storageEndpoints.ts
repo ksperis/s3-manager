@@ -39,6 +39,12 @@ export type StorageEndpointAdminOpsPermissions = {
   accounts_write: boolean;
 };
 
+export type StorageEndpointCephZonegroup = {
+  name?: string | null;
+  global_replication_configured: boolean;
+  bucket_replication_allowed: boolean;
+};
+
 export type StorageEndpoint = {
   id: number;
   name: string;
@@ -60,6 +66,7 @@ export type StorageEndpoint = {
   admin_ops_permissions?: StorageEndpointAdminOpsPermissions | null;
   features_config?: string | null;
   features?: StorageEndpointFeatures;
+  ceph_zonegroup?: StorageEndpointCephZonegroup | null;
   is_default: boolean;
   is_editable: boolean;
   tags: TagDefinitionSummary[];
@@ -92,6 +99,7 @@ export type StorageEndpointPayload = {
   ceph_admin_access_key?: string | null;
   ceph_admin_secret_key?: string | null;
   features_config?: string | null;
+  ceph_zonegroup?: StorageEndpointCephZonegroup | null;
 };
 
 export type StorageEndpointFeatureDetectionPayload = {

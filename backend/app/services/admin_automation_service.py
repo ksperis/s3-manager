@@ -988,6 +988,7 @@ class AdminAutomationService:
             ceph_admin_access_key=spec.ceph_admin_access_key,
             ceph_admin_secret_key=spec.ceph_admin_secret_key,
             features_config=spec.features_config,
+            ceph_zonegroup=spec.ceph_zonegroup,
         )
 
     def _build_storage_endpoint_update(self, item: StorageEndpointApply, spec) -> StorageEndpointUpdate:

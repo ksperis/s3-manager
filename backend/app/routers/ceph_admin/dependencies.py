@@ -175,6 +175,17 @@ def get_ceph_admin_workspace_endpoint(
 
 def build_ceph_admin_endpoint_payload(endpoint: StorageEndpoint) -> dict:
     features = normalize_features_config(endpoint.provider, endpoint.features_config)
+    ceph_zonegroup = None
+    if getattr(endpoint, "ceph_zonegroup_name", None):
+        ceph_zonegroup = {
+            "name": endpoint.ceph_zonegroup_name,
+            "global_replication_configured": bool(
+                getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
+            ),
+            "bucket_replication_allowed": bool(
+                getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
+            ),
+        }
     return {
         "id": endpoint.id,
         "name": endpoint.name,
@@ -183,4 +194,5 @@ def build_ceph_admin_endpoint_payload(endpoint: StorageEndpoint) -> dict:
         "region": endpoint.region,
         "is_default": bool(endpoint.is_default),
         "capabilities": features_to_capabilities(features),
+        "ceph_zonegroup": ceph_zonegroup,
     }

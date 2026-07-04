@@ -29,6 +29,7 @@ from app.db import (
     UserRole,
 )
 from app.models.storage_endpoint import (
+    StorageEndpointCephZonegroup,
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointCreate,
     StorageEndpointTagsUpdate,
@@ -299,6 +300,106 @@ def test_create_update_and_serialize_endpoint_coordinates(db_session):
     assert persisted.longitude == -1.5536
 
 
+def test_create_update_and_serialize_ceph_zonegroup(db_session):
+    service = StorageEndpointsService(db_session)
+
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="Ceph Zonegroup",
+            endpoint_url="https://ceph-zonegroup.example.test",
+            provider=StorageProvider.CEPH,
+            ceph_zonegroup=StorageEndpointCephZonegroup(
+                name=" zg-a ",
+                global_replication_configured=True,
+                bucket_replication_allowed=False,
+            ),
+        )
+    )
+
+    assert created.ceph_zonegroup is not None
+    assert created.ceph_zonegroup.name == "zg-a"
+    assert created.ceph_zonegroup.global_replication_configured is True
+    assert created.ceph_zonegroup.bucket_replication_allowed is False
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert persisted.ceph_zonegroup_name == "zg-a"
+    assert persisted.ceph_zonegroup_global_replication_configured is True
+    assert persisted.ceph_zonegroup_bucket_replication_allowed is False
+
+    updated = service.update_endpoint(
+        created.id,
+        StorageEndpointUpdate(
+            ceph_zonegroup=StorageEndpointCephZonegroup(
+                name="zg-b",
+                global_replication_configured=False,
+                bucket_replication_allowed=True,
+            )
+        ),
+    )
+
+    assert updated.ceph_zonegroup is not None
+    assert updated.ceph_zonegroup.name == "zg-b"
+    assert updated.ceph_zonegroup.global_replication_configured is False
+    assert updated.ceph_zonegroup.bucket_replication_allowed is True
+    db_session.refresh(persisted)
+    assert persisted.ceph_zonegroup_name == "zg-b"
+    assert persisted.ceph_zonegroup_global_replication_configured is False
+    assert persisted.ceph_zonegroup_bucket_replication_allowed is True
+
+
+def test_ceph_zonegroup_requires_ceph_provider_and_name_for_flags(db_session):
+    service = StorageEndpointsService(db_session)
+
+    with pytest.raises(ValueError, match="only be configured for Ceph endpoints"):
+        service.create_endpoint(
+            StorageEndpointCreate(
+                name="Other Zonegroup",
+                endpoint_url="https://other-zonegroup.example.test",
+                provider=StorageProvider.OTHER,
+                ceph_zonegroup=StorageEndpointCephZonegroup(name="zg-a"),
+            )
+        )
+
+    with pytest.raises(ValueError, match="name is required"):
+        service.create_endpoint(
+            StorageEndpointCreate(
+                name="Ceph Zonegroup Missing Name",
+                endpoint_url="https://ceph-zonegroup-missing-name.example.test",
+                provider=StorageProvider.CEPH,
+                ceph_zonegroup=StorageEndpointCephZonegroup(bucket_replication_allowed=True),
+            )
+        )
+
+
+def test_update_endpoint_clears_ceph_zonegroup_for_non_ceph_provider(db_session):
+    service = StorageEndpointsService(db_session)
+    created = service.create_endpoint(
+        StorageEndpointCreate(
+            name="Ceph To Other",
+            endpoint_url="https://ceph-to-other.example.test",
+            provider=StorageProvider.CEPH,
+            ceph_zonegroup=StorageEndpointCephZonegroup(
+                name="zg-a",
+                global_replication_configured=True,
+                bucket_replication_allowed=True,
+            ),
+        )
+    )
+
+    updated = service.update_endpoint(
+        created.id,
+        StorageEndpointUpdate(provider=StorageProvider.OTHER),
+    )
+
+    assert updated.provider == StorageProvider.OTHER
+    assert updated.ceph_zonegroup is None
+    persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
+    assert persisted is not None
+    assert persisted.ceph_zonegroup_name is None
+    assert persisted.ceph_zonegroup_global_replication_configured is False
+    assert persisted.ceph_zonegroup_bucket_replication_allowed is False
+
+
 def test_endpoint_coordinates_reject_invalid_ranges():
     with pytest.raises(ValidationError, match="Latitude must be a finite number between -90 and 90"):
         StorageEndpointCreate(
@@ -438,6 +539,11 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
                     "admin_access_key": "AKIA-ADMIN",
                     "admin_secret_key": "SECRET-ADMIN",
                     "features_config": "features:\n  admin:\n    enabled: true\n",
+                    "ceph_zonegroup": {
+                        "name": "zg-env",
+                        "global_replication_configured": True,
+                        "bucket_replication_allowed": True,
+                    },
                     "latitude": 43.6047,
                     "longitude": 1.4442,
                     "is_default": True,
@@ -466,6 +572,10 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     synced = service.sync_env_endpoints()
     assert len(synced) == 1
     assert synced[0].force_path_style is True
+    assert synced[0].ceph_zonegroup is not None
+    assert synced[0].ceph_zonegroup.name == "zg-env"
+    assert synced[0].ceph_zonegroup.global_replication_configured is True
+    assert synced[0].ceph_zonegroup.bucket_replication_allowed is True
     assert synced[0].latitude == 43.6047
     assert synced[0].longitude == 1.4442
     assert calls["count"] == 0
