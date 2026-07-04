@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ExecutionContext } from "../../api/executionContexts";
 import TopbarContextAccountSelector from "../TopbarContextAccountSelector";
@@ -120,6 +120,44 @@ describe("TopbarContextAccountSelector", () => {
     await user.type(input, "f");
     await user.type(input, "ilter target");
     expect(visibleOptionLabels(listbox)).toEqual(["Filter target"]);
+  });
+
+  it("supports project-specific trigger and menu wording", async () => {
+    const user = userEvent.setup();
+    const contexts = [
+      makeContext({ id: "proj-1", kind: "portal_project", display_name: "Research Project" }),
+      makeContext({ id: "proj-2", kind: "portal_project", display_name: "Archive Project" }),
+      makeContext({ id: "proj-3", kind: "portal_project", display_name: "Long Term Project" }),
+      makeContext({ id: "proj-4", kind: "portal_project", display_name: "Shared Project" }),
+      makeContext({ id: "proj-5", kind: "portal_project", display_name: "Training Project" }),
+      makeContext({ id: "proj-6", kind: "portal_project", display_name: "Demo Project" }),
+      makeContext({ id: "proj-7", kind: "portal_project", display_name: "Project Filter Target" }),
+    ];
+    render(
+      <TopbarContextAccountSelector
+        contexts={contexts}
+        selectedContextId="proj-1"
+        onContextChange={() => undefined}
+        selectedLabel="Research Project"
+        identityLabel={null}
+        defaultEndpointId={null}
+        defaultEndpointName="Default"
+        triggerLabel="Project"
+        searchPlaceholder="Search project..."
+        listboxAriaLabel="Select project context"
+        emptyMessage="No project matches your search."
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Select project context" })).toHaveTextContent("Project");
+    const listbox = await user.click(screen.getByRole("button", { name: "Select project context" })).then(() =>
+      screen.findByRole("listbox", { name: "Select project context" })
+    );
+    expect(within(listbox).getAllByText("Portal project").length).toBeGreaterThan(0);
+
+    const input = screen.getByPlaceholderText("Search project...");
+    fireEvent.change(input, { target: { value: "zzzzzz" } });
+    expect(within(listbox).getByText("No project matches your search.")).toBeInTheDocument();
   });
 
   it("keeps search input hidden when context count is at or below threshold", async () => {

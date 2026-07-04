@@ -281,40 +281,60 @@ export default function PortalStorageSpacesPage() {
                 : "lg:grid-cols-[1fr_1.5fr_auto]"
           )}>
             {canUseNamedBucket ? (
-              <select
-                className="ui-control h-9 py-1.5 text-xs"
-                value={newNamingMode}
-                onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
-                aria-label={t({ en: "Storage Space naming mode", fr: "Mode de nommage de l'espace de stockage", de: "Benennungsmodus des Speicherbereichs" })}
-              >
-                <option value="generic_uuid">{t({ en: "Automatic storage", fr: "Stockage automatique", de: "Automatischer Speicher" })}</option>
-                <option value="named_bucket">{t({ en: "Named storage", fr: "Stockage nommé", de: "Benannter Speicher" })}</option>
-              </select>
+              <label className="flex flex-col gap-1">
+                <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                  {t({ en: "Storage mode", fr: "Mode de stockage", de: "Speichermodus" })}
+                </span>
+                <select
+                  className="ui-control h-9 py-1.5 text-xs"
+                  value={newNamingMode}
+                  onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
+                  aria-label={t({ en: "Storage Space naming mode", fr: "Mode de nommage de l'espace de stockage", de: "Benennungsmodus des Speicherbereichs" })}
+                >
+                  <option value="generic_uuid">{t({ en: "Automatic storage", fr: "Stockage automatique", de: "Automatischer Speicher" })}</option>
+                  <option value="named_bucket">{t({ en: "Named storage", fr: "Stockage nommé", de: "Benannter Speicher" })}</option>
+                </select>
+              </label>
             ) : null}
             {requiresProjectAccountChoice ? (
-              <select
-                className="ui-control h-9 py-1.5 text-xs"
-                value={newAccountId}
-                onChange={(event) => setNewAccountId(event.target.value)}
-                aria-label={t({ en: "Project account", fr: "Compte du projet", de: "Projektkonto" })}
-              >
-                {selectedProjectAccounts.map((account) => (
-                  <option key={account.account_id} value={account.account_id}>
-                    {account.display_name}
-                  </option>
-                ))}
-              </select>
+              <label className="flex flex-col gap-1">
+                <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                  {t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}
+                </span>
+                <select
+                  className="ui-control h-9 py-1.5 text-xs"
+                  value={newAccountId}
+                  onChange={(event) => setNewAccountId(event.target.value)}
+                  aria-label={t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}
+                >
+                  {selectedProjectAccounts.map((account) => (
+                    <option key={account.account_id} value={account.account_id}>
+                      {account.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
-            <input
-              className="ui-control h-9 text-xs"
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              placeholder={effectiveNamingMode === "named_bucket"
-                ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
-                : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
-            />
-            <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
-            <UiButton disabled={!newName.trim() || createBusy || (requiresProjectAccountChoice && !newAccountId)} onClick={handleCreate} className="h-9 px-3 py-1.5">
+            <label className="flex flex-col gap-1">
+              <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                {t({ en: "Name", fr: "Nom", de: "Name" })}
+              </span>
+              <input
+                className="ui-control h-9 text-xs"
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder={effectiveNamingMode === "named_bucket"
+                  ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
+                  : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                {t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+              </span>
+              <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
+            </label>
+            <UiButton disabled={!newName.trim() || createBusy || (requiresProjectAccountChoice && !newAccountId)} onClick={handleCreate} className="h-9 px-3 py-1.5 lg:self-end">
               {createBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create", fr: "Créer", de: "Erstellen" })}
             </UiButton>
           </div>
@@ -326,7 +346,7 @@ export default function PortalStorageSpacesPage() {
                 accountMemberRole={newAccountMemberRole}
                 onAccountMemberRoleChange={setNewAccountMemberRole}
                 modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+                roleLabel={t({ en: "Default access for project members", fr: "Accès par défaut des membres du projet", de: "Standardzugriff für Projektmitglieder" })}
               />
             ) : (
               <div className={cx("text-xs font-medium", uiMutedTextClass)}>
@@ -356,32 +376,47 @@ export default function PortalStorageSpacesPage() {
         <UiCard title={t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" })}>
           <div className={cx("grid gap-3", requiresProjectAccountChoice ? "lg:grid-cols-[180px_1fr_1.5fr_auto]" : "lg:grid-cols-[1fr_1.5fr_auto]")}>
             {requiresProjectAccountChoice ? (
-              <select
-                className="ui-control h-9 py-1.5 text-xs"
-                value={importAccountId}
-                onChange={(event) => setImportAccountId(event.target.value)}
-                aria-label={t({ en: "Project account", fr: "Compte du projet", de: "Projektkonto" })}
-              >
-                {selectedProjectAccounts.map((account) => (
-                  <option key={account.account_id} value={account.account_id}>
-                    {account.display_name}
-                  </option>
-                ))}
-              </select>
+              <label className="flex flex-col gap-1">
+                <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                  {t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}
+                </span>
+                <select
+                  className="ui-control h-9 py-1.5 text-xs"
+                  value={importAccountId}
+                  onChange={(event) => setImportAccountId(event.target.value)}
+                  aria-label={t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}
+                >
+                  {selectedProjectAccounts.map((account) => (
+                    <option key={account.account_id} value={account.account_id}>
+                      {account.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
-            <input
-              className="ui-control h-9 text-xs"
-              value={importBucketName}
-              onChange={(event) => setImportBucketName(event.target.value)}
-              placeholder={t({ en: "Existing storage name", fr: "Nom du stockage existant", de: "Name des vorhandenen Speichers" })}
-            />
-            <input
-              className="ui-control h-9 text-xs"
-              value={importDescription}
-              onChange={(event) => setImportDescription(event.target.value)}
-              placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
-            />
-            <UiButton disabled={!importBucketName.trim() || importBusy || (requiresProjectAccountChoice && !importAccountId)} onClick={handleImport} className="h-9 px-3 py-1.5">
+            <label className="flex flex-col gap-1">
+              <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                {t({ en: "Existing storage", fr: "Stockage existant", de: "Vorhandener Speicher" })}
+              </span>
+              <input
+                className="ui-control h-9 text-xs"
+                value={importBucketName}
+                onChange={(event) => setImportBucketName(event.target.value)}
+                placeholder={t({ en: "Existing storage name", fr: "Nom du stockage existant", de: "Name des vorhandenen Speichers" })}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className={cx("text-[11px] font-semibold uppercase tracking-wide", uiMutedTextClass)}>
+                {t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+              </span>
+              <input
+                className="ui-control h-9 text-xs"
+                value={importDescription}
+                onChange={(event) => setImportDescription(event.target.value)}
+                placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+              />
+            </label>
+            <UiButton disabled={!importBucketName.trim() || importBusy || (requiresProjectAccountChoice && !importAccountId)} onClick={handleImport} className="h-9 px-3 py-1.5 lg:self-end">
               {importBusy ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefügt..." }) : t({ en: "Add", fr: "Ajouter", de: "Hinzufügen" })}
             </UiButton>
           </div>
@@ -392,7 +427,7 @@ export default function PortalStorageSpacesPage() {
               accountMemberRole={importAccountMemberRole}
               onAccountMemberRoleChange={setImportAccountMemberRole}
               modeLabel={t({ en: "Imported Storage Space access", fr: "Accès à l'espace importé", de: "Zugriff auf den importierten Speicherbereich" })}
-              roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+              roleLabel={t({ en: "Default access for project members", fr: "Accès par défaut des membres du projet", de: "Standardzugriff für Projektmitglieder" })}
             />
             <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
               {portalAccessModeSummary(importAccessMode, selectedImportRestrictedEntries.length, portalMemberCount, t)}
@@ -450,7 +485,7 @@ export default function PortalStorageSpacesPage() {
                 <th>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</th>
                 <th>{t({ en: "Size", fr: "Taille", de: "Größe" })}</th>
                 <th>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</th>
-                <th>{t({ en: "Project account", fr: "Compte projet", de: "Projektkonto" })}</th>
+                <th>{t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}</th>
                 <th>{t({ en: "Region", fr: "Région", de: "Region" })}</th>
                 <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
               </tr>
@@ -493,7 +528,7 @@ export default function PortalStorageSpacesPage() {
                       {space.createdLabel}
                     </td>
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Project account", fr: "Compte projet", de: "Projektkonto" })}</span>
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage location", fr: "Localisation de stockage", de: "Speicherstandort" })}</span>
                       {space.projectAccountLabel ?? "-"}
                     </td>
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">

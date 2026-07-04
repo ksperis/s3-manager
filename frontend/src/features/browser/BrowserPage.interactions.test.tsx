@@ -932,7 +932,7 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
   });
 
-  it("keeps root Browser bucket labels while preserving Portal-scoped requests", async () => {
+  it("uses Storage Space labels for root Browser Portal project contexts", async () => {
     setBrowserContext({
       selectorForApi: "acc-portal",
       selectedContextId: "portal-101",
@@ -951,9 +951,10 @@ describe("BrowserPage interactions", () => {
       "acc-portal",
       expect.objectContaining({ workspaceSurface: "portal" }),
     );
-    expect(screen.getByRole("button", { name: "Select bucket" })).toHaveTextContent("bucket-1");
-    expect(screen.getByTestId("browser-workspace-sidebar")).toHaveAttribute("aria-label", "Buckets");
-    expect(screen.queryByText("Storage Spaces")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select storage space" })).toHaveTextContent("bucket-1");
+    const sidebar = screen.getByTestId("browser-workspace-sidebar");
+    expect(sidebar).toHaveAttribute("aria-label", "Storage Spaces");
+    expect(within(sidebar).getByText("Storage Spaces")).toBeInTheDocument();
   });
 
   it("runs the Portal public-link action for a selected Browser file", async () => {

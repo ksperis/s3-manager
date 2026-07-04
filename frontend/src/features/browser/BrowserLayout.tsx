@@ -49,6 +49,13 @@ function BrowserShell() {
   const selected = contexts.find((a) => a.id === selectedContextId);
   const showSelector = requiresContextSelection && visibleContexts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
+  const contextControlLabel = selected?.kind === "portal_project" ? "Project" : "Account";
+  const contextSelectorAriaLabel =
+    selected?.kind === "portal_project" ? "Select project context" : "Select context account";
+  const contextSearchPlaceholder =
+    selected?.kind === "portal_project" ? "Search project..." : "Search account...";
+  const contextSearchEmptyMessage =
+    selected?.kind === "portal_project" ? "No project matches your search." : "No account matches your search.";
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
       ? `S3 Identity: ${iamIdentity}`
@@ -106,7 +113,7 @@ function BrowserShell() {
       return (
         <button
           type="button"
-          aria-label={`Account context ${selectedLabel}`}
+          aria-label={`${contextControlLabel} context ${selectedLabel}`}
           title={identityLabel ?? selectedLabel}
           className="shell-control inline-flex h-9 w-9 items-center justify-center rounded-lg border"
         >
@@ -123,7 +130,7 @@ function BrowserShell() {
       >
         <span className="min-w-0 flex-1 leading-tight">
           <span className="shell-muted-text block truncate text-[10px] font-medium">
-            Account
+            {contextControlLabel}
           </span>
           <span className={`mt-0.5 block ${TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS} truncate text-[12px] font-semibold leading-4 text-[var(--shell-text)]`}>{selectedLabel}</span>
         </span>
@@ -152,6 +159,10 @@ function BrowserShell() {
             widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             icon={<AccountControlIcon className="h-4 w-4" />}
             triggerMode={mode}
+            triggerLabel={contextControlLabel}
+            searchPlaceholder={contextSearchPlaceholder}
+            listboxAriaLabel={contextSelectorAriaLabel}
+            emptyMessage={contextSearchEmptyMessage}
           />
         ) : (
           renderStaticAccountPill(mode)

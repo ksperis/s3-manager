@@ -524,7 +524,7 @@ function ProjectAccountsCard({
   const { t } = useI18n();
   const visibleAccounts = accounts.slice(0, 4);
   return (
-    <WorkspaceDashboardCard title={t({ en: "Project accounts", fr: "Comptes du projet", de: "Projektkonten" })}>
+    <WorkspaceDashboardCard title={t({ en: "Storage locations", fr: "Localisations de stockage", de: "Speicherstandorte" })}>
       <div className="space-y-3">
         <div className="flex items-start gap-3">
           <IconBubble tone="blue">
@@ -533,7 +533,7 @@ function ProjectAccountsCard({
           <div className="min-w-0">
             <p className={cx("truncate text-sm font-bold", uiTitleTextClass)}>{project?.name ?? "-"}</p>
             <p className={cx("text-xs", uiMutedTextClass)}>
-              {t({ en: `${accounts.length} associated S3 account(s)`, fr: `${accounts.length} compte(s) S3 associé(s)`, de: `${accounts.length} verknüpfte S3-Konten` })}
+              {t({ en: `${accounts.length} available location(s)`, fr: `${accounts.length} localisation(s) disponible(s)`, de: `${accounts.length} verfügbare Speicherstandorte` })}
             </p>
           </div>
         </div>
@@ -544,7 +544,7 @@ function ProjectAccountsCard({
                 <p className={cx("truncate text-xs font-bold", uiTitleTextClass)}>{account.display_name}</p>
                 <p className={cx("truncate text-[11px]", uiMutedTextClass)}>{account.storage_endpoint_name ?? account.account_name}</p>
               </div>
-              <UiBadge tone="primary">{account.account_id}</UiBadge>
+              {account.storage_endpoint_zonegroup ? <UiBadge tone="primary">{account.storage_endpoint_zonegroup}</UiBadge> : null}
             </div>
           ))}
           {accounts.length > visibleAccounts.length ? (

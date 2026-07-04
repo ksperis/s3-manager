@@ -68,4 +68,27 @@ describe("browserBucketsPanelHelpers", () => {
       technicalDetail: "Network Error",
     });
   });
+
+  it("uses Storage Space copy for portal listing errors", () => {
+    const issue = normalizeBrowserListingIssue(
+      {
+        isAxiosError: true,
+        response: {
+          status: 403,
+          data: { detail: "Forbidden by policy" },
+        },
+        message: "Request failed with status code 403",
+      },
+      "Fallback message",
+      { workspaceNoun: "Storage Space" },
+    );
+
+    expect(issue).toEqual({
+      kind: "access_denied",
+      title: "Listing is not available for this Storage Space.",
+      description:
+        "The current credentials cannot list objects or folders in this Storage Space.",
+      technicalDetail: "Forbidden by policy",
+    });
+  });
 });

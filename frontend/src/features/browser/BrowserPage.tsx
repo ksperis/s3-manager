@@ -501,8 +501,10 @@ const PATH_SUGGESTIONS_API_LIMIT = 50;
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
-const CORS_DIRECT_TRANSFER_WARNING =
+const CORS_DIRECT_TRANSFER_BUCKET_WARNING =
   "Direct download/upload is not allowed on this bucket.";
+const CORS_DIRECT_TRANSFER_STORAGE_SPACE_WARNING =
+  "Direct download/upload is not allowed on this Storage Space.";
 const BUCKET_LIST_ACCESS_DENIED_MESSAGE =
   "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.";
 const STORAGE_SPACE_LIST_ACCESS_DENIED_MESSAGE =
@@ -943,8 +945,9 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser") ||
     (isPortalBrowserSurface && !isMainBrowserPath);
-  const usePortalWorkspaceLabels = isPortalBrowserSurface && !isMainBrowserPath;
+  const usePortalWorkspaceLabels = isPortalBrowserSurface;
   const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
+  const listingIssueWorkspaceNoun = usePortalWorkspaceLabels ? "Storage Space" : workspaceNoun;
   const workspaceNounPlural = `${workspaceNoun}s`;
   const workspaceNounTitle = usePortalWorkspaceLabels ? "Storage Spaces" : "Buckets";
   const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
@@ -1874,6 +1877,7 @@ export default function BrowserPage({
           const issue = normalizeBrowserListingIssue(
             error,
             "Unable to list bucket.",
+            { workspaceNoun: listingIssueWorkspaceNoun },
           );
           updateBucketAccessEntry(
             targetBucketName,
@@ -1900,6 +1904,7 @@ export default function BrowserPage({
     accountIdForApi,
     browserRequestOptions,
     hasS3AccountContext,
+    listingIssueWorkspaceNoun,
     updateBucketAccessEntry,
   ]);
 
@@ -2291,7 +2296,11 @@ export default function BrowserPage({
     }
     const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
     if (corsDisabled) {
-      items.push(CORS_DIRECT_TRANSFER_WARNING);
+      items.push(
+        usePortalWorkspaceLabels
+          ? CORS_DIRECT_TRANSFER_STORAGE_SPACE_WARNING
+          : CORS_DIRECT_TRANSFER_BUCKET_WARNING,
+      );
       if (!proxyAllowed) {
         items.push("Proxy transfers are disabled in settings.");
       }
@@ -2302,6 +2311,7 @@ export default function BrowserPage({
     corsStatus,
     proxyAllowed,
     stsCredentialsError,
+    usePortalWorkspaceLabels,
     warningMessage,
   ]);
   const hasCorsAction = Boolean(
@@ -3500,6 +3510,7 @@ export default function BrowserPage({
         const issue = normalizeBrowserListingIssue(
           err,
           "Unable to list objects for this prefix.",
+          { workspaceNoun: listingIssueWorkspaceNoun },
         );
         const previousAccess = resolveBucketAccessEntry(
           bucketName,
@@ -3556,6 +3567,7 @@ export default function BrowserPage({
       sortDirection,
       typeFilter,
       updateBucketAccessEntry,
+      listingIssueWorkspaceNoun,
     ],
   );
 
@@ -8065,7 +8077,7 @@ export default function BrowserPage({
     const files = await collectDroppedFiles(event.dataTransfer);
     if (files.length === 0) return;
     if (!bucketName || !hasS3AccountContext) {
-      setStatusMessage("Select a bucket before uploading.");
+      setStatusMessage(`Select a ${workspaceNoun} before uploading.`);
       return;
     }
     handleUploadFiles(files);
@@ -13345,12 +13357,12 @@ export default function BrowserPage({
                               disabled={!bucketName || !hasS3AccountContext}
                               title={
                                 !bucketName
-                                  ? "Select a bucket to configure it."
+                                  ? `Select a ${workspaceNoun} to configure it.`
                                   : undefined
                               }
                             >
                               <SettingsIcon className="h-3.5 w-3.5" />
-                              Configure bucket
+                              Configure {workspaceNoun}
                             </button>
                           )}
                           {hasToolbarPathActions &&
@@ -13476,7 +13488,7 @@ export default function BrowserPage({
                   key={`${warning}-${index}`}
                   className="font-semibold text-amber-600 dark:text-amber-200"
                 >
-                  {warning === CORS_DIRECT_TRANSFER_WARNING && hasCorsAction ? (
+                  {warning === CORS_DIRECT_TRANSFER_BUCKET_WARNING && hasCorsAction ? (
                     <span className="inline-flex items-center gap-1">
                       <span>{warning}</span>
                       <button
@@ -13568,7 +13580,7 @@ export default function BrowserPage({
                       <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
                         {bucketName
                           ? `${bucketName}/${normalizedPrefix}`
-                          : "Select a bucket first"}
+                          : `Select a ${workspaceNoun} first`}
                       </div>
                     </div>
                   </div>
@@ -13742,7 +13754,7 @@ export default function BrowserPage({
                       {!objectsLoading && !bucketName && (
                         <TableEmptyState
                           colSpan={objectTableColSpan}
-                          message="Select a bucket to browse objects."
+                          message={`Select a ${workspaceNoun} to browse objects.`}
                           className="py-10 text-center"
                         />
                       )}
@@ -14127,7 +14139,7 @@ export default function BrowserPage({
                             Current location
                           </p>
                           <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
-                            {currentPath || "Select a bucket to get started."}
+                            {currentPath || `Select a ${workspaceNoun} to get started.`}
                           </p>
                         </div>
                         <div className="space-y-3">
@@ -14301,7 +14313,7 @@ export default function BrowserPage({
                               Bucket overview
                             </p>
                             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                              {bucketName || "Select a bucket to inspect."}
+                              {bucketName || `Select a ${workspaceNoun} to inspect.`}
                             </p>
                           </div>
 
@@ -14354,7 +14366,7 @@ export default function BrowserPage({
 
                           {!bucketName || !hasS3AccountContext ? (
                             <div className={inspectorEmptyStateClasses}>
-                              Select a bucket to load bucket stats and features.
+                              Select a {workspaceNoun} to load {workspaceNoun} stats and features.
                             </div>
                           ) : (
                             <div className="space-y-3">

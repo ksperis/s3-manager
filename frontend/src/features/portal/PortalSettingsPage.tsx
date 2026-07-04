@@ -389,7 +389,7 @@ export default function PortalSettingsPage() {
                 </dd>
               </div>
               <div>
-                <dt className={labelClasses}>{t({ en: "Project accounts", fr: "Comptes du projet", de: "Projektkonten" })}</dt>
+                <dt className={labelClasses}>{t({ en: "Storage locations", fr: "Localisations de stockage", de: "Speicherstandorte" })}</dt>
                 <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
                   {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
                 </dd>

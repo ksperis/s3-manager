@@ -75,6 +75,10 @@ type TopbarContextAccountSelectorProps = {
   icon?: ReactNode;
   triggerMode?: "icon" | "icon_label";
   showTriggerTags?: boolean;
+  triggerLabel?: string;
+  searchPlaceholder?: string;
+  listboxAriaLabel?: string;
+  emptyMessage?: string;
 };
 
 export default function TopbarContextAccountSelector({
@@ -91,6 +95,10 @@ export default function TopbarContextAccountSelector({
   icon,
   triggerMode = "icon_label",
   showTriggerTags = true,
+  triggerLabel = "Account",
+  searchPlaceholder = "Search account...",
+  listboxAriaLabel = "Select context account",
+  emptyMessage = "No account matches your search.",
 }: TopbarContextAccountSelectorProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -108,7 +116,9 @@ export default function TopbarContextAccountSelector({
         .map((context) => {
           const label = formatAccountLabel(context, defaultEndpointId, defaultEndpointName);
           const description =
-            context.kind === "connection"
+            context.kind === "portal_project"
+              ? "Portal project"
+              : context.kind === "connection"
               ? "Private connection"
               : context.kind === "legacy_user"
                 ? "Legacy S3 user identity"
@@ -280,7 +290,7 @@ export default function TopbarContextAccountSelector({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search account..."
+            placeholder={searchPlaceholder}
             className="shell-control h-8 w-full rounded-md border pl-8 pr-3 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
@@ -292,13 +302,13 @@ export default function TopbarContextAccountSelector({
         className="mt-1.5 max-h-72 overflow-y-auto focus:outline-none"
         role="listbox"
         tabIndex={0}
-        aria-label="Select context account"
+        aria-label={listboxAriaLabel}
         aria-activedescendant={activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
         onKeyDown={handleListboxKeyDown}
       >
         {filteredItems.length === 0 ? (
           <div className="shell-muted-text rounded-md px-3 py-1.5 ui-caption">
-            No account matches your search.
+            {emptyMessage}
           </div>
         ) : (
           filteredItems.map((item, index) => {
@@ -361,11 +371,11 @@ export default function TopbarContextAccountSelector({
       <TopbarControlTrigger
         buttonRef={triggerRef}
         mode={triggerMode}
-        label="Account"
+        label={triggerLabel}
         value={selectedLabel}
         icon={icon}
         open={menuOpen}
-        ariaLabel="Select context account"
+        ariaLabel={listboxAriaLabel}
         title={identityLabel ?? undefined}
         rightAddon={
           showTriggerTags && showSelectorTags && triggerMode !== "icon" && selectedItem && selectedItem.tagItems.length > 0 ? (

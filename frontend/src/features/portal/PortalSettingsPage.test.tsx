@@ -113,7 +113,7 @@ describe("PortalSettingsPage", () => {
     expect(screen.getByRole("heading", { name: "Portal project" })).toBeInTheDocument();
     expect(screen.getByText("Workspace access")).toBeInTheDocument();
     expect(screen.getByText("User")).toBeInTheDocument();
-    expect(screen.getByText("Project accounts")).toBeInTheDocument();
+    expect(screen.getByText("Storage locations")).toBeInTheDocument();
     expect(screen.getByText("1 active / 2 total")).toBeInTheDocument();
     expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
     expect(screen.queryByText("Portal user")).not.toBeInTheDocument();

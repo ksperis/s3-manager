@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
+          projectAccountLabel: "Paris",
           origin: "portal_generic",
           nameEditable: true,
         },
@@ -47,6 +48,9 @@ const mocks = vi.hoisted(() => ({
       alerts: [],
     },
     state: { account_role: "portal_manager", can_manage_buckets: true, can_create_storage_spaces: true, allow_named_bucket_create: false },
+    selectedProjectAccounts: [
+      { account_id: 101, display_name: "Paris", account_name: "Research Account" },
+    ],
     loading: false,
     accountLoading: false,
     error: null,
@@ -77,6 +81,9 @@ describe("PortalStorageSpacesPage", () => {
     vi.clearAllMocks();
     mocks.usePortalWorkspaceDataMock.mockClear();
     mocks.hookResult.accountIdForApi = "101";
+    mocks.hookResult.selectedProjectAccounts = [
+      { account_id: 101, display_name: "Paris", account_name: "Research Account" },
+    ];
     mocks.createStorageSpaceMock.mockResolvedValue({ id: "created-space" });
     mocks.importStorageSpaceMock.mockResolvedValue({ id: "imported-space" });
     mocks.listShareCandidatesMock.mockResolvedValue([
@@ -109,6 +116,7 @@ describe("PortalStorageSpacesPage", () => {
         objectCount: 12,
         createdAt: "2026-03-10T10:00:00Z",
         shareCount: 3,
+        projectAccountLabel: "Paris",
         origin: "portal_generic",
         nameEditable: true,
       },
@@ -137,6 +145,8 @@ describe("PortalStorageSpacesPage", () => {
     expect(within(researchRow!).getByText("Restricted")).toBeInTheDocument();
     expect(within(researchRow!).queryByText("Active")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Storage location" })).toBeInTheDocument();
+    expect(within(researchRow!).getByText("Paris")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data"
@@ -237,6 +247,26 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByRole("option", { name: "Generic storage" })).not.toBeInTheDocument();
   });
 
+  it("labels the project account choice as a storage location for multi-location projects", () => {
+    mocks.hookResult.selectedProjectAccounts = [
+      { account_id: 101, display_name: "Paris", account_name: "Research Paris" },
+      { account_id: 102, display_name: "Lyon", account_name: "Research Lyon" },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
+
+    const locationSelect = screen.getByLabelText("Storage location");
+    expect(within(locationSelect).getByRole("option", { name: "Paris" })).toBeInTheDocument();
+    expect(within(locationSelect).getByRole("option", { name: "Lyon" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Project account")).not.toBeInTheDocument();
+  });
+
   it("allows portal users to create Storage Spaces without showing bucket import", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
@@ -279,6 +309,7 @@ describe("PortalStorageSpacesPage", () => {
 
     await waitFor(() => {
       expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        account_id: null,
         name: "Private Research",
         naming_mode: "generic_uuid",
         description: null,
@@ -323,6 +354,7 @@ describe("PortalStorageSpacesPage", () => {
 
     await waitFor(() => {
       expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        account_id: null,
         name: "Team Research",
         naming_mode: "generic_uuid",
         description: null,
@@ -358,6 +390,7 @@ describe("PortalStorageSpacesPage", () => {
 
     await waitFor(() => {
       expect(mocks.createStorageSpaceMock).toHaveBeenCalledWith("101", {
+        account_id: null,
         name: "Restricted Research",
         naming_mode: "generic_uuid",
         description: null,
@@ -387,6 +420,7 @@ describe("PortalStorageSpacesPage", () => {
 
     await waitFor(() => {
       expect(mocks.importStorageSpaceMock).toHaveBeenCalledWith("101", {
+        account_id: null,
         bucket_name: "existing-research",
         description: null,
         visibility: "shared",
@@ -418,6 +452,7 @@ describe("PortalStorageSpacesPage", () => {
 
     await waitFor(() => {
       expect(mocks.importStorageSpaceMock).toHaveBeenCalledWith("101", {
+        account_id: null,
         bucket_name: "existing-restricted",
         description: null,
         visibility: "shared",

@@ -29,24 +29,26 @@ const ACCESS_DENIED_PATTERN = /\b(accessdenied|forbidden)\b/i;
 
 export function normalizeBrowserListingIssue(
   error: unknown,
-  fallbackTechnicalDetail: string
+  fallbackTechnicalDetail: string,
+  options: { workspaceNoun?: string } = {}
 ): BrowserListingIssue {
   const technicalDetail = extractApiError(error, fallbackTechnicalDetail);
   const statusCode = axios.isAxiosError(error) ? error.response?.status : undefined;
   const accessDenied = statusCode === 403 || ACCESS_DENIED_PATTERN.test(technicalDetail);
+  const workspaceNoun = options.workspaceNoun?.trim() || "bucket";
 
   if (accessDenied) {
     return {
       kind: "access_denied",
-      title: "Listing is not available for this bucket.",
-      description: "The current credentials cannot list objects or folders in this bucket.",
+      title: `Listing is not available for this ${workspaceNoun}.`,
+      description: `The current credentials cannot list objects or folders in this ${workspaceNoun}.`,
       technicalDetail,
     };
   }
 
   return {
     kind: "request_failed",
-    title: "Unable to load objects for this bucket.",
+    title: `Unable to load objects for this ${workspaceNoun}.`,
     description: "Retry in a moment.",
     technicalDetail,
   };

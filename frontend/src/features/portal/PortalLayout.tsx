@@ -51,7 +51,7 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
     label: project.name,
     description: project.accounts.length === 1
       ? project.accounts[0]?.display_name
-      : t({ en: `${project.accounts.length} S3 accounts`, fr: `${project.accounts.length} comptes S3`, de: `${project.accounts.length} S3-Konten` }),
+      : t({ en: `${project.accounts.length} storage locations`, fr: `${project.accounts.length} localisations de stockage`, de: `${project.accounts.length} Speicherstandorte` }),
     icon: <AccountControlIcon className="h-4 w-4" />,
   }));
 

@@ -19,6 +19,9 @@ let capturedSelectorProps: {
   selectedLabel?: string;
   triggerMode?: "icon" | "icon_label";
   widthClassName?: string;
+  triggerLabel?: string;
+  searchPlaceholder?: string;
+  listboxAriaLabel?: string;
 } | null = null;
 
 vi.mock("./BrowserContext", () => ({
@@ -62,6 +65,9 @@ vi.mock("../../components/TopbarContextAccountSelector", () => ({
     selectedContextId?: string | null;
     selectedLabel?: string;
     triggerMode?: "icon" | "icon_label";
+    triggerLabel?: string;
+    searchPlaceholder?: string;
+    listboxAriaLabel?: string;
   }) => {
     capturedSelectorProps = props;
     return <button type="button">Browser account selector</button>;
@@ -133,6 +139,39 @@ describe("BrowserLayout", () => {
         selectedContextId: "ctx-1",
         selectedLabel: "Main account",
         widthClassName: TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
+        triggerLabel: "Account",
+      })
+    );
+  });
+
+  it("labels a selected Portal project context as a Project in the Browser topbar", () => {
+    useBrowserContextMock.mockReturnValue(
+      buildBrowserContext({
+        contexts: [
+          { id: "proj-1", kind: "portal_project", display_name: "Research Project" },
+          { id: "proj-2", kind: "portal_project", display_name: "Archive Project" },
+        ],
+        selectedContextId: "proj-1",
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/browser?ctx=proj-1"]}>
+        <Routes>
+          <Route path="/browser" element={<BrowserLayout />}>
+            <Route index element={<BrowserSidebarSlotConsumer />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(capturedSelectorProps).toEqual(
+      expect.objectContaining({
+        selectedContextId: "proj-1",
+        selectedLabel: "Research Project",
+        triggerLabel: "Project",
+        searchPlaceholder: "Search project...",
+        listboxAriaLabel: "Select project context",
       })
     );
   });

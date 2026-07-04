@@ -85,7 +85,7 @@ function projectToSyntheticAccount(project: PortalProject): S3Account {
     storage_endpoint_name:
       project.accounts.length === 1
         ? firstAccount?.storage_endpoint_name ?? firstAccount?.display_name ?? null
-        : `${project.accounts.length} S3 accounts`,
+        : `${project.accounts.length} storage locations`,
     storage_endpoint_url: firstAccount?.storage_endpoint_url ?? null,
   };
 }
