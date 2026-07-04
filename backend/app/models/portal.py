@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
+from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 
 
 class PortalAccessKey(BaseModel):
@@ -61,10 +62,26 @@ class PortalAccessKeysState(BaseModel):
 class PortalUsageStorageSpace(BaseModel):
     id: str
     name: str
+    account_id: Optional[int] = None
+    project_account_label: Optional[str] = None
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+
+
+class PortalUsageAccount(BaseModel):
+    account_id: int
+    account_name: str
+    display_name: str
+    rgw_account_id: Optional[str] = None
+    storage_endpoint_name: Optional[str] = None
+    storage_endpoint_zonegroup: Optional[str] = None
+    used_bytes: Optional[int] = None
+    used_objects: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+    storage_space_count: int = 0
 
 
 class PortalUsage(BaseModel):
@@ -74,6 +91,24 @@ class PortalUsage(BaseModel):
     quota_max_objects: Optional[int] = None
     storage_spaces: list[PortalUsageStorageSpace] = Field(default_factory=list)
     other_storage_space: Optional[PortalUsageStorageSpace] = None
+    accounts: list[PortalUsageAccount] = Field(default_factory=list)
+
+
+class PortalUsageAccountTrend(BaseModel):
+    account_id: int
+    account_name: str
+    display_name: str
+    rgw_account_id: Optional[str] = None
+    storage_endpoint_name: Optional[str] = None
+    storage_endpoint_zonegroup: Optional[str] = None
+    trend: UsageHistoryTrendResponse
+
+
+class PortalUsageAccountTrends(BaseModel):
+    window: UsageHistoryTrendWindow
+    available: bool = True
+    unavailable_reason: Optional[str] = None
+    accounts: list[PortalUsageAccountTrend] = Field(default_factory=list)
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]

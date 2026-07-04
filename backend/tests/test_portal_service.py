@@ -47,6 +47,7 @@ from app.models.portal import (
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
+    PortalUsageStorageSpace,
 )
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
@@ -3613,6 +3614,167 @@ def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db
         ("research-data", 700, 70),
     ]
     assert usage.other_storage_space is None
+
+
+def test_portal_project_usage_exposes_account_breakdown(monkeypatch, db_session):
+    endpoint = StorageEndpoint(
+        name="portal-project-usage-endpoint",
+        endpoint_url="https://portal-project-usage.example.test",
+        provider="ceph",
+        ceph_zonegroup_name="zg-eu",
+        features_config=(
+            "features:\n"
+            "  iam:\n"
+            "    enabled: true\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account_a = S3Account(
+        name="portal-project-usage-a",
+        rgw_account_id="tenant-a",
+        rgw_access_key="ROOT-AK-A",
+        rgw_secret_key="ROOT-SK-A",
+        storage_endpoint=endpoint,
+    )
+    account_b = S3Account(
+        name="portal-project-usage-b",
+        rgw_account_id="tenant-b",
+        rgw_access_key="ROOT-AK-B",
+        rgw_secret_key="ROOT-SK-B",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="project-usage@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account_a, account_b, user])
+    db_session.commit()
+    project = _portal_project(db_session, account_a, display_name="Paris")
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            _project_user(project, user, AccountRole.PORTAL_USER.value),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    def fake_get_usage(_user, access):
+        if access.account.id == account_a.id:
+            return PortalUsage(
+                used_bytes=900,
+                used_objects=90,
+                quota_max_size_bytes=1000,
+                quota_max_objects=100,
+                storage_spaces=[
+                    PortalUsageStorageSpace(id="space-a", name="Space A", used_bytes=450, object_count=45),
+                ],
+            )
+        return PortalUsage(
+            used_bytes=120,
+            used_objects=12,
+            quota_max_size_bytes=1000,
+            quota_max_objects=100,
+            storage_spaces=[
+                PortalUsageStorageSpace(id="space-b", name="Space B", used_bytes=120, object_count=12),
+            ],
+        )
+
+    monkeypatch.setattr(service, "get_usage", fake_get_usage)
+
+    payload = portal_router.portal_project_usage(
+        project_id=project.id,
+        user=user,
+        db=db_session,
+        service=service,
+    )
+
+    assert payload.used_bytes == 1020
+    assert payload.used_objects == 102
+    assert [(item.display_name, item.used_bytes, item.quota_max_size_bytes) for item in payload.accounts] == [
+        ("Paris", 900, 1000),
+        ("Lyon", 120, 1000),
+    ]
+    assert payload.accounts[0].storage_endpoint_zonegroup == "zg-eu"
+    assert [(space.id, space.project_account_label, space.used_bytes) for space in payload.storage_spaces] == [
+        (f"a{account_a.id}:space-a", "Paris", 450),
+        (f"a{account_b.id}:space-b", "Lyon", 120),
+    ]
+
+
+def test_portal_project_account_usage_trends_are_filtered_by_project(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
+    endpoint = StorageEndpoint(
+        name="portal-project-history-endpoint",
+        endpoint_url="https://portal-project-history.example.test",
+        provider="ceph",
+        ceph_zonegroup_name="zg-eu",
+        features_config=(
+            "features:\n"
+            "  iam:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account_a = S3Account(name="portal-project-history-a", rgw_account_id="tenant-a", storage_endpoint=endpoint)
+    account_b = S3Account(name="portal-project-history-b", rgw_account_id="tenant-b", storage_endpoint=endpoint)
+    other_account = S3Account(name="portal-project-history-other", rgw_account_id="tenant-other", storage_endpoint=endpoint)
+    user = User(email="project-history@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([endpoint, account_a, account_b, other_account, user])
+    db_session.commit()
+    project = _portal_project(db_session, account_a, display_name="Paris")
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            _project_user(project, user, AccountRole.PORTAL_USER.value),
+        ]
+    )
+    today = utcnow().date()
+    db_session.add_all(
+        [
+            QuotaUsageDaily(
+                day=today,
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account_a.id,
+                last_used_bytes=900,
+                last_used_objects=90,
+                bucket_count=2,
+                updated_at=datetime.combine(today, datetime.min.time()),
+            ),
+            QuotaUsageDaily(
+                day=today,
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=account_b.id,
+                last_used_bytes=120,
+                last_used_objects=12,
+                bucket_count=1,
+                updated_at=datetime.combine(today, datetime.min.time()),
+            ),
+            QuotaUsageDaily(
+                day=today,
+                storage_endpoint_id=endpoint.id,
+                s3_account_id=other_account.id,
+                last_used_bytes=999,
+                last_used_objects=99,
+                bucket_count=9,
+                updated_at=datetime.combine(today, datetime.min.time()),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = portal_router.portal_project_account_usage_trends(
+        project_id=project.id,
+        window="month",
+        user=user,
+        db=db_session,
+    )
+
+    assert payload.available is True
+    assert [(item.display_name, item.trend.summary.latest_used_bytes) for item in payload.accounts] == [
+        ("Paris", 900),
+        ("Lyon", 120),
+    ]
+    assert payload.accounts[0].trend.summary.latest_bucket_count == 2
+    assert payload.accounts[1].trend.summary.latest_used_objects == 12
 
 
 def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):

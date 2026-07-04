@@ -5,7 +5,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
-import type { PortalUsageStorageSpace } from "../../api/portal";
+import type { PortalUsageAccount, PortalUsageStorageSpace } from "../../api/portal";
 import type { ManagerUsageTrendBaseline } from "../../api/stats";
 import PageHeader from "../../components/PageHeader";
 import {
@@ -100,10 +100,22 @@ type QuickLink = {
 };
 
 const TOP_STORAGE_SPACES_LIMIT = 4;
+const TOP_ACCOUNTS_LIMIT = 4;
 
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
+}
+
+function bytesFromGb(value?: number | null): number | null {
+  if (value == null) return null;
+  return Math.round(value * 1024 * 1024 * 1024);
+}
+
+function progressTone(value: number | null): WorkspaceDashboardTone {
+  if (value == null) return "blue";
+  if (value >= 85) return "amber";
+  return "emerald";
 }
 
 function formatDashboardNumber(value?: number | null): string {
@@ -514,17 +526,37 @@ function QuickLinksCard({ links }: { links: QuickLink[] }) {
   );
 }
 
-function ProjectAccountsCard({
+function ProjectAccountUsageCard({
   project,
   accounts,
+  usageAccounts,
 }: {
   project: ReturnType<typeof usePortalWorkspaceData>["selectedProject"];
   accounts: ReturnType<typeof usePortalWorkspaceData>["selectedProjectAccounts"];
+  usageAccounts: PortalUsageAccount[];
 }) {
   const { t } = useI18n();
-  const visibleAccounts = accounts.slice(0, 4);
+  const rows = usageAccounts.length > 0
+    ? usageAccounts
+    : accounts.map((account) => ({
+        account_id: account.account_id,
+        account_name: account.account_name,
+        display_name: account.display_name,
+        rgw_account_id: account.rgw_account_id,
+        storage_endpoint_name: account.storage_endpoint_name,
+        storage_endpoint_zonegroup: account.storage_endpoint_zonegroup,
+        quota_max_size_bytes: bytesFromGb(account.quota_max_size_gb),
+        quota_max_objects: account.quota_max_objects,
+        used_bytes: null,
+        used_objects: null,
+        storage_space_count: 0,
+      }));
+  const visibleAccounts = rows.slice(0, TOP_ACCOUNTS_LIMIT);
   return (
-    <WorkspaceDashboardCard title={t({ en: "Storage locations", fr: "Localisations de stockage", de: "Speicherstandorte" })}>
+    <WorkspaceDashboardCard
+      title={t({ en: "Storage accounts", fr: "Comptes de stockage", de: "Speicherkonten" })}
+      action={<Link to="/portal/usage" className="ui-caption font-semibold text-primary">{t({ en: "Details", fr: "Détails", de: "Details" })}</Link>}
+    >
       <div className="space-y-3">
         <div className="flex items-start gap-3">
           <IconBubble tone="blue">
@@ -533,23 +565,48 @@ function ProjectAccountsCard({
           <div className="min-w-0">
             <p className={cx("truncate text-sm font-bold", uiTitleTextClass)}>{project?.name ?? "-"}</p>
             <p className={cx("text-xs", uiMutedTextClass)}>
-              {t({ en: `${accounts.length} available location(s)`, fr: `${accounts.length} localisation(s) disponible(s)`, de: `${accounts.length} verfügbare Speicherstandorte` })}
+              {t({ en: `${rows.length} account(s) in this project`, fr: `${rows.length} compte(s) dans ce projet`, de: `${rows.length} Konto/Konten in diesem Projekt` })}
             </p>
           </div>
         </div>
         <div className="space-y-2">
-          {visibleAccounts.map((account) => (
-            <div key={account.account_id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
-              <div className="min-w-0">
-                <p className={cx("truncate text-xs font-bold", uiTitleTextClass)}>{account.display_name}</p>
-                <p className={cx("truncate text-[11px]", uiMutedTextClass)}>{account.storage_endpoint_name ?? account.account_name}</p>
+          {visibleAccounts.map((account) => {
+            const accountLabel = account.display_name || account.account_name;
+            const storagePercent = percent(account.used_bytes, account.quota_max_size_bytes);
+            return (
+              <div key={account.account_id} className="rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={cx("truncate text-xs font-bold", uiTitleTextClass)}>{accountLabel}</p>
+                    <p className={cx("truncate text-[11px]", uiMutedTextClass)}>{account.storage_endpoint_name ?? account.account_name}</p>
+                  </div>
+                  {account.storage_endpoint_zonegroup ? <UiBadge tone="primary">{account.storage_endpoint_zonegroup}</UiBadge> : null}
+                </div>
+                <div className="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)_2.5rem] items-center gap-2">
+                  <span className="ui-caption font-semibold text-[var(--ui-text)]">{formatBytes(account.used_bytes)}</span>
+                  <ProgressBar
+                    value={storagePercent}
+                    tone={progressTone(storagePercent)}
+                    className="h-1.5"
+                    ariaLabel={t({ en: `${accountLabel} storage quota usage`, fr: `Utilisation du quota stockage ${accountLabel}`, de: `${accountLabel} Speicherquotennutzung` })}
+                  />
+                  <span className="text-right text-[11px] font-semibold text-[var(--ui-text-muted)]">
+                    {storagePercent == null ? "-" : formatPercentage(storagePercent)}
+                  </span>
+                </div>
+                <p className={cx("mt-1 text-[11px]", uiMutedTextClass)}>
+                  {t({
+                    en: `${formatDashboardNumber(account.used_objects)} objects / ${formatDashboardNumber(account.quota_max_objects)} quota`,
+                    fr: `${formatDashboardNumber(account.used_objects)} objets / ${formatDashboardNumber(account.quota_max_objects)} quota`,
+                    de: `${formatDashboardNumber(account.used_objects)} Objekte / ${formatDashboardNumber(account.quota_max_objects)} Quote`,
+                  })}
+                </p>
               </div>
-              {account.storage_endpoint_zonegroup ? <UiBadge tone="primary">{account.storage_endpoint_zonegroup}</UiBadge> : null}
-            </div>
-          ))}
-          {accounts.length > visibleAccounts.length ? (
+            );
+          })}
+          {rows.length > visibleAccounts.length ? (
             <p className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
-              {t({ en: `+${accounts.length - visibleAccounts.length} more`, fr: `+${accounts.length - visibleAccounts.length} autre(s)`, de: `+${accounts.length - visibleAccounts.length} weitere` })}
+              {t({ en: `+${rows.length - visibleAccounts.length} more`, fr: `+${rows.length - visibleAccounts.length} autre(s)`, de: `+${rows.length - visibleAccounts.length} weitere` })}
             </p>
           ) : null}
         </div>
@@ -575,8 +632,8 @@ export default function PortalDashboard() {
     trafficLoading,
     trafficError,
     usage,
-    selectedProject,
-    selectedProjectAccounts,
+    selectedProject = null,
+    selectedProjectAccounts = [],
   } = usePortalWorkspaceData({
     includeTraffic: true,
     includeTrafficTrend: true,
@@ -585,6 +642,7 @@ export default function PortalDashboard() {
   });
 
   const storageRows = useMemo(() => buildStorageRows(workspace.spaces, usage?.other_storage_space), [usage?.other_storage_space, workspace.spaces]);
+  const accountUsageRows = usage?.accounts ?? [];
   const activityRows = useMemo(() => buildActivityRows(workspace.activity, t), [t, workspace.activity]);
   const transferRows = useMemo(() => buildTransferRows(workspace.transfers, t), [t, workspace.transfers]);
   const currentTraffic = trafficByWindow.day ?? traffic;
@@ -732,7 +790,7 @@ export default function PortalDashboard() {
         <RecentTransfersCard rows={transferRows} />
         <RecentActivityCard rows={activityRows} />
         <AlertsCard alerts={alerts} healthStatus={healthStatus} />
-        <ProjectAccountsCard project={selectedProject} accounts={selectedProjectAccounts} />
+        <ProjectAccountUsageCard project={selectedProject} accounts={selectedProjectAccounts} usageAccounts={accountUsageRows} />
         <QuickLinksCard links={quickLinks} />
       </div>
     </div>

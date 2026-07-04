@@ -112,7 +112,22 @@ const mocks = vi.hoisted(() => {
       week: weekTraffic,
       month: monthTraffic,
     },
-    usage: null,
+    usage: {
+      accounts: [
+        {
+          account_id: 101,
+          account_name: "rgw-research",
+          display_name: "EU West",
+          storage_endpoint_name: "eu-west-3",
+          storage_endpoint_zonegroup: "zone-a",
+          used_bytes: 384,
+          used_objects: 8,
+          quota_max_size_bytes: 512,
+          quota_max_objects: 16,
+          storage_space_count: 1,
+        },
+      ],
+    },
     usageTrends: {
       storage: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_bytes: 256 },
       buckets: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 0 },
@@ -140,6 +155,35 @@ const mocks = vi.hoisted(() => {
     usageTrendsLoading: false,
     trafficError: null,
     hasAccountContext: true,
+    selectedProject: {
+      id: "proj-42",
+      db_id: 42,
+      name: "Climate Project",
+      description: null,
+      account_role: "portal_manager",
+      accounts: [
+        {
+          account_id: 101,
+          account_name: "rgw-research",
+          display_name: "EU West",
+          storage_endpoint_name: "eu-west-3",
+          storage_endpoint_zonegroup: "zone-a",
+          quota_max_size_gb: 1,
+          quota_max_objects: 16,
+        },
+      ],
+    },
+    selectedProjectAccounts: [
+      {
+        account_id: 101,
+        account_name: "rgw-research",
+        display_name: "EU West",
+        storage_endpoint_name: "eu-west-3",
+        storage_endpoint_zonegroup: "zone-a",
+        quota_max_size_gb: 1,
+        quota_max_objects: 16,
+      },
+    ],
   });
 
   return {
@@ -222,6 +266,24 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
     expect(screen.queryByText("Last 7 days")).not.toBeInTheDocument();
     expect(screen.queryByText(/requests/i)).not.toBeInTheDocument();
+  });
+
+  it("shows account-level quota pressure on the dashboard", () => {
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    const accountsCard = screen.getByRole("heading", { name: "Storage accounts" }).closest("section");
+    expect(accountsCard).not.toBeNull();
+    expect(within(accountsCard!).getByText("Climate Project")).toBeInTheDocument();
+    expect(within(accountsCard!).getByText("EU West")).toBeInTheDocument();
+    expect(within(accountsCard!).getByText("zone-a")).toBeInTheDocument();
+    expect(within(accountsCard!).getByText("75%")).toBeInTheDocument();
+    expect(within(accountsCard!).getByText("8 objects / 16 quota")).toBeInTheDocument();
+    expect(within(accountsCard!).getByRole("meter", { name: "EU West storage quota usage" })).toHaveAttribute("aria-valuenow", "75");
+    expect(within(accountsCard!).getByRole("link", { name: "Details" })).toHaveAttribute("href", "/portal/usage");
   });
 
   it("limits the top storage spaces card to the four largest spaces", () => {

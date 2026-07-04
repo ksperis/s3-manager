@@ -37,6 +37,9 @@ from app.models.portal import (
     PortalStorageSpaceSummary,
     PortalStorageSpaceUpdate,
     PortalUsage,
+    PortalUsageAccount,
+    PortalUsageAccountTrend,
+    PortalUsageAccountTrends,
     PortalUsageStorageSpace,
 )
 from app.models.project import PortalProject
@@ -141,6 +144,38 @@ def _with_project_share(share: PortalStorageSpaceShare, *, account_id: int) -> P
     payload = share.model_dump()
     payload["storage_space_id"] = _project_space_id(account_id, share.storage_space_id)
     return PortalStorageSpaceShare.model_validate(payload)
+
+
+def _portal_usage_account(account_link, usage: PortalUsage) -> PortalUsageAccount:
+    account = account_link.account
+    endpoint = account.storage_endpoint if account is not None else None
+    return PortalUsageAccount(
+        account_id=account_link.account_id,
+        account_name=account.name if account is not None else f"Account #{account_link.account_id}",
+        display_name=account_link.display_name,
+        rgw_account_id=account.rgw_account_id if account is not None else None,
+        storage_endpoint_name=endpoint.name if endpoint else None,
+        storage_endpoint_zonegroup=endpoint.ceph_zonegroup_name if endpoint else None,
+        used_bytes=usage.used_bytes,
+        used_objects=usage.used_objects,
+        quota_max_size_bytes=usage.quota_max_size_bytes,
+        quota_max_objects=usage.quota_max_objects,
+        storage_space_count=len(usage.storage_spaces),
+    )
+
+
+def _portal_usage_account_trend(account_link, trend: UsageHistoryTrendResponse) -> PortalUsageAccountTrend:
+    account = account_link.account
+    endpoint = account.storage_endpoint if account is not None else None
+    return PortalUsageAccountTrend(
+        account_id=account_link.account_id,
+        account_name=account.name if account is not None else f"Account #{account_link.account_id}",
+        display_name=account_link.display_name,
+        rgw_account_id=account.rgw_account_id if account is not None else None,
+        storage_endpoint_name=endpoint.name if endpoint else None,
+        storage_endpoint_zonegroup=endpoint.ceph_zonegroup_name if endpoint else None,
+        trend=trend,
+    )
 
 
 def _raise_project_access_error(exc: ValueError) -> None:
@@ -336,6 +371,7 @@ def portal_project_usage(
         _raise_project_access_error(exc)
     usages: list[PortalUsage] = []
     storage_spaces: list[PortalUsageStorageSpace] = []
+    usage_accounts: list[PortalUsageAccount] = []
     for account_link in project_access.account_links:
         account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
         try:
@@ -343,12 +379,15 @@ def portal_project_usage(
         except RuntimeError as exc:
             raise_bad_gateway_from_runtime(exc)
         usages.append(usage)
+        usage_accounts.append(_portal_usage_account(account_link, usage))
         for space in usage.storage_spaces:
             label = account_link.display_name
             storage_spaces.append(
                 PortalUsageStorageSpace(
                     id=_project_space_id(account_link.account_id, space.id),
                     name=f"{space.name} ({label})" if label else space.name,
+                    account_id=account_link.account_id,
+                    project_account_label=label,
                     used_bytes=space.used_bytes,
                     object_count=space.object_count,
                     quota_max_size_bytes=space.quota_max_size_bytes,
@@ -361,6 +400,48 @@ def portal_project_usage(
         quota_max_size_bytes=_sum_optional([usage.quota_max_size_bytes for usage in usages]),
         quota_max_objects=_sum_optional([usage.quota_max_objects for usage in usages]),
         storage_spaces=storage_spaces,
+        accounts=usage_accounts,
+    )
+
+
+@router.get("/projects/{project_id}/account-usage-trends", response_model=PortalUsageAccountTrends)
+def portal_project_account_usage_trends(
+    project_id: int,
+    window: UsageHistoryTrendWindow = Query("month"),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> PortalUsageAccountTrends:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    history_service = UsageHistoryService(db)
+    if not load_app_settings().general.usage_history_enabled:
+        return PortalUsageAccountTrends(
+            window=window,
+            available=False,
+            unavailable_reason="Usage history is disabled.",
+        )
+    trends: list[PortalUsageAccountTrend] = []
+    for account_link in project_access.account_links:
+        account = account_link.account
+        filters = account_usage_trend_filters(account, QuotaUsageDaily) if account is not None else None
+        if filters is None or account is None:
+            trend = history_service.empty_trends(
+                window=window,
+                unavailable_reason="Usage history trends are unavailable for this account.",
+            )
+        else:
+            trend = history_service.aggregate_trends(
+                window=window,
+                extra_filter_builder=lambda model, scoped_account=account: account_usage_trend_filters(scoped_account, model) or [],
+            )
+        trends.append(_portal_usage_account_trend(account_link, trend))
+    return PortalUsageAccountTrends(
+        window=window,
+        available=True,
+        accounts=trends,
     )
 
 

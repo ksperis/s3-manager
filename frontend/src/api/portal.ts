@@ -63,6 +63,7 @@ export type PortalUsage = {
   quota_max_objects?: number | null;
   storage_spaces?: PortalUsageStorageSpace[];
   other_storage_space?: PortalUsageStorageSpace | null;
+  accounts?: PortalUsageAccount[];
 };
 
 export type PortalUsageStorageSpace = {
@@ -74,6 +75,37 @@ export type PortalUsageStorageSpace = {
   object_count?: number | null;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
+};
+
+export type PortalUsageAccount = {
+  account_id: number;
+  account_name: string;
+  display_name: string;
+  rgw_account_id?: string | null;
+  storage_endpoint_name?: string | null;
+  storage_endpoint_zonegroup?: string | null;
+  used_bytes?: number | null;
+  used_objects?: number | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  storage_space_count?: number;
+};
+
+export type PortalUsageAccountTrend = {
+  account_id: number;
+  account_name: string;
+  display_name: string;
+  rgw_account_id?: string | null;
+  storage_endpoint_name?: string | null;
+  storage_endpoint_zonegroup?: string | null;
+  trend: UsageHistoryTrendResponse;
+};
+
+export type PortalUsageAccountTrends = {
+  window: UsageHistoryTrendWindow;
+  available: boolean;
+  unavailable_reason?: string | null;
+  accounts: PortalUsageAccountTrend[];
 };
 
 export type PortalStorageSpaceRole = "Viewer" | "Editor" | "Owner";
@@ -473,6 +505,23 @@ export async function fetchPortalUsageHistoryTrends(
     { params: withS3AccountParam({ window }, accountId) }
   );
   return data;
+}
+
+export async function fetchPortalAccountUsageTrends(
+  accountId: S3AccountSelector,
+  window: UsageHistoryTrendWindow
+): Promise<PortalUsageAccountTrends> {
+  const projectPath = portalProjectPath(accountId, "/account-usage-trends");
+  if (projectPath) {
+    const { data } = await client.get<PortalUsageAccountTrends>(projectPath, { params: { window } });
+    return data;
+  }
+  return {
+    window,
+    available: false,
+    unavailable_reason: "Account usage trends are available for portal projects.",
+    accounts: [],
+  };
 }
 
 export async function fetchPortalActivity(

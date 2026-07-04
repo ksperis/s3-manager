@@ -5,6 +5,7 @@ import PortalUsagePage from "./PortalUsagePage";
 
 const mocks = vi.hoisted(() => ({
   billingMock: vi.fn(),
+  accountUsageTrendsMock: vi.fn(),
   usageHistoryMock: vi.fn(),
   usageStatsMock: vi.fn(),
   generalSettings: {
@@ -43,6 +44,20 @@ const mocks = vi.hoisted(() => ({
       used_objects: 12,
       quota_max_size_bytes: 1024,
       storage_spaces: [{ id: "research-data", name: "Research Data", used_bytes: 512, object_count: 12 }],
+      accounts: [
+        {
+          account_id: 101,
+          account_name: "rgw-research",
+          display_name: "EU West",
+          storage_endpoint_name: "eu-west-3",
+          storage_endpoint_zonegroup: "zone-a",
+          used_bytes: 384,
+          used_objects: 8,
+          quota_max_size_bytes: 512,
+          quota_max_objects: 16,
+          storage_space_count: 1,
+        },
+      ],
     },
     usageLoading: false,
     usageError: null,
@@ -70,6 +85,17 @@ const mocks = vi.hoisted(() => ({
     accountError: null,
     hasAccountContext: true,
     accountIdForApi: "101",
+    selectedProjectAccounts: [
+      {
+        account_id: 101,
+        account_name: "rgw-research",
+        display_name: "EU West",
+        storage_endpoint_name: "eu-west-3",
+        storage_endpoint_zonegroup: "zone-a",
+        quota_max_size_gb: 1,
+        quota_max_objects: 16,
+      },
+    ],
     state: { quota_max_size_bytes: 1024 },
   } as any,
 }));
@@ -79,6 +105,7 @@ vi.mock("../../api/billing", () => ({
 }));
 
 vi.mock("../../api/portal", () => ({
+  fetchPortalAccountUsageTrends: (...args: unknown[]) => mocks.accountUsageTrendsMock(...args),
   fetchPortalUsageHistoryTrends: (...args: unknown[]) => mocks.usageHistoryMock(...args),
   getPortalUsageStatsAggregate: (...args: unknown[]) => mocks.usageStatsMock(...args),
 }));
@@ -204,6 +231,59 @@ function mockUsageHistory() {
   });
 }
 
+function mockAccountUsageTrends() {
+  mocks.accountUsageTrendsMock.mockResolvedValue({
+    window: "month",
+    available: true,
+    accounts: [
+      {
+        account_id: 101,
+        account_name: "rgw-research",
+        display_name: "EU West",
+        storage_endpoint_name: "eu-west-3",
+        storage_endpoint_zonegroup: "zone-a",
+        trend: {
+          window: "month",
+          granularity: "daily",
+          available: true,
+          points: [
+            {
+              period_start: "2026-05-20",
+              used_bytes: 320,
+              used_objects: 6,
+              bucket_count: 1,
+              max_usage_ratio_pct: 62,
+              subjects_count: 1,
+              samples_count: 1,
+              collected_at: "2026-05-20T12:00:00Z",
+            },
+            {
+              period_start: "2026-05-21",
+              used_bytes: 384,
+              used_objects: 8,
+              bucket_count: 1,
+              max_usage_ratio_pct: 75,
+              subjects_count: 1,
+              samples_count: 1,
+              collected_at: "2026-05-21T12:00:00Z",
+            },
+          ],
+          summary: {
+            total_records: 2,
+            points_count: 2,
+            subjects_count: 1,
+            latest_used_bytes: 384,
+            latest_used_objects: 8,
+            latest_bucket_count: 1,
+            latest_collected_at: "2026-05-21T12:00:00Z",
+            max_usage_ratio_pct: 75,
+          },
+        },
+      },
+    ],
+  });
+}
+
 describe("PortalUsagePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -240,6 +320,20 @@ describe("PortalUsagePage", () => {
       used_objects: 12,
       quota_max_size_bytes: 1024,
       storage_spaces: [{ id: "research-data", name: "Research Data", used_bytes: 512, object_count: 12 }],
+      accounts: [
+        {
+          account_id: 101,
+          account_name: "rgw-research",
+          display_name: "EU West",
+          storage_endpoint_name: "eu-west-3",
+          storage_endpoint_zonegroup: "zone-a",
+          used_bytes: 384,
+          used_objects: 8,
+          quota_max_size_bytes: 512,
+          quota_max_objects: 16,
+          storage_space_count: 1,
+        },
+      ],
     };
     mocks.hookResult.usageLoading = false;
     mocks.hookResult.usageError = null;
@@ -262,18 +356,39 @@ describe("PortalUsagePage", () => {
     mocks.hookResult.trafficLoading = false;
     mocks.hookResult.trafficError = null;
     mocks.hookResult.state = { quota_max_size_bytes: 1024 };
+    mocks.hookResult.selectedProjectAccounts = [
+      {
+        account_id: 101,
+        account_name: "rgw-research",
+        display_name: "EU West",
+        storage_endpoint_name: "eu-west-3",
+        storage_endpoint_zonegroup: "zone-a",
+        quota_max_size_gb: 1,
+        quota_max_objects: 16,
+      },
+    ];
     mockBilling();
     mockUsageComposition();
     mockUsageHistory();
+    mockAccountUsageTrends();
   });
 
-  it("renders storage, Storage Spaces, usage composition, history, traffic and visible billing analytics", async () => {
+  it("renders storage, account, Storage Spaces, usage composition, history, traffic and visible billing analytics", async () => {
     render(<PortalUsagePage />);
 
     expect(screen.getByRole("heading", { name: "Usage & Analytics" })).toBeInTheDocument();
     expect(screen.getByText("Storage snapshot")).toBeInTheDocument();
     expect(screen.getByText("Stored volume")).toBeInTheDocument();
     expect(screen.getByText("50% of quota")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
+
+    expect(screen.getByText("Accounts (volume)")).toBeInTheDocument();
+    expect(screen.getByText("Accounts (objects)")).toBeInTheDocument();
+    expect(screen.getAllByText("EU West").length).toBeGreaterThan(0);
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(await screen.findByText("+64 B")).toBeInTheDocument();
+    expect(mocks.accountUsageTrendsMock).toHaveBeenCalledWith("101", "month");
 
     fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
 
