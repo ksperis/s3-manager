@@ -319,6 +319,46 @@ export type PortalProject = {
   accounts: PortalProjectAccount[];
 };
 
+export type PortalReplicationStorageSpace = {
+  id: string;
+  name: string;
+  bucket_name: string;
+  account_id: number;
+  account_name: string;
+  project_account_label?: string | null;
+  storage_endpoint_id?: number | null;
+  storage_endpoint_name?: string | null;
+  storage_endpoint_zonegroup?: string | null;
+  bucket_replication_allowed: boolean;
+  global_replication_configured: boolean;
+  can_manage: boolean;
+};
+
+export type PortalReplicationSummary = {
+  id: string;
+  mode: "bucket_level" | "global";
+  status: "configured" | "unavailable" | "error";
+  source: PortalReplicationStorageSpace;
+  target?: PortalReplicationStorageSpace | null;
+  target_bucket_name?: string | null;
+  zonegroup?: string | null;
+  rule_id?: string | null;
+  role_arn?: string | null;
+  message?: string | null;
+};
+
+export type PortalReplicationList = {
+  storage_spaces: PortalReplicationStorageSpace[];
+  replications: PortalReplicationSummary[];
+  can_create: boolean;
+  unavailable_reason?: string | null;
+};
+
+export type PortalReplicationCreate = {
+  source_storage_space_id: string;
+  target_storage_space_id: string;
+};
+
 export function isPortalProjectSelector(accountId: S3AccountSelector): accountId is string {
   return typeof accountId === "string" && accountId.startsWith("proj-");
 }
@@ -383,6 +423,33 @@ export async function listPortalAccounts(): Promise<S3Account[]> {
 
 export async function listPortalProjects(): Promise<PortalProject[]> {
   const { data } = await client.get<PortalProject[]>("/portal/projects");
+  return data;
+}
+
+export async function listPortalReplications(accountId: S3AccountSelector): Promise<PortalReplicationList> {
+  const projectPath = portalProjectPath(accountId, "/replications");
+  if (projectPath) {
+    const { data } = await client.get<PortalReplicationList>(projectPath);
+    return data;
+  }
+  const { data } = await client.get<PortalReplicationList>("/portal/replications", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function createPortalReplication(
+  accountId: S3AccountSelector,
+  payload: PortalReplicationCreate
+): Promise<PortalReplicationSummary> {
+  const projectPath = portalProjectPath(accountId, "/replications");
+  if (projectPath) {
+    const { data } = await client.post<PortalReplicationSummary>(projectPath, payload);
+    return data;
+  }
+  const { data } = await client.post<PortalReplicationSummary>("/portal/replications", payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 

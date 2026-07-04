@@ -23,6 +23,11 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency guard
 BACKEND_HOST = "127.0.0.1"
 DEFAULT_BACKEND_PORT = 8000
 BACKEND_BOOT_TIMEOUT_SECONDS = 90.0
+DEFAULT_LAB_ZONEGROUP = {
+    "name": "zg-lab",
+    "global_replication_configured": False,
+    "bucket_replication_allowed": True,
+}
 
 
 def _env_bool(name: str, default: bool, source: dict[str, str] | None = None) -> bool:
@@ -135,6 +140,33 @@ def _select_storage_endpoint(entries: list[dict[str, object]]) -> dict[str, obje
     )
 
 
+def _lab_zone_endpoint(entry: dict[str, object]) -> bool:
+    name = str(entry.get("name") or "").strip().lower()
+    return name in {"s3-z1", "s3-z2"}
+
+
+def _normalize_existing_endpoint_payload(payload: str) -> str:
+    try:
+        entries = json.loads(payload)
+    except json.JSONDecodeError:
+        return payload
+    if not isinstance(entries, list):
+        return payload
+    changed = False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("ceph_zonegroup") is not None:
+            continue
+        if not _lab_zone_endpoint(entry):
+            continue
+        if not _storage_feature_enabled(entry, "replication"):
+            continue
+        entry["ceph_zonegroup"] = dict(DEFAULT_LAB_ZONEGROUP)
+        changed = True
+    return json.dumps(entries) if changed else payload
+
+
 def _derive_ceph_test_env_from_storage_endpoints(env: dict[str, str]) -> None:
     selected = _select_storage_endpoint(_storage_endpoint_entries(env))
     if not selected:
@@ -179,7 +211,7 @@ def _build_endpoint_payload(source: dict[str, str] | None = None) -> str:
     env = source or os.environ
     existing_payload = _env_str("ENV_STORAGE_ENDPOINTS", source=env)
     if existing_payload and not _env_str("CEPH_TEST_LAB_S3_ENDPOINT", source=env):
-        return existing_payload
+        return _normalize_existing_endpoint_payload(existing_payload)
 
     s3_endpoint = _require_env("CEPH_TEST_LAB_S3_ENDPOINT", source=env)
     s3_endpoint_z2 = _env_str("CEPH_TEST_LAB_S3_ENDPOINT_Z2", source=env)
@@ -217,6 +249,9 @@ def _build_endpoint_payload(source: dict[str, str] | None = None) -> str:
                 "sse": {"enabled": True},
                 "healthcheck": {"enabled": True, "mode": "s3"},
             },
+            "ceph_zonegroup": {
+                **DEFAULT_LAB_ZONEGROUP,
+            },
             "is_default": is_default,
         }
 
@@ -234,11 +269,13 @@ def _build_app_settings_payload() -> str:
     payload = {
         "general": {
             "manager_enabled": True,
+            "portal_enabled": True,
             "ceph_admin_enabled": True,
             "storage_ops_enabled": True,
             "browser_enabled": True,
             "browser_root_enabled": True,
             "browser_manager_enabled": True,
+            "browser_portal_enabled": True,
             "browser_ceph_admin_enabled": True,
             "billing_enabled": False,
             "endpoint_status_enabled": True,

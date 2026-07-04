@@ -88,6 +88,7 @@ const PortalAccessKeysPage = lazy(() => import("./features/portal/PortalAccessKe
 const PortalStorageSpacesPage = lazy(() => import("./features/portal/PortalStorageSpacesPage"));
 const PortalStorageSpaceDetailPage = lazy(() => import("./features/portal/PortalStorageSpaceDetailPage"));
 const PortalObjectDetailPage = lazy(() => import("./features/portal/PortalObjectDetailPage"));
+const PortalReplicationsPage = lazy(() => import("./features/portal/PortalReplicationsPage"));
 const PortalSharesPage = lazy(() => import("./features/portal/PortalSharesPage"));
 const PortalActivityPage = lazy(() => import("./features/portal/PortalActivityPage"));
 const PortalTransfersPage = lazy(() => import("./features/portal/PortalTransfersPage"));
@@ -378,6 +379,7 @@ export function createAppRoutes() {
               <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
               <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
               <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
+              <Route path="replications" element={<PortalReplicationsPage />} />
               <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="shares" element={<PortalSharesPage />} />
               <Route path="activity" element={<PortalActivityPage />} />

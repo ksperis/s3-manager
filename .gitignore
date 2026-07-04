@@ -8,6 +8,7 @@ TODO_local.md
 *.db.save
 backend/app/data/
 backend/.browser-e2e-runtime/
+backend/.ci-runtime/
 .pytest_cache/
 __pycache__/
 *.py[cod]

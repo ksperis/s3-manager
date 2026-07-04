@@ -122,6 +122,8 @@ PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
 PortalAlertTone = Literal["info", "warning", "danger"]
 PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
+PortalReplicationMode = Literal["bucket_level", "global"]
+PortalReplicationStatus = Literal["configured", "unavailable", "error"]
 
 
 class PortalStorageSpaceSummary(BaseModel):
@@ -225,6 +227,46 @@ class PortalStorageSpaceUpdate(BaseModel):
         if not cleaned:
             raise ValueError("Storage Space name is required")
         return cleaned
+
+
+class PortalReplicationStorageSpace(BaseModel):
+    id: str
+    name: str
+    bucket_name: str
+    account_id: int
+    account_name: str
+    project_account_label: Optional[str] = None
+    storage_endpoint_id: Optional[int] = None
+    storage_endpoint_name: Optional[str] = None
+    storage_endpoint_zonegroup: Optional[str] = None
+    bucket_replication_allowed: bool = False
+    global_replication_configured: bool = False
+    can_manage: bool = False
+
+
+class PortalReplicationSummary(BaseModel):
+    id: str
+    mode: PortalReplicationMode
+    status: PortalReplicationStatus
+    source: PortalReplicationStorageSpace
+    target: Optional[PortalReplicationStorageSpace] = None
+    target_bucket_name: Optional[str] = None
+    zonegroup: Optional[str] = None
+    rule_id: Optional[str] = None
+    role_arn: Optional[str] = None
+    message: Optional[str] = None
+
+
+class PortalReplicationList(BaseModel):
+    storage_spaces: list[PortalReplicationStorageSpace] = Field(default_factory=list)
+    replications: list[PortalReplicationSummary] = Field(default_factory=list)
+    can_create: bool = False
+    unavailable_reason: Optional[str] = None
+
+
+class PortalReplicationCreate(BaseModel):
+    source_storage_space_id: str = Field(min_length=1)
+    target_storage_space_id: str = Field(min_length=1)
 
 
 class PortalStorageObjectDeleteResponse(BaseModel):

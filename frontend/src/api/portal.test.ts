@@ -21,6 +21,7 @@ import {
   fetchPortalState,
   fetchPortalUsage,
   grantPortalStorageSpaceShare,
+  createPortalReplication,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpaceObject,
@@ -36,6 +37,7 @@ import {
   importPortalStorageSpace,
   listPortalShareCandidates,
   listPortalProjects,
+  listPortalReplications,
   listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
@@ -253,6 +255,8 @@ describe("portal storage spaces api", () => {
     await createPortalStorageSpace("proj-42", { name: "Research", account_id: 7, initial_shares: [] });
     await fetchPortalStorageSpace("proj-42", "a7:research");
     await fetchPortalStorageSpaceObjectDetail("proj-42", "a7:research", "raw/report.csv");
+    await listPortalReplications("proj-42");
+    await createPortalReplication("proj-42", { source_storage_space_id: "a7:source", target_storage_space_id: "a8:target" });
     await listPortalShareCandidates("proj-42", { targetAccountId: 7 });
     await grantPortalStorageSpaceShare("proj-42", "a7:research", { user_id: 12, role: "Viewer" });
     await createPortalStorageSpacePublicLink("proj-42", "a7:research", { object_key: "raw/report.csv" });
@@ -274,6 +278,11 @@ describe("portal storage spaces api", () => {
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/storage-spaces/a7%3Aresearch/objects/detail", {
       params: { key: "raw/report.csv" },
     });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/replications");
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/projects/42/replications",
+      { source_storage_space_id: "a7:source", target_storage_space_id: "a8:target" }
+    );
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/share-candidates", {
       params: { account_id: 7 },
     });

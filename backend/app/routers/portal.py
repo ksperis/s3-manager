@@ -22,6 +22,9 @@ from app.models.portal import (
     PortalIAMUser,
     PortalPublicLink,
     PortalPublicLinkCreate,
+    PortalReplicationCreate,
+    PortalReplicationList,
+    PortalReplicationSummary,
     PortalState,
     PortalTransfer,
     PortalStorageObjectDeleteResponse,
@@ -67,6 +70,7 @@ from app.services.portal_service import (
     PortalService,
     get_portal_service,
 )
+from app.services.portal.replications import PortalReplicationAccountContext
 from app.services.projects_service import PortalProjectAccess, ProjectsService, get_projects_service
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.healthcheck_service import HealthCheckService
@@ -146,6 +150,16 @@ def _with_project_share(share: PortalStorageSpaceShare, *, account_id: int) -> P
     return PortalStorageSpaceShare.model_validate(payload)
 
 
+def _project_replication_contexts(project_access: PortalProjectAccess, projects_service: ProjectsService) -> list[PortalReplicationAccountContext]:
+    return [
+        PortalReplicationAccountContext(
+            access=projects_service.account_access_for_project(project_access, account_link.account_id),
+            label=account_link.display_name,
+        )
+        for account_link in project_access.account_links
+    ]
+
+
 def _portal_usage_account(account_link, usage: PortalUsage) -> PortalUsageAccount:
     account = account_link.account
     endpoint = account.storage_endpoint if account is not None else None
@@ -199,6 +213,17 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
     if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered or "cannot be changed" in lowered:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     raise_bad_gateway_from_runtime(exc)
+
+
+def _raise_portal_replication_error(exc: Exception) -> None:
+    detail = sanitize_error_detail(str(exc))
+    if isinstance(exc, PermissionError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+    if isinstance(exc, RuntimeError):
+        raise_bad_gateway_from_runtime(exc)
+    raise exc
 
 
 def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
@@ -492,6 +517,65 @@ def portal_project_storage_spaces(
         "status": lambda item: item.status or "",
     }
     return sorted(spaces, key=sorters.get(key, sorters["name"]), reverse=reverse)
+
+
+@router.get("/projects/{project_id}/replications", response_model=PortalReplicationList)
+def portal_project_replications(
+    project_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalReplicationList:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        contexts = _project_replication_contexts(project_access, projects_service)
+        return service.list_replications(user, contexts)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except Exception as exc:
+        _raise_portal_replication_error(exc)
+
+
+@router.post("/projects/{project_id}/replications", response_model=PortalReplicationSummary, status_code=status.HTTP_201_CREATED)
+def create_portal_project_replication(
+    project_id: int,
+    payload: PortalReplicationCreate,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalReplicationSummary:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    contexts = _project_replication_contexts(project_access, projects_service)
+    try:
+        replication = service.create_replication(user, contexts, payload)
+    except Exception as exc:
+        _raise_portal_replication_error(exc)
+    audit_service.record_action(
+        user=user,
+        scope="portal",
+        action="create_bucket_replication",
+        entity_type="storage_space",
+        entity_id=replication.source.id,
+        account_id=replication.source.account_id,
+        account_name=replication.source.account_name,
+        metadata={
+            "project_id": project_id,
+            "source_storage_space_id": replication.source.id,
+            "target_storage_space_id": replication.target.id if replication.target else None,
+            "source_bucket": replication.source.bucket_name,
+            "target_bucket": replication.target_bucket_name,
+            "zonegroup": replication.zonegroup,
+            "replication_mode": replication.mode,
+            "rule_id": replication.rule_id,
+        },
+    )
+    return replication
 
 
 def _project_account_id_from_payload(project_access: PortalProjectAccess, requested_account_id: Optional[int]) -> int:
@@ -1573,6 +1657,55 @@ def portal_storage_spaces(
         )
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/replications", response_model=PortalReplicationList)
+def portal_replications(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalReplicationList:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_replications(actor, [PortalReplicationAccountContext(access=access)])
+    except Exception as exc:
+        _raise_portal_replication_error(exc)
+
+
+@router.post("/replications", response_model=PortalReplicationSummary, status_code=status.HTTP_201_CREATED)
+def create_portal_replication(
+    payload: PortalReplicationCreate,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalReplicationSummary:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        replication = service.create_replication(actor, [PortalReplicationAccountContext(access=access)], payload)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="create_bucket_replication",
+            entity_type="storage_space",
+            entity_id=replication.source.id,
+            account_id=replication.source.account_id,
+            account_name=replication.source.account_name,
+            metadata={
+                "source_storage_space_id": replication.source.id,
+                "target_storage_space_id": replication.target.id if replication.target else None,
+                "source_bucket": replication.source.bucket_name,
+                "target_bucket": replication.target_bucket_name,
+                "zonegroup": replication.zonegroup,
+                "replication_mode": replication.mode,
+                "rule_id": replication.rule_id,
+            },
+        )
+        return replication
+    except Exception as exc:
+        _raise_portal_replication_error(exc)
 
 
 @router.post("/storage-spaces", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)

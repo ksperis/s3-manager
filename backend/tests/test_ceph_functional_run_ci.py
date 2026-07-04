@@ -29,6 +29,11 @@ def test_ci_endpoint_payload_enables_replication(monkeypatch):
     assert payload[0]["endpoint_url"] == "https://s3.example.test"
     assert payload[0]["is_default"] is True
     assert payload[0]["features"]["replication"] == {"enabled": True}
+    assert payload[0]["ceph_zonegroup"] == {
+        "name": "zg-lab",
+        "global_replication_configured": False,
+        "bucket_replication_allowed": True,
+    }
 
 
 def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):
@@ -49,6 +54,10 @@ def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):
     ]
     assert payload[0]["admin_access_key"] == payload[1]["admin_access_key"] == "admin-ak"
     assert payload[0]["ceph_admin_secret_key"] == payload[1]["ceph_admin_secret_key"] == "ceph-admin-sk"
+    assert [item["ceph_zonegroup"] for item in payload] == [
+        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+    ]
 
 
 def test_ci_endpoint_payload_can_use_env_storage_endpoints():
@@ -85,3 +94,44 @@ def test_ci_endpoint_payload_can_use_env_storage_endpoints():
     assert env["CEPH_TEST_SUPERVISION_SECRET_KEY"] == "supervision-sk"
     assert env["CEPH_TEST_CEPH_ADMIN_ACCESS_KEY"] == "ceph-admin-ak"
     assert env["CEPH_TEST_RGW_VERIFY_TLS"] == "true"
+
+
+def test_ci_endpoint_payload_adds_lab_zonegroup_to_existing_z1_z2_payload():
+    storage_endpoints = [
+        {
+            "name": "s3-z1",
+            "endpoint_url": "https://s3-z1.example.test",
+            "provider": "ceph",
+            "features": {"replication": {"enabled": True}},
+            "is_default": True,
+        },
+        {
+            "name": "s3-z2",
+            "endpoint_url": "https://s3-z2.example.test",
+            "provider": "ceph",
+            "features": {"replication": {"enabled": True}},
+            "is_default": False,
+        },
+        {
+            "name": "aws-us-east-1",
+            "endpoint_url": "https://s3.us-east-1.amazonaws.com",
+            "provider": "aws",
+            "is_default": False,
+        },
+    ]
+    env = {"ENV_STORAGE_ENDPOINTS": json.dumps(storage_endpoints)}
+
+    payload = json.loads(run_ci._build_endpoint_payload(env))
+
+    assert [item.get("ceph_zonegroup") for item in payload] == [
+        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+        None,
+    ]
+
+
+def test_ci_app_settings_payload_enables_portal():
+    payload = json.loads(run_ci._build_app_settings_payload())
+
+    assert payload["general"]["portal_enabled"] is True
+    assert payload["general"]["browser_portal_enabled"] is True

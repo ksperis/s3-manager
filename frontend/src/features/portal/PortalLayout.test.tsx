@@ -113,6 +113,7 @@ describe("PortalLayout", () => {
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Dashboard",
       "Storage Spaces",
+      "Replications",
       "Shares",
       "Access keys",
       "Activity",
@@ -170,6 +171,7 @@ describe("PortalLayout", () => {
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Tableau de bord",
       "Espaces de stockage",
+      "Réplications",
       "Partages",
       "Clés d'accès",
       "Activité",

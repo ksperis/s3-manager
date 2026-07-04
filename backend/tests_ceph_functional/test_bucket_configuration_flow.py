@@ -206,6 +206,74 @@ def _find_replication_endpoints(super_admin_session: BackendSession) -> tuple[di
     return source, target
 
 
+def _find_portal_replication_endpoints(super_admin_session: BackendSession) -> tuple[dict[str, Any], dict[str, Any]]:
+    endpoints = super_admin_session.get("/ceph-admin/endpoints")
+    if not isinstance(endpoints, list):
+        pytest.skip("Portal replication validation requires Ceph Admin endpoint discovery")
+
+    by_zonegroup: dict[str, list[dict[str, Any]]] = {}
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict) or endpoint.get("id") is None:
+            continue
+        ceph_zonegroup = endpoint.get("ceph_zonegroup") if isinstance(endpoint.get("ceph_zonegroup"), dict) else {}
+        zonegroup = str(ceph_zonegroup.get("name") or "").strip()
+        if not zonegroup:
+            continue
+        if not bool(ceph_zonegroup.get("bucket_replication_allowed")):
+            continue
+        if not bool((endpoint.get("capabilities") or {}).get("replication")):
+            continue
+        by_zonegroup.setdefault(zonegroup, []).append(endpoint)
+    for candidates in by_zonegroup.values():
+        if len(candidates) >= 2:
+            sorted_candidates = sorted(candidates, key=lambda item: (not bool(item.get("is_default")), str(item.get("name") or ""), int(item["id"])))
+            return sorted_candidates[0], sorted_candidates[1]
+    pytest.skip("Portal replication validation requires two bucket-replication-capable endpoints in the same zonegroup")
+
+
+def _register_portal_storage_space_metadata(*, account_id: int, bucket_name: str, owner_user_id: int) -> None:
+    from app.core.database import SessionLocal
+    from app.db import PortalStorageSpaceMetadata
+    from app.utils.time import utcnow
+
+    with SessionLocal() as db:
+        metadata = (
+            db.query(PortalStorageSpaceMetadata)
+            .filter(
+                PortalStorageSpaceMetadata.account_id == account_id,
+                PortalStorageSpaceMetadata.bucket_name == bucket_name,
+            )
+            .first()
+        )
+        if metadata is None:
+            metadata = PortalStorageSpaceMetadata(account_id=account_id, bucket_name=bucket_name)
+        metadata.display_name = bucket_name
+        metadata.owner_user_id = owner_user_id
+        metadata.visibility = "private"
+        metadata.share_scope = "restricted"
+        metadata.origin = "imported"
+        metadata.name_editable = False
+        metadata.updated_at = utcnow()
+        db.add(metadata)
+        db.commit()
+
+
+def _delete_portal_storage_space_metadata(*, account_id: int, bucket_name: str) -> None:
+    from app.core.database import SessionLocal
+    from app.db import PortalStorageSpaceMetadata
+
+    with SessionLocal() as db:
+        (
+            db.query(PortalStorageSpaceMetadata)
+            .filter(
+                PortalStorageSpaceMetadata.account_id == account_id,
+                PortalStorageSpaceMetadata.bucket_name == bucket_name,
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+
+
 def _create_replication_connection_context(
     *,
     super_admin_session: BackendSession,
@@ -849,3 +917,159 @@ def test_manager_bucket_replication_roundtrip(
         except BackendAPIError:
             pass
         _cleanup_replication_connection_context(super_admin_session, context)
+
+
+@pytest.mark.ceph_functional
+def test_portal_bucket_replication_roundtrip_between_lab_zones(
+    ceph_test_settings: CephTestSettings,
+    super_admin_session: BackendSession,
+    backend_authenticator: BackendAuthenticator,
+    account_factory,
+    resource_tracker: ResourceTracker,
+) -> None:
+    source_endpoint, target_endpoint = _find_portal_replication_endpoints(super_admin_session)
+    suffix = uuid.uuid4().hex[:8]
+    source_account = account_factory(
+        account_payload={
+            "name": f"{ceph_test_settings.test_prefix}-portal-repl-src-{suffix}",
+            "email": f"portal-repl-src-{suffix}@example.com",
+            "storage_endpoint_id": int(source_endpoint["id"]),
+        }
+    )
+    target_account = account_factory(
+        account_payload={
+            "name": f"{ceph_test_settings.test_prefix}-portal-repl-dst-{suffix}",
+            "email": f"portal-repl-dst-{suffix}@example.com",
+            "storage_endpoint_id": int(target_endpoint["id"]),
+        }
+    )
+    source_bucket = _bucket_name(ceph_test_settings.test_prefix, "portal-repl-src")
+    target_bucket = _bucket_name(ceph_test_settings.test_prefix, "portal-repl-dst")
+    project_id: int | None = None
+    portal_user_id: int | None = None
+    replication_configured = False
+
+    try:
+        source_account.manager_session.post(
+            "/manager/buckets",
+            params=_account_params(source_account.account_id),
+            json={"name": source_bucket, "versioning": False, "block_public_access": False},
+            expected_status=201,
+        )
+        resource_tracker.track_bucket(source_account.account_id, source_bucket)
+        target_account.manager_session.post(
+            "/manager/buckets",
+            params=_account_params(target_account.account_id),
+            json={"name": target_bucket, "versioning": False, "block_public_access": False},
+            expected_status=201,
+        )
+        resource_tracker.track_bucket(target_account.account_id, target_bucket)
+
+        portal_email = f"{ceph_test_settings.test_prefix}.portal-repl.{suffix}@example.com"
+        portal_password = f"Test-{uuid.uuid4().hex[:12]}"
+        portal_user = super_admin_session.post(
+            "/admin/users",
+            json={
+                "email": portal_email,
+                "password": portal_password,
+                "full_name": "Ceph Functional Portal Replication User",
+                "role": "ui_user",
+            },
+            expected_status=201,
+        )
+        portal_user_id = int(portal_user["id"])
+        resource_tracker.track_user(portal_user_id)
+
+        project = super_admin_session.post(
+            "/admin/projects",
+            json={
+                "name": f"{ceph_test_settings.test_prefix}-portal-repl-{suffix}",
+                "description": "Functional Portal replication project",
+                "account_links": [
+                    {"account_id": source_account.account_id, "display_name": "z1", "sort_order": 0},
+                    {"account_id": target_account.account_id, "display_name": "z2", "sort_order": 1},
+                ],
+                "user_links": [{"user_id": portal_user_id, "account_role": "portal_manager"}],
+            },
+            expected_status=201,
+        )
+        project_id = int(project["id"])
+        _register_portal_storage_space_metadata(
+            account_id=source_account.account_id,
+            bucket_name=source_bucket,
+            owner_user_id=portal_user_id,
+        )
+        _register_portal_storage_space_metadata(
+            account_id=target_account.account_id,
+            bucket_name=target_bucket,
+            owner_user_id=portal_user_id,
+        )
+        portal_session = backend_authenticator.login(portal_email, portal_password)
+        source_space_id = f"a{source_account.account_id}:{source_bucket}"
+        target_space_id = f"a{target_account.account_id}:{target_bucket}"
+
+        replications_state = portal_session.get(f"/portal/projects/{project_id}/replications")
+        assert replications_state["can_create"] is True
+        assert {space["project_account_label"] for space in replications_state["storage_spaces"]} == {"z1", "z2"}
+        assert {space["id"] for space in replications_state["storage_spaces"]} == {source_space_id, target_space_id}
+
+        try:
+            created = portal_session.post(
+                f"/portal/projects/{project_id}/replications",
+                json={
+                    "source_storage_space_id": source_space_id,
+                    "target_storage_space_id": target_space_id,
+                },
+                expected_status=201,
+            )
+        except BackendAPIError as exc:
+            detail = backend_error_detail(exc).lower()
+            if exc.status_code == 502 and "notimplemented" in detail:
+                pytest.skip(f"Portal bucket replication not implemented by this z1/z2 lab RGW: {backend_error_detail(exc)}")
+            raise
+        replication_configured = True
+        assert created["mode"] == "bucket_level"
+        assert created["source"]["bucket_name"] == source_bucket
+        assert created["target"]["bucket_name"] == target_bucket
+        assert created["zonegroup"]
+
+        fetched_replication = _wait_for_value(
+            "portal bucket replication configuration",
+            lambda: source_account.manager_session.get(
+                f"/manager/buckets/{source_bucket}/replication",
+                params=_account_params(source_account.account_id),
+            ),
+            lambda current: isinstance(current, dict)
+            and any(
+                isinstance(rule, dict)
+                and rule.get("Status") == "Enabled"
+                and (rule.get("Destination") or {}).get("Bucket") == f"arn:aws:s3:::{target_bucket}"
+                for rule in ((current.get("configuration") or {}).get("Rules") or [])
+            ),
+        )
+        assert fetched_replication["configuration"]["Rules"][0]["Destination"]["Bucket"] == f"arn:aws:s3:::{target_bucket}"
+
+        listed = portal_session.get(f"/portal/projects/{project_id}/replications")
+        assert any(
+            item["mode"] == "bucket_level"
+            and item["source"]["bucket_name"] == source_bucket
+            and item["target_bucket_name"] == target_bucket
+            for item in listed["replications"]
+        )
+    finally:
+        if replication_configured:
+            try:
+                source_account.manager_session.delete(
+                    f"/manager/buckets/{source_bucket}/replication",
+                    params=_account_params(source_account.account_id),
+                    expected_status=(204, 404),
+                )
+            except BackendAPIError:
+                pass
+        if project_id is not None:
+            try:
+                super_admin_session.delete(f"/admin/projects/{project_id}", expected_status=(204, 404))
+            except BackendAPIError:
+                pass
+        _delete_portal_storage_space_metadata(account_id=source_account.account_id, bucket_name=source_bucket)
+        _delete_portal_storage_space_metadata(account_id=target_account.account_id, bucket_name=target_bucket)

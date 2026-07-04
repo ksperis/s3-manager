@@ -25,6 +25,7 @@ function usePortalNavSections(): SidebarSection[] {
         links: [
           { to: "/portal", label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }), end: true, icon: <HomeIcon /> },
           { to: "/portal/storage-spaces", label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), icon: <StorageIcon /> },
+          { to: "/portal/replications", label: t({ en: "Replications", fr: "Réplications", de: "Replikationen" }), icon: <ReplicationIcon /> },
           { to: "/portal/shares", label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), icon: <ShareIcon /> },
           { to: "/portal/access-keys", label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }), icon: <KeyIcon /> },
           { to: "/portal/activity", label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }), icon: <ActivityIcon /> },
@@ -190,6 +191,17 @@ function ShareIcon() {
       <circle cx="14.5" cy="5.8" r="2" strokeWidth={1.7} />
       <circle cx="14.5" cy="14.2" r="2" strokeWidth={1.7} />
       <path strokeLinecap="round" strokeWidth={1.7} d="m8 9 4.5-2.3M8 11l4.5 2.3" />
+    </IconBase>
+  );
+}
+
+function ReplicationIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5 6.5h7.8c2 0 3.7 1.6 3.7 3.7v.3" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m14.2 4 2.7 2.7-2.7 2.7" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M15 13.5H7.2c-2 0-3.7-1.6-3.7-3.7v-.3" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m5.8 16-2.7-2.7 2.7-2.7" />
     </IconBase>
   );
 }
