@@ -98,12 +98,6 @@ const toOverrideValue = (value: TriState): boolean | undefined => {
 const buildPortalOverrideFormSignature = (snapshot: PortalOverrideFormSnapshot) =>
   stableSignature({ portalOverrides: snapshot });
 
-const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_none", label: "No portal access" },
-  { value: "portal_user", label: "Portal user" },
-  { value: "portal_manager", label: "Portal manager" },
-];
-
 function normalizePortalRole(value?: string | null): PortalAccountRole {
   if (value === "portal_user" || value === "portal_manager") return value;
   return "portal_none";
@@ -801,12 +795,12 @@ export default function S3AccountsPage() {
         sections={[
           {
             label: "Users",
-            value: <AccountAssociationChips accounts={userItems} showPortalRole={portalEnabled} />,
+            value: <AccountAssociationChips accounts={userItems} showPortalRole={false} />,
             visible: userItems.length > 0,
           },
           {
             label: "Groups",
-            value: <AccountAssociationChips accounts={groupItems} showPortalRole={portalEnabled} />,
+            value: <AccountAssociationChips accounts={groupItems} showPortalRole={false} />,
             visible: groupItems.length > 0,
           },
         ]}
@@ -1696,11 +1690,6 @@ export default function S3AccountsPage() {
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Admin
                           </th>
-                          {portalEnabled && (
-                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Portal role
-                            </th>
-                          )}
                           <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Actions
                           </th>
@@ -1709,7 +1698,7 @@ export default function S3AccountsPage() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {assignedUsers.length === 0 ? (
                           <tr>
-                            <td colSpan={portalEnabled ? 4 : 3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                               No linked users yet.
                             </td>
                           </tr>
@@ -1735,30 +1724,6 @@ export default function S3AccountsPage() {
                                   Admin
                                 </label>
                               </td>
-                              {portalEnabled && (
-                                <td className="px-3 py-2">
-                                  <select
-                                    value={u.account_role}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        user_links: prev.user_links.map((link) =>
-                                          link.user_id === u.id
-                                            ? { ...link, account_role: normalizePortalRole(e.target.value) }
-                                            : link
-                                        ),
-                                      }))
-                                    }
-                                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  >
-                                    {PORTAL_ROLE_OPTIONS.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </td>
-                              )}
                               <td className="px-3 py-2 text-right">
                                 <button
                                   type="button"
@@ -1919,11 +1884,6 @@ export default function S3AccountsPage() {
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Admin
                           </th>
-                          {portalEnabled && (
-                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Portal role
-                            </th>
-                          )}
                           <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Actions
                           </th>
@@ -1932,7 +1892,7 @@ export default function S3AccountsPage() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {assignedGroups.length === 0 ? (
                           <tr>
-                            <td colSpan={portalEnabled ? 4 : 3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            <td colSpan={3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
                               No linked groups yet.
                             </td>
                           </tr>
@@ -1958,30 +1918,6 @@ export default function S3AccountsPage() {
                                   Admin
                                 </label>
                               </td>
-                              {portalEnabled && (
-                                <td className="px-3 py-2">
-                                  <select
-                                    value={group.account_role}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        group_links: prev.group_links.map((link) =>
-                                          link.group_id === group.id
-                                            ? { ...link, account_role: normalizePortalRole(e.target.value) }
-                                            : link
-                                        ),
-                                      }))
-                                    }
-                                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  >
-                                    {PORTAL_ROLE_OPTIONS.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </td>
-                              )}
                               <td className="px-3 py-2 text-right">
                                 <button
                                   type="button"

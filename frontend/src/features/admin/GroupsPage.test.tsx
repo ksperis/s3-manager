@@ -138,7 +138,7 @@ describe("GroupsPage", () => {
 
     expect(await screen.findByText("production-account")).toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Portal manager")).toBeInTheDocument();
+    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
     expect(screen.getByText("Accounts")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
     expect(screen.getByText("S3 Users")).toBeInTheDocument();

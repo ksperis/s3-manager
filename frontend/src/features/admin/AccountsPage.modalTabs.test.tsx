@@ -249,8 +249,8 @@ describe("AccountsPage modal tabs", () => {
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
     expect(screen.getByText("ui7@example.com")).toBeInTheDocument();
     expect(screen.getByText("Research Group")).toBeInTheDocument();
-    expect(screen.getByText("Portal user")).toBeInTheDocument();
-    expect(screen.getByText("Portal manager")).toBeInTheDocument();
+    expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
+    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
   });
 

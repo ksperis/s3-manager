@@ -35,7 +35,6 @@ import {
 import AdminModalTabs from "./AdminModalTabs";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
-  PORTAL_ROLE_OPTIONS,
   buildManagerToolDefinitions,
   normalizeManagerToolAccess,
   normalizePortalRole,
@@ -115,7 +114,6 @@ export default function GroupsPage() {
   type SortField = "name" | "created_at" | "updated_at";
 
   const { generalSettings } = useGeneralSettings();
-  const showPortalRole = Boolean(generalSettings.portal_enabled);
   const [groups, setGroups] = useState<UiGroup[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [accounts, setAccounts] = useState<S3AccountSummary[]>([]);
@@ -504,19 +502,6 @@ export default function GroupsPage() {
                           />
                           Admin
                         </label>
-                        {showPortalRole && (
-                          <select
-                            value={normalizePortalRole(link?.account_role)}
-                            onChange={(event) => updateAccountSelection(accountId, { account_role: normalizePortalRole(event.target.value) })}
-                            className={`${compactInputClass} w-44`}
-                          >
-                            {PORTAL_ROLE_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
                       </div>
                     )}
                   </div>
@@ -629,7 +614,7 @@ export default function GroupsPage() {
         sections={[
           {
             label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} showPortalRole={showPortalRole} />,
+            value: <AccountAssociationChips accounts={accountItems} showPortalRole={false} />,
             visible: accountItems.length > 0,
           },
           { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },

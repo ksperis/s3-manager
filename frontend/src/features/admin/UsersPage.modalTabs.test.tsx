@@ -163,7 +163,7 @@ describe("UsersPage modal tabs", () => {
 
     expect(await screen.findByText("acc-1")).toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Portal user")).toBeInTheDocument();
+    expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
     expect(screen.getByText("Accounts")).toBeInTheDocument();
     expect(screen.getByText("Users")).toBeInTheDocument();
     expect(screen.getByText("Connections")).toBeInTheDocument();
