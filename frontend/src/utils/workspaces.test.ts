@@ -263,6 +263,50 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     });
   });
 
+  it("exposes Portal and Portal Browser for admin users with only project access", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      {
+        ...adminUser,
+        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+        effective_access: {
+          can_access_ceph_admin: true,
+          can_access_storage_ops: false,
+          manager_tool_access: {
+            bucket_compare: false,
+            bucket_integrity_check: false,
+            bucket_migration: false,
+            bucket_purge: false,
+            feature_rules: false,
+            bucket_quota: false,
+            ceph_s3_user_keys: false,
+          },
+          accounts: [24],
+          account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+          portal_projects: [{ id: 7, name: "Research", account_role: "portal_manager" }],
+          s3_users: [],
+          s3_user_details: [],
+          s3_connections: [],
+          s3_connection_details: [],
+        },
+      },
+      {
+        ...baseSettings,
+        portal_enabled: true,
+        browser_root_enabled: false,
+        browser_portal_enabled: true,
+      }
+    );
+
+    expect(workspaces.find((workspace) => workspace.id === "portal")).toMatchObject({
+      label: "Portal (self-service)",
+      path: "/portal",
+    });
+    expect(workspaces.find((workspace) => workspace.id === "browser")).toMatchObject({
+      label: "Browser (objects)",
+      path: "/browser",
+    });
+  });
+
   it("exposes Portal for superadmin users with an explicit portal account role", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {

@@ -8,14 +8,17 @@ from sqlalchemy.orm import Session
 
 from app.db import (
     AccountRole,
+    Project,
     S3Connection,
     S3User,
     UiGroup,
+    UiGroupProject,
     UiGroupS3Account,
     UiGroupS3Connection,
     UiGroupS3User,
     User,
     UserRole,
+    UserProject,
     UserS3Account,
     UserS3Connection,
     UserS3User,
@@ -25,6 +28,7 @@ from app.db import (
 from app.models.user import (
     AccountMembership,
     EffectiveUserAccess,
+    LinkedPortalProject,
     LinkedS3Connection,
     LinkedS3User,
     LinkedUiGroup,
@@ -57,11 +61,19 @@ class EffectiveAccountLink:
     account_role: str = AccountRole.PORTAL_NONE.value
 
 
+@dataclass(frozen=True)
+class EffectivePortalProjectLink:
+    project_id: int
+    project_name: str
+    account_role: str
+
+
 @dataclass
 class ResolvedUserAccess:
     group_ids: list[int]
     group_details: list[LinkedUiGroup]
     account_links: list[EffectiveAccountLink]
+    portal_project_links: list[EffectivePortalProjectLink]
     s3_user_ids: list[int]
     s3_connection_ids: list[int]
     can_access_ceph_admin: bool
@@ -103,6 +115,7 @@ class EffectiveAccessService:
         groups = self.db.query(UiGroup).filter(UiGroup.id.in_(group_ids)).all() if group_ids else []
 
         account_by_id: dict[int, EffectiveAccountLink] = {}
+        project_by_id: dict[int, EffectivePortalProjectLink] = {}
         direct_account_links = (
             self.db.query(UserS3Account)
             .filter(UserS3Account.user_id == user.id)
@@ -115,6 +128,20 @@ class EffectiveAccessService:
                 account_admin=bool(link.account_admin or link.is_root),
                 is_root=bool(link.is_root),
                 account_role=link.account_role,
+            )
+
+        direct_project_links = (
+            self.db.query(UserProject.project_id, Project.name, UserProject.account_role)
+            .join(Project, Project.id == UserProject.project_id)
+            .filter(UserProject.user_id == user.id)
+            .all()
+        )
+        for project_id, project_name, account_role in direct_project_links:
+            self._merge_project_link(
+                project_by_id,
+                project_id=project_id,
+                project_name=project_name,
+                account_role=account_role,
             )
 
         if group_ids:
@@ -130,6 +157,20 @@ class EffectiveAccessService:
                     account_admin=bool(link.account_admin),
                     is_root=False,
                     account_role=link.account_role,
+                )
+
+            group_project_links = (
+                self.db.query(UiGroupProject.project_id, Project.name, UiGroupProject.account_role)
+                .join(Project, Project.id == UiGroupProject.project_id)
+                .filter(UiGroupProject.group_id.in_(group_ids))
+                .all()
+            )
+            for project_id, project_name, account_role in group_project_links:
+                self._merge_project_link(
+                    project_by_id,
+                    project_id=project_id,
+                    project_name=project_name,
+                    account_role=account_role,
                 )
 
         s3_user_ids = {
@@ -212,6 +253,10 @@ class EffectiveAccessService:
             group_ids=group_ids,
             group_details=group_details,
             account_links=sorted(account_by_id.values(), key=lambda link: link.account_id),
+            portal_project_links=sorted(
+                project_by_id.values(),
+                key=lambda link: (link.project_name.lower(), link.project_id),
+            ),
             s3_user_ids=sorted(s3_user_ids),
             s3_connection_ids=sorted(s3_connection_ids),
             can_access_ceph_admin=can_access_ceph_admin,
@@ -237,6 +282,14 @@ class EffectiveAccessService:
                     account_role=link.account_role,
                 )
                 for link in resolved.account_links
+            ],
+            portal_projects=[
+                LinkedPortalProject(
+                    id=link.project_id,
+                    name=link.project_name,
+                    account_role=link.account_role,
+                )
+                for link in resolved.portal_project_links
             ],
             s3_users=resolved.s3_user_ids,
             s3_user_details=[
@@ -271,6 +324,27 @@ class EffectiveAccessService:
             account_id=account_id,
             account_admin=bool(account_admin or (current.account_admin if current else False)),
             is_root=bool(is_root or (current.is_root if current else False)),
+            account_role=next_role,
+        )
+
+    def _merge_project_link(
+        self,
+        project_by_id: dict[int, EffectivePortalProjectLink],
+        *,
+        project_id: int,
+        project_name: str,
+        account_role: str | None,
+    ) -> None:
+        if account_role not in {
+            AccountRole.PORTAL_USER.value,
+            AccountRole.PORTAL_MANAGER.value,
+        }:
+            return
+        current = project_by_id.get(project_id)
+        next_role = self._max_portal_role(current.account_role if current else None, account_role)
+        project_by_id[project_id] = EffectivePortalProjectLink(
+            project_id=project_id,
+            project_name=project_name,
             account_role=next_role,
         )
 

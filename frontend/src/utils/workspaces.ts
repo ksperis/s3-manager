@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
-import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "../api/users";
+import type { EffectiveUserAccess, ManagerToolAccess, PortalProjectMembership, UiPreferences } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
@@ -31,6 +31,7 @@ export type SessionUser = {
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean | null;
   effective_access?: EffectiveUserAccess | null;
+  portal_projects?: PortalProjectMembership[] | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   actorType?: string | null;
   accountId?: string | null;
@@ -104,10 +105,14 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 
 export function hasPortalWorkspaceAccess(user: SessionUser | null): boolean {
   const links = getAccountLinks(user);
+  const projectLinks = getPortalProjects(user);
   return Boolean(
     links.some(
       (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-    )
+    ) ||
+      projectLinks.some(
+        (project) => project.account_role === "portal_user" || project.account_role === "portal_manager"
+      )
   );
 }
 
@@ -117,6 +122,10 @@ function getEffectiveAccess(user: SessionUser | null): EffectiveUserAccess | nul
 
 function getAccountLinks(user: SessionUser | null): NonNullable<SessionUser["account_links"]> {
   return getEffectiveAccess(user)?.account_links ?? user?.account_links ?? [];
+}
+
+function getPortalProjects(user: SessionUser | null): PortalProjectMembership[] {
+  return getEffectiveAccess(user)?.portal_projects ?? user?.portal_projects ?? [];
 }
 
 function getS3UserIds(user: SessionUser | null): number[] {

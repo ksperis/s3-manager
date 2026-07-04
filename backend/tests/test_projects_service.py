@@ -20,6 +20,7 @@ from app.db import (
     UserUiGroup,
 )
 from app.models.project import ProjectProvisionAccountsRequest
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.projects_service import ProjectsService
 
 
@@ -101,6 +102,30 @@ def test_portal_projects_use_project_links_and_group_role_precedence(db_session)
     account_access = service.account_access_for_project(access, primary.id)
     assert account_access.role == AccountRole.PORTAL_MANAGER.value
     assert account_access.account.id == primary.id
+
+
+def test_effective_access_exposes_project_links_for_workspace_guard(db_session):
+    user = _seed_user(db_session, "project-session@example.test")
+    group = UiGroup(name="project-session-managers")
+    project = Project(name="Portal Workspace", description=None)
+    db_session.add_all([group, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
+            UserUiGroup(user_id=user.id, group_id=group.id),
+            UiGroupProject(group_id=group.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    db_session.commit()
+
+    effective_access = EffectiveAccessService(db_session).to_user_effective_access(user)
+
+    assert effective_access.account_links == []
+    assert len(effective_access.portal_projects) == 1
+    assert effective_access.portal_projects[0].id == project.id
+    assert effective_access.portal_projects[0].name == "Portal Workspace"
+    assert effective_access.portal_projects[0].account_role == AccountRole.PORTAL_MANAGER.value
 
 
 class _FakeAccountsService:

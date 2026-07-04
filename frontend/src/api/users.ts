@@ -11,6 +11,12 @@ export type AccountMembership = {
   account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
 };
 
+export type PortalProjectMembership = {
+  id: number;
+  name: string;
+  account_role: "portal_user" | "portal_manager" | string;
+};
+
 export type ManagerToolAccess = {
   bucket_compare: boolean;
   bucket_integrity_check: boolean;
@@ -33,6 +39,7 @@ export type EffectiveUserAccess = {
   browser_advanced_features_enabled: boolean;
   accounts: number[];
   account_links: AccountMembership[];
+  portal_projects?: PortalProjectMembership[];
   s3_users: number[];
   s3_user_details: { id: number; name: string }[];
   s3_connections: number[];
@@ -61,6 +68,7 @@ export type User = {
   ui_preferences?: UiPreferences | null;
   accounts?: number[];
   account_links?: AccountMembership[];
+  portal_projects?: PortalProjectMembership[];
   group_ids?: number[];
   group_details?: { id: number; name: string }[];
   s3_users?: number[];

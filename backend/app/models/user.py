@@ -35,6 +35,12 @@ class LinkedUiGroup(BaseModel):
     name: str
 
 
+class LinkedPortalProject(BaseModel):
+    id: int
+    name: str
+    account_role: str
+
+
 class AccountMembership(BaseModel):
     account_id: int
     account_admin: Optional[bool] = None
@@ -144,6 +150,7 @@ class EffectiveUserAccess(BaseModel):
     browser_advanced_features_enabled: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
+    portal_projects: list[LinkedPortalProject] = []
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []
