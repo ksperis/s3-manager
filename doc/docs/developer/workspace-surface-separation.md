@@ -129,6 +129,56 @@ placeholder.
   external enforcement; they must not be read back as the Portal source of
   listings or roles.
 
+## Portal Execution Identity Matrix
+
+Portal intentionally separates the UI actor from the storage executor. Every
+Portal route must resolve the UI user, project/account scope, visible Storage
+Spaces, and Portal role first. Only after those checks may the backend select a
+storage identity for the actual S3, IAM, or RGW call.
+
+### Actions using the user's Portal IAM identity
+
+These actions execute with the IAM user and active Portal runtime key owned by
+the authenticated UI user. The same identity is also used when root `/browser`
+or the locked Browser embed runs in a Portal account context.
+
+| Portal action | Storage executor | Guard rails |
+| --- | --- | --- |
+| Storage Space object listing, object detail, preview, download, upload, folder creation, and delete through the locked Browser profile or `/portal/storage-spaces/{spaceId}/objects*`. | The current user's Portal IAM access key from `account_iam_users.active_access_key`. | The route resolves active Storage Space metadata first, blocks archived spaces, and maps Viewer, Editor, and Owner content roles from DB grants before calling S3. Viewer spaces cannot upload, create folders, or delete. |
+| Public-link creation object check. | The current user's Portal IAM access key. | The backend first requires Owner content access and a shared, active Storage Space. The IAM call is only a `HEAD`/metadata check proving the user can access the object before the DB token is created. |
+| External S3 access after a user creates a Portal access key. | The user's own Portal IAM key returned by `/portal/access-keys`. | The key is attached to the user's Portal IAM principal. Portal-generated runtime keys remain hidden and protected from status changes or deletion. |
+
+### Actions using controlled backend elevation
+
+The following Portal actions are not executed with the user's Portal IAM key.
+They are controlled orchestration steps signed by backend-held account
+credentials after Portal role checks have succeeded. This is an explicit
+privilege elevation inside the selected S3 Account; it must never switch to
+Ceph Admin endpoint credentials or another endpoint-wide identity.
+
+| Portal action | Storage executor | Why elevation is used and how it is bounded |
+| --- | --- | --- |
+| Create a Storage Space. | Stored RGW credentials of the selected `S3Account`. | Bucket creation and optional bucket defaults such as versioning, lifecycle, and CORS are platform-orchestrated so the default `portal-manager` IAM policy does not need `s3:CreateBucket` or broad bucket-configuration rights. The route checks Portal role/settings, creates only the requested bucket, rolls back the bucket on metadata failure, syncs Portal IAM projections, and records an audit action. |
+| Import an existing bucket as a Storage Space. | Stored RGW credentials of the selected `S3Account`. | The backend lists buckets to verify the target belongs to the account, then registers Portal metadata, grants, IAM projections, and bucket policy statements. Portal users cannot import unless they have the Portal manager bucket capability. |
+| Update Storage Space metadata, visibility, archive state, or account-wide share scope. | Stored RGW credentials of the selected `S3Account` for bucket-policy sync; DB transaction for Portal metadata. | The UI actor must be the owner or Portal manager for that Storage Space. The backend only updates Portal-managed policy statements such as `PortalStorageSpaceAccess` and archive guards, preserving unrelated bucket policy statements. |
+| Grant, update, or revoke Storage Space shares. | Stored RGW credentials of the selected `S3Account` for IAM and bucket-policy sync; DB transaction for grant records. | The backend records the DB grant, updates the target user's Portal IAM inline policy, and syncs the Storage Space bucket policy. It must not create account membership for a user who is outside the account/project scope. |
+| Provision or rotate the hidden Portal runtime key. | Stored RGW credentials of the selected `S3Account` through RGW IAM. | The hidden key is created for the user's Portal IAM principal and is used only by Portal runtime operations. It is excluded from `/portal/access-keys`, cannot be deleted by the user, and stale runtime keys are cleaned up by the provisioning workflow. |
+| Create, enable/disable, or delete a user-managed Portal access key. | Stored RGW credentials of the selected `S3Account` through RGW IAM. | The backend mutates keys only on the current user's Portal IAM principal, enforces account settings and key limits, and rejects operations against the protected runtime key. |
+| Configure bucket-level replication from Portal. | Stored RGW credentials of the source and target `S3Account` records. | The user must have Portal manager rights, both Storage Spaces must be visible in the workspace, endpoints must be different locations in the same Ceph zonegroup, and bucket replication must be allowed on both endpoints. The workflow enables versioning on source and target and writes the source bucket replication rule with audit metadata `executor = s3_account_admin`. It must not use Ceph Admin endpoint credentials. |
+| Public-link download by token. | Stored RGW credentials of the linked `S3Account`. | There is no authenticated UI user on the download route. The backend validates the random token, expiry, revocation state, Storage Space visibility, and archive state before streaming the object. Private or archived Storage Spaces suspend the public link. |
+
+### Read-only operational identities
+
+Some Portal dashboard and usage cards require account-level or endpoint-level
+read APIs rather than the user's Portal IAM identity. These reads must remain
+non-mutating, tolerate unavailable capabilities, and avoid exposing hidden bucket
+names to users.
+
+| Portal read path | Executor | Constraints |
+| --- | --- | --- |
+| Account usage, quota, bucket counts, and usage composition. | Configured supervision or admin read credentials for the storage endpoint, depending on the metric. | Results are filtered back through Portal-visible Storage Spaces. Hidden usage can appear only as an anonymous `Other` aggregate. |
+| Endpoint health, billing source, activity, transfers, and alerts. | DB records and configured operational collectors. | These pages must stay user-facing and must not reveal operator-only bucket, endpoint, or IAM diagnostics. |
+
 ## Routing Contract
 
 Portal canonical routes are:

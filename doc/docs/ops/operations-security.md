@@ -39,6 +39,14 @@
 - LDAP login success, failure, rate-limit, and provider configuration failures are audited without recording submitted passwords.
 - Backend HTTP 5xx details are sanitized before being returned or logged by the HTTP exception handler. Do not bypass the shared error helpers when exposing upstream S3/RGW/IAM failures.
 
+Portal has documented executor-identity boundaries. File operations run with
+the user's Portal IAM identity, while selected orchestration workflows such as
+Storage Space creation/import, share projection, access-key provisioning, bucket
+policy sync, public-link token download, and bucket-level replication use
+backend-held S3 Account credentials after Portal role checks. Review the full
+[Portal execution identity matrix](../developer/workspace-surface-separation.md#portal-execution-identity-matrix)
+when auditing privileged Portal actions.
+
 ## CI security gates
 
 GitLab CI blocks merges and image promotion when security scans detect `HIGH` or `CRITICAL` findings.
