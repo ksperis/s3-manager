@@ -10,6 +10,8 @@ const listMinimalUsersMock = vi.fn();
 const listMinimalS3AccountsMock = vi.fn();
 const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
+const listProjectsMock = vi.fn();
+const updateProjectMock = vi.fn();
 
 const generalSettingsState = {
   manager_enabled: true,
@@ -68,6 +70,11 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listMinimalS3Connections: () => listMinimalS3ConnectionsMock(),
 }));
 
+vi.mock("../../api/projects", () => ({
+  listProjects: (params?: unknown) => listProjectsMock(params),
+  updateProject: (projectId: number, payload: unknown) => updateProjectMock(projectId, payload),
+}));
+
 describe("GroupsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,9 +99,31 @@ describe("GroupsPage", () => {
       { id: 21, name: "shared-conn", is_shared: true },
       { id: 22, name: "private-conn", is_shared: false },
     ]);
+    listProjectsMock.mockResolvedValue({
+      items: [
+        {
+          id: 71,
+          name: "Operations Project",
+          description: "Platform operations",
+          account_links: [],
+          user_links: [],
+          group_links: [],
+          account_count: 0,
+          user_count: 0,
+          group_count: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 200,
+      has_next: false,
+    });
     createGroupMock.mockResolvedValue({ id: 50, name: "ops-group" });
     updateGroupMock.mockResolvedValue({ id: 50, name: "ops-group-updated" });
     deleteGroupMock.mockResolvedValue(undefined);
+    updateProjectMock.mockResolvedValue(undefined);
   });
 
   it("renders association names from group details without waiting for modal resources", async () => {
@@ -327,6 +356,96 @@ describe("GroupsPage", () => {
 
     await waitFor(() => {
       expect(deleteGroupMock).toHaveBeenCalledWith(50);
+    });
+  });
+
+  it("links projects from the UI group edit modal", async () => {
+    listProjectsMock
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 71,
+            name: "Operations Project",
+            description: "Platform operations",
+            account_links: [],
+            user_links: [],
+            group_links: [],
+            account_count: 0,
+            user_count: 0,
+            group_count: 0,
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 200,
+        has_next: false,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 71,
+            name: "Operations Project",
+            description: "Platform operations",
+            account_links: [],
+            user_links: [],
+            group_links: [{ group_id: 50, group_name: "ops-group", account_role: "portal_user" }],
+            account_count: 0,
+            user_count: 0,
+            group_count: 1,
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 200,
+        has_next: false,
+      });
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: "Initial",
+          can_access_ceph_admin: false,
+          can_access_storage_ops: false,
+          manager_tool_access: {
+            bucket_compare: false,
+            bucket_integrity_check: false,
+            bucket_migration: false,
+            feature_rules: false,
+            bucket_quota: false,
+            ceph_s3_user_keys: false,
+          },
+          user_ids: [],
+          user_details: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add projects" }));
+    fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "operations" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Operations Project/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save project links" }));
+
+    await waitFor(() => {
+      expect(updateProjectMock).toHaveBeenCalledWith(71, {
+        group_links: [{ group_id: 50, account_role: "portal_user" }],
+      });
     });
   });
 });

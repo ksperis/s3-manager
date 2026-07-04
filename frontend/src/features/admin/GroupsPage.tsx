@@ -33,6 +33,7 @@ import {
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
 import AdminModalTabs from "./AdminModalTabs";
+import ProjectAssociationEditor from "./ProjectAssociationEditor";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   buildManagerToolDefinitions,
@@ -49,7 +50,7 @@ import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from ".
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 
-type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "browser" | "manager_tools";
+type GroupModalTab = "general" | "members" | "associations" | "projects" | "workspaces" | "browser" | "manager_tools";
 type AssociationTab = "accounts" | "s3_users" | "connections";
 type AccountSelection = {
   account_id: number;
@@ -766,6 +767,7 @@ export default function GroupsPage() {
                 { id: "general", label: "General" },
                 { id: "members", label: "Members" },
                 { id: "associations", label: "Associations" },
+                ...(editingGroup ? [{ id: "projects" as const, label: "Projects" }] : []),
                 { id: "workspaces", label: "Workspaces" },
                 { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },
@@ -803,6 +805,10 @@ export default function GroupsPage() {
               <div className={tableContainerClass}>
                 <div className={tableClass}>{renderAssociationsTab()}</div>
               </div>
+            )}
+
+            {modalTab === "projects" && editingGroup && (
+              <ProjectAssociationEditor target={{ kind: "group", id: editingGroup.id, label: editingGroup.name }} />
             )}
 
             {modalTab === "workspaces" && (

@@ -40,6 +40,11 @@ import {
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
+import {
+  AdminAssociationPickerOption,
+  AdminAssociationPickerPanel,
+  AdminAssociationSectionHeader,
+} from "./AdminAssociationPicker";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 
 type ProjectFormAccountLink = ProjectAccountLinkInput & { account_id: number | "" };
@@ -58,6 +63,14 @@ const ROLE_OPTIONS: { value: ProjectPortalRole; label: string }[] = [
   { value: "portal_user", label: "Portal user" },
   { value: "portal_manager", label: "Portal manager" },
 ];
+
+const MAX_VISIBLE_OPTIONS = 10;
+
+type ProjectAssociationOption = {
+  id: number;
+  label: string;
+  detail?: string | null;
+};
 
 const emptyForm = (): ProjectForm => ({
   name: "",
@@ -98,10 +111,20 @@ function selectedIds(entries: unknown[], key: string): number[] {
     .filter((value): value is number => typeof value === "number");
 }
 
+function accountId(account: S3AccountSummary): number {
+  return Number(account.db_id ?? account.id);
+}
+
 function accountLabel(account: S3AccountSummary | undefined): string {
   if (!account) return "Unknown account";
   const endpoint = account.storage_endpoint_name ?? account.storage_endpoint_url;
   return endpoint ? `${account.name} (${endpoint})` : account.name;
+}
+
+function optionMatchesSearch(option: ProjectAssociationOption, search: string): boolean {
+  const query = search.trim().toLowerCase();
+  if (!query) return true;
+  return [option.label, option.detail ?? ""].some((value) => value.toLowerCase().includes(query));
 }
 
 function endpointLabel(endpoint: StorageEndpoint): string {
@@ -127,6 +150,15 @@ export default function ProjectsPage() {
   const [accounts, setAccounts] = useState<S3AccountSummary[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [groups, setGroups] = useState<UiGroupSummary[]>([]);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showUserPicker, setShowUserPicker] = useState(false);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [accountPickerSearch, setAccountPickerSearch] = useState("");
+  const [userPickerSearch, setUserPickerSearch] = useState("");
+  const [groupPickerSearch, setGroupPickerSearch] = useState("");
+  const [accountSelectionIds, setAccountSelectionIds] = useState<number[]>([]);
+  const [userSelectionIds, setUserSelectionIds] = useState<number[]>([]);
+  const [groupSelectionIds, setGroupSelectionIds] = useState<number[]>([]);
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [provisionEndpointIds, setProvisionEndpointIds] = useState<number[]>([]);
   const [provisionBaseName, setProvisionBaseName] = useState("");
@@ -134,12 +166,44 @@ export default function ProjectsPage() {
   const [provisioning, setProvisioning] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const accountById = useMemo(() => new Map(accounts.map((account) => [Number(account.db_id ?? account.id), account])), [accounts]);
+  const accountById = useMemo(() => new Map(accounts.map((account) => [accountId(account), account])), [accounts]);
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const groupById = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
   const accountIds = useMemo(() => selectedIds(form.account_links, "account_id"), [form.account_links]);
   const userIds = useMemo(() => selectedIds(form.user_links, "user_id"), [form.user_links]);
   const groupIds = useMemo(() => selectedIds(form.group_links, "group_id"), [form.group_links]);
+  const accountOptions = useMemo<ProjectAssociationOption[]>(
+    () =>
+      accounts.map((account) => ({
+        id: accountId(account),
+        label: accountLabel(account),
+        detail: account.rgw_account_id ?? account.storage_endpoint_url ?? account.storage_endpoint_name,
+      })),
+    [accounts]
+  );
+  const userOptions = useMemo<ProjectAssociationOption[]>(
+    () => users.map((user) => ({ id: user.id, label: user.email })),
+    [users]
+  );
+  const groupOptions = useMemo<ProjectAssociationOption[]>(
+    () => groups.map((group) => ({ id: group.id, label: group.name })),
+    [groups]
+  );
+  const availableAccountOptions = useMemo(
+    () => accountOptions.filter((option) => !accountIds.includes(option.id) && optionMatchesSearch(option, accountPickerSearch)),
+    [accountIds, accountOptions, accountPickerSearch]
+  );
+  const availableUserOptions = useMemo(
+    () => userOptions.filter((option) => !userIds.includes(option.id) && optionMatchesSearch(option, userPickerSearch)),
+    [userIds, userOptions, userPickerSearch]
+  );
+  const availableGroupOptions = useMemo(
+    () => groupOptions.filter((option) => !groupIds.includes(option.id) && optionMatchesSearch(option, groupPickerSearch)),
+    [groupIds, groupOptions, groupPickerSearch]
+  );
+  const visibleAccountOptions = useMemo(() => availableAccountOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableAccountOptions]);
+  const visibleUserOptions = useMemo(() => availableUserOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableUserOptions]);
+  const visibleGroupOptions = useMemo(() => availableGroupOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableGroupOptions]);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -183,6 +247,18 @@ export default function ProjectsPage() {
     }
   }, []);
 
+  const resetAssociationPickers = () => {
+    setShowAccountPicker(false);
+    setShowUserPicker(false);
+    setShowGroupPicker(false);
+    setAccountPickerSearch("");
+    setUserPickerSearch("");
+    setGroupPickerSearch("");
+    setAccountSelectionIds([]);
+    setUserSelectionIds([]);
+    setGroupSelectionIds([]);
+  };
+
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
@@ -193,6 +269,7 @@ export default function ProjectsPage() {
     setProvisionEndpointIds([]);
     setProvisionBaseName("");
     setProvisionEmail("");
+    resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
     setShowModal(true);
@@ -205,6 +282,7 @@ export default function ProjectsPage() {
     setProvisionEndpointIds([]);
     setProvisionBaseName("");
     setProvisionEmail("");
+    resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
     setShowModal(true);
@@ -299,38 +377,68 @@ export default function ProjectsPage() {
     }
   };
 
-  const addAccountLink = () => {
-    const next = accounts.find((account) => {
-      const id = Number(account.db_id ?? account.id);
-      return !accountIds.includes(id);
-    });
-    if (!next) return;
-    const accountId = Number(next.db_id ?? next.id);
+  const toggleAccountSelection = (id: number, checked: boolean) => {
+    setAccountSelectionIds((current) => (checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)));
+  };
+
+  const toggleUserSelection = (id: number, checked: boolean) => {
+    setUserSelectionIds((current) => (checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)));
+  };
+
+  const toggleGroupSelection = (id: number, checked: boolean) => {
+    setGroupSelectionIds((current) => (checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)));
+  };
+
+  const addSelectedAccountLinks = () => {
     setForm((current) => ({
       ...current,
       account_links: [
         ...current.account_links,
-        { account_id: accountId, display_name: next.storage_endpoint_name ?? next.name, sort_order: current.account_links.length },
+        ...accountSelectionIds
+          .filter((id) => !selectedIds(current.account_links, "account_id").includes(id))
+          .map((id, index) => {
+            const account = accountById.get(id);
+            return {
+              account_id: id,
+              display_name: account?.storage_endpoint_name ?? account?.name ?? `Account #${id}`,
+              sort_order: current.account_links.length + index,
+            };
+          }),
       ],
     }));
+    setAccountSelectionIds([]);
+    setAccountPickerSearch("");
+    setShowAccountPicker(false);
   };
 
-  const addUserLink = () => {
-    const next = users.find((user) => !userIds.includes(user.id));
-    if (!next) return;
+  const addSelectedUserLinks = () => {
     setForm((current) => ({
       ...current,
-      user_links: [...current.user_links, { user_id: next.id, account_role: "portal_user" }],
+      user_links: [
+        ...current.user_links,
+        ...userSelectionIds
+          .filter((id) => !selectedIds(current.user_links, "user_id").includes(id))
+          .map((id) => ({ user_id: id, account_role: "portal_user" as ProjectPortalRole })),
+      ],
     }));
+    setUserSelectionIds([]);
+    setUserPickerSearch("");
+    setShowUserPicker(false);
   };
 
-  const addGroupLink = () => {
-    const next = groups.find((group) => !groupIds.includes(group.id));
-    if (!next) return;
+  const addSelectedGroupLinks = () => {
     setForm((current) => ({
       ...current,
-      group_links: [...current.group_links, { group_id: next.id, account_role: "portal_user" }],
+      group_links: [
+        ...current.group_links,
+        ...groupSelectionIds
+          .filter((id) => !selectedIds(current.group_links, "group_id").includes(id))
+          .map((id) => ({ group_id: id, account_role: "portal_user" as ProjectPortalRole })),
+      ],
     }));
+    setGroupSelectionIds([]);
+    setGroupPickerSearch("");
+    setShowGroupPicker(false);
   };
 
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: projects.length });
@@ -468,7 +576,47 @@ export default function ProjectsPage() {
             </section>
 
             <section className="space-y-3">
-              <SectionHeader title="S3 accounts" count={form.account_links.length} actionLabel="Add account" onAction={addAccountLink} disabled={auxLoading || accountIds.length >= accounts.length} />
+              <AdminAssociationSectionHeader
+                title="S3 accounts"
+                countLabel={`${form.account_links.length} linked`}
+                actionLabel={showAccountPicker ? "Close" : "Add accounts"}
+                onAction={() => {
+                  setShowAccountPicker((current) => !current);
+                  setAccountSelectionIds([]);
+                  setAccountPickerSearch("");
+                }}
+              />
+              {showAccountPicker ? (
+                <AdminAssociationPickerPanel
+                  title="Add S3 accounts"
+                  hint="Search by account, endpoint, or RGW id"
+                  search={accountPickerSearch}
+                  onSearchChange={setAccountPickerSearch}
+                  loading={auxLoading}
+                  availableCount={availableAccountOptions.length}
+                  maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                  selectedCount={accountSelectionIds.length}
+                  onCancel={() => {
+                    setShowAccountPicker(false);
+                    setAccountSelectionIds([]);
+                    setAccountPickerSearch("");
+                  }}
+                  onAdd={addSelectedAccountLinks}
+                  addDisabled={accountSelectionIds.length === 0}
+                  loadingLabel="Loading accounts..."
+                  emptyLabel="No available accounts."
+                >
+                  {visibleAccountOptions.map((option) => (
+                    <AdminAssociationPickerOption
+                      key={option.id}
+                      checked={accountSelectionIds.includes(option.id)}
+                      onChange={(checked) => toggleAccountSelection(option.id, checked)}
+                      label={option.label}
+                      detail={option.detail}
+                    />
+                  ))}
+                </AdminAssociationPickerPanel>
+              ) : null}
               <div className={uiTableContainerClass}>
                 <table className={cx(uiDataTableClass, "min-w-full")}>
                   <thead>
@@ -485,32 +633,12 @@ export default function ProjectsPage() {
                       return (
                         <tr key={`${link.account_id || "new"}-${index}`}>
                           <td>
-                            <select
-                              className={uiInputClass}
-                              value={link.account_id}
-                              onChange={(event) => {
-                                const accountId = Number(event.target.value);
-                                const account = accountById.get(accountId);
-                                setForm((current) => ({
-                                  ...current,
-                                  account_links: current.account_links.map((entry, entryIndex) =>
-                                    entryIndex === index
-                                      ? { ...entry, account_id: accountId, display_name: entry.display_name || account?.storage_endpoint_name || account?.name || "" }
-                                      : entry
-                                  ),
-                                }));
-                              }}
-                            >
-                              {accounts.map((account) => {
-                                const id = Number(account.db_id ?? account.id);
-                                const disabled = accountIds.includes(id) && id !== link.account_id;
-                                return (
-                                  <option key={id} value={id} disabled={disabled}>
-                                    {accountLabel(account)}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                            <p className={cx("font-semibold", uiTitleTextClass)}>
+                              {selected ? accountLabel(selected) : `Account #${link.account_id}`}
+                            </p>
+                            {selected?.rgw_account_id ? (
+                              <p className={cx("text-[11px]", uiMutedTextClass)}>{selected.rgw_account_id}</p>
+                            ) : null}
                           </td>
                           <td>
                             <input
@@ -557,12 +685,26 @@ export default function ProjectsPage() {
               <AssociationTable
                 title="UI users"
                 count={form.user_links.length}
-                actionLabel="Add user"
-                onAction={addUserLink}
-                disabled={auxLoading || userIds.length >= users.length}
+                actionLabel={showUserPicker ? "Close" : "Add UI users"}
+                showPicker={showUserPicker}
+                onTogglePicker={() => {
+                  setShowUserPicker((current) => !current);
+                  setUserSelectionIds([]);
+                  setUserPickerSearch("");
+                }}
+                pickerTitle="Add UI users"
+                pickerHint="Search by email"
+                pickerSearch={userPickerSearch}
+                onPickerSearchChange={setUserPickerSearch}
+                loading={auxLoading}
+                availableOptions={availableUserOptions}
+                visibleOptions={visibleUserOptions}
+                pickerSelectionIds={userSelectionIds}
+                onPickerSelectionChange={toggleUserSelection}
+                onAddSelected={addSelectedUserLinks}
+                loadingLabel="Loading users..."
+                emptyLabel="No available users."
                 rows={form.user_links}
-                options={users.map((user) => ({ id: user.id, label: user.email }))}
-                selectedIds={userIds}
                 idKey="user_id"
                 labelById={(id) => userById.get(id)?.email ?? `User #${id}`}
                 onChange={(rows) => setForm((current) => ({ ...current, user_links: rows as ProjectFormUserLink[] }))}
@@ -570,12 +712,26 @@ export default function ProjectsPage() {
               <AssociationTable
                 title="UI groups"
                 count={form.group_links.length}
-                actionLabel="Add group"
-                onAction={addGroupLink}
-                disabled={auxLoading || groupIds.length >= groups.length}
+                actionLabel={showGroupPicker ? "Close" : "Add UI groups"}
+                showPicker={showGroupPicker}
+                onTogglePicker={() => {
+                  setShowGroupPicker((current) => !current);
+                  setGroupSelectionIds([]);
+                  setGroupPickerSearch("");
+                }}
+                pickerTitle="Add UI groups"
+                pickerHint="Search by group name"
+                pickerSearch={groupPickerSearch}
+                onPickerSearchChange={setGroupPickerSearch}
+                loading={auxLoading}
+                availableOptions={availableGroupOptions}
+                visibleOptions={visibleGroupOptions}
+                pickerSelectionIds={groupSelectionIds}
+                onPickerSelectionChange={toggleGroupSelection}
+                onAddSelected={addSelectedGroupLinks}
+                loadingLabel="Loading groups..."
+                emptyLabel="No available groups."
                 rows={form.group_links}
-                options={groups.map((group) => ({ id: group.id, label: group.name }))}
-                selectedIds={groupIds}
                 idKey="group_id"
                 labelById={(id) => groupById.get(id)?.name ?? `Group #${id}`}
                 onChange={(rows) => setForm((current) => ({ ...current, group_links: rows as ProjectFormGroupLink[] }))}
@@ -655,41 +811,25 @@ export default function ProjectsPage() {
   );
 }
 
-function SectionHeader({
-  title,
-  count,
-  actionLabel,
-  onAction,
-  disabled,
-}: {
-  title: string;
-  count: number;
-  actionLabel: string;
-  onAction: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <p className={cx("ui-body font-bold", uiTitleTextClass)}>{title}</p>
-        <p className={cx("ui-caption", uiMutedTextClass)}>{count} linked</p>
-      </div>
-      <button type="button" className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 text-xs")} onClick={onAction} disabled={disabled}>
-        {actionLabel}
-      </button>
-    </div>
-  );
-}
-
 function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>({
   title,
   count,
   actionLabel,
-  onAction,
-  disabled,
+  showPicker,
+  onTogglePicker,
+  pickerTitle,
+  pickerHint,
+  pickerSearch,
+  onPickerSearchChange,
+  loading,
+  availableOptions,
+  visibleOptions,
+  pickerSelectionIds,
+  onPickerSelectionChange,
+  onAddSelected,
+  loadingLabel,
+  emptyLabel,
   rows,
-  options,
-  selectedIds,
   idKey,
   labelById,
   onChange,
@@ -697,18 +837,55 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
   title: string;
   count: number;
   actionLabel: string;
-  onAction: () => void;
-  disabled?: boolean;
+  showPicker: boolean;
+  onTogglePicker: () => void;
+  pickerTitle: string;
+  pickerHint: string;
+  pickerSearch: string;
+  onPickerSearchChange: (value: string) => void;
+  loading: boolean;
+  availableOptions: ProjectAssociationOption[];
+  visibleOptions: ProjectAssociationOption[];
+  pickerSelectionIds: number[];
+  onPickerSelectionChange: (id: number, checked: boolean) => void;
+  onAddSelected: () => void;
+  loadingLabel: string;
+  emptyLabel: string;
   rows: T[];
-  options: { id: number; label: string }[];
-  selectedIds: number[];
   idKey: "user_id" | "group_id";
   labelById: (id: number) => string;
   onChange: (rows: T[]) => void;
 }) {
   return (
     <section className="space-y-3">
-      <SectionHeader title={title} count={count} actionLabel={actionLabel} onAction={onAction} disabled={disabled} />
+      <AdminAssociationSectionHeader title={title} countLabel={`${count} linked`} actionLabel={actionLabel} onAction={onTogglePicker} />
+      {showPicker ? (
+        <AdminAssociationPickerPanel
+          title={pickerTitle}
+          hint={pickerHint}
+          search={pickerSearch}
+          onSearchChange={onPickerSearchChange}
+          loading={loading}
+          availableCount={availableOptions.length}
+          maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+          selectedCount={pickerSelectionIds.length}
+          onCancel={onTogglePicker}
+          onAdd={onAddSelected}
+          addDisabled={pickerSelectionIds.length === 0}
+          loadingLabel={loadingLabel}
+          emptyLabel={emptyLabel}
+        >
+          {visibleOptions.map((option) => (
+            <AdminAssociationPickerOption
+              key={option.id}
+              checked={pickerSelectionIds.includes(option.id)}
+              onChange={(checked) => onPickerSelectionChange(option.id, checked)}
+              label={option.label}
+              detail={option.detail}
+            />
+          ))}
+        </AdminAssociationPickerPanel>
+      ) : null}
       <div className={uiTableContainerClass}>
         <table className={cx(uiDataTableClass, "min-w-full")}>
           <thead>
@@ -726,22 +903,9 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
               return (
                 <tr key={`${currentId || "new"}-${index}`}>
                   <td>
-                    <select
-                      className={uiInputClass}
-                      value={currentId}
-                      aria-label={title}
-                      onChange={(event) => {
-                        const nextId = Number(event.target.value);
-                        onChange(rows.map((entry, entryIndex) => entryIndex === index ? { ...entry, [idKey]: nextId } : entry) as T[]);
-                      }}
-                    >
-                      {options.map((option) => (
-                        <option key={option.id} value={option.id} disabled={selectedIds.includes(option.id) && option.id !== currentId}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    {typeof currentId === "number" ? <p className={cx("mt-1 text-[11px]", uiMutedTextClass)}>{labelById(currentId)}</p> : null}
+                    <p className={cx("font-semibold", uiTitleTextClass)}>
+                      {typeof currentId === "number" ? labelById(currentId) : "Unknown"}
+                    </p>
                   </td>
                   <td>
                     <select

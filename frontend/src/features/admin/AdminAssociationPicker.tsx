@@ -53,6 +53,35 @@ type AdminAssociationPickerPanelProps = {
   children: ReactNode;
 };
 
+type AdminAssociationPickerOptionProps = {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: ReactNode;
+  detail?: ReactNode;
+};
+
+export function AdminAssociationPickerOption({
+  checked,
+  onChange,
+  label,
+  detail,
+}: AdminAssociationPickerOptionProps) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+      />
+      <span className="min-w-0">
+        <span className={cx("block truncate ui-body font-medium", uiTitleTextClass)}>{label}</span>
+        {detail ? <span className={cx("block truncate ui-caption", uiMutedTextClass)}>{detail}</span> : null}
+      </span>
+    </label>
+  );
+}
+
 export function AdminAssociationPickerPanel({
   title,
   hint,
