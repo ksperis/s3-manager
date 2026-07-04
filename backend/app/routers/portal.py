@@ -573,6 +573,9 @@ def create_portal_project_replication(
             "zonegroup": replication.zonegroup,
             "replication_mode": replication.mode,
             "rule_id": replication.rule_id,
+            "executor": "s3_account_admin",
+            "source_storage_endpoint_id": replication.source.storage_endpoint_id,
+            "target_storage_endpoint_id": replication.target.storage_endpoint_id if replication.target else None,
         },
     )
     return replication
@@ -1701,6 +1704,9 @@ def create_portal_replication(
                 "zonegroup": replication.zonegroup,
                 "replication_mode": replication.mode,
                 "rule_id": replication.rule_id,
+                "executor": "s3_account_admin",
+                "source_storage_endpoint_id": replication.source.storage_endpoint_id,
+                "target_storage_endpoint_id": replication.target.storage_endpoint_id if replication.target else None,
             },
         )
         return replication

@@ -10,7 +10,14 @@ from app.services.portal.replications import PortalReplicationAccountContext
 from app.services.portal_service import PortalService
 
 
-def _endpoint(db_session, *, name: str, zonegroup: str, bucket_allowed: bool = True, global_configured: bool = False):
+def _endpoint(
+    db_session,
+    *,
+    name: str,
+    zonegroup: str,
+    bucket_allowed: bool = True,
+    global_configured: bool = False,
+):
     endpoint = StorageEndpoint(
         name=name,
         endpoint_url=f"https://{name}.example.test",
@@ -40,6 +47,14 @@ def _account(db_session, *, name: str, endpoint: StorageEndpoint):
         storage_endpoint=endpoint,
     )
     db_session.add(account)
+    db_session.flush()
+    return account
+
+
+def _account_without_admin_credentials(db_session, *, name: str, endpoint: StorageEndpoint):
+    account = _account(db_session, name=name, endpoint=endpoint)
+    account.rgw_access_key = None
+    account.rgw_secret_key = None
     db_session.flush()
     return account
 
@@ -82,17 +97,41 @@ def _access(account: S3Account, user: User) -> AccountAccess:
 class _BucketService:
     def __init__(self):
         self.versioning_calls: list[tuple[str, int, bool]] = []
+        self.admin_credential_checks: list[int] = []
         self.replication_calls: list[tuple[str, int, dict]] = []
+        self.admin_replication_calls: list[tuple[str, int, dict]] = []
         self.replication_by_bucket: dict[str, dict] = {}
 
     def get_bucket_replication(self, name: str, account: S3Account):
         return BucketReplicationConfiguration(configuration=self.replication_by_bucket.get(name, {}))
 
+    def get_bucket_replication_as_account_admin(self, name: str, account: S3Account):
+        self._require_account_admin_credentials(account)
+        return self.get_bucket_replication(name, account)
+
+    def _require_account_admin_credentials(self, account: S3Account):
+        if not account.rgw_access_key or not account.rgw_secret_key:
+            raise RuntimeError("S3Account is missing account admin credentials")
+
+    def ensure_account_admin_credentials(self, account: S3Account):
+        self._require_account_admin_credentials(account)
+        self.admin_credential_checks.append(account.id)
+
     def set_versioning(self, name: str, account: S3Account, enabled: bool):
+        self.versioning_calls.append((name, account.id, enabled))
+
+    def set_versioning_as_account_admin(self, name: str, account: S3Account, enabled: bool):
+        self._require_account_admin_credentials(account)
         self.versioning_calls.append((name, account.id, enabled))
 
     def set_bucket_replication(self, name: str, account: S3Account, payload: BucketReplicationConfiguration):
         self.replication_calls.append((name, account.id, payload.configuration))
+        self.replication_by_bucket[name] = payload.configuration
+        return payload
+
+    def set_bucket_replication_as_account_admin(self, name: str, account: S3Account, payload: BucketReplicationConfiguration):
+        self._require_account_admin_credentials(account)
+        self.admin_replication_calls.append((name, account.id, payload.configuration))
         self.replication_by_bucket[name] = payload.configuration
         return payload
 
@@ -153,12 +192,14 @@ def test_portal_create_bucket_level_replication_automates_versioning_and_rule(db
         bucket_service=bucket_service,
     )
 
+    assert bucket_service.admin_credential_checks == [account_z1.id, account_z2.id]
     assert bucket_service.versioning_calls == [
         ("research-source", account_z1.id, True),
         ("research-target", account_z2.id, True),
     ]
-    assert len(bucket_service.replication_calls) == 1
-    source_bucket, source_account_id, configuration = bucket_service.replication_calls[0]
+    assert bucket_service.replication_calls == []
+    assert len(bucket_service.admin_replication_calls) == 1
+    source_bucket, source_account_id, configuration = bucket_service.admin_replication_calls[0]
     assert (source_bucket, source_account_id) == ("research-source", account_z1.id)
     assert configuration["Rules"][0]["Destination"] == {"Bucket": "arn:aws:s3:::research-target"}
     assert configuration["Rules"][0]["Status"] == "Enabled"
@@ -206,13 +247,49 @@ def test_portal_create_bucket_level_replication_preserves_existing_rules(db_sess
         bucket_service=bucket_service,
     )
 
-    assert len(bucket_service.replication_calls) == 1
-    configuration = bucket_service.replication_calls[0][2]
+    assert bucket_service.replication_calls == []
+    assert bucket_service.admin_credential_checks == [account_z1.id, account_z2.id]
+    assert len(bucket_service.admin_replication_calls) == 1
+    configuration = bucket_service.admin_replication_calls[0][2]
     assert configuration["Role"] == "arn:aws:iam::000000000000:role/existing-replication"
     assert [rule["ID"] for rule in configuration["Rules"]] == ["keep-existing-rule", replication.rule_id]
     assert configuration["Rules"][0]["Destination"] == {"Bucket": "arn:aws:s3:::audit-target"}
     assert configuration["Rules"][1]["Destination"] == {"Bucket": "arn:aws:s3:::research-target"}
     assert configuration["Rules"][1]["Priority"] == 3
+
+
+def test_portal_create_bucket_level_replication_requires_account_admin_credentials(db_session):
+    user = _user(db_session)
+    endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab")
+    endpoint_z2 = _endpoint(db_session, name="s3-z2", zonegroup="zg-lab")
+    account_z1 = _account_without_admin_credentials(db_session, name="project-z1", endpoint=endpoint_z1)
+    account_z2 = _account(db_session, name="project-z2", endpoint=endpoint_z2)
+    _metadata(db_session, account=account_z1, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_z2, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    bucket_service = _BucketService()
+    service = PortalService(db_session)
+
+    try:
+        service.create_replication(
+            user,
+            [
+                PortalReplicationAccountContext(access=_access(account_z1, user), label="Paris"),
+                PortalReplicationAccountContext(access=_access(account_z2, user), label="Lyon"),
+            ],
+            PortalReplicationCreate(
+                source_storage_space_id=f"a{account_z1.id}:research-source",
+                target_storage_space_id=f"a{account_z2.id}:research-target",
+            ),
+            bucket_service=bucket_service,
+        )
+    except RuntimeError as exc:
+        assert "S3Account is missing account admin credentials" in str(exc)
+    else:
+        raise AssertionError("account admin credentials should be required for portal replication setup")
+    assert bucket_service.versioning_calls == []
+    assert bucket_service.admin_replication_calls == []
 
 
 def test_portal_create_bucket_level_replication_requires_distinct_storage_locations(db_session):

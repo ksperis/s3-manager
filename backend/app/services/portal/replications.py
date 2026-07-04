@@ -315,9 +315,11 @@ class PortalReplicationsMixin:
             raise ValueError("Bucket-level replication requires two Storage Spaces in the same Ceph zonegroup.")
 
         try:
-            bucket_service.set_versioning(source.bucket_name, source.account, enabled=True)
-            bucket_service.set_versioning(target.bucket_name, target.account, enabled=True)
-            current = bucket_service.get_bucket_replication(source.bucket_name, source.account)
+            bucket_service.ensure_account_admin_credentials(source.account)
+            bucket_service.ensure_account_admin_credentials(target.account)
+            bucket_service.set_versioning_as_account_admin(source.bucket_name, source.account, enabled=True)
+            bucket_service.set_versioning_as_account_admin(target.bucket_name, target.account, enabled=True)
+            current = bucket_service.get_bucket_replication_as_account_admin(source.bucket_name, source.account)
             current_configuration = current.configuration if isinstance(current.configuration, dict) else {}
             existing_rules = [
                 rule
@@ -365,7 +367,7 @@ class PortalReplicationsMixin:
                     }
                 ],
             }
-            result = bucket_service.set_bucket_replication(
+            result = bucket_service.set_bucket_replication_as_account_admin(
                 source.bucket_name,
                 source.account,
                 BucketReplicationConfiguration(configuration=configuration),

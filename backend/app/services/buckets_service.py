@@ -408,6 +408,13 @@ class BucketsService:
             raise RuntimeError("S3Account is missing admin credentials")
         return access_key, secret_key
 
+    def _account_admin_credentials(self, account: S3Account) -> tuple[str, str]:
+        access_key = (account.rgw_access_key or "").strip()
+        secret_key = account.rgw_secret_key
+        if not access_key or not secret_key:
+            raise RuntimeError("S3Account is missing account admin credentials")
+        return access_key, secret_key
+
     def _client_kwargs(self, account: S3Account) -> dict:
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
@@ -418,6 +425,14 @@ class BucketsService:
             "verify_tls": verify_tls,
             "session_token": session_token,
         }
+
+    def _account_admin_client_kwargs(self, account: S3Account) -> dict:
+        kwargs = self._client_kwargs(account)
+        kwargs["session_token"] = None
+        return kwargs
+
+    def ensure_account_admin_credentials(self, account: S3Account) -> None:
+        self._account_admin_credentials(account)
 
     def _extract_quota_from_admin_stats(self, stats: Any) -> tuple[Optional[int], Optional[int]]:
         quota_size: Optional[int] = None
@@ -890,6 +905,22 @@ class BucketsService:
             **self._client_kwargs(account),
         )
         logger.debug("S3Account %s set versioning on bucket %s to %s", account.rgw_account_id or account.id, name, enabled)
+
+    def set_versioning_as_account_admin(self, name: str, account: S3Account, enabled: bool) -> None:
+        access_key, secret_key = self._account_admin_credentials(account)
+        s3_client.set_bucket_versioning(
+            name,
+            enabled=enabled,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._account_admin_client_kwargs(account),
+        )
+        logger.debug(
+            "S3Account %s set versioning as account admin on bucket %s to %s",
+            account.rgw_account_id or account.id,
+            name,
+            enabled,
+        )
 
     def get_bucket_properties(self, name: str, account: S3Account) -> BucketProperties:
         access_key, secret_key = self._account_credentials(account)
@@ -1622,6 +1653,16 @@ class BucketsService:
         ) or {}
         return BucketReplicationConfiguration(configuration=config)
 
+    def get_bucket_replication_as_account_admin(self, name: str, account: S3Account) -> BucketReplicationConfiguration:
+        access_key, secret_key = self._account_admin_credentials(account)
+        config = s3_client.get_bucket_replication(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._account_admin_client_kwargs(account),
+        ) or {}
+        return BucketReplicationConfiguration(configuration=config)
+
     def _validate_bucket_replication_configuration(self, configuration: Any) -> dict:
         if not isinstance(configuration, dict):
             raise ValueError("Replication configuration must be an object.")
@@ -1652,6 +1693,28 @@ class BucketsService:
             **self._client_kwargs(account),
         )
         return self.get_bucket_replication(name, account)
+
+    def set_bucket_replication_as_account_admin(
+        self,
+        name: str,
+        account: S3Account,
+        payload: BucketReplicationConfiguration,
+    ) -> BucketReplicationConfiguration:
+        configuration = self._validate_bucket_replication_configuration(payload.configuration)
+        access_key, secret_key = self._account_admin_credentials(account)
+        s3_client.put_bucket_replication(
+            name,
+            configuration=configuration,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._account_admin_client_kwargs(account),
+        )
+        logger.info(
+            "Account admin credentials configured bucket replication on bucket %s for S3Account %s",
+            name,
+            account.rgw_account_id or account.id,
+        )
+        return BucketReplicationConfiguration(configuration=configuration)
 
     def delete_bucket_replication(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)

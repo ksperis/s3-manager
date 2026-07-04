@@ -175,6 +175,33 @@ def test_buckets_service_set_bucket_replication_rejects_destination_zone():
         service.set_bucket_replication("demo-bucket", _build_account(), payload)
 
 
+def test_buckets_service_account_admin_replication_uses_stored_account_credentials(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    def fake_put_bucket_replication(name: str, **kwargs):  # noqa: ANN003
+        captured["put"] = {"name": name, **kwargs}
+
+    monkeypatch.setattr("app.services.buckets_service.s3_client.put_bucket_replication", fake_put_bucket_replication)
+
+    service = BucketsService()
+    account = _build_account()
+    account.set_session_credentials("PORTAL-AK", "PORTAL-SK")
+    account._session_token = "PORTAL-TOKEN"  # type: ignore[attr-defined]
+    payload = BucketReplicationConfiguration(
+        configuration={
+            "Role": "arn:aws:iam::123456789012:role/replication",
+            "Rules": [{"Status": "Enabled", "Destination": {"Bucket": "arn:aws:s3:::target-bucket"}}],
+        }
+    )
+    result = service.set_bucket_replication_as_account_admin("demo-bucket", account, payload)
+
+    assert result.configuration == payload.configuration
+    assert captured["put"]["access_key"] == "AK"
+    assert captured["put"]["secret_key"] == "SK"
+    assert captured["put"]["configuration"] == payload.configuration
+    assert captured["put"]["session_token"] is None
+
+
 def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch: pytest.MonkeyPatch):
     invalidated: list[int] = []
 
