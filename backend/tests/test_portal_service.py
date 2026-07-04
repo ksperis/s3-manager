@@ -35,7 +35,7 @@ from app.db import (
 from app.models.app_settings import AppSettings, PortalSettings, PortalSettingsOverride
 from app.models.bucket import Bucket
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsSnapshot
-from app.models.iam import AccessKey as IAMAccessKey, IAMUser
+from app.models.iam import AccessKey as IAMAccessKey, IAMGroup, IAMUser
 from app.models.portal import (
     PortalAccessKey,
     PortalAccessKeyStatusChange,
@@ -2563,6 +2563,9 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
     editor_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceEditor")
     assert "s3:PutObject" in editor_statement["Action"]
     assert "s3:DeleteObject" in editor_statement["Action"]
+    assert "s3:AbortMultipartUpload" in editor_statement["Action"]
+    assert "s3:ListBucketMultipartUploads" in editor_statement["Action"]
+    assert "s3:ListMultipartUploadParts" in editor_statement["Action"]
 
     service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Owner")
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
@@ -2570,7 +2573,105 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     assert access == {"research-data": "Owner"}
     owner_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceOwner")
-    assert owner_statement["Action"] == ["s3:*"]
+    assert owner_statement["Action"] == service._storage_space_policy_actions()
+    assert "s3:*" not in owner_statement["Action"]
+
+
+def test_iam_compliance_detects_and_repairs_broad_storage_space_owner_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-owner-compliance", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-compliance@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    project = _portal_project(db_session, account)
+    db_session.add_all(
+        [
+            _project_user(project, owner, AccountRole.PORTAL_USER.value),
+            AccountIAMUser(
+                user_id=owner.id,
+                account_id=account.id,
+                iam_user_id="owner-iam-id",
+                iam_username="owner-iam",
+            ),
+            PortalStorageSpaceMetadata(
+                account_id=account.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=owner.id,
+                visibility="private",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    class FakeIAMService:
+        def __init__(self):
+            self.policies = {
+                ("owner-iam", service._bucket_access_policy_name): {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": service._storage_space_share_sid("Owner"),
+                            "Effect": "Allow",
+                            "Action": ["s3:*"],
+                            "Resource": service._bucket_arns("research-data"),
+                        }
+                    ],
+                }
+            }
+            self.group_policies = {
+                (service._manager_group_name, service._manager_group_policy_name): service._resolve_group_policy(
+                    PortalSettings(), "manager"
+                ),
+                (service._user_group_name, service._inline_policy_name): service._resolve_group_policy(
+                    PortalSettings(), "user"
+                ),
+            }
+
+        def list_groups(self):
+            return [IAMGroup(name=service._manager_group_name), IAMGroup(name=service._user_group_name)]
+
+        def list_group_policies(self, group_name):  # noqa: ARG002
+            return []
+
+        def get_group_inline_policy(self, group_name, policy_name):
+            return self.group_policies.get((group_name, policy_name))
+
+        def list_groups_for_user(self, iam_username):  # noqa: ARG002
+            return [IAMGroup(name=service._user_group_name)]
+
+        def get_user_inline_policy(self, username, policy_name):
+            return self.policies.get((username, policy_name))
+
+        def put_user_inline_policy(self, username, policy_name, policy_document):
+            self.policies[(username, policy_name)] = policy_document
+
+        def delete_user_inline_policy(self, username, policy_name):
+            self.policies.pop((username, policy_name), None)
+
+    iam = FakeIAMService()
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings())
+
+    report = service.check_iam_compliance(account)
+
+    assert report.ok is False
+    assert any("Actions IAM divergentes" in issue.message for issue in report.issues)
+
+    monkeypatch.setattr(service, "_ensure_portal_groups", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_sync_account_storage_space_bucket_policies", lambda *args, **kwargs: None)
+
+    repaired = service.apply_iam_compliance(account)
+    policy = iam.policies[("owner-iam", service._bucket_access_policy_name)]
+    owner_statement = next(
+        stmt for stmt in policy["Statement"] if stmt["Sid"] == service._storage_space_share_sid("Owner")
+    )
+
+    assert repaired.ok is True
+    assert owner_statement["Action"] == service._storage_space_policy_actions()
+    assert "s3:*" not in owner_statement["Action"]
 
 
 def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):

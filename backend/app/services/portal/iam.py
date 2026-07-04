@@ -156,14 +156,10 @@ class PortalIamMixin:
         ]
         if role == "Viewer":
             return viewer_actions
-        editor_actions = [
-            *viewer_actions,
-            "s3:PutObject",
-            "s3:DeleteObject",
-        ]
-        if role == "Editor":
-            return editor_actions
-        return ["s3:*"]
+        # Owner is a Portal governance role. Personal IAM keys stay scoped to
+        # Storage Space content operations; sharing and policy orchestration
+        # remain controlled by the application.
+        return self._storage_space_policy_actions()
 
     def _bucket_arns(self, bucket_name: str) -> list[str]:
         return [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"]
@@ -584,6 +580,31 @@ class PortalIamMixin:
             for bucket_name in self._bucket_names_from_resources(stmt.get("Resource") or []):
                 self._merge_storage_space_role(roles_by_bucket, bucket_name, role)
         return roles_by_bucket
+
+    def _storage_space_policy_action_drift(
+        self,
+        policy: Optional[dict],
+        expected_access: dict[str, PortalStorageSpaceRole],
+    ) -> list[str]:
+        drifted_buckets: set[str] = set()
+        sid_to_role = {
+            self._bucket_access_sid: "Editor",
+            self._storage_space_share_sid("Viewer"): "Viewer",
+            self._storage_space_share_sid("Editor"): "Editor",
+            self._storage_space_share_sid("Owner"): "Owner",
+        }
+        for stmt in self._policy_statements(policy):
+            role = sid_to_role.get(stmt.get("Sid"))
+            if role is None:
+                continue
+            expected_actions = {action.lower() for action in self._storage_space_role_actions(role)}
+            actual_actions = {action.lower() for action in self._action_set(stmt.get("Action"))}
+            if actual_actions == expected_actions:
+                continue
+            for bucket_name in self._bucket_names_from_resources(stmt.get("Resource") or []):
+                if expected_access.get(bucket_name) == role:
+                    drifted_buckets.add(bucket_name)
+        return sorted(drifted_buckets)
 
     def _db_storage_space_access(
         self,
@@ -1634,6 +1655,15 @@ class PortalIamMixin:
                         scope="user",
                         subject=subject,
                         message=f"Projection IAM divergente des grants DB: {', '.join(mismatched)}.",
+                    )
+                )
+            action_drift = self._storage_space_policy_action_drift(policy, expected_access)
+            if action_drift:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="user",
+                        subject=subject,
+                        message=f"Actions IAM divergentes du role Storage Space attendu: {', '.join(action_drift)}.",
                     )
                 )
             stale = sorted(bucket_name for bucket_name in actual_access if bucket_name not in expected_access)
