@@ -205,7 +205,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No accounts yet.")).not.toBeInTheDocument();
   });
 
-  it("renders direct UI users and UI groups in the combined listing column", async () => {
+  it("renders direct UI users, UI groups, and projects in the associations listing column", async () => {
     portalEnabled = true;
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
@@ -252,7 +252,7 @@ describe("AccountsPage modal tabs", () => {
 
     render(<AccountsPage />);
 
-    expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Associations" })).toBeInTheDocument();
     expect(screen.getByText("ui7@example.com")).toBeInTheDocument();
     expect(screen.getByText("Research Group")).toBeInTheDocument();
     expect(screen.getByText("Genome Project (Paris)")).toBeInTheDocument();

@@ -688,7 +688,7 @@ export default function S3AccountsPage() {
     { label: "Name", field: "name" },
     { label: "RGW ID", field: "rgw_account_id" },
     { label: "Endpoint", field: null },
-    { label: "UI Users / Groups", field: null },
+    { label: "Associations", field: null },
     { label: "Actions", field: null, align: "right" },
   ];
   const tableStatus = resolveListTableStatus({
