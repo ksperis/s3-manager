@@ -27,7 +27,6 @@ export type LoginResponse = {
     account_links?: {
       account_id: number;
       account_admin?: boolean | null;
-      account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
     }[] | null;
     group_ids?: number[] | null;
     group_details?: { id: number; name: string }[] | null;

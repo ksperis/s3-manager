@@ -6,7 +6,6 @@ import logging
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
     AuditLog,
     S3Account,
     StorageEndpoint,
@@ -48,7 +47,6 @@ from app.utils.s3_account_ordering import s3_account_name_order_by
 
 
 logger = logging.getLogger(__name__)
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
 
 
 def _parse_positive_limit(value: Any) -> Optional[int]:
@@ -522,7 +520,6 @@ class S3AccountsService:
                 UserS3Account.account_id,
                 UserS3Account.user_id,
                 UserS3Account.account_admin,
-                UserS3Account.account_role,
                 User.email,
             )
             .join(User, User.id == UserS3Account.user_id)
@@ -535,7 +532,7 @@ class S3AccountsService:
         )
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for account_id, user_id, account_admin, account_role, user_email in rows:
+        for account_id, user_id, account_admin, user_email in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user_id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
@@ -543,7 +540,6 @@ class S3AccountsService:
                 AccountUserLink(
                     user_id=normalized_user_id,
                     account_admin=account_admin,
-                    account_role=account_role,
                     user_email=user_email,
                 )
             )
@@ -561,7 +557,6 @@ class S3AccountsService:
                 UiGroupS3Account.group_id,
                 UiGroup.name,
                 UiGroupS3Account.account_admin,
-                UiGroupS3Account.account_role,
             )
             .join(UiGroup, UiGroup.id == UiGroupS3Account.group_id)
             .filter(UiGroupS3Account.account_id.in_(account_ids))
@@ -570,7 +565,7 @@ class S3AccountsService:
         )
         group_ids_by_account: dict[int, list[int]] = {}
         group_links_by_account: dict[int, list[AccountGroupLink]] = {}
-        for account_id, group_id, group_name, account_admin, account_role in rows:
+        for account_id, group_id, group_name, account_admin in rows:
             normalized_account_id = int(account_id)
             normalized_group_id = int(group_id)
             group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
@@ -579,7 +574,6 @@ class S3AccountsService:
                     group_id=normalized_group_id,
                     group_name=group_name,
                     account_admin=account_admin,
-                    account_role=account_role,
                 )
             )
         return group_ids_by_account, group_links_by_account
@@ -994,13 +988,6 @@ class S3AccountsService:
                     account_admin = db_link.account_admin if db_link else False
                 else:
                     account_admin = bool(link.account_admin)
-                if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                    raise ValueError("Invalid account role")
-                account_role = (
-                    link.account_role
-                    if link.account_role is not None
-                    else (db_link.account_role if db_link else AccountRole.PORTAL_NONE.value)
-                )
                 if not db_link:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
@@ -1012,10 +999,8 @@ class S3AccountsService:
                         user_id=user_id,
                         account_id=account.id,
                         is_root=False,
-                        account_role=account_role,
                     )
                 db_link.account_admin = account_admin
-                db_link.account_role = account_role
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
@@ -1024,12 +1009,9 @@ class S3AccountsService:
             if payload.group_links is not None:
                 for link in payload.group_links:
                     group_id = int(link.group_id)
-                    if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                        raise ValueError("Invalid account role")
                     desired_links[group_id] = AccountGroupLink(
                         group_id=group_id,
                         account_admin=bool(link.account_admin),
-                        account_role=link.account_role or AccountRole.PORTAL_NONE.value,
                     )
             elif payload.group_ids is not None:
                 desired_links = {
@@ -1055,7 +1037,6 @@ class S3AccountsService:
                 if db_link is None:
                     db_link = UiGroupS3Account(group_id=group_id, account_id=account.id)
                 db_link.account_admin = bool(link.account_admin)
-                db_link.account_role = link.account_role or AccountRole.PORTAL_NONE.value
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 

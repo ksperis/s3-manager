@@ -39,12 +39,20 @@ vi.mock("./PortalAccountContext", () => ({
   PortalAccountProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   usePortalAccountContext: () => ({
     accounts: [
-      { id: "101", name: "Helios Retail", tags: [] },
-      { id: "102", name: "Northwind Ops", tags: [] },
+      { id: "proj-101", db_id: 101, name: "Helios Retail", tags: [] },
+      { id: "proj-102", db_id: 102, name: "Northwind Ops", tags: [] },
     ],
-    selectedAccountId: "101",
-    selectedAccount: { id: "101", name: "Helios Retail", tags: [] },
+    projects: [
+      { id: "proj-101", db_id: 101, name: "Helios Retail", account_role: "portal_manager", accounts: [] },
+      { id: "proj-102", db_id: 102, name: "Northwind Ops", account_role: "portal_user", accounts: [] },
+    ],
+    selectedAccountId: "proj-101",
+    selectedAccount: { id: "proj-101", db_id: 101, name: "Helios Retail", tags: [] },
+    selectedProject: { id: "proj-101", db_id: 101, name: "Helios Retail", account_role: "portal_manager", accounts: [] },
+    selectedProjectAccounts: [],
     setSelectedAccountId: mocks.setSelectedAccountId,
+    hasAccountContext: true,
+    accountIdForApi: "proj-101",
     loading: false,
     error: null,
   }),
@@ -84,7 +92,8 @@ describe("PortalLayout", () => {
         display_name: "Laurent",
         role: "ui_admin",
         authType: "password",
-        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 101, account_admin: true }],
+        portal_projects: [{ id: 101, name: "Research", account_role: "portal_manager" }],
       })
     );
     const { container } = render(
@@ -122,16 +131,16 @@ describe("PortalLayout", () => {
       expect(within(topbar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
     });
     expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
-    expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
+    expect(within(desktopSidebar).queryByRole("button", { name: "Select portal project" })).not.toBeInTheDocument();
     expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
 
-    const accountSelector = within(topbar).getByRole("button", { name: "Select portal account" });
-    expect(accountSelector).toHaveTextContent("Account");
+    const accountSelector = within(topbar).getByRole("button", { name: "Select portal project" });
+    expect(accountSelector).toHaveTextContent("Project");
     expect(accountSelector).toHaveTextContent("Helios Retail");
     expect(accountSelector.parentElement).toHaveClass(...TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS.split(" "));
     await user.click(accountSelector);
-    await user.click(await screen.findByRole("option", { name: "Northwind Ops" }));
-    expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
+    await user.click(await screen.findByRole("option", { name: /Northwind Ops/ }));
+    expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("proj-102");
   });
 
   it("renders portal navigation in French when the session language is French", () => {
@@ -144,7 +153,8 @@ describe("PortalLayout", () => {
         role: "ui_admin",
         authType: "password",
         ui_language: "fr",
-        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 101, account_admin: true }],
+        portal_projects: [{ id: 101, name: "Research", account_role: "portal_manager" }],
       })
     );
 

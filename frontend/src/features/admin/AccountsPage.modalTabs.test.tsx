@@ -224,7 +224,6 @@ describe("AccountsPage modal tabs", () => {
               user_id: 7,
               user_email: "ui7@example.com",
               account_admin: false,
-              account_role: "portal_user",
             },
           ],
           group_ids: [31],
@@ -233,7 +232,6 @@ describe("AccountsPage modal tabs", () => {
               group_id: 31,
               group_name: "Research Group",
               account_admin: true,
-              account_role: "portal_manager",
             },
           ],
         },
@@ -293,7 +291,6 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            account_role: "portal_none",
           }),
         ]),
       })
@@ -329,14 +326,13 @@ describe("AccountsPage modal tabs", () => {
             group_id: 31,
             group_name: "Research Group",
             account_admin: false,
-            account_role: "portal_none",
           }),
         ],
       })
     );
   });
 
-  it("hides portal roles when portal is disabled without clearing existing account roles", async () => {
+  it("does not submit legacy portal roles from direct account links", async () => {
     listS3AccountsMock.mockResolvedValueOnce({
       items: [
         {
@@ -349,7 +345,7 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
           user_ids: [7],
-          user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+          user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true }],
         },
       ],
       total: 1,
@@ -374,7 +370,7 @@ describe("AccountsPage modal tabs", () => {
       quota_max_size_gb: null,
       quota_max_objects: null,
       user_ids: [7],
-      user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+      user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true }],
     });
 
     render(<AccountsPage />);
@@ -401,7 +397,6 @@ describe("AccountsPage modal tabs", () => {
           expect.objectContaining({
             user_id: 7,
             account_admin: true,
-            account_role: "portal_manager",
           }),
         ],
       })

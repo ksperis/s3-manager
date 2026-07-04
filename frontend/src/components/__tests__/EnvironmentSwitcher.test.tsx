@@ -104,7 +104,8 @@ function storePortalAdminUser() {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, account_admin: true }],
+      portal_projects: [{ id: 101, name: "Research", account_role: "portal_manager" }],
     })
   );
 }
@@ -117,7 +118,7 @@ function storePlainAdminUser() {
       email: "plain-admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_none" }],
+      account_links: [{ account_id: 101, account_admin: true }],
     })
   );
 }
@@ -130,7 +131,8 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, account_admin: true }],
+      portal_projects: [{ id: 101, name: "Research", account_role: "portal_manager" }],
     });
     mocks.listExecutionContexts.mockResolvedValue([]);
     storePortalAdminUser();
@@ -184,7 +186,8 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "plain-admin@example.com",
       role: "ui_superadmin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, account_admin: true }],
+      portal_projects: [{ id: 101, name: "Research", account_role: "portal_manager" }],
     });
 
     renderSwitcherModel("/admin");
@@ -193,7 +196,7 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       const options = within(screen.getByRole("list", { name: "Workspace options" }));
       expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
     });
-    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].account_role).toBe(
+    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").portal_projects[0].account_role).toBe(
       "portal_manager"
     );
   });

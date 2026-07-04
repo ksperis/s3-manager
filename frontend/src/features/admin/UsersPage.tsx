@@ -38,9 +38,7 @@ import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   buildManagerToolDefinitions,
   normalizeManagerToolAccess,
-  normalizePortalRole,
   type ManagerToolKey,
-  type PortalAccountRole,
 } from "./adminAccessConfig";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
@@ -69,7 +67,6 @@ type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 type AccountSelection = {
   id: number;
   account_admin?: boolean;
-  account_role?: PortalAccountRole;
 };
 
 type Option = {
@@ -327,7 +324,7 @@ const AssociationsTabs = ({
                       if (accounts.selections.length === 0) return;
                       const next = accounts.selections.map((accountId) => {
                         const account_admin = accounts.adminChoice[accountId] ?? false;
-                        return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
+                        return { id: accountId, account_admin };
                       });
                       accounts.setSelected((prev) => [...prev, ...next]);
                       accounts.setSelections([]);
@@ -861,14 +858,10 @@ export default function UsersPage() {
     const adminByAccountId = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
-    const portalRoleByAccountId = new Map<number, PortalAccountRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
-    );
     const accountItems: AssociationAccountItem[] = accountIds.map((id) => ({
       id,
       label: accountOptionsById.get(id)?.name ?? `Account #${id}`,
       account_admin: adminByAccountId.get(id) === true,
-      account_role: portalRoleByAccountId.get(id) ?? "portal_none",
     }));
     const s3UserItems: AssociationChipItem[] =
       user.s3_user_details && user.s3_user_details.length > 0
@@ -899,7 +892,7 @@ export default function UsersPage() {
         sections={[
           {
             label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} showPortalRole={false} />,
+            value: <AccountAssociationChips accounts={accountItems} />,
             visible: accountItems.length > 0,
           },
           { label: "Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
@@ -1387,8 +1380,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
+              entry.account_admin ?? false
             )
           )
         );
@@ -1439,14 +1431,10 @@ export default function UsersPage() {
     const accountAdmins = new Map<number, boolean>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
     );
-    const accountRoles = new Map<number, PortalAccountRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
-    );
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
         account_admin: accountAdmins.get(Number(id)) ?? false,
-        account_role: accountRoles.get(Number(id)) ?? "portal_none",
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
@@ -1546,19 +1534,12 @@ export default function UsersPage() {
       const existingAdminById = new Map<number, boolean>(
         (editingUser.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
       );
-      const existingRoleById = new Map<number, PortalAccountRole>(
-        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
-      );
       const selectedIds = editSelectedS3Accounts.map((entry) => Number(entry.id));
       const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
       const toRemove = existing.filter((id) => !selectedIds.includes(id));
       const toUpdateLinks = editSelectedS3Accounts.filter((entry) => {
         const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
-        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
-        return (
-          existing.includes(Number(entry.id)) &&
-          (currentAdmin !== Boolean(entry.account_admin) || currentRole !== normalizePortalRole(entry.account_role))
-        );
+        return existing.includes(Number(entry.id)) && currentAdmin !== Boolean(entry.account_admin);
       });
 
       if (toAdd.length > 0) {
@@ -1567,8 +1548,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
+              entry.account_admin ?? false
             )
           )
         );
@@ -1579,8 +1559,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               editingUser.id,
               Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
+              entry.account_admin ?? false
             )
           )
         );
@@ -1589,7 +1568,7 @@ export default function UsersPage() {
         const account = accountOptionsById.get(Number(accountId));
         if (!account) continue;
         const remainingLinks =
-          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" })) ?? [])
+          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false })) ?? [])
             .filter((link) => link.user_id !== editingUser.id);
         await updateS3Account(Number(accountId), { user_links: remainingLinks });
       }

@@ -1,6 +1,5 @@
 import type { ManagerToolAccess } from "../../api/users";
 
-export type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 export type ManagerToolKey = keyof ManagerToolAccess;
 
 export type ManagerToolDefinition = {
@@ -19,17 +18,6 @@ export const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
   bucket_quota: false,
   ceph_s3_user_keys: false,
 };
-
-export const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_none", label: "No portal access" },
-  { value: "portal_user", label: "Portal user" },
-  { value: "portal_manager", label: "Portal manager" },
-];
-
-export function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
-}
 
 export function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {
   return {

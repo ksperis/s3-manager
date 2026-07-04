@@ -118,7 +118,7 @@ describe("GroupsPage", () => {
           user_ids: [2],
           user_details: [{ id: 2, email: "alice@example.com" }],
           accounts: [99],
-          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_links: [{ account_id: 99, account_admin: true }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
           s3_users: [88],
           s3_user_details: [{ id: 88, name: "archive-rgw-user" }],
@@ -174,7 +174,7 @@ describe("GroupsPage", () => {
           user_ids: [],
           user_details: [],
           accounts: [99],
-          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_links: [{ account_id: 99, account_admin: true }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
           s3_users: [],
           s3_connections: [],
@@ -204,7 +204,7 @@ describe("GroupsPage", () => {
     expect(updateGroupMock).toHaveBeenCalledWith(
       50,
       expect.objectContaining({
-        account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 99, account_admin: true }],
       })
     );
   });
@@ -268,7 +268,7 @@ describe("GroupsPage", () => {
         ceph_s3_user_keys: false,
       },
       user_ids: [2],
-      account_links: [{ account_id: 1, account_admin: true, account_role: "portal_none" }],
+      account_links: [{ account_id: 1, account_admin: true }],
       s3_user_ids: [11],
       s3_connection_ids: [21],
     });

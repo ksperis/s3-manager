@@ -9,6 +9,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db import (
     AccountRole,
+    Project,
+    ProjectS3Account,
     QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
@@ -17,11 +19,12 @@ from app.db import (
     StorageEndpoint,
     StorageProvider,
     UiGroup,
-    UiGroupS3Account,
+    UiGroupProject,
     UiGroupS3User,
     User,
     UserNotification,
     UserRole,
+    UserProject,
     UserS3Account,
     UserS3User,
     UserUiGroup,
@@ -375,10 +378,12 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
 
     account_group = UiGroup(name="quota-account-notification-group")
     s3_user_group = UiGroup(name="quota-s3-user-notification-group")
-    db_session.add_all([account_group, s3_user_group])
+    project = Project(name="quota-notification-project")
+    db_session.add_all([account_group, s3_user_group, project])
     db_session.commit()
     db_session.refresh(account_group)
     db_session.refresh(s3_user_group)
+    db_session.refresh(project)
 
     db_session.add_all(
         [
@@ -392,9 +397,10 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
                 account_id=account.id,
                 is_root=True,
             ),
-            UserS3Account(
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(
                 user_id=account_portal_manager.id,
-                account_id=account.id,
+                project_id=project.id,
                 account_role=AccountRole.PORTAL_MANAGER.value,
             ),
             UserS3Account(
@@ -418,9 +424,9 @@ def test_recipient_resolution_for_account_s3_user_and_global_watch(db_session):
                 user_id=group_s3_user_member.id,
                 group_id=s3_user_group.id,
             ),
-            UiGroupS3Account(
+            UiGroupProject(
                 group_id=account_group.id,
-                account_id=account.id,
+                project_id=project.id,
                 account_role=AccountRole.PORTAL_MANAGER.value,
             ),
             UiGroupS3User(

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { normalizePortalRole } from "./adminAccessConfig";
 
 export type AssociationChipItem = {
   id: number | string;
@@ -8,7 +7,6 @@ export type AssociationChipItem = {
 
 export type AssociationAccountItem = AssociationChipItem & {
   account_admin?: boolean | null;
-  account_role?: string | null;
 };
 
 export type AssociationSummarySection = {
@@ -35,37 +33,20 @@ export function AssociationChips({ items }: { items: AssociationChipItem[] }) {
   );
 }
 
-export function AccountAssociationChips({
-  accounts,
-  showPortalRole = true,
-}: {
-  accounts: AssociationAccountItem[];
-  showPortalRole?: boolean;
-}) {
+export function AccountAssociationChips({ accounts }: { accounts: AssociationAccountItem[] }) {
   if (accounts.length === 0) return null;
   return (
     <div className="flex max-w-full min-w-0 flex-wrap gap-1.5">
-      {accounts.map((account, index) => {
-        const portalRole = normalizePortalRole(account.account_role);
-        return (
-          <span
-            key={`${account.id}-${Boolean(account.account_admin) ? "admin" : "user"}-${portalRole}-${index}`}
-            className={chipClass}
-          >
-            <span className="min-w-0 max-w-full break-all">{account.label}</span>
-            {account.account_admin && (
-              <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                Admin
-              </span>
-            )}
-            {showPortalRole && portalRole !== "portal_none" && (
-              <span className="shrink-0 rounded-full bg-sky-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
-                {portalRole === "portal_manager" ? "Portal manager" : "Portal user"}
-              </span>
-            )}
-          </span>
-        );
-      })}
+      {accounts.map((account, index) => (
+        <span key={`${account.id}-${Boolean(account.account_admin) ? "admin" : "user"}-${index}`} className={chipClass}>
+          <span className="min-w-0 max-w-full break-all">{account.label}</span>
+          {account.account_admin && (
+            <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+              Admin
+            </span>
+          )}
+        </span>
+      ))}
     </div>
   );
 }

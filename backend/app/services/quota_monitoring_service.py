@@ -12,13 +12,13 @@ import logging
 import smtplib
 from typing import Any, Optional
 
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import (
     AccountRole,
+    ProjectS3Account,
     QuotaAlertState,
     QuotaUsageDaily,
     QuotaUsageHourly,
@@ -27,9 +27,11 @@ from app.db import (
     StorageEndpoint,
     StorageProvider,
     UiGroupS3Account,
+    UiGroupProject,
     UiGroupS3User,
     User,
     UserRole,
+    UserProject,
     UserS3Account,
     UserS3User,
     UserUiGroup,
@@ -777,13 +779,7 @@ class QuotaMonitoringService:
             .join(User, User.id == UserS3Account.user_id)
             .filter(User.is_active.is_(True))
             .filter(User.quota_alerts_enabled.is_(True))
-            .filter(
-                or_(
-                    UserS3Account.account_admin.is_(True),
-                    UserS3Account.is_root.is_(True),
-                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
-            )
+            .filter((UserS3Account.account_admin.is_(True)) | (UserS3Account.is_root.is_(True)))
             .all()
         )
         result: dict[int, set[str]] = {}
@@ -799,15 +795,41 @@ class QuotaMonitoringService:
             .join(User, User.id == UserUiGroup.user_id)
             .filter(User.is_active.is_(True))
             .filter(User.quota_alerts_enabled.is_(True))
-            .filter(
-                or_(
-                    UiGroupS3Account.account_admin.is_(True),
-                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
-            )
+            .filter(UiGroupS3Account.account_admin.is_(True))
             .all()
         )
         for account_id, email in group_rows:
+            normalized = self._normalize_email(email)
+            if not normalized:
+                continue
+            result.setdefault(int(account_id), set()).add(normalized)
+
+        project_rows = (
+            self.db.query(ProjectS3Account.account_id, User.email)
+            .join(UserProject, UserProject.project_id == ProjectS3Account.project_id)
+            .join(User, User.id == UserProject.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(User.quota_alerts_enabled.is_(True))
+            .filter(UserProject.account_role == AccountRole.PORTAL_MANAGER.value)
+            .all()
+        )
+        for account_id, email in project_rows:
+            normalized = self._normalize_email(email)
+            if not normalized:
+                continue
+            result.setdefault(int(account_id), set()).add(normalized)
+
+        group_project_rows = (
+            self.db.query(ProjectS3Account.account_id, User.email)
+            .join(UiGroupProject, UiGroupProject.project_id == ProjectS3Account.project_id)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupProject.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(User.quota_alerts_enabled.is_(True))
+            .filter(UiGroupProject.account_role == AccountRole.PORTAL_MANAGER.value)
+            .all()
+        )
+        for account_id, email in group_project_rows:
             normalized = self._normalize_email(email)
             if not normalized:
                 continue
@@ -885,13 +907,7 @@ class QuotaMonitoringService:
             self.db.query(UserS3Account.account_id, User.id)
             .join(User, User.id == UserS3Account.user_id)
             .filter(User.is_active.is_(True))
-            .filter(
-                or_(
-                    UserS3Account.account_admin.is_(True),
-                    UserS3Account.is_root.is_(True),
-                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
-            )
+            .filter((UserS3Account.account_admin.is_(True)) | (UserS3Account.is_root.is_(True)))
             .all()
         )
         result: dict[int, set[int]] = {}
@@ -903,15 +919,33 @@ class QuotaMonitoringService:
             .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
             .join(User, User.id == UserUiGroup.user_id)
             .filter(User.is_active.is_(True))
-            .filter(
-                or_(
-                    UiGroupS3Account.account_admin.is_(True),
-                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
-            )
+            .filter(UiGroupS3Account.account_admin.is_(True))
             .all()
         )
         for account_id, user_id in group_rows:
+            result.setdefault(int(account_id), set()).add(int(user_id))
+
+        project_rows = (
+            self.db.query(ProjectS3Account.account_id, User.id)
+            .join(UserProject, UserProject.project_id == ProjectS3Account.project_id)
+            .join(User, User.id == UserProject.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(UserProject.account_role == AccountRole.PORTAL_MANAGER.value)
+            .all()
+        )
+        for account_id, user_id in project_rows:
+            result.setdefault(int(account_id), set()).add(int(user_id))
+
+        group_project_rows = (
+            self.db.query(ProjectS3Account.account_id, User.id)
+            .join(UiGroupProject, UiGroupProject.project_id == ProjectS3Account.project_id)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupProject.group_id)
+            .join(User, User.id == UserUiGroup.user_id)
+            .filter(User.is_active.is_(True))
+            .filter(UiGroupProject.account_role == AccountRole.PORTAL_MANAGER.value)
+            .all()
+        )
+        for account_id, user_id in group_project_rows:
             result.setdefault(int(account_id), set()).add(int(user_id))
         return result
 

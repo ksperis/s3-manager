@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import AccountRole, User, UserNotification, UserRole
+from app.db import User, UserNotification, UserRole
 from app.models.user_notification import UserNotificationOut, UserNotificationsResponse
 from app.services.effective_access_service import EffectiveAccessService
 from app.utils.time import utcnow
@@ -117,12 +117,14 @@ class UserNotificationsService:
 
     def _visible_notifications_query(self, user: User):
         query = self.db.query(UserNotification).filter(UserNotification.user_id == user.id)
-        access = EffectiveAccessService(self.db).resolve_user(user)
+        effective_access_service = EffectiveAccessService(self.db)
+        access = effective_access_service.resolve_user(user)
         alert_account_ids = {
             int(link.account_id)
             for link in access.account_links
-            if bool(link.account_admin or link.is_root or link.account_role == AccountRole.PORTAL_MANAGER.value)
+            if bool(link.account_admin or link.is_root)
         }
+        alert_account_ids.update(effective_access_service.portal_manager_account_ids(user))
         alert_s3_user_ids = {int(item) for item in access.s3_user_ids}
         global_watch = bool(
             user.is_active

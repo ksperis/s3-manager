@@ -8,7 +8,6 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -28,9 +27,6 @@ from app.models.user import (
     UserSummary,
 )
 from app.utils.time import utcnow
-
-
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
 
 
 class UiGroupsService:
@@ -238,7 +234,6 @@ class UiGroupsService:
                 AccountMembership(
                     account_id=link.account_id,
                     account_admin=link.account_admin,
-                    account_role=link.account_role,
                 )
                 for link in account_rows
             ],
@@ -286,12 +281,9 @@ class UiGroupsService:
         cleaned: dict[int, AccountMembership] = {}
         for link in links:
             account_id = int(link.account_id)
-            if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                raise ValueError("Invalid account role")
             cleaned[account_id] = AccountMembership(
                 account_id=account_id,
                 account_admin=bool(link.account_admin),
-                account_role=link.account_role or AccountRole.PORTAL_NONE.value,
             )
         self._ensure_accounts_exist(sorted(cleaned))
         existing = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.group_id == group.id).all()
@@ -304,7 +296,6 @@ class UiGroupsService:
             if row is None:
                 row = UiGroupS3Account(group_id=group.id, account_id=account_id)
             row.account_admin = bool(payload.account_admin)
-            row.account_role = payload.account_role or AccountRole.PORTAL_NONE.value
             row.updated_at = utcnow()
             self.db.add(row)
 

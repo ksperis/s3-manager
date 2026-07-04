@@ -52,8 +52,8 @@ vi.mock("../../api/users", () => ({
   listUsers: (params?: unknown) => listUsersMock(params),
   createUser: (payload: unknown) => createUserMock(payload),
   updateUser: (userId: number, payload: unknown) => updateUserMock(userId, payload),
-  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean, accountRole?: string) =>
-    assignUserToS3AccountMock(userId, accountId, accountAdmin, accountRole),
+  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean) =>
+    assignUserToS3AccountMock(userId, accountId, accountAdmin),
   deleteUser: (userId: number) => deleteUserMock(userId),
 }));
 
@@ -144,7 +144,7 @@ describe("UsersPage modal tabs", () => {
           email: "assoc.summary@example.com",
           role: "ui_user",
           accounts: [1],
-          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          account_links: [{ account_id: 1, account_admin: true }],
           s3_users: [11],
           s3_user_details: [{ id: 11, name: "s3-user-1" }],
           s3_connections: [21],
@@ -181,7 +181,7 @@ describe("UsersPage modal tabs", () => {
           email: "assoc.summary@example.com",
           role: "ui_user",
           accounts: [1],
-          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          account_links: [{ account_id: 1, account_admin: true }],
           s3_users: [],
           s3_connections: [],
           group_ids: [],
@@ -208,7 +208,7 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(assignUserToS3AccountMock).toHaveBeenCalledWith(12, 1, false, "portal_user");
+      expect(assignUserToS3AccountMock).toHaveBeenCalledWith(12, 1, false);
     });
   });
 
@@ -247,7 +247,7 @@ describe("UsersPage modal tabs", () => {
       expect(createUserMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false, "portal_none");
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false);
     expect(updateUserMock).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
@@ -629,6 +629,6 @@ describe("UsersPage modal tabs", () => {
     await waitFor(() => {
       expect(assignUserToS3AccountMock).toHaveBeenCalled();
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true, "portal_none");
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true);
   });
 });

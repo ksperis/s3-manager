@@ -6,7 +6,6 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, St
 from sqlalchemy.orm import relationship
 
 from .base import Base
-from .enums import AccountRole
 
 
 class UiGroup(Base):
@@ -63,12 +62,6 @@ class UiGroupS3Account(Base):
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
-    account_role = Column(
-        String,
-        nullable=False,
-        default=AccountRole.PORTAL_NONE.value,
-        server_default=AccountRole.PORTAL_NONE.value,
-    )
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 

@@ -273,7 +273,6 @@ class ProjectsService:
                 account_id=link.account_id,
                 account_admin=False,
                 is_root=False,
-                account_role=access.role,
             ),
             capabilities=self._portal_capabilities(access.role),
             role=access.role,

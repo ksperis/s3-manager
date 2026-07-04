@@ -8,7 +8,20 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
+from app.db import (
+    AccountRole,
+    Project,
+    ProjectS3Account,
+    S3Account,
+    S3Connection,
+    S3User,
+    StorageEndpoint,
+    User,
+    UserProject,
+    UserRole,
+    UserS3Account,
+    UserS3User,
+)
 from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
@@ -144,7 +157,6 @@ def test_manager_workspace_rejects_portal_role_without_account_admin(db_session)
             account_id=account.id,
             account_admin=False,
             is_root=False,
-            account_role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()
@@ -180,18 +192,17 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         rgw_secret_key="SK-ROOT",
         storage_endpoint=endpoint,
     )
-    db_session.add_all([endpoint, user, account])
+    project = Project(name="Portal Browser Project")
+    db_session.add_all([endpoint, user, account, project])
     db_session.commit()
     db_session.refresh(user)
     db_session.refresh(account)
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_admin=False,
-            is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
-        )
+    db_session.refresh(project)
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
     )
     db_session.commit()
     monkeypatch.setattr(
@@ -249,14 +260,15 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         rgw_secret_key="SK-ROOT",
         storage_endpoint=endpoint,
     )
-    db_session.add_all([endpoint, user, account])
+    project = Project(name="Portal Browser Archive Project")
+    db_session.add_all([endpoint, user, account, project])
     db_session.commit()
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_role=AccountRole.PORTAL_USER.value,
-        )
+    db_session.refresh(project)
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
     )
     db_session.commit()
     monkeypatch.setattr(

@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -103,7 +102,6 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
                 {
                     "account_id": account.id,
                     "account_admin": True,
-                    "account_role": AccountRole.PORTAL_MANAGER.value,
                 }
             ],
             "s3_user_ids": [s3_user.id],
@@ -161,7 +159,6 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
             account_id=account.id,
             account_admin=False,
             is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -186,7 +183,6 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
                 {
                     "account_id": account.id,
                     "account_admin": True,
-                    "account_role": AccountRole.PORTAL_MANAGER.value,
                 }
             ],
             "s3_user_ids": [s3_user.id],
@@ -209,7 +205,6 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.manager_tool_access.bucket_quota is True
     assert out.effective_access.accounts == [account.id]
     assert out.effective_access.account_links[0].account_admin is True
-    assert out.effective_access.account_links[0].account_role == AccountRole.PORTAL_MANAGER.value
     assert out.effective_access.s3_users == [s3_user.id]
     assert out.effective_access.s3_connections == [connection.id]
 

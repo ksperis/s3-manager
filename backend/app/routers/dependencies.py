@@ -87,7 +87,6 @@ from app.routers.dependencies_internal.portal_access import (
     _is_portal_browser_request,
     _portal_browser_relative_segments,
     _portal_browser_target_bucket,
-    _portal_membership_capabilities,
     _parse_project_selector,
     _resolve_portal_project_browser_context,
     _resolve_portal_browser_context,

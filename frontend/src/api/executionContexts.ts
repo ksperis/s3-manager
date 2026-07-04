@@ -5,7 +5,7 @@
 import client from "./client";
 import type { TagDefinitionSummary } from "./tags";
 
-export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_account" | "portal_project";
+export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_project";
 
 export type ExecutionContextCapabilities = {
   can_manage_iam: boolean;

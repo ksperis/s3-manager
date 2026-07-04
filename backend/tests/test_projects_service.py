@@ -16,7 +16,6 @@ from app.db import (
     User,
     UserProject,
     UserRole,
-    UserS3Account,
     UserUiGroup,
 )
 from app.models.project import ProjectProvisionAccountsRequest
@@ -69,7 +68,6 @@ def test_portal_projects_use_project_links_and_group_role_precedence(db_session)
     endpoint = _seed_endpoint(db_session, name="paris", zonegroup="zg-fr")
     primary = _seed_account(db_session, name="primary", endpoint=endpoint)
     replica = _seed_account(db_session, name="replica", endpoint=endpoint)
-    legacy = _seed_account(db_session, name="legacy", endpoint=endpoint)
     user = _seed_user(db_session, "project-user@example.test")
     group = UiGroup(name="project-managers")
     project = Project(name="Genome", description="Sequencing")
@@ -82,7 +80,6 @@ def test_portal_projects_use_project_links_and_group_role_precedence(db_session)
             UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
             UserUiGroup(user_id=user.id, group_id=group.id),
             UiGroupProject(group_id=group.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=user.id, account_id=legacy.id, account_role=AccountRole.PORTAL_MANAGER.value),
         ]
     )
     db_session.commit()

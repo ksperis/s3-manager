@@ -921,7 +921,7 @@ export default function BrowserPage({
   const normalizedPath = location.pathname.replace(/\/+$/, "");
   const workspaceSurface =
     workspaceSurfaceOverride ??
-    (selectedContext?.kind === "portal_account" || selectedContext?.kind === "portal_project" ? "portal" : "browser");
+    (selectedContext?.kind === "portal_project" ? "portal" : "browser");
   const actionProfile =
     actionProfileOverride ?? (workspaceSurface === "portal" ? "portal-basic" : "full");
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
@@ -4572,7 +4572,7 @@ export default function BrowserPage({
     ) {
       return "manager";
     }
-    if (selectedContext?.kind === "portal_account" || selectedContext?.kind === "portal_project" || isPortalBrowserSurface) {
+    if (selectedContext?.kind === "portal_project" || isPortalBrowserSurface) {
       return accountIdForApi != null ? "portal" : null;
     }
     return null;

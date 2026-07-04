@@ -231,7 +231,7 @@ function LocationProbe() {
 
 function makeExecutionContext(overrides: Partial<ExecutionContext>): ExecutionContext {
   return {
-    kind: "portal_account",
+    kind: "portal_project",
     id: "101",
     display_name: "Research account",
     tags: [],
@@ -940,7 +940,7 @@ describe("BrowserPage interactions", () => {
         id: "portal-101",
         display_name: "Research Portal",
       }),
-      selectedKind: "portal_account",
+      selectedKind: "portal_project",
     });
 
     renderPage({ initialEntry: "/browser" });
@@ -2573,11 +2573,11 @@ describe("BrowserPage interactions", () => {
     expect(within(sidebar).queryByText(/objects/i)).not.toBeInTheDocument();
   });
 
-  it("opens a Portal Browser account in the Portal workspace from the sidebar", async () => {
+  it("opens a Portal Browser project in the Portal workspace from the sidebar", async () => {
     const user = userEvent.setup();
     const portalContext = makeExecutionContext({
       id: "101",
-      kind: "portal_account",
+      kind: "portal_project",
       manager_account_is_admin: false,
     });
     setBrowserContext({
@@ -2586,7 +2586,7 @@ describe("BrowserPage interactions", () => {
       selectedContext: portalContext,
       requiresContextSelection: true,
       selectorForApi: "101",
-      selectedKind: "portal_account",
+      selectedKind: "portal_project",
     });
 
     renderPage();
@@ -2600,11 +2600,11 @@ describe("BrowserPage interactions", () => {
     expect(screen.getByLabelText("Current location")).toHaveTextContent("/portal");
   });
 
-  it("opens a manager-available Portal Browser account in Manager from the sidebar", async () => {
+  it("opens a manager-available Portal Browser project in Manager from the sidebar", async () => {
     const user = userEvent.setup();
     const portalContext = makeExecutionContext({
       id: "101",
-      kind: "portal_account",
+      kind: "portal_project",
       manager_account_is_admin: true,
     });
     setBrowserContext({
@@ -2613,7 +2613,7 @@ describe("BrowserPage interactions", () => {
       selectedContext: portalContext,
       requiresContextSelection: true,
       selectorForApi: "101",
-      selectedKind: "portal_account",
+      selectedKind: "portal_project",
     });
 
     renderPage();

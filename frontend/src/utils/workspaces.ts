@@ -39,7 +39,6 @@ export type SessionUser = {
   account_links?: {
     account_id: number;
     account_admin?: boolean | null;
-    account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
@@ -104,15 +103,11 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 }
 
 export function hasPortalWorkspaceAccess(user: SessionUser | null): boolean {
-  const links = getAccountLinks(user);
   const projectLinks = getPortalProjects(user);
   return Boolean(
-    links.some(
-      (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-    ) ||
-      projectLinks.some(
-        (project) => project.account_role === "portal_user" || project.account_role === "portal_manager"
-      )
+    projectLinks.some(
+      (project) => project.account_role === "portal_user" || project.account_role === "portal_manager"
+    )
   );
 }
 

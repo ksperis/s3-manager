@@ -11,20 +11,41 @@ const mocks = vi.hoisted(() => ({
   accountContext: {
     accounts: [
       {
-        id: "101",
+        id: "proj-101",
+        db_id: 101,
         name: "Research Account",
         tags: [],
         storage_endpoint_name: "ceph-eu",
       },
     ],
+    projects: [
+      {
+        id: "proj-101",
+        db_id: 101,
+        name: "Research Account",
+        account_role: "portal_user",
+        accounts: [{ account_id: 101, display_name: "ceph-eu", account_name: "Research Account" }],
+      },
+    ],
     selectedAccount: {
-      id: "101",
+      id: "proj-101",
+      db_id: 101,
       name: "Research Account",
       tags: [],
       storage_endpoint_name: "ceph-eu",
     },
-    selectedAccountId: "101",
+    selectedProject: {
+      id: "proj-101",
+      db_id: 101,
+      name: "Research Account",
+      account_role: "portal_user",
+      accounts: [{ account_id: 101, display_name: "ceph-eu", account_name: "Research Account" }],
+    },
+    selectedProjectAccounts: [{ account_id: 101, display_name: "ceph-eu", account_name: "Research Account" }],
+    selectedAccountId: "proj-101",
     setSelectedAccountId: vi.fn(),
+    hasAccountContext: true,
+    accountIdForApi: "proj-101",
     loading: false,
   },
   workspaceData: {
@@ -76,8 +97,9 @@ describe("PortalSettingsPage", () => {
       display_name: "Portal User",
       ui_language: "fr",
       quota_alerts_enabled: true,
-      ui_preferences: { theme: "dark", selected_portal_account_id: "101" },
-      account_links: [{ account_id: 101, account_role: "portal_user" }],
+      ui_preferences: { theme: "dark", selected_portal_account_id: "proj-101" },
+      account_links: [{ account_id: 101 }],
+      portal_projects: [{ id: 101, name: "Research", account_role: "portal_user" }],
     });
   });
 
@@ -88,10 +110,10 @@ describe("PortalSettingsPage", () => {
     expect(await screen.findByDisplayValue("Portal User")).toBeInTheDocument();
     expect(screen.getByDisplayValue("portal@example.com")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Portal account" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Portal project" })).toBeInTheDocument();
     expect(screen.getByText("Workspace access")).toBeInTheDocument();
     expect(screen.getByText("User")).toBeInTheDocument();
-    expect(screen.getByText("Storage service")).toBeInTheDocument();
+    expect(screen.getByText("Project accounts")).toBeInTheDocument();
     expect(screen.getByText("1 active / 2 total")).toBeInTheDocument();
     expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
     expect(screen.queryByText("Portal user")).not.toBeInTheDocument();

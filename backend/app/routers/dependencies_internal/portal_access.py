@@ -9,21 +9,18 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
+from app.db import AccountRole, S3Account, StorageProvider, User
 from app.models.browser import BrowserBucket
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.dependencies_internal.settings_loader import load_app_settings
-from app.services.effective_access_service import EffectiveAccountLink
 from app.utils.storage_endpoint_features import resolve_feature_flags
 
-from .account_context import _parse_account_selector, _resolve_user_account_link, _resolve_workspace_surface
+from .account_context import _parse_account_selector, _resolve_workspace_surface
 from .auth_session import get_current_account_user, settings
 from .types import AccountAccess, AccountCapabilities
 
-def _portal_membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink]) -> tuple[str, AccountCapabilities]:
-    if not link:
-        return AccountRole.PORTAL_NONE.value, AccountCapabilities()
-    role = link.account_role or AccountRole.PORTAL_NONE.value
+def _portal_role_capabilities(role: Optional[str]) -> tuple[str, AccountCapabilities]:
+    role = role or AccountRole.PORTAL_NONE.value
     if role == AccountRole.PORTAL_NONE.value:
         return role, AccountCapabilities()
     can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
@@ -35,6 +32,68 @@ def _portal_membership_capabilities(link: Optional[UserS3Account | EffectiveAcco
         can_view_root_key=False,
         using_root_key=False,
     )
+
+
+def _resolve_portal_access_from_project(
+    db: Session,
+    user: User,
+    *,
+    project_id: int,
+    account_id: Optional[int] = None,
+) -> AccountAccess:
+    from app.services.projects_service import get_projects_service
+
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_403_FORBIDDEN if "Not authorized" in detail else status.HTTP_404_NOT_FOUND
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    if account_id is None:
+        if len(project_access.account_links) != 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
+        account_id = project_access.account_links[0].account_id
+    try:
+        return projects_service.account_access_for_project(project_access, account_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+def _resolve_portal_access_from_account(
+    db: Session,
+    user: User,
+    account_id: Optional[int],
+    *,
+    allow_default: bool,
+) -> AccountAccess:
+    from app.services.projects_service import get_projects_service
+
+    projects_service = get_projects_service(db)
+    projects = projects_service.list_portal_projects_for_user(user)
+    candidates: list[tuple[int, str]] = []
+    for project in projects:
+        for account in project.accounts:
+            if account_id is None or account.account_id == account_id:
+                candidates.append((project.db_id, project.account_role))
+    if account_id is None:
+        account_ids = {account.account_id for project in projects for account in project.accounts}
+        if not allow_default or len(account_ids) != 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
+        account_id = next(iter(account_ids))
+        candidates = [
+            (project.db_id, project.account_role)
+            for project in projects
+            for account in project.accounts
+            if account.account_id == account_id
+        ]
+    if not candidates:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    project_id, _role = sorted(
+        candidates,
+        key=lambda item: (item[1] != AccountRole.PORTAL_MANAGER.value, item[0]),
+    )[0]
+    return _resolve_portal_access_from_project(db, user, project_id=project_id, account_id=account_id)
 
 
 def _validate_portal_account_surface(account: S3Account) -> None:
@@ -132,7 +191,6 @@ def _resolve_portal_browser_context(
     db: Session,
     user: User,
     account: S3Account,
-    link: UserS3Account,
     *,
     request: Request,
 ) -> S3Account:
@@ -143,14 +201,12 @@ def _resolve_portal_browser_context(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Portal workspace")
 
     _validate_portal_account_surface(account)
-    role, portal_capabilities = _portal_membership_capabilities(link)
-    if role == AccountRole.PORTAL_NONE.value:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    portal_access = _resolve_portal_access_from_account(db, user, account.id, allow_default=False)
+    role, portal_capabilities = _portal_role_capabilities(portal_access.role)
 
     from app.services.portal_service import PortalService
 
     portal_service = PortalService(db)
-    portal_access = AccountAccess(account=account, actor=user, membership=link, capabilities=portal_capabilities, role=role)
     try:
         access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
     except RuntimeError as exc:
@@ -295,17 +351,17 @@ def get_portal_account_access(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> AccountAccess:
+    project_id = _parse_project_selector(account_ref)
+    if project_id is not None:
+        return _resolve_portal_access_from_project(db, user, project_id=project_id)
+
     account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
     if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
 
-    account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
-    _validate_portal_account_surface(account)
-
-    role, capabilities = _portal_membership_capabilities(link)
-    if role == AccountRole.PORTAL_NONE.value:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    return AccountAccess(account=account, actor=user, membership=link, capabilities=capabilities, role=role)
+    access = _resolve_portal_access_from_account(db, user, account_id, allow_default=False)
+    _validate_portal_account_surface(access.account)
+    return access
 
 
 def require_portal_manager(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:

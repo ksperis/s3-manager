@@ -11,7 +11,6 @@ from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validat
 class AccountUserLink(BaseModel):
     user_id: int
     account_admin: Optional[bool] = None
-    account_role: Optional[str] = None
     user_email: Optional[str] = None
 
 
@@ -19,7 +18,6 @@ class AccountGroupLink(BaseModel):
     group_id: int
     group_name: Optional[str] = None
     account_admin: Optional[bool] = None
-    account_role: Optional[str] = None
 
 
 class S3Account(BaseModel):

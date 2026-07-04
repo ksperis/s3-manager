@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from app.core.security import get_password_hash, verify_password
 from app.db import (
     AccountIAMUser,
-    AccountRole,
     ApiToken,
     AuditLog,
     BucketMigration,
@@ -54,9 +53,6 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
-
-
 def _parse_ui_preferences(raw: object) -> UiPreferences:
     if not raw:
         return UiPreferences()
@@ -529,7 +525,6 @@ class UsersService:
         *,
         role: Optional[str] = None,
         account_admin: Optional[bool] = None,
-        account_role: Optional[str] = None,
     ) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -547,23 +542,14 @@ class UsersService:
             user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
-        if account_role is not None and account_role not in ACCOUNT_ROLE_VALUES:
-            raise ValueError("Invalid account role")
-        next_account_role = (
-            account_role
-            if account_role is not None
-            else (link.account_role if link else AccountRole.PORTAL_NONE.value)
-        )
         if not link:
             link = UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
                 is_root=bool(account_root),
-                account_role=next_account_role,
             )
         link.is_root = bool(account_root)
         link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
-        link.account_role = next_account_role
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
@@ -600,19 +586,18 @@ class UsersService:
                     AccountMembership(
                         account_id=link.account_id,
                         account_admin=link.account_admin,
-                        account_role=link.account_role,
                     )
                     for link in user.account_links
                 ]
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.account_admin, UserS3Account.account_role)
+                self.db.query(UserS3Account.account_id, UserS3Account.account_admin)
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], account_admin=row[1], account_role=row[2]) for row in account_rows
+                AccountMembership(account_id=row[0], account_admin=row[1]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
         try:

@@ -43,11 +43,14 @@ type WorkspaceAccessLabel = "limited" | "manager" | "user";
 
 function resolveWorkspaceAccess(user: User | null, selectedAccountId: string | null): WorkspaceAccessLabel {
   if (!user || !selectedAccountId) return "limited";
-  const numericId = Number(selectedAccountId);
-  const link = user.account_links?.find((item) => Number(item.account_id) === numericId);
-  if (!link?.account_role || link.account_role === "portal_none") return "limited";
-  if (link.account_role === "portal_manager") return "manager";
-  if (link.account_role === "portal_user") return "user";
+  const projectId = selectedAccountId.startsWith("proj-")
+    ? Number(selectedAccountId.slice("proj-".length))
+    : Number(selectedAccountId);
+  const project = (user.effective_access?.portal_projects ?? user.portal_projects ?? []).find(
+    (item) => Number(item.id) === projectId
+  );
+  if (project?.account_role === "portal_manager") return "manager";
+  if (project?.account_role === "portal_user") return "user";
   return "limited";
 }
 

@@ -1,7 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.db import (
-    AccountRole,
     S3Account,
     StorageEndpoint,
     StorageProvider,
@@ -79,7 +78,6 @@ def test_accounts_expose_direct_group_links(db_session):
             account_id=account.id,
             group_id=group.id,
             account_admin=True,
-            account_role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()
@@ -99,4 +97,3 @@ def test_accounts_expose_direct_group_links(db_session):
         assert item.group_links[0].group_id == group.id
         assert item.group_links[0].group_name == "Platform Operators"
         assert item.group_links[0].account_admin is True
-        assert item.group_links[0].account_role == AccountRole.PORTAL_MANAGER.value

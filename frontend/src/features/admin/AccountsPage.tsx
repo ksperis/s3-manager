@@ -58,7 +58,6 @@ type EditTab = "general" | "users" | "groups" | "projects" | "privileged" | "por
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
-type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 type PortalOverrideFormSnapshot = {
   bucketCreate: TriState;
   namedBucketCreate: TriState;
@@ -97,11 +96,6 @@ const toOverrideValue = (value: TriState): boolean | undefined => {
 
 const buildPortalOverrideFormSignature = (snapshot: PortalOverrideFormSnapshot) =>
   stableSignature({ portalOverrides: snapshot });
-
-function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
-}
 
 export default function S3AccountsPage() {
   const { generalSettings } = useGeneralSettings();
@@ -383,7 +377,6 @@ export default function S3AccountsPage() {
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
       account_admin: Boolean(link.account_admin),
-      account_role: normalizePortalRole(link.account_role),
     }));
   }, [editForm.user_links, userLabelById]);
   const assignedGroups = useMemo(() => {
@@ -391,7 +384,6 @@ export default function S3AccountsPage() {
       id: link.group_id,
       label: link.group_name ?? groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`,
       account_admin: Boolean(link.account_admin),
-      account_role: normalizePortalRole(link.account_role),
     }));
   }, [editForm.group_links, groupLabelById]);
   const availableUsers = useMemo(() => {
@@ -766,26 +758,24 @@ export default function S3AccountsPage() {
     if (account.user_links && account.user_links.length > 0) {
       return account.user_links;
     }
-    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" }));
+    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_admin: false }));
   };
   const resolveAccountGroupLinks = (account: S3Account | S3AccountSummary): AccountGroupLink[] => {
     if (account.group_links && account.group_links.length > 0) {
       return account.group_links;
     }
-    return (account.group_ids ?? []).map((id) => ({ group_id: id, account_admin: false, account_role: "portal_none" }));
+    return (account.group_ids ?? []).map((id) => ({ group_id: id, account_admin: false }));
   };
   const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
     const userItems: AssociationAccountItem[] = resolveAccountUserLinks(account).map((link) => ({
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
       account_admin: link.account_admin,
-      account_role: link.account_role,
     }));
     const groupItems: AssociationAccountItem[] = resolveAccountGroupLinks(account).map((link) => ({
       id: link.group_id,
       label: link.group_name ?? `Group #${link.group_id}`,
       account_admin: link.account_admin,
-      account_role: link.account_role,
     }));
     if (userItems.length === 0 && groupItems.length === 0) {
       return <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>;
@@ -795,12 +785,12 @@ export default function S3AccountsPage() {
         sections={[
           {
             label: "Users",
-            value: <AccountAssociationChips accounts={userItems} showPortalRole={false} />,
+            value: <AccountAssociationChips accounts={userItems} />,
             visible: userItems.length > 0,
           },
           {
             label: "Groups",
-            value: <AccountAssociationChips accounts={groupItems} showPortalRole={false} />,
+            value: <AccountAssociationChips accounts={groupItems} />,
             visible: groupItems.length > 0,
           },
         ]}
@@ -934,7 +924,6 @@ export default function S3AccountsPage() {
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
           account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
           user_email: link.user_email ?? undefined,
         })) ?? [],
       group_links:
@@ -942,7 +931,6 @@ export default function S3AccountsPage() {
           group_id: link.group_id,
           group_name: link.group_name ?? undefined,
           account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
         })) ?? [],
     };
     setEditingS3Account(detail);
@@ -1831,7 +1819,6 @@ export default function S3AccountsPage() {
                               const toAdd = userSelections.map((id) => ({
                                 user_id: id,
                                 account_admin: userAdminChoice[id] ?? false,
-                                account_role: "portal_none" as PortalAccountRole,
                                 user_email: userLabelById.get(id) ?? undefined,
                               }));
                               setEditForm((prev) => ({
@@ -2026,7 +2013,6 @@ export default function S3AccountsPage() {
                                 group_id: id,
                                 group_name: groupLabelById.get(id) ?? undefined,
                                 account_admin: groupAdminChoice[id] ?? false,
-                                account_role: "portal_none" as PortalAccountRole,
                               }));
                               setEditForm((prev) => ({
                                 ...prev,

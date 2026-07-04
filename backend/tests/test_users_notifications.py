@@ -7,14 +7,16 @@ import json
 
 from app.db import (
     AccountRole,
+    Project,
+    ProjectS3Account,
     S3Account,
     S3User,
     StorageEndpoint,
     StorageProvider,
     User,
     UserNotification,
+    UserProject,
     UserRole,
-    UserS3Account,
     UserS3User,
 )
 from app.main import app
@@ -125,12 +127,14 @@ def test_list_notifications_filters_by_current_account_access(client, db_session
     assert response.status_code == 200
     assert response.json() == {"items": [], "unread_count": 0}
 
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-        )
+    project = Project(name="Notifications project")
+    db_session.add(project)
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
     )
     db_session.commit()
 

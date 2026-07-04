@@ -116,12 +116,13 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(true);
   });
 
-  it("exposes Portal only for explicit portal account roles when feature is enabled", () => {
+  it("exposes Portal only for explicit portal project roles when feature is enabled", () => {
     const user: SessionUser = {
       id: 7,
       email: "portal-user@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      account_links: [{ account_id: 24, account_admin: false }],
+      portal_projects: [{ id: 24, name: "Research", account_role: "portal_user" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -151,7 +152,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
           ceph_s3_user_keys: false,
         },
         accounts: [42],
-        account_links: [{ account_id: 42, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 42, account_admin: true }],
+        portal_projects: [{ id: 42, name: "Research", account_role: "portal_manager" }],
         s3_users: [],
         s3_user_details: [],
         s3_connections: [],
@@ -206,7 +208,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 9,
       email: "portal-manager@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_manager" }],
+      account_links: [{ account_id: 24, account_admin: false }],
+      portal_projects: [{ id: 24, name: "Research", account_role: "portal_manager" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -225,7 +228,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 15,
       email: "portal-browser@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      account_links: [{ account_id: 24, account_admin: false }],
+      portal_projects: [{ id: 24, name: "Research", account_role: "portal_user" }],
       s3_connections: [],
       s3_connection_details: [],
       s3_users: [],
@@ -245,11 +249,12 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     });
   });
 
-  it("exposes Portal for admin users with an explicit portal account role", () => {
+  it("exposes Portal for admin users with an explicit portal project role", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...adminUser,
-        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 24, account_admin: true }],
+        portal_projects: [{ id: 24, name: "Research", account_role: "portal_manager" }],
       },
       {
         ...baseSettings,
@@ -267,7 +272,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...adminUser,
-        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+        account_links: [{ account_id: 24, account_admin: true }],
         effective_access: {
           can_access_ceph_admin: true,
           can_access_storage_ops: false,
@@ -281,7 +286,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
             ceph_s3_user_keys: false,
           },
           accounts: [24],
-          account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+          account_links: [{ account_id: 24, account_admin: true }],
           portal_projects: [{ id: 7, name: "Research", account_role: "portal_manager" }],
           s3_users: [],
           s3_user_details: [],
@@ -307,11 +312,12 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     });
   });
 
-  it("exposes Portal for superadmin users with an explicit portal account role", () => {
+  it("exposes Portal for superadmin users with an explicit portal project role", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...superAdminUser,
-        account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+        account_links: [{ account_id: 24, account_admin: false }],
+        portal_projects: [{ id: 24, name: "Research", account_role: "portal_user" }],
       },
       {
         ...baseSettings,
@@ -322,11 +328,11 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
   });
 
-  it("does not expose Portal for admin users without an explicit portal account role", () => {
+  it("does not expose Portal for admin users without an explicit portal project role", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(
       {
         ...adminUser,
-        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+        account_links: [{ account_id: 24, account_admin: true }],
       },
       {
         ...baseSettings,
@@ -342,7 +348,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 10,
       email: "portal-disabled@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      account_links: [{ account_id: 24, account_admin: false }],
+      portal_projects: [{ id: 24, name: "Research", account_role: "portal_user" }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -358,7 +365,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 8,
       email: "plain-user@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+      account_links: [{ account_id: 24, account_admin: true }],
     };
 
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
@@ -390,7 +397,8 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
       id: 12,
       email: "portal-only@example.com",
       role: "ui_user",
-      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+      account_links: [{ account_id: 24, account_admin: false }],
+      portal_projects: [{ id: 24, name: "Research", account_role: "portal_user" }],
     };
 
     expect(resolvePostLoginPath(user, { ...baseSettings, portal_enabled: true })).toBe("/portal");

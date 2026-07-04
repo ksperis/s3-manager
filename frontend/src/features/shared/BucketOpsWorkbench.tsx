@@ -1128,7 +1128,7 @@ const formatStorageOpsContextKindLabel = (kind: StorageOpsContextFilterKind | Ex
 
 const toStorageOpsContextKind = (kind: ExecutionContext["kind"]): StorageOpsContextFilterKind => {
   if (kind === "legacy_user") return "s3_user";
-  if (kind === "portal_account" || kind === "portal_project") return "account";
+  if (kind === "portal_project") return "account";
   return kind;
 };
 

@@ -51,7 +51,6 @@ from app.models.portal import (
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
-from app.services.effective_access_service import EffectiveAccountLink
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -1266,12 +1265,24 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     from fastapi import Request
     from app.routers.dependencies_internal import portal_access as portal_access_deps
 
-    account = S3Account(name="portal-browser-content", rgw_account_id="tenant-browser")
+    endpoint = StorageEndpoint(
+        name="portal-browser-content-endpoint",
+        endpoint_url="https://portal-browser-content.example.test",
+        provider="ceph",
+        features_config="features:\n  iam:\n    enabled: true\n",
+    )
+    account = S3Account(name="portal-browser-content", rgw_account_id="tenant-browser", storage_endpoint=endpoint)
     user = User(email="portal-browser-content@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
+    project = Project(name="Portal Browser Content", description=None)
+    db_session.add_all([endpoint, account, user, project])
     db_session.commit()
-    link = EffectiveAccountLink(account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value)
-
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    db_session.commit()
     app_settings = AppSettings()
     app_settings.general.portal_enabled = True
     app_settings.general.browser_portal_enabled = True
@@ -1316,7 +1327,6 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
         db_session,
         user,
         account,
-        link,
         request=request,
     )
 

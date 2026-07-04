@@ -3,14 +3,13 @@
 from app.utils.time import utcnow
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, S3Account, S3Connection, S3User, User, UserS3Account
+from app.db import S3Account, S3Connection, S3User, User
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
-from app.routers.dependencies_internal.portal_access import _validate_portal_account_surface
 from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import S3UsersService
@@ -78,47 +77,6 @@ def _build_account_context(
             can_manage_iam=True,
             sts_capable=sts_capable,
             admin_api_capable=True,
-        ),
-    )
-
-
-def _build_portal_account_context(
-    account: S3Account,
-    quota_max_size_gb: Optional[float],
-    quota_max_objects: Optional[int],
-    max_buckets: Optional[int],
-    *,
-    tags_service: TagsService,
-    account_role: str,
-    manager_account_is_admin: Optional[bool] = None,
-) -> ExecutionContext:
-    endpoint = account.storage_endpoint
-    endpoint_caps = (
-        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-        if endpoint
-        else None
-    )
-    return ExecutionContext(
-        kind="portal_account",
-        id=str(account.id),
-        display_name=account.name,
-        account_role=account_role,
-        manager_account_is_admin=manager_account_is_admin,
-        rgw_account_id=account.rgw_account_id,
-        max_buckets=max_buckets,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=endpoint.name if endpoint else None,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=endpoint.endpoint_url if endpoint else None,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=False,
-            sts_capable=False,
-            admin_api_capable=False,
         ),
     )
 
@@ -223,15 +181,8 @@ def _build_connection_context(
     )
 
 
-def _manager_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
+def _manager_account_allowed(link: EffectiveAccountLink) -> bool:
     return bool(link.account_admin or link.is_root)
-
-
-def _portal_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
-    return link.account_role in {
-        AccountRole.PORTAL_USER.value,
-        AccountRole.PORTAL_MANAGER.value,
-    }
 
 
 @router.get("/execution-contexts", response_model=list[ExecutionContext])
@@ -337,35 +288,6 @@ def list_execution_contexts(
             projects_service = get_projects_service(db, accounts_service=s3_accounts_service)
             for project in projects_service.list_portal_projects_for_user(user):
                 results.append(_build_portal_project_context(project))
-            for link in links:
-                if not _portal_account_allowed(link):
-                    continue
-                account = account_by_id.get(link.account_id)
-                if account is None:
-                    continue
-                try:
-                    _validate_portal_account_surface(account)
-                except (HTTPException, ValueError):
-                    continue
-                (
-                    quota_max_size_gb,
-                    quota_max_objects,
-                    max_buckets,
-                    _max_users,
-                    _max_roles,
-                    _max_groups,
-                ) = s3_accounts_service.get_account_limits(account)
-                results.append(
-                    _build_portal_account_context(
-                        account,
-                        quota_max_size_gb,
-                        quota_max_objects,
-                        max_buckets,
-                        tags_service=tags_service,
-                        account_role=link.account_role or AccountRole.PORTAL_USER.value,
-                        manager_account_is_admin=bool(link.account_admin or link.is_root),
-                    )
-                )
 
     if workspace in {None, "manager", "browser"}:
         for s3_user in s3_users:

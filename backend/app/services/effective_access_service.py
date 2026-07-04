@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import (
     AccountRole,
     Project,
+    ProjectS3Account,
     S3Connection,
     S3User,
     UiGroup,
@@ -58,7 +59,6 @@ class EffectiveAccountLink:
     account_id: int
     account_admin: bool = False
     is_root: bool = False
-    account_role: str = AccountRole.PORTAL_NONE.value
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,6 @@ class EffectiveAccessService:
                 account_id=link.account_id,
                 account_admin=bool(link.account_admin or link.is_root),
                 is_root=bool(link.is_root),
-                account_role=link.account_role,
             )
 
         direct_project_links = (
@@ -156,7 +155,6 @@ class EffectiveAccessService:
                     account_id=link.account_id,
                     account_admin=bool(link.account_admin),
                     is_root=False,
-                    account_role=link.account_role,
                 )
 
             group_project_links = (
@@ -265,6 +263,42 @@ class EffectiveAccessService:
             browser_advanced_features_enabled=browser_advanced_features_enabled,
         )
 
+    def portal_manager_account_ids(self, user: User) -> set[int]:
+        account_ids = {
+            int(row[0])
+            for row in (
+                self.db.query(ProjectS3Account.account_id)
+                .join(UserProject, UserProject.project_id == ProjectS3Account.project_id)
+                .filter(
+                    UserProject.user_id == user.id,
+                    UserProject.account_role == AccountRole.PORTAL_MANAGER.value,
+                )
+                .all()
+            )
+        }
+        group_ids = [
+            int(row[0])
+            for row in (
+                self.db.query(UserUiGroup.group_id)
+                .filter(UserUiGroup.user_id == user.id)
+                .all()
+            )
+        ]
+        if group_ids:
+            account_ids.update(
+                int(row[0])
+                for row in (
+                    self.db.query(ProjectS3Account.account_id)
+                    .join(UiGroupProject, UiGroupProject.project_id == ProjectS3Account.project_id)
+                    .filter(
+                        UiGroupProject.group_id.in_(group_ids),
+                        UiGroupProject.account_role == AccountRole.PORTAL_MANAGER.value,
+                    )
+                    .all()
+                )
+            )
+        return account_ids
+
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
         resolved = self.resolve_user(user)
         s3_user_names = self._load_s3_user_names(resolved.s3_user_ids)
@@ -279,7 +313,6 @@ class EffectiveAccessService:
                 AccountMembership(
                     account_id=link.account_id,
                     account_admin=link.account_admin,
-                    account_role=link.account_role,
                 )
                 for link in resolved.account_links
             ],
@@ -316,15 +349,12 @@ class EffectiveAccessService:
         account_id: int,
         account_admin: bool,
         is_root: bool,
-        account_role: str | None,
     ) -> None:
         current = account_by_id.get(account_id)
-        next_role = self._max_portal_role(current.account_role if current else None, account_role)
         account_by_id[account_id] = EffectiveAccountLink(
             account_id=account_id,
             account_admin=bool(account_admin or (current.account_admin if current else False)),
             is_root=bool(is_root or (current.is_root if current else False)),
-            account_role=next_role,
         )
 
     def _merge_project_link(

@@ -8,7 +8,6 @@ from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
 from .base import Base
-from .enums import AccountRole
 
 
 class S3Account(Base):
@@ -87,12 +86,6 @@ class UserS3Account(Base):
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
     account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
-    account_role = Column(
-        String,
-        nullable=False,
-        default=AccountRole.PORTAL_NONE.value,
-        server_default=AccountRole.PORTAL_NONE.value,
-    )
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
 

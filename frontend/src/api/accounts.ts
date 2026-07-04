@@ -11,7 +11,6 @@ import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 export type AccountUserLink = {
   user_id: number;
   account_admin?: boolean | null;
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   user_email?: string | null;
 };
 
@@ -19,7 +18,6 @@ export type AccountGroupLink = {
   group_id: number;
   group_name?: string | null;
   account_admin?: boolean | null;
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
 };
 
 export type S3Account = {

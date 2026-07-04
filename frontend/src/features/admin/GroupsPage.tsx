@@ -37,9 +37,7 @@ import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   buildManagerToolDefinitions,
   normalizeManagerToolAccess,
-  normalizePortalRole,
   type ManagerToolKey,
-  type PortalAccountRole,
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
@@ -56,7 +54,6 @@ type AssociationTab = "accounts" | "s3_users" | "connections";
 type AccountSelection = {
   account_id: number;
   account_admin?: boolean | null;
-  account_role?: PortalAccountRole | string | null;
 };
 const labelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const fieldClass =
@@ -295,7 +292,6 @@ export default function GroupsPage() {
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
           account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
         })) ?? [],
       s3_user_ids: group.s3_users ?? [],
       s3_connection_ids: group.s3_connections ?? [],
@@ -346,7 +342,7 @@ export default function GroupsPage() {
       const links = [...(current.account_links ?? [])];
       const existing = links.find((link) => Number(link.account_id) === accountId);
       if (selected && !existing) {
-        links.push({ account_id: accountId, account_admin: false, account_role: "portal_none" });
+        links.push({ account_id: accountId, account_admin: false });
       }
       return {
         ...current,
@@ -384,7 +380,6 @@ export default function GroupsPage() {
         form.account_links?.map((link) => ({
           account_id: Number(link.account_id),
           account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
         })) ?? [],
       s3_user_ids: form.s3_user_ids ?? [],
       s3_connection_ids: form.s3_connection_ids ?? [],
@@ -585,7 +580,6 @@ export default function GroupsPage() {
           accountOptionsById.get(accountId)?.name ??
           `Account #${link.account_id}`,
         account_admin: Boolean(link.account_admin),
-        account_role: link.account_role,
       };
     });
     const userItems: AssociationChipItem[] = (group.user_details ?? []).map((user) => ({
@@ -614,7 +608,7 @@ export default function GroupsPage() {
         sections={[
           {
             label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} showPortalRole={false} />,
+            value: <AccountAssociationChips accounts={accountItems} />,
             visible: accountItems.length > 0,
           },
           { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },

@@ -268,7 +268,7 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
     assert {context.kind for context in contexts} == {"legacy_user", "connection"}
 
 
-def test_browser_workspace_returns_portal_account_context_when_portal_browser_enabled(db_session, monkeypatch):
+def test_browser_workspace_returns_portal_project_context_when_portal_browser_enabled(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-browser-endpoint")
     account = _create_account(
@@ -277,14 +277,15 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
         rgw_account_id="RGWPORTALBROWSER0001",
         storage_endpoint=endpoint,
     )
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_admin=False,
-            is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
-        )
+    project = Project(name="Portal Browser Project", description=None)
+    db_session.add(project)
+    db_session.commit()
+    db_session.refresh(project)
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
     )
     db_session.commit()
 
@@ -292,6 +293,10 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
         def get_account_limits(self, target_account):
             assert target_account.id == account.id
             return 12, 1_500, 7, 0, 0, 0
+
+        def get_account_quota(self, target_account):
+            assert target_account.id == account.id
+            return 12, 1_500
 
     monkeypatch.setattr(
         execution_contexts,
@@ -314,14 +319,11 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
 
     assert len(contexts) == 1
     context = contexts[0]
-    assert context.kind == "portal_account"
-    assert context.id == str(account.id)
-    assert context.display_name == account.name
+    assert context.kind == "portal_project"
+    assert context.id == f"proj-{project.id}"
+    assert context.display_name == project.name
     assert context.account_role == AccountRole.PORTAL_USER.value
-    assert context.manager_account_is_admin is False
-    assert context.quota_max_size_gb == 12
-    assert context.quota_max_objects == 1_500
-    assert context.max_buckets == 7
+    assert context.endpoint_name == "1 project account"
     assert context.capabilities.can_manage_iam is False
     assert context.capabilities.admin_api_capable is False
 
@@ -390,7 +392,7 @@ def test_browser_workspace_returns_portal_project_context_when_project_is_availa
     assert context.capabilities.can_manage_iam is False
 
 
-def test_browser_workspace_marks_portal_context_when_account_is_available_in_manager(db_session, monkeypatch):
+def test_browser_workspace_returns_project_context_when_account_is_also_available_in_manager(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-manager-endpoint")
     account = _create_account(
@@ -399,14 +401,21 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
         rgw_account_id="RGWPORTALMANAGER0001",
         storage_endpoint=endpoint,
     )
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_admin=True,
-            is_root=False,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-        )
+    project = Project(name="Portal Manager Project", description=None)
+    db_session.add(project)
+    db_session.commit()
+    db_session.refresh(project)
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=user.id,
+                account_id=account.id,
+                account_admin=True,
+                is_root=False,
+            ),
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
     )
     db_session.commit()
 
@@ -414,6 +423,10 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
         def get_account_limits(self, target_account):
             assert target_account.id == account.id
             return None, None, None, None, None, None
+
+        def get_account_quota(self, target_account):
+            assert target_account.id == account.id
+            return None, None
 
     monkeypatch.setattr(
         execution_contexts,
@@ -436,9 +449,9 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
 
     assert len(contexts) == 1
     context = contexts[0]
-    assert context.kind == "portal_account"
-    assert context.id == str(account.id)
-    assert context.manager_account_is_admin is True
+    assert context.kind == "portal_project"
+    assert context.id == f"proj-{project.id}"
+    assert context.account_role == AccountRole.PORTAL_MANAGER.value
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):

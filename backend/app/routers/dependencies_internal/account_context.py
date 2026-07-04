@@ -40,13 +40,12 @@ def _resolve_portal_browser_context(
     db: Session,
     user: User,
     account: S3Account,
-    link: UserS3Account | EffectiveAccountLink,
     *,
     request: Request,
 ) -> S3Account:
     from .portal_access import _resolve_portal_browser_context as resolve_context
 
-    return resolve_context(db, user, account, link, request=request)
+    return resolve_context(db, user, account, request=request)
 
 
 def _resolve_portal_project_browser_context(
@@ -378,9 +377,12 @@ def get_account_context(
             )
         if s3_user_id is not None:
             return _resolve_s3_user_context(db, actor, s3_user_id)
-        account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         if _is_portal_browser_request(request, surface):
-            return _resolve_portal_browser_context(db, actor, account, link, request=request)
+            if account_id is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
+            account = _resolve_account_by_id(db, account_id)
+            return _resolve_portal_browser_context(db, actor, account, request=request)
+        account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         capabilities = _manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
