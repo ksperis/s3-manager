@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import S3Account, UiGroup, UiGroupS3Account
+from app.db import Project, ProjectS3Account, S3Account, UiGroup, UiGroupS3Account
 from app.services.tags_service import TagsService
 
 
@@ -117,6 +117,41 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
             "account_admin": True,
         }
     ]
+
+
+def test_admin_accounts_search_matches_project_links(client, db_session):
+    linked = _seed_account(db_session, name="project-linked-account", rgw_account_id="RGW-PROJECT-LINKED")
+    _seed_account(db_session, name="plain-account", rgw_account_id="RGW-PROJECT-PLAIN")
+    project = Project(name="Genome Atlas", description=None)
+    db_session.add(project)
+    db_session.flush()
+    db_session.add(
+        ProjectS3Account(
+            account_id=linked.id,
+            project_id=project.id,
+            display_name="Paris",
+            sort_order=3,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/admin/accounts", params={"search": "genome"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert [item["name"] for item in payload["items"]] == ["project-linked-account"]
+    assert payload["items"][0]["project_links"] == [
+        {
+            "project_id": project.id,
+            "project_name": "Genome Atlas",
+            "display_name": "Paris",
+            "sort_order": 3,
+        }
+    ]
+
+    location_response = client.get("/api/admin/accounts", params={"search": "paris"})
+    assert location_response.status_code == 200, location_response.text
+    assert [item["name"] for item in location_response.json()["items"]] == ["project-linked-account"]
 
 
 def test_admin_accounts_update_replaces_direct_group_links(client, db_session):

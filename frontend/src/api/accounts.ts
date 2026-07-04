@@ -20,6 +20,13 @@ export type AccountGroupLink = {
   account_admin?: boolean | null;
 };
 
+export type AccountProjectLink = {
+  project_id: number;
+  project_name: string;
+  display_name: string;
+  sort_order?: number | null;
+};
+
 export type S3Account = {
   id: string;
   db_id?: number | null;
@@ -38,6 +45,7 @@ export type S3Account = {
   user_links?: AccountUserLink[] | null;
   group_ids?: number[] | null;
   group_links?: AccountGroupLink[] | null;
+  project_links?: AccountProjectLink[] | null;
   bucket_count?: number | null;
   rgw_user_count?: number | null;
   rgw_user_uids?: string[] | null;
@@ -61,6 +69,7 @@ export type S3AccountSummary = {
   user_links?: AccountUserLink[] | null;
   group_ids?: number[] | null;
   group_links?: AccountGroupLink[] | null;
+  project_links?: AccountProjectLink[] | null;
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;

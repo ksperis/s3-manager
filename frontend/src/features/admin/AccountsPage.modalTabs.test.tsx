@@ -234,6 +234,14 @@ describe("AccountsPage modal tabs", () => {
               account_admin: true,
             },
           ],
+          project_links: [
+            {
+              project_id: 41,
+              project_name: "Genome Project",
+              display_name: "Paris",
+              sort_order: 0,
+            },
+          ],
         },
       ],
       total: 1,
@@ -247,6 +255,7 @@ describe("AccountsPage modal tabs", () => {
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
     expect(screen.getByText("ui7@example.com")).toBeInTheDocument();
     expect(screen.getByText("Research Group")).toBeInTheDocument();
+    expect(screen.getByText("Genome Project (Paris)")).toBeInTheDocument();
     expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
     expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);

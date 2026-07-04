@@ -20,6 +20,13 @@ class AccountGroupLink(BaseModel):
     account_admin: Optional[bool] = None
 
 
+class AccountProjectLink(BaseModel):
+    project_id: int
+    project_name: str
+    display_name: str
+    sort_order: int = 0
+
+
 class S3Account(BaseModel):
     id: str
     db_id: Optional[int] = None
@@ -38,6 +45,7 @@ class S3Account(BaseModel):
     user_links: Optional[list[AccountUserLink]] = None
     group_ids: Optional[list[int]] = None
     group_links: Optional[list[AccountGroupLink]] = None
+    project_links: Optional[list[AccountProjectLink]] = None
     bucket_count: Optional[int] = None
     rgw_user_count: Optional[int] = None
     rgw_user_uids: Optional[list[str]] = None
@@ -105,6 +113,7 @@ class S3AccountSummary(BaseModel):
     user_links: Optional[list[AccountUserLink]] = None
     group_ids: Optional[list[int]] = None
     group_links: Optional[list[AccountGroupLink]] = None
+    project_links: Optional[list[AccountProjectLink]] = None
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None

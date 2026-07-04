@@ -7,6 +7,8 @@ import logging
 from app.db import (
     AccountIAMUser,
     AuditLog,
+    Project,
+    ProjectS3Account,
     S3Account,
     StorageEndpoint,
     StorageProvider,
@@ -18,6 +20,7 @@ from app.db import (
 )
 from app.models.s3_account import (
     AccountGroupLink,
+    AccountProjectLink,
     AccountUserLink,
     S3Account as S3AccountSchema,
     S3AccountCreate,
@@ -578,6 +581,39 @@ class S3AccountsService:
             )
         return group_ids_by_account, group_links_by_account
 
+    def _load_project_links(self, account_ids: list[int]) -> dict[int, list[AccountProjectLink]]:
+        if not account_ids:
+            return {}
+        rows = (
+            self.db.query(
+                ProjectS3Account.account_id,
+                ProjectS3Account.project_id,
+                Project.name,
+                ProjectS3Account.display_name,
+                ProjectS3Account.sort_order,
+            )
+            .join(Project, Project.id == ProjectS3Account.project_id)
+            .filter(ProjectS3Account.account_id.in_(account_ids))
+            .order_by(
+                ProjectS3Account.account_id.asc(),
+                Project.name.asc(),
+                ProjectS3Account.sort_order.asc(),
+                ProjectS3Account.project_id.asc(),
+            )
+            .all()
+        )
+        links_by_account: dict[int, list[AccountProjectLink]] = {}
+        for account_id, project_id, project_name, display_name, sort_order in rows:
+            links_by_account.setdefault(int(account_id), []).append(
+                AccountProjectLink(
+                    project_id=int(project_id),
+                    project_name=project_name,
+                    display_name=display_name,
+                    sort_order=int(sort_order or 0),
+                )
+            )
+        return links_by_account
+
     def list_accounts(
         self,
         include_usage_stats: bool = True,
@@ -588,6 +624,7 @@ class S3AccountsService:
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
         group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
+        project_links_by_account = self._load_project_links(account_ids)
 
         roots_by_account: dict[str, tuple[str, int]] = {}
         for acc in db_accounts:
@@ -650,6 +687,7 @@ class S3AccountsService:
                     user_links=user_links_by_account.get(acc.id),
                     group_ids=group_ids_by_account.get(acc.id),
                     group_links=group_links_by_account.get(acc.id),
+                    project_links=project_links_by_account.get(acc.id),
                     storage_endpoint=endpoint,
                     storage_endpoint_capabilities=endpoint_capabilities,
                     tags=self.tags.get_account_tags(acc),
@@ -662,6 +700,7 @@ class S3AccountsService:
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
         group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
+        project_links_by_account = self._load_project_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
             endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
@@ -673,6 +712,7 @@ class S3AccountsService:
                     user_links=user_links_by_account.get(acc.id),
                     group_ids=group_ids_by_account.get(acc.id),
                     group_links=group_links_by_account.get(acc.id),
+                    project_links=project_links_by_account.get(acc.id),
                     storage_endpoint=endpoint,
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                     tags=self.tags.get_account_tags(acc),
@@ -697,6 +737,7 @@ class S3AccountsService:
         group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
         group_ids = group_ids_by_account.get(account.id)
         group_links = group_links_by_account.get(account.id)
+        project_links = self._load_project_links([account.id]).get(account.id)
         used_bytes = used_objects = bucket_count = None
         if include_usage:
             used_bytes, used_objects, bucket_count = self._account_usage(account)
@@ -732,6 +773,7 @@ class S3AccountsService:
             user_links=user_links,
             group_ids=group_ids,
             group_links=group_links,
+            project_links=project_links,
             storage_endpoint=endpoint,
             storage_endpoint_capabilities=endpoint_capabilities,
             tags=self.tags.get_account_tags(account),

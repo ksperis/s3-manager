@@ -93,6 +93,8 @@ def list_accounts(
             or search_value in (acc.rgw_account_id or acc.rgw_user_uid or acc.id or "").lower()
             or any(search_value in (tag.label or "").lower() for tag in (acc.tags or []))
             or any(search_value in (link.group_name or "").lower() for link in (acc.group_links or []))
+            or any(search_value in (link.project_name or "").lower() for link in (acc.project_links or []))
+            or any(search_value in (link.display_name or "").lower() for link in (acc.project_links or []))
         ]
     else:
         filtered = accounts

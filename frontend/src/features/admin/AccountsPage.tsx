@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   AccountGroupLink,
+  AccountProjectLink,
   AccountUserLink,
   ImportS3AccountPayload,
   S3Account,
@@ -43,7 +44,9 @@ import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import AssociationSummary, {
   AccountAssociationChips,
+  AssociationChips,
   type AssociationAccountItem,
+  type AssociationChipItem,
 } from "./AssociationSummary";
 import ProjectAssociationEditor from "./ProjectAssociationEditor";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -766,6 +769,17 @@ export default function S3AccountsPage() {
     }
     return (account.group_ids ?? []).map((id) => ({ group_id: id, account_admin: false }));
   };
+  const resolveAccountProjectLinks = (account: S3Account | S3AccountSummary): AccountProjectLink[] => {
+    return account.project_links ?? [];
+  };
+  const formatProjectAssociationLabel = (link: AccountProjectLink) => {
+    const projectName = link.project_name || `Project #${link.project_id}`;
+    const displayName = (link.display_name || "").trim();
+    if (!displayName || displayName === projectName) {
+      return projectName;
+    }
+    return `${projectName} (${displayName})`;
+  };
   const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
     const userItems: AssociationAccountItem[] = resolveAccountUserLinks(account).map((link) => ({
       id: link.user_id,
@@ -777,7 +791,11 @@ export default function S3AccountsPage() {
       label: link.group_name ?? `Group #${link.group_id}`,
       account_admin: link.account_admin,
     }));
-    if (userItems.length === 0 && groupItems.length === 0) {
+    const projectItems: AssociationChipItem[] = resolveAccountProjectLinks(account).map((link) => ({
+      id: link.project_id,
+      label: formatProjectAssociationLabel(link),
+    }));
+    if (userItems.length === 0 && groupItems.length === 0 && projectItems.length === 0) {
       return <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>;
     }
     return (
@@ -792,6 +810,11 @@ export default function S3AccountsPage() {
             label: "Groups",
             value: <AccountAssociationChips accounts={groupItems} />,
             visible: groupItems.length > 0,
+          },
+          {
+            label: "Projects",
+            value: <AssociationChips items={projectItems} />,
+            visible: projectItems.length > 0,
           },
         ]}
       />
