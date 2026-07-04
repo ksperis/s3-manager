@@ -359,14 +359,14 @@ export default function ProjectAssociationEditor({ target }: { target: ProjectAs
                 <td>
                   {target.kind === "account" ? (
                     <input
-                      className={uiInputClass}
+                      className={cx(uiInputClass, "min-w-48")}
                       value={displayNames[project.id] ?? ""}
                       placeholder="Location or common name"
                       onChange={(event) => setDisplayNames((current) => ({ ...current, [project.id]: event.target.value }))}
                     />
                   ) : (
                     <select
-                      className={uiInputClass}
+                      className={cx(uiInputClass, "min-w-40")}
                       value={roles[project.id] ?? "portal_user"}
                       onChange={(event) =>
                         setRoles((current) => ({ ...current, [project.id]: normalizeRole(event.target.value) }))

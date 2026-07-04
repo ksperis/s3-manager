@@ -67,7 +67,14 @@ export function AdminAssociationPickerOption({
   detail,
 }: AdminAssociationPickerOptionProps) {
   return (
-    <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]">
+    <label
+      className={cx(
+        "flex cursor-pointer items-start gap-2 rounded-md border px-2 py-1 transition",
+        checked
+          ? "border-primary/30 bg-primary/10"
+          : "border-transparent hover:bg-[var(--ui-hover)]"
+      )}
+    >
       <input
         type="checkbox"
         checked={checked}

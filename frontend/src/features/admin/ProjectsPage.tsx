@@ -32,6 +32,7 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
+  uiCardMutedClass,
   uiDataTableClass,
   uiInputClass,
   uiMutedTextClass,
@@ -506,8 +507,12 @@ export default function ProjectsPage() {
                       )}
                     </div>
                   </td>
-                  <td>{project.user_count}</td>
-                  <td>{project.group_count}</td>
+                  <td>
+                    <ProjectCountPill count={project.user_count} singular="user" />
+                  </td>
+                  <td>
+                    <ProjectCountPill count={project.group_count} singular="group" />
+                  </td>
                   <td className="text-right">
                     <div className="flex justify-end gap-2">
                       <button type="button" className={tableActionButtonClasses} onClick={() => openEditModal(project)}>
@@ -574,6 +579,14 @@ export default function ProjectsPage() {
                 />
               </label>
             </section>
+
+            <ProjectModalSummary
+              accountCount={form.account_links.length}
+              userCount={form.user_links.length}
+              groupCount={form.group_links.length}
+              endpointCount={endpoints.length}
+              editing={Boolean(editingProject)}
+            />
 
             <section className="space-y-3">
               <AdminAssociationSectionHeader
@@ -811,6 +824,87 @@ export default function ProjectsPage() {
   );
 }
 
+function ProjectCountPill({ count, singular }: { count: number; singular: string }) {
+  const label = count === 0 ? `No ${singular}s` : `${count} ${singular}${count === 1 ? "" : "s"}`;
+  return (
+    <span
+      className={cx(
+        "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        count === 0
+          ? "border-[color:var(--ui-border)] text-[var(--ui-text-muted)]"
+          : "border-primary/25 bg-primary/10 text-primary-800 dark:text-primary-100"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ProjectModalSummary({
+  accountCount,
+  userCount,
+  groupCount,
+  endpointCount,
+  editing,
+}: {
+  accountCount: number;
+  userCount: number;
+  groupCount: number;
+  endpointCount: number;
+  editing: boolean;
+}) {
+  const principalCount = userCount + groupCount;
+  const items = [
+    {
+      label: "Portal locations",
+      value: `${accountCount} account${accountCount === 1 ? "" : "s"}`,
+      detail:
+        accountCount > 0
+          ? "Users will choose these labels when creating Storage Spaces."
+          : "Link at least one S3 account before exposing the project.",
+      ready: accountCount > 0,
+    },
+    {
+      label: "Portal access",
+      value: `${userCount} user${userCount === 1 ? "" : "s"} / ${groupCount} group${groupCount === 1 ? "" : "s"}`,
+      detail:
+        principalCount > 0
+          ? "Direct users and groups can see this project according to their role."
+          : "No UI user or group can access this project yet.",
+      ready: principalCount > 0,
+    },
+    {
+      label: editing ? "Provisioning" : "Next step",
+      value: editing ? `${endpointCount} writable endpoint${endpointCount === 1 ? "" : "s"}` : "Available after save",
+      detail: editing
+        ? "Create missing RGW accounts from the provisioning section if needed."
+        : "Save the project before provisioning missing RGW accounts.",
+      ready: editing ? endpointCount > 0 : false,
+    },
+  ];
+
+  return (
+    <section className={cx(uiCardMutedClass, "grid gap-3 px-3 py-3 md:grid-cols-3")}>
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className={cx(
+                "h-2 w-2 rounded-full",
+                item.ready ? "bg-emerald-500" : "bg-amber-500"
+              )}
+              aria-hidden="true"
+            />
+            <span className={cx("ui-caption font-semibold uppercase", uiMutedTextClass)}>{item.label}</span>
+          </div>
+          <p className={cx("mt-1 ui-body font-bold", uiTitleTextClass)}>{item.value}</p>
+          <p className={cx("mt-0.5 ui-caption", uiMutedTextClass)}>{item.detail}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>({
   title,
   count,
@@ -909,7 +1003,7 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
                   </td>
                   <td>
                     <select
-                      className={uiInputClass}
+                      className={cx(uiInputClass, "min-w-40")}
                       value={row.account_role}
                       onChange={(event) =>
                         onChange(rows.map((entry, entryIndex) => entryIndex === index ? { ...entry, account_role: roleValue(event.target.value) } : entry) as T[])
