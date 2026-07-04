@@ -20,12 +20,15 @@ from app.db import (
     PortalPublicLink,
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
+    Project,
+    ProjectS3Account,
     QuotaUsageDaily,
     S3Account,
     StorageEndpoint,
     UiGroup,
-    UiGroupS3Account,
+    UiGroupProject,
     User,
+    UserProject,
     UserUiGroup,
     UserS3Account,
 )
@@ -48,6 +51,7 @@ from app.models.portal import (
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
+from app.services.effective_access_service import EffectiveAccountLink
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -73,6 +77,29 @@ def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage
             using_root_key=False,
         ),
     )
+
+
+def _portal_project(db_session, account, *, display_name: str | None = None) -> Project:
+    project = Project(name=f"Project {account.name}", description="Portal test project")
+    db_session.add(project)
+    db_session.flush()
+    db_session.add(
+        ProjectS3Account(
+            project_id=project.id,
+            account_id=account.id,
+            display_name=display_name or account.name,
+        )
+    )
+    db_session.flush()
+    return project
+
+
+def _project_user(project: Project, user: User, role: str) -> UserProject:
+    return UserProject(project_id=project.id, user_id=user.id, account_role=role)
+
+
+def _project_group(project: Project, group: UiGroup, role: str) -> UiGroupProject:
+    return UiGroupProject(project_id=project.id, group_id=group.id, account_role=role)
 
 
 def _usage_history_settings(enabled: bool) -> AppSettings:
@@ -1243,7 +1270,7 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     user = User(email="portal-browser-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    link = UserS3Account(user_id=user.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value)
+    link = EffectiveAccountLink(account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value)
 
     app_settings = AppSettings()
     app_settings.general.portal_enabled = True
@@ -1322,9 +1349,10 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     manager = User(email="manager-policy@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, manager])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, manager, AccountRole.PORTAL_MANAGER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=manager.id, account_id=account.id, iam_user_id="manager-iam-id", iam_username="manager-iam"),
         ]
@@ -1391,12 +1419,13 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
     group = UiGroup(name="Portal policy group")
     db_session.add_all([account, owner, direct, grouped, manager, inactive, outsider, group])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=inactive.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, direct, AccountRole.PORTAL_USER.value),
+            _project_user(project, manager, AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, inactive, AccountRole.PORTAL_USER.value),
+            _project_group(project, group, AccountRole.PORTAL_USER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=direct.id, account_id=account.id, iam_user_id="direct-iam-id", iam_username="direct-iam"),
@@ -1445,12 +1474,13 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
     outsider = User(email="outsider-policy-restricted@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer, editor, delegated_owner, member_without_grant, outsider])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=member_without_grant.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, viewer, AccountRole.PORTAL_USER.value),
+            _project_user(project, editor, AccountRole.PORTAL_USER.value),
+            _project_user(project, delegated_owner, AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, member_without_grant, AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=viewer.id, account_id=account.id, iam_user_id="viewer-iam-id", iam_username="viewer-iam"),
             AccountIAMUser(user_id=editor.id, account_id=account.id, iam_user_id="editor-iam-id", iam_username="editor-iam"),
@@ -1719,10 +1749,11 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     editor = User(email="editor-initial@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer, editor])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, viewer, AccountRole.PORTAL_USER.value),
+            _project_user(project, editor, AccountRole.PORTAL_MANAGER.value),
         ]
     )
     db_session.commit()
@@ -1783,7 +1814,8 @@ def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_b
     outsider = User(email=f"outsider-invalid-{message}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer, outsider])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    project = _portal_project(db_session, account)
+    db_session.add(_project_user(project, viewer, AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -1816,7 +1848,8 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
     viewer = User(email="viewer-initial-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    project = _portal_project(db_session, account)
+    db_session.add(_project_user(project, viewer, AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -1986,7 +2019,8 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     viewer = User(email="viewer-import-restricted@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    project = _portal_project(db_session, account)
+    db_session.add(_project_user(project, viewer, AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -2267,9 +2301,10 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     target = User(email="matrix-target@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, actor, target])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, target, AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="iam-target", iam_username=f"iam-{target.id}"),
         ]
     )
@@ -2534,10 +2569,11 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
     viewer = User(email="viewer@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, owner, AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, viewer, AccountRole.PORTAL_USER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -2593,10 +2629,11 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     manager = User(email="manager-account-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, member, manager])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, member, AccountRole.PORTAL_USER.value),
+            _project_user(project, manager, AccountRole.PORTAL_MANAGER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -2650,11 +2687,12 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
     group = UiGroup(name="Portal group")
     db_session.add_all([account, owner, direct, grouped, outsider, group])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, owner, AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, direct, AccountRole.PORTAL_USER.value),
+            _project_group(project, group, AccountRole.PORTAL_MANAGER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
         ]
     )
@@ -2709,10 +2747,11 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
     outsider = User(email="outsider-access-summary@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, member, manager, outsider])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            _project_user(project, member, AccountRole.PORTAL_USER.value),
+            _project_user(project, manager, AccountRole.PORTAL_MANAGER.value),
         ]
     )
     private_metadata = PortalStorageSpaceMetadata(
@@ -2865,9 +2904,10 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
     target = User(email="target-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, target, AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )
@@ -2921,9 +2961,10 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
     target = User(email="target-policy-sync@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
     db_session.commit()
+    project = _portal_project(db_session, account)
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            _project_user(project, target, AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )

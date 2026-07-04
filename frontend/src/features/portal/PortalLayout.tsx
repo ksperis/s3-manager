@@ -15,7 +15,6 @@ import {
 } from "../../components/topbarControlWidths";
 import { useI18n } from "../../i18n";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
-import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function usePortalNavSections(): SidebarSection[] {
   const { t } = useI18n();
@@ -41,27 +40,29 @@ function usePortalNavSections(): SidebarSection[] {
 
 function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }) {
   const { t } = useI18n();
-  const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId, loading } = usePortalAccountContext();
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const selectedLabel = selectedAccount
-    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+  const { projects, selectedProject, selectedAccountId, setSelectedAccountId, loading } = usePortalAccountContext();
+  const selectedLabel = selectedProject
+    ? selectedProject.name
     : loading
       ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
-      : t({ en: "No account selected", fr: "Aucun compte sélectionné", de: "Kein Konto ausgewählt" });
-  const options: TopbarDropdownOption[] = accounts.map((account) => ({
-    value: String(account.id),
-    label: formatAccountLabel(account, defaultEndpointId, defaultEndpointName, false),
+      : t({ en: "No project selected", fr: "Aucun projet sélectionné", de: "Kein Projekt ausgewählt" });
+  const options: TopbarDropdownOption[] = projects.map((project) => ({
+    value: String(project.id),
+    label: project.name,
+    description: project.accounts.length === 1
+      ? project.accounts[0]?.display_name
+      : t({ en: `${project.accounts.length} S3 accounts`, fr: `${project.accounts.length} comptes S3`, de: `${project.accounts.length} S3-Konten` }),
     icon: <AccountControlIcon className="h-4 w-4" />,
   }));
 
-  if (accounts.length > 1) {
+  if (projects.length > 1) {
     return (
       <TopbarDropdownSelect
         value={selectedAccountId ?? ""}
         options={options}
         onChange={(value) => setSelectedAccountId(value || null)}
-        ariaLabel={t({ en: "Select portal account", fr: "Sélectionner un compte Portal", de: "Portal-Konto auswählen" })}
-        triggerLabel={t({ en: "Account", fr: "Compte", de: "Konto" })}
+        ariaLabel={t({ en: "Select portal project", fr: "Sélectionner un projet Portal", de: "Portal-Projekt auswählen" })}
+        triggerLabel={t({ en: "Project", fr: "Projet", de: "Projekt" })}
         placeholder={selectedLabel}
         widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
         menuMinWidthClassName="min-w-[18rem]"
@@ -76,10 +77,10 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
     return (
       <TopbarStaticControl
         mode="icon"
-        label={t({ en: "Account", fr: "Compte", de: "Konto" })}
+        label={t({ en: "Project", fr: "Projet", de: "Projekt" })}
         value={selectedLabel}
         icon={<AccountControlIcon className="h-4 w-4" />}
-        ariaLabel={t({ en: `Portal account ${selectedLabel}`, fr: `Compte Portal ${selectedLabel}`, de: `Portal-Konto ${selectedLabel}` })}
+        ariaLabel={t({ en: `Portal project ${selectedLabel}`, fr: `Projet Portal ${selectedLabel}`, de: `Portal-Projekt ${selectedLabel}` })}
         title={selectedLabel}
       />
     );
@@ -87,10 +88,10 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
   return (
     <TopbarStaticControl
       mode="icon_label"
-      label={t({ en: "Account", fr: "Compte", de: "Konto" })}
+      label={t({ en: "Project", fr: "Projet", de: "Projekt" })}
       value={selectedLabel}
       icon={<AccountControlIcon className="h-4 w-4" />}
-      ariaLabel={t({ en: `Portal account ${selectedLabel}`, fr: `Compte Portal ${selectedLabel}`, de: `Portal-Konto ${selectedLabel}` })}
+      ariaLabel={t({ en: `Portal project ${selectedLabel}`, fr: `Projet Portal ${selectedLabel}`, de: `Portal-Projekt ${selectedLabel}` })}
       title={selectedLabel}
       className={TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
     />
@@ -100,13 +101,12 @@ function PortalAccountTopbarSelector({ mode }: { mode: TopbarControlRenderMode }
 function PortalShell() {
   const { t } = useI18n();
   const portalNavSections = usePortalNavSections();
-  const { selectedAccount, loading } = usePortalAccountContext();
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const selectedLabel = selectedAccount
-    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+  const { selectedProject, loading } = usePortalAccountContext();
+  const selectedLabel = selectedProject
+    ? selectedProject.name
     : loading
       ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
-      : t({ en: "No account selected", fr: "Aucun compte sélectionné", de: "Kein Konto ausgewählt" });
+      : t({ en: "No project selected", fr: "Aucun projet sélectionné", de: "Kein Projekt ausgewählt" });
   const topbarControlDescriptors: TopbarControlDescriptor[] = [
     {
       id: "account",

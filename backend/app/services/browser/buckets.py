@@ -19,6 +19,9 @@ def _bucket_search_values(bucket: BrowserBucket) -> list[str]:
 
 class BrowserBucketsMixin:
     def _list_portal_storage_space_buckets(self, account: S3Account) -> Optional[list[BrowserBucket]]:
+        project_buckets = getattr(account, "_portal_project_buckets", None)
+        if project_buckets is not None:
+            return list(project_buckets)
         spaces = getattr(account, "_portal_storage_spaces", None)
         if spaces is None:
             return None

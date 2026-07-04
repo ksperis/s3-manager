@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
+from app.models.browser import BrowserBucket
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.effective_access_service import EffectiveAccountLink
@@ -107,6 +108,15 @@ def _portal_browser_target_bucket(request: Request) -> Optional[str]:
     return None
 
 
+def _parse_project_selector(account_ref: Optional[str]) -> Optional[int]:
+    if not isinstance(account_ref, str) or not account_ref.startswith("proj-"):
+        return None
+    suffix = account_ref.split("proj-", 1)[1]
+    if not suffix.isdigit():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid project identifier")
+    return int(suffix)
+
+
 def require_portal_browser_basic_route(request: Request) -> None:
     if not _is_portal_browser_request(request, _resolve_workspace_surface(request)):
         return
@@ -177,6 +187,106 @@ def _resolve_portal_browser_context(
     account._portal_browser_access = portal_access  # type: ignore[attr-defined]
     account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
     account._portal_storage_spaces = browse_spaces  # type: ignore[attr-defined]
+    return account
+
+
+def _resolve_portal_project_browser_context(
+    db: Session,
+    user: User,
+    project_id: int,
+    *,
+    request: Request,
+) -> S3Account:
+    app_settings = load_app_settings()
+    if not app_settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+    if not app_settings.general.browser_portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Portal workspace")
+
+    from app.services.portal_service import PortalService
+    from app.services.projects_service import get_projects_service
+
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_403_FORBIDDEN if "Not authorized" in detail else status.HTTP_404_NOT_FOUND
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+    portal_service = PortalService(db)
+    project_buckets: list[BrowserBucket] = []
+    target_bucket = _portal_browser_target_bucket(request)
+    target_candidates: list[tuple[S3Account, str, object]] = []
+    for project_account_link in project_access.account_links:
+        account_access = projects_service.account_access_for_project(project_access, project_account_link.account_id)
+        account = account_access.account
+        _validate_portal_account_surface(account)
+        try:
+            spaces = portal_service.list_storage_spaces(user, account_access)
+        except RuntimeError as exc:
+            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+        for space in spaces:
+            if not space.can_browse:
+                continue
+            bucket_name = space.internal_bucket_name or space.id
+            if not bucket_name:
+                continue
+            project_buckets.append(
+                BrowserBucket(
+                    name=bucket_name,
+                    display_name=space.name,
+                    workspace_label=project_account_link.display_name,
+                    used_bytes=space.used_bytes,
+                    object_count=space.object_count,
+                    quota_max_size_bytes=space.quota_max_size_bytes,
+                    quota_max_objects=space.quota_max_objects,
+                    status=space.status,
+                    role=space.role,
+                    internal_bucket_name=bucket_name,
+                )
+            )
+            if target_bucket and target_bucket == bucket_name:
+                target_candidates.append((account, account_access.role, space))
+
+    if not target_bucket:
+        synthetic = S3Account(name=project_access.project.name, rgw_account_id=None)
+        synthetic.id = -(2_000_000 + project_access.project.id)
+        synthetic._portal_browser_role = project_access.role  # type: ignore[attr-defined]
+        synthetic._portal_project_buckets = sorted(  # type: ignore[attr-defined]
+            project_buckets,
+            key=lambda bucket: ((bucket.workspace_label or "").lower(), (bucket.display_name or bucket.name).lower()),
+        )
+        return synthetic
+
+    if len(target_candidates) != 1:
+        detail = "Storage Space is not available in Portal project"
+        if len(target_candidates) > 1:
+            detail = "Storage Space name is ambiguous in this project"
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+    account, role, _space = target_candidates[0]
+    try:
+        access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
+    except RuntimeError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    if not access_key or not secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Portal credentials are not configured for this account",
+        )
+    account.set_session_credentials(access_key, secret_key)
+    can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
+    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
+        can_manage_buckets=True,
+        can_manage_portal_users=can_manage_portal_users,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
+    account._portal_browser_role = role  # type: ignore[attr-defined]
+    account._portal_allowed_buckets = {target_bucket}  # type: ignore[attr-defined]
+    account._portal_project_id = project_access.project.id  # type: ignore[attr-defined]
     return account
 
 

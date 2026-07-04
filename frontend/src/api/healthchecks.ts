@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import { isPortalProjectSelector } from "./portal";
 
 export type HealthCheckStatus = "unknown" | "up" | "degraded" | "down";
 export type HealthWindow = "day" | "week" | "month" | "quarter" | "half_year" | "year";
@@ -291,6 +292,19 @@ export async function fetchManagerWorkspaceHealthOverview(
 export async function fetchPortalWorkspaceHealthOverview(
   accountId: S3AccountSelector
 ): Promise<WorkspaceEndpointHealthOverviewResponse> {
+  if (isPortalProjectSelector(accountId)) {
+    return {
+      generated_at: new Date().toISOString(),
+      incident_highlight_minutes: 0,
+      endpoint_count: 0,
+      up_count: 0,
+      degraded_count: 0,
+      down_count: 0,
+      unknown_count: 0,
+      endpoints: [],
+      incidents: [],
+    };
+  }
   const { data } = await client.get<WorkspaceEndpointHealthOverviewResponse>("/portal/endpoint-health", {
     params: withS3AccountParam(undefined, accountId),
   });

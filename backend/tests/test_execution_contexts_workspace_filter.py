@@ -7,11 +7,14 @@ from types import SimpleNamespace
 
 from app.db import (
     AccountRole,
+    Project,
+    ProjectS3Account,
     S3Account,
     S3Connection,
     S3User,
     StorageEndpoint,
     User,
+    UserProject,
     UserRole,
     UserS3Account,
     UserS3User,
@@ -321,6 +324,70 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
     assert context.max_buckets == 7
     assert context.capabilities.can_manage_iam is False
     assert context.capabilities.admin_api_capable is False
+
+
+def test_browser_workspace_returns_portal_project_context_when_project_is_available(db_session, monkeypatch):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="portal-project-endpoint")
+    first = _create_account(
+        db_session,
+        name="portal-project-first",
+        rgw_account_id="RGWPORTALPROJECT0001",
+        storage_endpoint=endpoint,
+    )
+    second = _create_account(
+        db_session,
+        name="portal-project-second",
+        rgw_account_id="RGWPORTALPROJECT0002",
+        storage_endpoint=endpoint,
+    )
+    project = Project(name="Portal Project", description=None)
+    db_session.add(project)
+    db_session.commit()
+    db_session.refresh(project)
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=first.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=second.id, display_name="Rennes", sort_order=1),
+            UserProject(user_id=user.id, project_id=project.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    db_session.commit()
+
+    class _FakeAccountService:
+        def get_account_limits(self, target_account):  # noqa: ANN001
+            return None, None, None, None, None, None
+
+        def get_account_quota(self, target_account):  # noqa: ANN001
+            return None, None
+
+    monkeypatch.setattr(
+        execution_contexts,
+        "get_s3_accounts_service",
+        lambda db, allow_missing_admin=False: _FakeAccountService(),
+    )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: SimpleNamespace(
+            general=SimpleNamespace(
+                browser_enabled=True,
+                portal_enabled=True,
+                browser_portal_enabled=True,
+            )
+        ),
+    )
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert context.kind == "portal_project"
+    assert context.id == f"proj-{project.id}"
+    assert context.display_name == "Portal Project"
+    assert context.account_role == AccountRole.PORTAL_MANAGER.value
+    assert context.endpoint_name == "2 project accounts"
+    assert context.capabilities.can_manage_iam is False
 
 
 def test_browser_workspace_marks_portal_context_when_account_is_available_in_manager(db_session, monkeypatch):

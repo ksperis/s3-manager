@@ -18,6 +18,8 @@ import {
   deletePortalAccessKey,
   fetchPortalAlerts,
   fetchPortalAccessKeysState,
+  fetchPortalState,
+  fetchPortalUsage,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
@@ -32,6 +34,7 @@ import {
   getPortalUsageStatsAggregate,
   importPortalStorageSpace,
   listPortalShareCandidates,
+  listPortalProjects,
   listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
@@ -237,6 +240,51 @@ describe("portal storage spaces api", () => {
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },
     });
+  });
+
+  it("routes project selectors through project-scoped portal endpoints", async () => {
+    clientMock.get.mockResolvedValue({ data: [] });
+
+    await listPortalProjects();
+    await fetchPortalState("proj-42");
+    await fetchPortalUsage("proj-42");
+    await listPortalStorageSpaces("proj-42", { includeArchived: true });
+    await createPortalStorageSpace("proj-42", { name: "Research", account_id: 7, initial_shares: [] });
+    await fetchPortalStorageSpace("proj-42", "a7:research");
+    await fetchPortalStorageSpaceObjectDetail("proj-42", "a7:research", "raw/report.csv");
+    await listPortalShareCandidates("proj-42");
+    await grantPortalStorageSpaceShare("proj-42", "a7:research", { user_id: 12, role: "Viewer" });
+    await createPortalStorageSpacePublicLink("proj-42", "a7:research", { object_key: "raw/report.csv" });
+    await fetchPortalActivity("proj-42", { limit: 5 });
+    await fetchPortalTransfers("proj-42", { spaceId: "a7:research" });
+    await fetchPortalAlerts("proj-42", 3);
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects");
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/state");
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/usage");
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/storage-spaces", {
+      params: { include_archived: true },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/projects/42/storage-spaces",
+      { name: "Research", account_id: 7, initial_shares: [] }
+    );
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/storage-spaces/a7%3Aresearch");
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/storage-spaces/a7%3Aresearch/objects/detail", {
+      params: { key: "raw/report.csv" },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/share-candidates");
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/projects/42/storage-spaces/a7%3Aresearch/shares",
+      { user_id: 12, role: "Viewer" }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/projects/42/storage-spaces/a7%3Aresearch/public-links",
+      { object_key: "raw/report.csv" }
+    );
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/activity", { params: { limit: 5 } });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/transfers", { params: { space_id: "a7:research" } });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/alerts", { params: { limit: 3 } });
   });
 
   it("manages portal access keys through user-facing endpoints", async () => {

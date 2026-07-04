@@ -50,6 +50,7 @@ class S3Account(Base):
         overlaps="users,account_links",
     )
     tag_links = relationship("S3AccountTag", back_populates="account", cascade="all, delete-orphan")
+    project_links = relationship("ProjectS3Account", back_populates="account", cascade="all, delete-orphan")
 
     def set_session_credentials(self, access_key: Optional[str], secret_key: Optional[str]) -> None:
         self._session_access_key = access_key

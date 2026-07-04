@@ -29,7 +29,7 @@ import {
 } from "../../components/workspaceDashboardKpis";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import UiBadge from "../../components/ui/UiBadge";
-import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
+import { cx, uiCardClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n, type I18nMessage } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
@@ -514,6 +514,50 @@ function QuickLinksCard({ links }: { links: QuickLink[] }) {
   );
 }
 
+function ProjectAccountsCard({
+  project,
+  accounts,
+}: {
+  project: ReturnType<typeof usePortalWorkspaceData>["selectedProject"];
+  accounts: ReturnType<typeof usePortalWorkspaceData>["selectedProjectAccounts"];
+}) {
+  const { t } = useI18n();
+  const visibleAccounts = accounts.slice(0, 4);
+  return (
+    <WorkspaceDashboardCard title={t({ en: "Project accounts", fr: "Comptes du projet", de: "Projektkonten" })}>
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <IconBubble tone="blue">
+            <InfoIcon className="h-4 w-4" />
+          </IconBubble>
+          <div className="min-w-0">
+            <p className={cx("truncate text-sm font-bold", uiTitleTextClass)}>{project?.name ?? "-"}</p>
+            <p className={cx("text-xs", uiMutedTextClass)}>
+              {t({ en: `${accounts.length} associated S3 account(s)`, fr: `${accounts.length} compte(s) S3 associé(s)`, de: `${accounts.length} verknüpfte S3-Konten` })}
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {visibleAccounts.map((account) => (
+            <div key={account.account_id} className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
+              <div className="min-w-0">
+                <p className={cx("truncate text-xs font-bold", uiTitleTextClass)}>{account.display_name}</p>
+                <p className={cx("truncate text-[11px]", uiMutedTextClass)}>{account.storage_endpoint_name ?? account.account_name}</p>
+              </div>
+              <UiBadge tone="primary">{account.account_id}</UiBadge>
+            </div>
+          ))}
+          {accounts.length > visibleAccounts.length ? (
+            <p className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
+              {t({ en: `+${accounts.length - visibleAccounts.length} more`, fr: `+${accounts.length - visibleAccounts.length} autre(s)`, de: `+${accounts.length - visibleAccounts.length} weitere` })}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </WorkspaceDashboardCard>
+  );
+}
+
 export default function PortalDashboard() {
   const { t } = useI18n();
   const {
@@ -531,6 +575,8 @@ export default function PortalDashboard() {
     trafficLoading,
     trafficError,
     usage,
+    selectedProject,
+    selectedProjectAccounts,
   } = usePortalWorkspaceData({
     includeTraffic: true,
     includeTrafficTrend: true,
@@ -682,10 +728,11 @@ export default function PortalDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-5">
         <RecentTransfersCard rows={transferRows} />
         <RecentActivityCard rows={activityRows} />
         <AlertsCard alerts={alerts} healthStatus={healthStatus} />
+        <ProjectAccountsCard project={selectedProject} accounts={selectedProjectAccounts} />
         <QuickLinksCard links={quickLinks} />
       </div>
     </div>

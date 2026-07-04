@@ -15,6 +15,7 @@ from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import S3UsersService
 from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.projects_service import get_projects_service
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -114,6 +115,22 @@ def _build_portal_account_context(
         storage_endpoint_capabilities=endpoint_caps,
         tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
         endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
+        capabilities=ExecutionContextCapabilities(
+            can_manage_iam=False,
+            sts_capable=False,
+            admin_api_capable=False,
+        ),
+    )
+
+
+def _build_portal_project_context(project) -> ExecutionContext:  # noqa: ANN001
+    account_count = len(getattr(project, "accounts", None) or [])
+    return ExecutionContext(
+        kind="portal_project",
+        id=str(project.id),
+        display_name=project.name,
+        account_role=project.account_role,
+        endpoint_name=f"{account_count} project account{'s' if account_count != 1 else ''}",
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=False,
             sts_capable=False,
@@ -317,6 +334,9 @@ def list_execution_contexts(
             and app_settings.general.portal_enabled
             and app_settings.general.browser_portal_enabled
         ):
+            projects_service = get_projects_service(db, accounts_service=s3_accounts_service)
+            for project in projects_service.list_portal_projects_for_user(user):
+                results.append(_build_portal_project_context(project))
             for link in links:
                 if not _portal_account_allowed(link):
                     continue

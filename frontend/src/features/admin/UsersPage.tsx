@@ -61,9 +61,10 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
 } from "./AdminAssociationPicker";
+import ProjectAssociationEditor from "./ProjectAssociationEditor";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type UserModalTab = "general" | "associations" | "groups" | "access" | "browser" | "manager_tools";
+type UserModalTab = "general" | "associations" | "projects" | "groups" | "access" | "browser" | "manager_tools";
 type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
@@ -1718,6 +1719,7 @@ export default function UsersPage() {
               tabs={[
                 { id: "general", label: "General" },
                 { id: "associations", label: "Associations" },
+                { id: "projects", label: "Projects" },
                 { id: "groups", label: "Groups" },
                 { id: "access", label: "Workspaces" },
                 { id: "browser", label: "Browser" },
@@ -2228,6 +2230,10 @@ export default function UsersPage() {
                   }
                 />
               </div>
+            )}
+
+            {editModalTab === "projects" && (
+              <ProjectAssociationEditor target={{ kind: "user", id: editingUser.id, label: editingUser.email }} />
             )}
 
             {editModalTab === "associations" && (

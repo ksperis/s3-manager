@@ -54,6 +54,7 @@ export type PortalWorkspaceSpace = {
   status: PortalWorkspaceStatus | "Archived";
   access: PortalWorkspaceAccess;
   region: string | null;
+  projectAccountLabel: string | null;
   createdLabel: string;
   usedBytes?: number | null;
   quotaBytes?: number | null;
@@ -236,6 +237,7 @@ export function buildPortalWorkspaceModel({
       status,
       access,
       region: storageSpace.region ?? null,
+      projectAccountLabel: storageSpace.project_account_label ?? null,
       createdLabel: createdLabel(storageSpace.created_at, locale),
       usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,
       quotaBytes: usageSpace?.quota_max_size_bytes ?? storageSpace.quota_max_size_bytes ?? null,

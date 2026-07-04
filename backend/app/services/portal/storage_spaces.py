@@ -120,6 +120,7 @@ class PortalStorageSpacesMixin:
         return PortalStorageSpaceSummary(
             id=bucket.name,
             name=name,
+            account_id=access.account.id,
             role=role,
             content_role=content_role,
             can_browse=content_role is not None,

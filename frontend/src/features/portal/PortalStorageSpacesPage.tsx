@@ -50,7 +50,17 @@ function visibleStatus(space: { status: string }) {
 
 export default function PortalStorageSpacesPage() {
   const { t } = useI18n();
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData({ includeArchived: true });
+  const {
+    workspace,
+    loading,
+    error,
+    hasAccountContext,
+    accountError,
+    accountLoading,
+    accountIdForApi,
+    selectedProjectAccounts,
+    state,
+  } = usePortalWorkspaceData({ includeArchived: true });
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<PortalStorageSpaceRole | "all">("all");
@@ -70,9 +80,11 @@ export default function PortalStorageSpacesPage() {
   const [importShareCandidateQuery, setImportShareCandidateQuery] = useState("");
   const [importRestrictedRolesByUserId, setImportRestrictedRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
   const [newNamingMode, setNewNamingMode] = useState<"generic_uuid" | "named_bucket">("generic_uuid");
+  const [newAccountId, setNewAccountId] = useState<string>("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [importBucketName, setImportBucketName] = useState("");
+  const [importAccountId, setImportAccountId] = useState<string>("");
   const [importDescription, setImportDescription] = useState("");
   const [importAccessMode, setImportAccessMode] = useState<PortalAccessMode>("private");
   const [importAccountMemberRole, setImportAccountMemberRole] = useState<PortalStorageSpaceAccountMemberRole>("Editor");
@@ -112,6 +124,26 @@ export default function PortalStorageSpacesPage() {
   const selectedRestrictedEntries = selectedPortalShares(restrictedRolesByUserId);
   const selectedImportRestrictedEntries = selectedPortalShares(importRestrictedRolesByUserId);
   const portalMemberCount = shareCandidates.length + 1;
+  const requiresProjectAccountChoice = selectedProjectAccounts.length > 1;
+  const defaultProjectAccountId = selectedProjectAccounts[0]?.account_id ? String(selectedProjectAccounts[0].account_id) : "";
+
+  useEffect(() => {
+    if (!selectedProjectAccounts.length) {
+      setNewAccountId("");
+      setImportAccountId("");
+      return;
+    }
+    setNewAccountId((current) =>
+      current && selectedProjectAccounts.some((account) => String(account.account_id) === current)
+        ? current
+        : defaultProjectAccountId
+    );
+    setImportAccountId((current) =>
+      current && selectedProjectAccounts.some((account) => String(account.account_id) === current)
+        ? current
+        : defaultProjectAccountId
+    );
+  }, [defaultProjectAccountId, selectedProjectAccounts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,6 +204,7 @@ export default function PortalStorageSpacesPage() {
     try {
       const created = await createPortalStorageSpace(accountIdForApi, {
         name: newName.trim(),
+        account_id: requiresProjectAccountChoice ? Number(newAccountId) : null,
         naming_mode: effectiveNamingMode,
         description: newDescription.trim() || null,
         visibility: effectiveNewVisibility,
@@ -195,6 +228,7 @@ export default function PortalStorageSpacesPage() {
     try {
       const imported = await importPortalStorageSpace(accountIdForApi, {
         bucket_name: importBucketName.trim(),
+        account_id: requiresProjectAccountChoice ? Number(importAccountId) : null,
         description: importDescription.trim() || null,
         visibility: effectiveImportVisibility,
         share_scope: effectiveImportShareScope,
@@ -238,9 +272,14 @@ export default function PortalStorageSpacesPage() {
 
       {showCreate ? (
         <UiCard title={t({ en: "Create Storage Space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" })}>
-          <div className={cx("grid gap-3", canUseNamedBucket
-            ? "lg:grid-cols-[180px_1fr_1.5fr_auto]"
-            : "lg:grid-cols-[1fr_1.5fr_auto]")}>
+          <div className={cx(
+            "grid gap-3",
+            canUseNamedBucket && requiresProjectAccountChoice
+              ? "lg:grid-cols-[180px_180px_1fr_1.5fr_auto]"
+              : canUseNamedBucket || requiresProjectAccountChoice
+                ? "lg:grid-cols-[180px_1fr_1.5fr_auto]"
+                : "lg:grid-cols-[1fr_1.5fr_auto]"
+          )}>
             {canUseNamedBucket ? (
               <select
                 className="ui-control h-9 py-1.5 text-xs"
@@ -252,6 +291,20 @@ export default function PortalStorageSpacesPage() {
                 <option value="named_bucket">{t({ en: "Named storage", fr: "Stockage nommé", de: "Benannter Speicher" })}</option>
               </select>
             ) : null}
+            {requiresProjectAccountChoice ? (
+              <select
+                className="ui-control h-9 py-1.5 text-xs"
+                value={newAccountId}
+                onChange={(event) => setNewAccountId(event.target.value)}
+                aria-label={t({ en: "Project account", fr: "Compte du projet", de: "Projektkonto" })}
+              >
+                {selectedProjectAccounts.map((account) => (
+                  <option key={account.account_id} value={account.account_id}>
+                    {account.display_name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <input
               className="ui-control h-9 text-xs"
               value={newName}
@@ -261,7 +314,7 @@ export default function PortalStorageSpacesPage() {
                 : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
             />
             <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
-            <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
+            <UiButton disabled={!newName.trim() || createBusy || (requiresProjectAccountChoice && !newAccountId)} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create", fr: "Créer", de: "Erstellen" })}
             </UiButton>
           </div>
@@ -301,7 +354,21 @@ export default function PortalStorageSpacesPage() {
 
       {showImport ? (
         <UiCard title={t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" })}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
+          <div className={cx("grid gap-3", requiresProjectAccountChoice ? "lg:grid-cols-[180px_1fr_1.5fr_auto]" : "lg:grid-cols-[1fr_1.5fr_auto]")}>
+            {requiresProjectAccountChoice ? (
+              <select
+                className="ui-control h-9 py-1.5 text-xs"
+                value={importAccountId}
+                onChange={(event) => setImportAccountId(event.target.value)}
+                aria-label={t({ en: "Project account", fr: "Compte du projet", de: "Projektkonto" })}
+              >
+                {selectedProjectAccounts.map((account) => (
+                  <option key={account.account_id} value={account.account_id}>
+                    {account.display_name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <input
               className="ui-control h-9 text-xs"
               value={importBucketName}
@@ -314,7 +381,7 @@ export default function PortalStorageSpacesPage() {
               onChange={(event) => setImportDescription(event.target.value)}
               placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
             />
-            <UiButton disabled={!importBucketName.trim() || importBusy} onClick={handleImport} className="h-9 px-3 py-1.5">
+            <UiButton disabled={!importBucketName.trim() || importBusy || (requiresProjectAccountChoice && !importAccountId)} onClick={handleImport} className="h-9 px-3 py-1.5">
               {importBusy ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefügt..." }) : t({ en: "Add", fr: "Ajouter", de: "Hinzufügen" })}
             </UiButton>
           </div>
@@ -383,6 +450,7 @@ export default function PortalStorageSpacesPage() {
                 <th>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</th>
                 <th>{t({ en: "Size", fr: "Taille", de: "Größe" })}</th>
                 <th>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</th>
+                <th>{t({ en: "Project account", fr: "Compte projet", de: "Projektkonto" })}</th>
                 <th>{t({ en: "Region", fr: "Région", de: "Region" })}</th>
                 <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
               </tr>
@@ -425,6 +493,10 @@ export default function PortalStorageSpacesPage() {
                       {space.createdLabel}
                     </td>
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Project account", fr: "Compte projet", de: "Projektkonto" })}</span>
+                      {space.projectAccountLabel ?? "-"}
+                    </td>
+                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
                       <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Region", fr: "Région", de: "Region" })}</span>
                       {space.region}
                     </td>
@@ -438,7 +510,7 @@ export default function PortalStorageSpacesPage() {
               })}
               {filteredSpaces.length === 0 ? (
                 <tr className="max-md:block max-md:w-full">
-                  <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
+                  <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
                     {t({ en: "No Storage Spaces to display.", fr: "Aucun espace de stockage à afficher.", de: "Keine Speicherbereiche zum Anzeigen." })}
                   </td>
                 </tr>

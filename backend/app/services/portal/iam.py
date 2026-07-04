@@ -261,21 +261,23 @@ class PortalIamMixin:
             rows_by_user[user.id] = (user, rank_role.get(next_rank, AccountRole.PORTAL_USER.value), sources)
 
         direct_rows = (
-            self.db.query(User, UserS3Account.account_role)
-            .join(UserS3Account, UserS3Account.user_id == User.id)
-            .filter(UserS3Account.account_id == account.id)
-            .filter(UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
+            self.db.query(User, UserProject.account_role)
+            .join(UserProject, UserProject.user_id == User.id)
+            .join(ProjectS3Account, ProjectS3Account.project_id == UserProject.project_id)
+            .filter(ProjectS3Account.account_id == account.id)
+            .filter(UserProject.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
             .all()
         )
         for user, role in direct_rows:
             merge(user, role, "direct")
 
         group_rows = (
-            self.db.query(User, UiGroupS3Account.account_role)
+            self.db.query(User, UiGroupProject.account_role)
             .join(UserUiGroup, UserUiGroup.user_id == User.id)
-            .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
-            .filter(UiGroupS3Account.account_id == account.id)
-            .filter(UiGroupS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
+            .join(UiGroupProject, UiGroupProject.group_id == UserUiGroup.group_id)
+            .join(ProjectS3Account, ProjectS3Account.project_id == UiGroupProject.project_id)
+            .filter(ProjectS3Account.account_id == account.id)
+            .filter(UiGroupProject.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
             .all()
         )
         for user, role in group_rows:
@@ -731,17 +733,14 @@ class PortalIamMixin:
             .all()
         )
         user_ids.update(user_id for (user_id,) in grant_rows if user_id is not None)
-        manager_rows = (
-            self.db.query(UserS3Account.user_id)
-            .filter(
-                UserS3Account.account_id == metadata.account_id,
-                UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+        account = self.db.query(S3Account).filter(S3Account.id == metadata.account_id).first()
+        if account is not None:
+            user_ids.update(
+                user_id
+                for user_id, (_user, account_role, _sources) in self._portal_account_member_map(account).items()
+                if account_role == AccountRole.PORTAL_MANAGER.value
             )
-            .all()
-        )
-        user_ids.update(user_id for (user_id,) in manager_rows if user_id is not None)
         if self._metadata_account_member_role(metadata):
-            account = self.db.query(S3Account).filter(S3Account.id == metadata.account_id).first()
             if account is not None:
                 user_ids.update(self._portal_account_member_map(account))
         return user_ids

@@ -60,7 +60,7 @@ function normalizeUiPreferences(value?: UiPreferences | null): UiPreferences {
 
 export default function PortalSettingsPage() {
   const { t } = useI18n();
-  const { accounts, selectedAccount, selectedAccountId, setSelectedAccountId, loading: accountsLoading } = usePortalAccountContext();
+  const { accounts, selectedAccount, selectedProject, selectedAccountId, setSelectedAccountId, loading: accountsLoading } = usePortalAccountContext();
   const { workspace, loading: workspaceLoading } = usePortalWorkspaceData();
   const { theme, setTheme } = useTheme();
   const { languagePreference, setLanguagePreference } = useLanguage();
@@ -81,10 +81,11 @@ export default function PortalSettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const selectedWorkspaceAccess = useMemo(
-    () => resolveWorkspaceAccess(user, selectedAccountId),
-    [selectedAccountId, user]
-  );
+  const selectedWorkspaceAccess = useMemo(() => {
+    if (selectedProject?.account_role === "portal_manager") return "manager";
+    if (selectedProject?.account_role === "portal_user") return "user";
+    return resolveWorkspaceAccess(user, selectedAccountId);
+  }, [selectedAccountId, selectedProject?.account_role, user]);
   const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived");
 
   useEffect(() => {
@@ -280,14 +281,14 @@ export default function PortalSettingsPage() {
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className={labelClasses}>{t({ en: "Default portal account", fr: "Compte Portal par défaut", de: "Standard-Portal-Konto" })}</span>
+                  <span className={labelClasses}>{t({ en: "Default portal project", fr: "Projet Portal par défaut", de: "Standard-Portal-Projekt" })}</span>
                   <select
                     className={inputClasses}
                     value={defaultPortalAccountId}
                     onChange={(event) => setDefaultPortalAccountId(event.target.value)}
                     disabled={accounts.length === 0}
                   >
-                    {accounts.length === 0 ? <option value="">{t({ en: "No portal account", fr: "Aucun compte Portal", de: "Kein Portal-Konto" })}</option> : null}
+                    {accounts.length === 0 ? <option value="">{t({ en: "No portal project", fr: "Aucun projet Portal", de: "Kein Portal-Projekt" })}</option> : null}
                     {accounts.map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -366,10 +367,10 @@ export default function PortalSettingsPage() {
         </div>
 
         <aside className="space-y-4">
-          <UiCard title={t({ en: "Portal account", fr: "Compte Portal", de: "Portal-Konto" })}>
+          <UiCard title={t({ en: "Portal project", fr: "Projet Portal", de: "Portal-Projekt" })}>
             <dl className="space-y-3 text-xs">
               <div>
-                <dt className={labelClasses}>{t({ en: "Selected account", fr: "Compte sélectionné", de: "Ausgewähltes Konto" })}</dt>
+                <dt className={labelClasses}>{t({ en: "Selected project", fr: "Projet sélectionné", de: "Ausgewähltes Projekt" })}</dt>
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
               </div>
               <div>
@@ -385,7 +386,7 @@ export default function PortalSettingsPage() {
                 </dd>
               </div>
               <div>
-                <dt className={labelClasses}>{t({ en: "Storage service", fr: "Service de stockage", de: "Speicherdienst" })}</dt>
+                <dt className={labelClasses}>{t({ en: "Project accounts", fr: "Comptes du projet", de: "Projektkonten" })}</dt>
                 <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
                   {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
                 </dd>

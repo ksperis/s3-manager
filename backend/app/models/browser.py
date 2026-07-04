@@ -79,7 +79,7 @@ class PaginatedBrowserBucketsResponse(BaseModel):
 
 class BrowserUsageSummary(BaseModel):
     available: bool = False
-    source: Optional[Literal["account", "s3_user", "portal", "connection"]] = None
+    source: Optional[Literal["account", "s3_user", "portal", "portal_project", "connection"]] = None
     label: Optional[str] = None
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None

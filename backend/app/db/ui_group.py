@@ -33,6 +33,7 @@ class UiGroup(Base):
     account_links = relationship("UiGroupS3Account", back_populates="group", cascade="all, delete-orphan")
     s3_user_links = relationship("UiGroupS3User", back_populates="group", cascade="all, delete-orphan")
     s3_connection_links = relationship("UiGroupS3Connection", back_populates="group", cascade="all, delete-orphan")
+    project_links = relationship("UiGroupProject", back_populates="group", cascade="all, delete-orphan")
 
 
 class UserUiGroup(Base):

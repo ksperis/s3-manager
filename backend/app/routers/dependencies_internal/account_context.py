@@ -48,6 +48,24 @@ def _resolve_portal_browser_context(
 
     return resolve_context(db, user, account, link, request=request)
 
+
+def _resolve_portal_project_browser_context(
+    db: Session,
+    user: User,
+    project_id: int,
+    *,
+    request: Request,
+) -> S3Account:
+    from .portal_access import _resolve_portal_project_browser_context as resolve_context
+
+    return resolve_context(db, user, project_id, request=request)
+
+
+def _parse_project_selector(account_ref: Optional[str]) -> Optional[int]:
+    from .portal_access import _parse_project_selector as parse_project_selector
+
+    return parse_project_selector(account_ref)
+
 def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
     if account_ref is None or account_ref == "":
         return None, None, None, None
@@ -330,7 +348,11 @@ def get_account_context(
     actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
 ) -> S3Account:
-    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
+    project_id = _parse_project_selector(account_ref)
+    if project_id is None:
+        account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
+    else:
+        account_id = s3_user_id = connection_id = ceph_admin_endpoint_id = None
     surface = _resolve_workspace_surface(request)
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
     if isinstance(actor, ManagerSessionPrincipal):
@@ -340,6 +362,10 @@ def get_account_context(
         requested_endpoint = None
     is_storage_ops_surface = bool(request and str(request.url.path).startswith(f"{settings.api_v1_prefix}/storage-ops"))
     if isinstance(actor, User):
+        if project_id is not None:
+            if surface == "browser" and _is_portal_browser_request(request, surface):
+                return _resolve_portal_project_browser_context(db, actor, project_id, request=request)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project context is only supported in Portal browser")
         if ceph_admin_endpoint_id is not None:
             return _resolve_ceph_admin_browser_context(db, actor, ceph_admin_endpoint_id, surface=surface)
         if connection_id is not None:

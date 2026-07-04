@@ -36,7 +36,7 @@ export type PaginatedBrowserBucketsResponse = {
 
 export type BrowserUsageSummary = {
   available: boolean;
-  source?: "account" | "s3_user" | "portal" | "connection" | null;
+  source?: "account" | "s3_user" | "portal" | "portal_project" | "connection" | null;
   label?: string | null;
   used_bytes?: number | null;
   object_count?: number | null;

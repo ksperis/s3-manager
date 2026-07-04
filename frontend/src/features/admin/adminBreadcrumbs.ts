@@ -13,6 +13,7 @@ export function adminBreadcrumbs(...breadcrumbs: PageBreadcrumb[]): PageBreadcru
 export type AdminPageId =
   | "accounts"
   | "groups"
+  | "projects"
   | "shared-connections"
   | "storage-endpoints"
   | "users";
@@ -27,6 +28,11 @@ export const ADMIN_PAGE_CONTRACTS: Record<AdminPageId, AdminPageContract> = {
   accounts: {
     title: "Accounts",
     breadcrumbs: [{ label: "Accounts" }],
+    governanceArea: "accounts",
+  },
+  projects: {
+    title: "Projects",
+    breadcrumbs: [{ label: "Managed Tenants" }, { label: "Projects" }],
     governanceArea: "accounts",
   },
   groups: {

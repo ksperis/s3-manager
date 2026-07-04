@@ -68,6 +68,8 @@ export type PortalUsage = {
 export type PortalUsageStorageSpace = {
   id: string;
   name: string;
+  account_id?: number | null;
+  project_account_label?: string | null;
   used_bytes?: number | null;
   object_count?: number | null;
   quota_max_size_bytes?: number | null;
@@ -82,6 +84,8 @@ export type PortalStorageSpaceAccountMemberRole = "Viewer" | "Editor";
 export type PortalStorageSpaceSummary = {
   id: string;
   name: string;
+  account_id?: number | null;
+  project_account_label?: string | null;
   role: PortalStorageSpaceRole;
   content_role?: PortalStorageSpaceRole | null;
   can_browse?: boolean | null;
@@ -115,6 +119,7 @@ export type PortalStorageSpaceInitialShare = {
 
 export type PortalStorageSpaceCreate = {
   name: string;
+  account_id?: number | null;
   naming_mode?: "generic_uuid" | "named_bucket";
   description?: string | null;
   owner_label?: string | null;
@@ -128,6 +133,7 @@ export type PortalStorageSpaceCreate = {
 
 export type PortalStorageSpaceImport = {
   bucket_name: string;
+  account_id?: number | null;
   description?: string | null;
   owner_label?: string | null;
   visibility?: PortalStorageSpaceVisibility;
@@ -259,17 +265,114 @@ export type PortalAccountSettings = {
   admin_override: PortalSettingsOverride;
 };
 
+export type PortalProjectAccount = {
+  account_id: number;
+  account_name: string;
+  display_name: string;
+  rgw_account_id?: string | null;
+  storage_endpoint_id?: number | null;
+  storage_endpoint_name?: string | null;
+  storage_endpoint_url?: string | null;
+  storage_endpoint_zonegroup?: string | null;
+  quota_max_size_gb?: number | null;
+  quota_max_objects?: number | null;
+};
+
+export type PortalProject = {
+  id: string;
+  db_id: number;
+  name: string;
+  description?: string | null;
+  account_role: "portal_user" | "portal_manager" | string;
+  accounts: PortalProjectAccount[];
+};
+
+export function isPortalProjectSelector(accountId: S3AccountSelector): accountId is string {
+  return typeof accountId === "string" && accountId.startsWith("proj-");
+}
+
+function projectIdFromSelector(accountId: S3AccountSelector): string | null {
+  if (!isPortalProjectSelector(accountId)) return null;
+  return accountId.slice("proj-".length);
+}
+
+function portalProjectPath(accountId: S3AccountSelector, suffix: string): string | null {
+  const projectId = projectIdFromSelector(accountId);
+  return projectId ? `/portal/projects/${encodeURIComponent(projectId)}${suffix}` : null;
+}
+
+function emptyPortalTraffic(window: import("./stats").TrafficWindow): import("./stats").ManagerTrafficStats {
+  const now = new Date().toISOString();
+  return {
+    window,
+    start: now,
+    end: now,
+    resolution: "none",
+    data_points: 0,
+    series: [],
+    totals: { bytes_in: 0, bytes_out: 0, ops: 0, success_ops: 0, success_rate: null },
+    bucket_rankings: [],
+    user_rankings: [],
+    request_breakdown: [],
+    category_breakdown: [],
+  };
+}
+
+function emptyUsageStatsAggregate(): BucketUsageStatsAggregateResponse {
+  return {
+    aggregate: {
+      scope_kind: "portal_project",
+      scope_id: "project",
+      bucket_count: 0,
+      buckets_with_snapshot: 0,
+      missing_bucket_count: 0,
+      partial_scan_count: 0,
+      object_version_count: 0,
+      current_version_count: 0,
+      noncurrent_version_count: 0,
+      delete_marker_count: 0,
+      total_bytes: 0,
+      current_bytes: 0,
+      noncurrent_bytes: 0,
+      data_type_distribution: [],
+      storage_class_distribution: [],
+      size_distribution: [],
+      age_distribution: [],
+      current_vs_noncurrent: [],
+      warnings: [],
+    },
+  };
+}
+
 export async function listPortalAccounts(): Promise<S3Account[]> {
   const { data } = await client.get<S3Account[]>("/portal/accounts");
   return data;
 }
 
+export async function listPortalProjects(): Promise<PortalProject[]> {
+  const { data } = await client.get<PortalProject[]>("/portal/projects");
+  return data;
+}
+
 export async function fetchPortalState(accountId: S3AccountSelector): Promise<PortalState> {
+  const projectPath = portalProjectPath(accountId, "/state");
+  if (projectPath) {
+    const { data } = await client.get<PortalState>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalState>("/portal/state", { params: withS3AccountParam(undefined, accountId) });
   return data;
 }
 
 export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): Promise<PortalAccessKeysState> {
+  if (isPortalProjectSelector(accountId)) {
+    return {
+      iam_user: {},
+      access_keys: [],
+      can_manage_access_keys: false,
+      max_access_keys: 0,
+    };
+  }
   const { data } = await client.get<PortalAccessKeysState>("/portal/access-keys", {
     params: withS3AccountParam(undefined, accountId),
   });
@@ -277,6 +380,9 @@ export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): 
 }
 
 export async function createPortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
+  if (isPortalProjectSelector(accountId)) {
+    throw new Error("Access keys are scoped to a single S3 account.");
+  }
   const { data } = await client.post<PortalAccessKey>(
     "/portal/access-keys",
     undefined,
@@ -290,6 +396,9 @@ export async function updatePortalAccessKeyStatus(
   accessKeyId: string,
   active: boolean
 ): Promise<PortalAccessKey> {
+  if (isPortalProjectSelector(accountId)) {
+    throw new Error("Access keys are scoped to a single S3 account.");
+  }
   const { data } = await client.put<PortalAccessKey>(
     `/portal/access-keys/${encodeURIComponent(accessKeyId)}/status`,
     { active },
@@ -299,17 +408,28 @@ export async function updatePortalAccessKeyStatus(
 }
 
 export async function deletePortalAccessKey(accountId: S3AccountSelector, accessKeyId: string): Promise<void> {
+  if (isPortalProjectSelector(accountId)) {
+    throw new Error("Access keys are scoped to a single S3 account.");
+  }
   await client.delete(`/portal/access-keys/${encodeURIComponent(accessKeyId)}`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
 
 export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<PortalUsage> {
+  const projectPath = portalProjectPath(accountId, "/usage");
+  if (projectPath) {
+    const { data } = await client.get<PortalUsage>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalUsage>("/portal/usage", { params: withS3AccountParam(undefined, accountId) });
   return data;
 }
 
 export async function fetchPortalUsageTrends(accountId: S3AccountSelector): Promise<ManagerUsageTrendsResponse> {
+  if (isPortalProjectSelector(accountId)) {
+    return {};
+  }
   const { data } = await client.get<ManagerUsageTrendsResponse>("/portal/usage-trends", { params: withS3AccountParam(undefined, accountId) });
   return data;
 }
@@ -317,6 +437,9 @@ export async function fetchPortalUsageTrends(accountId: S3AccountSelector): Prom
 export async function getPortalUsageStatsAggregate(
   accountId: S3AccountSelector
 ): Promise<BucketUsageStatsAggregateResponse> {
+  if (isPortalProjectSelector(accountId)) {
+    return emptyUsageStatsAggregate();
+  }
   const { data } = await client.get<BucketUsageStatsAggregateResponse>(
     "/portal/usage-stats/latest",
     { params: withS3AccountParam(undefined, accountId) }
@@ -328,6 +451,23 @@ export async function fetchPortalUsageHistoryTrends(
   accountId: S3AccountSelector,
   window: UsageHistoryTrendWindow
 ): Promise<UsageHistoryTrendResponse> {
+  if (isPortalProjectSelector(accountId)) {
+    return {
+      window,
+      granularity: "daily",
+      available: false,
+      unavailable_reason: "Project usage history is not collected yet.",
+      points: [],
+      summary: {
+        total_records: 0,
+        points_count: 0,
+        subjects_count: 0,
+        latest_used_bytes: 0,
+        latest_used_objects: 0,
+        latest_bucket_count: 0,
+      },
+    };
+  }
   const { data } = await client.get<UsageHistoryTrendResponse>(
     "/portal/usage-history-trends",
     { params: withS3AccountParam({ window }, accountId) }
@@ -342,6 +482,11 @@ export async function fetchPortalActivity(
   const baseParams: Record<string, string | number> = {};
   if (options?.spaceId) baseParams.space_id = options.spaceId;
   if (options?.limit) baseParams.limit = options.limit;
+  const projectPath = portalProjectPath(accountId, "/activity");
+  if (projectPath) {
+    const { data } = await client.get<PortalActivityItem[]>(projectPath, { params: baseParams });
+    return data;
+  }
   const { data } = await client.get<PortalActivityItem[]>("/portal/activity", {
     params: withS3AccountParam(baseParams, accountId),
   });
@@ -355,6 +500,11 @@ export async function fetchPortalTransfers(
   const baseParams: Record<string, string | number> = {};
   if (options?.spaceId) baseParams.space_id = options.spaceId;
   if (options?.limit) baseParams.limit = options.limit;
+  const projectPath = portalProjectPath(accountId, "/transfers");
+  if (projectPath) {
+    const { data } = await client.get<PortalTransfer[]>(projectPath, { params: baseParams });
+    return data;
+  }
   const { data } = await client.get<PortalTransfer[]>("/portal/transfers", {
     params: withS3AccountParam(baseParams, accountId),
   });
@@ -362,6 +512,11 @@ export async function fetchPortalTransfers(
 }
 
 export async function fetchPortalAlerts(accountId: S3AccountSelector, limit = 50): Promise<PortalAlert[]> {
+  const projectPath = portalProjectPath(accountId, "/alerts");
+  if (projectPath) {
+    const { data } = await client.get<PortalAlert[]>(projectPath, { params: { limit } });
+    return data;
+  }
   const { data } = await client.get<PortalAlert[]>("/portal/alerts", {
     params: withS3AccountParam({ limit }, accountId),
   });
@@ -388,6 +543,11 @@ export async function listPortalStorageSpaces(
   if (options?.includeArchived) {
     baseParams.include_archived = true;
   }
+  const projectPath = portalProjectPath(accountId, "/storage-spaces");
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpaceSummary[]>(projectPath, { params: baseParams });
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpaceSummary[]>("/portal/storage-spaces", {
     params: withS3AccountParam(baseParams, accountId),
   });
@@ -398,6 +558,11 @@ export async function createPortalStorageSpace(
   accountId: S3AccountSelector,
   payload: PortalStorageSpaceCreate
 ): Promise<PortalStorageSpace> {
+  const projectPath = portalProjectPath(accountId, "/storage-spaces");
+  if (projectPath) {
+    const { data } = await client.post<PortalStorageSpace>(projectPath, payload);
+    return data;
+  }
   const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
@@ -408,6 +573,11 @@ export async function importPortalStorageSpace(
   accountId: S3AccountSelector,
   payload: PortalStorageSpaceImport
 ): Promise<PortalStorageSpace> {
+  const projectPath = portalProjectPath(accountId, "/storage-spaces/import");
+  if (projectPath) {
+    const { data } = await client.post<PortalStorageSpace>(projectPath, payload);
+    return data;
+  }
   const { data } = await client.post<PortalStorageSpace>("/portal/storage-spaces/import", payload, {
     params: withS3AccountParam(undefined, accountId),
   });
@@ -418,6 +588,11 @@ export async function fetchPortalStorageSpace(
   accountId: S3AccountSelector,
   spaceId: string
 ): Promise<PortalStorageSpace> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}`);
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpace>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpace>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -430,6 +605,11 @@ export async function updatePortalStorageSpace(
   spaceId: string,
   payload: PortalStorageSpaceUpdate
 ): Promise<PortalStorageSpace> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}`);
+  if (projectPath) {
+    const { data } = await client.patch<PortalStorageSpace>(projectPath, payload);
+    return data;
+  }
   const { data } = await client.patch<PortalStorageSpace>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
     payload,
@@ -442,6 +622,11 @@ export async function fetchPortalStorageSpaceAccessSummary(
   accountId: S3AccountSelector,
   spaceId: string
 ): Promise<PortalStorageSpaceAccessSummary> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/access-summary`);
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpaceAccessSummary>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpaceAccessSummary>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/access-summary`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -454,6 +639,11 @@ export async function fetchPortalStorageSpaceObjectDetail(
   spaceId: string,
   key: string
 ): Promise<PortalStorageObjectDetail> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/objects/detail`);
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageObjectDetail>(projectPath, { params: { key } });
+    return data;
+  }
   const { data } = await client.get<PortalStorageObjectDetail>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/detail`,
     { params: withS3AccountParam({ key }, accountId) }
@@ -466,6 +656,11 @@ export async function deletePortalStorageSpaceObject(
   spaceId: string,
   key: string
 ): Promise<void> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/objects`);
+  if (projectPath) {
+    await client.delete(projectPath, { params: { key } });
+    return;
+  }
   await client.delete(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects`,
     { params: withS3AccountParam({ key }, accountId) }
@@ -494,10 +689,11 @@ export async function downloadPortalStorageSpaceObject(
   spaceId: string,
   key: string
 ): Promise<PortalStorageObjectDownload> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/objects/download`);
   const response = await client.get<Blob>(
-    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/download`,
+    projectPath ?? `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/download`,
     {
-      params: withS3AccountParam({ key }, accountId),
+      params: projectPath ? { key } : withS3AccountParam({ key }, accountId),
       responseType: "blob",
     }
   );
@@ -510,6 +706,11 @@ export async function listPortalStorageSpaceShares(
   accountId: S3AccountSelector,
   spaceId: string
 ): Promise<PortalStorageSpaceShare[]> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/shares`);
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpaceShare[]>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpaceShare[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -520,6 +721,11 @@ export async function listPortalStorageSpaceShares(
 export async function listPortalShareCandidates(
   accountId: S3AccountSelector
 ): Promise<PortalStorageSpaceShareCandidate[]> {
+  const projectPath = portalProjectPath(accountId, "/share-candidates");
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(
     "/portal/share-candidates",
     { params: withS3AccountParam(undefined, accountId) }
@@ -531,6 +737,11 @@ export async function listPortalStorageSpaceShareCandidates(
   accountId: S3AccountSelector,
   spaceId: string
 ): Promise<PortalStorageSpaceShareCandidate[]> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/share-candidates`);
+  if (projectPath) {
+    const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(projectPath);
+    return data;
+  }
   const { data } = await client.get<PortalStorageSpaceShareCandidate[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/share-candidates`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -543,6 +754,11 @@ export async function grantPortalStorageSpaceShare(
   spaceId: string,
   payload: { email?: string; user_id?: number; role: PortalStorageSpaceRole }
 ): Promise<PortalStorageSpaceShare> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/shares`);
+  if (projectPath) {
+    const { data } = await client.post<PortalStorageSpaceShare>(projectPath, payload);
+    return data;
+  }
   const { data } = await client.post<PortalStorageSpaceShare>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares`,
     payload,
@@ -557,6 +773,11 @@ export async function updatePortalStorageSpaceShare(
   userId: number,
   role: PortalStorageSpaceRole
 ): Promise<PortalStorageSpaceShare> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`);
+  if (projectPath) {
+    const { data } = await client.put<PortalStorageSpaceShare>(projectPath, { role });
+    return data;
+  }
   const { data } = await client.put<PortalStorageSpaceShare>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`,
     { role },
@@ -570,6 +791,11 @@ export async function revokePortalStorageSpaceShare(
   spaceId: string,
   userId: number
 ): Promise<PortalStorageSpaceShare[]> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`);
+  if (projectPath) {
+    const { data } = await client.delete<PortalStorageSpaceShare[]>(projectPath);
+    return data;
+  }
   const { data } = await client.delete<PortalStorageSpaceShare[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/shares/${userId}`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -589,6 +815,11 @@ export async function listPortalStorageSpacePublicLinks(
   if (options?.includeRevoked) {
     baseParams.include_revoked = true;
   }
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/public-links`);
+  if (projectPath) {
+    const { data } = await client.get<PortalPublicLink[]>(projectPath, { params: baseParams });
+    return data;
+  }
   const { data } = await client.get<PortalPublicLink[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/public-links`,
     { params: withS3AccountParam(baseParams, accountId) }
@@ -601,6 +832,11 @@ export async function createPortalStorageSpacePublicLink(
   spaceId: string,
   payload: { object_key: string; label?: string | null; expires_at?: string | null }
 ): Promise<PortalPublicLink> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/public-links`);
+  if (projectPath) {
+    const { data } = await client.post<PortalPublicLink>(projectPath, payload);
+    return data;
+  }
   const { data } = await client.post<PortalPublicLink>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/public-links`,
     payload,
@@ -614,6 +850,11 @@ export async function revokePortalStorageSpacePublicLink(
   spaceId: string,
   linkId: number
 ): Promise<PortalPublicLink[]> {
+  const projectPath = portalProjectPath(accountId, `/storage-spaces/${encodeURIComponent(spaceId)}/public-links/${linkId}`);
+  if (projectPath) {
+    const { data } = await client.delete<PortalPublicLink[]>(projectPath);
+    return data;
+  }
   const { data } = await client.delete<PortalPublicLink[]>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/public-links/${linkId}`,
     { params: withS3AccountParam(undefined, accountId) }
@@ -626,6 +867,9 @@ export async function fetchPortalTraffic(
   window: import("./stats").TrafficWindow,
   bucket?: string
 ): Promise<import("./stats").ManagerTrafficStats> {
+  if (isPortalProjectSelector(accountId)) {
+    return emptyPortalTraffic(window);
+  }
   const baseParams: Record<string, string | number> = { window };
   if (bucket) {
     baseParams.bucket = bucket;

@@ -45,6 +45,7 @@ import AssociationSummary, {
   AccountAssociationChips,
   type AssociationAccountItem,
 } from "./AssociationSummary";
+import ProjectAssociationEditor from "./ProjectAssociationEditor";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -53,7 +54,7 @@ import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
 type SortField = "name" | "rgw_account_id";
-type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
+type EditTab = "general" | "users" | "groups" | "projects" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type TextMatchMode = "contains" | "exact";
@@ -226,6 +227,7 @@ export default function S3AccountsPage() {
   const showGeneralTab = editTab === "general";
   const showUsersTab = editTab === "users";
   const showGroupsTab = editTab === "groups";
+  const showProjectsTab = editTab === "projects";
   const showPrivilegedTab = editTab === "privileged";
   const showPortalTab = portalEnabled && editTab === "portal";
   const {
@@ -1551,6 +1553,17 @@ export default function S3AccountsPage() {
               >
                 Linked UI groups
               </button>
+              <button
+                type="button"
+                onClick={() => setEditTab("projects")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "projects"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Projects
+              </button>
               {canManagePrivilegedTargets && (
                 <button
                   type="button"
@@ -2096,6 +2109,16 @@ export default function S3AccountsPage() {
                     </div>
                   )}
                 </div>
+              )}
+              {showProjectsTab && editingAccountId && (
+                <ProjectAssociationEditor
+                  target={{
+                    kind: "account",
+                    id: editingAccountId,
+                    label: editingS3Account.name,
+                    defaultDisplayName: editingS3Account.storage_endpoint_name ?? editingS3Account.name,
+                  }}
+                />
               )}
               {canManagePrivilegedTargets && showPrivilegedTab && (
                 <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">

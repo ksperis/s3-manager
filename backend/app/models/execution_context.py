@@ -13,7 +13,7 @@ class ExecutionContextCapabilities(BaseModel):
 
 
 class ExecutionContext(BaseModel):
-    kind: Literal["account", "connection", "legacy_user", "portal_account"]
+    kind: Literal["account", "connection", "legacy_user", "portal_account", "portal_project"]
     id: str
     display_name: str
     hidden: bool = False

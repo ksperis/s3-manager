@@ -92,6 +92,8 @@ PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 class PortalStorageSpaceSummary(BaseModel):
     id: str
     name: str
+    account_id: Optional[int] = None
+    project_account_label: Optional[str] = None
     role: PortalStorageSpaceRole
     content_role: Optional[PortalStorageSpaceRole] = None
     can_browse: bool = True
@@ -127,6 +129,7 @@ class PortalStorageSpaceInitialShare(BaseModel):
 
 class PortalStorageSpaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    account_id: Optional[int] = None
     naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
@@ -148,6 +151,7 @@ class PortalStorageSpaceCreate(BaseModel):
 
 class PortalStorageSpaceImport(BaseModel):
     bucket_name: str = Field(min_length=1, max_length=63)
+    account_id: Optional[int] = None
     description: Optional[str] = Field(default=None, max_length=2000)
     owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: PortalStorageSpaceVisibility = "private"

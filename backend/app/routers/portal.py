@@ -19,6 +19,7 @@ from app.models.portal import (
     PortalActivityItem,
     PortalAlert,
     PortalEligibility,
+    PortalIAMUser,
     PortalPublicLink,
     PortalPublicLinkCreate,
     PortalState,
@@ -36,7 +37,9 @@ from app.models.portal import (
     PortalStorageSpaceSummary,
     PortalStorageSpaceUpdate,
     PortalUsage,
+    PortalUsageStorageSpace,
 )
+from app.models.project import PortalProject
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
@@ -61,6 +64,7 @@ from app.services.portal_service import (
     PortalService,
     get_portal_service,
 )
+from app.services.projects_service import PortalProjectAccess, ProjectsService, get_projects_service
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.healthcheck_service import HealthCheckService
 from app.utils.storage_endpoint_features import (
@@ -77,13 +81,76 @@ from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.services.billing_service import BillingService
 from app.services.bucket_usage_stats_service import BucketUsageStatsAggregateTarget, BucketUsageStatsService
 from app.services.app_settings_service import load_app_settings
-from app.services.effective_access_service import EffectiveAccessService
 from app.services.usage_history_service import UsageHistoryService
 from app.models.billing import BillingSubjectDetail
 from app.utils.http_headers import build_attachment_content_disposition
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _project_space_id(account_id: int, bucket_name: str) -> str:
+    return f"a{account_id}:{bucket_name}"
+
+
+def _parse_project_space_id(space_id: str) -> tuple[int, str]:
+    value = (space_id or "").strip()
+    if not value.startswith("a") or ":" not in value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project Storage Space id is invalid")
+    account_part, bucket_name = value.split(":", 1)
+    account_digits = account_part[1:]
+    if not account_digits.isdigit() or not bucket_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project Storage Space id is invalid")
+    return int(account_digits), bucket_name
+
+
+def _sum_optional(values: list[Optional[int]]) -> Optional[int]:
+    known = [value for value in values if value is not None]
+    if not known:
+        return None
+    return sum(known)
+
+
+def _portal_project_label(access: PortalProjectAccess, account_id: int) -> Optional[str]:
+    for link in access.account_links:
+        if link.account_id == account_id:
+            return link.display_name
+    return None
+
+
+def _with_project_space_identity(
+    space: PortalStorageSpaceSummary,
+    *,
+    account_id: int,
+    account_label: Optional[str],
+) -> PortalStorageSpaceSummary:
+    payload = space.model_dump()
+    payload["id"] = _project_space_id(account_id, space.internal_bucket_name or space.id)
+    payload["account_id"] = account_id
+    payload["project_account_label"] = account_label
+    return PortalStorageSpaceSummary.model_validate(payload)
+
+
+def _with_project_public_link(link: PortalPublicLink, *, account_id: int) -> PortalPublicLink:
+    payload = link.model_dump()
+    payload["storage_space_id"] = _project_space_id(account_id, link.storage_space_id)
+    return PortalPublicLink.model_validate(payload)
+
+
+def _with_project_share(share: PortalStorageSpaceShare, *, account_id: int) -> PortalStorageSpaceShare:
+    payload = share.model_dump()
+    payload["storage_space_id"] = _project_space_id(account_id, share.storage_space_id)
+    return PortalStorageSpaceShare.model_validate(payload)
+
+
+def _raise_project_access_error(exc: ValueError) -> None:
+    detail = sanitize_error_detail(str(exc))
+    lowered = detail.lower()
+    if "not authorized" in lowered:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+    if "not found" in lowered:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
 
 
 def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
@@ -147,13 +214,13 @@ def list_portal_accounts(
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
     quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
-    links = [
-        link
-        for link in EffectiveAccessService(db).resolve_user(user).account_links
-        if link.account_role in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}
-    ]
-    account_ids = {link.account_id for link in links}
-    account_role_by_id = {link.account_id: link.account_role for link in links}
+    projects_service = get_projects_service(db, accounts_service=quota_service)
+    projects = projects_service.list_portal_projects_for_user(user)
+    account_role_by_id: dict[int, str] = {}
+    for project in projects:
+        for project_account in project.accounts:
+            account_role_by_id[project_account.account_id] = project.account_role
+    account_ids = set(account_role_by_id)
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).order_by(*s3_account_name_order_by(S3Account)).all()
         if account_ids
@@ -205,6 +272,868 @@ def list_portal_accounts(
             )
         )
     return results
+
+
+@router.get("/projects", response_model=list[PortalProject])
+def list_portal_projects(
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> list[PortalProject]:
+    quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
+    return get_projects_service(db, accounts_service=quota_service).list_portal_projects_for_user(user)
+
+
+@router.get("/projects/{project_id}/state", response_model=PortalState)
+def portal_project_state(
+    project_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalState:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    states: list[PortalState] = []
+    for account_link in project_access.account_links:
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            states.append(service.get_state(user, account_access))
+        except RuntimeError as exc:
+            raise_bad_gateway_from_runtime(exc)
+    return PortalState(
+        account_id=states[0].account_id if states else 0,
+        iam_user=PortalIAMUser(),
+        access_keys=[],
+        iam_provisioned=any(state.iam_provisioned for state in states),
+        max_buckets=_sum_optional([state.max_buckets for state in states]),
+        s3_endpoint=None,
+        used_bytes=_sum_optional([state.used_bytes for state in states]),
+        used_objects=_sum_optional([state.used_objects for state in states]),
+        quota_max_size_bytes=_sum_optional([state.quota_max_size_bytes for state in states]),
+        quota_max_objects=_sum_optional([state.quota_max_objects for state in states]),
+        just_created=False,
+        account_role=project_access.role,
+        can_manage_buckets=any(state.can_manage_buckets for state in states),
+        can_create_storage_spaces=any(state.can_create_storage_spaces for state in states),
+        can_manage_portal_users=any(state.can_manage_portal_users for state in states),
+        allow_named_bucket_create=any(state.allow_named_bucket_create for state in states),
+    )
+
+
+@router.get("/projects/{project_id}/usage", response_model=PortalUsage)
+def portal_project_usage(
+    project_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalUsage:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    usages: list[PortalUsage] = []
+    storage_spaces: list[PortalUsageStorageSpace] = []
+    for account_link in project_access.account_links:
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            usage = service.get_usage(user, account_access)
+        except RuntimeError as exc:
+            raise_bad_gateway_from_runtime(exc)
+        usages.append(usage)
+        for space in usage.storage_spaces:
+            label = account_link.display_name
+            storage_spaces.append(
+                PortalUsageStorageSpace(
+                    id=_project_space_id(account_link.account_id, space.id),
+                    name=f"{space.name} ({label})" if label else space.name,
+                    used_bytes=space.used_bytes,
+                    object_count=space.object_count,
+                    quota_max_size_bytes=space.quota_max_size_bytes,
+                    quota_max_objects=space.quota_max_objects,
+                )
+            )
+    return PortalUsage(
+        used_bytes=_sum_optional([usage.used_bytes for usage in usages]),
+        used_objects=_sum_optional([usage.used_objects for usage in usages]),
+        quota_max_size_bytes=_sum_optional([usage.quota_max_size_bytes for usage in usages]),
+        quota_max_objects=_sum_optional([usage.quota_max_objects for usage in usages]),
+        storage_spaces=storage_spaces,
+    )
+
+
+@router.get("/projects/{project_id}/storage-spaces", response_model=list[PortalStorageSpaceSummary])
+def portal_project_storage_spaces(
+    project_id: int,
+    search: Optional[str] = Query(None, description="Filter storage spaces by name"),
+    role: Optional[str] = Query(None, description="Filter by simple Portal role"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by simple Storage Space status"),
+    sort: str = Query("name", description="Sort by name, created_at, used_bytes, object_count, role, or status"),
+    include_archived: bool = Query(False, description="Include archived Storage Spaces"),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceSummary]:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    spaces: list[PortalStorageSpaceSummary] = []
+    for account_link in project_access.account_links:
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            account_spaces = service.list_storage_spaces(
+                user,
+                account_access,
+                search=search,
+                role=role,
+                status=status_filter,
+                sort=sort,
+                include_archived=include_archived,
+            )
+        except RuntimeError as exc:
+            raise_bad_gateway_from_runtime(exc)
+        spaces.extend(
+            _with_project_space_identity(space, account_id=account_link.account_id, account_label=account_link.display_name)
+            for space in account_spaces
+        )
+    reverse = sort.startswith("-")
+    key = sort[1:] if reverse else sort
+    sorters = {
+        "name": lambda item: ((item.project_account_label or "").lower(), item.name.lower()),
+        "created_at": lambda item: item.created_at or utcnow(),
+        "used_bytes": lambda item: item.used_bytes if item.used_bytes is not None else -1,
+        "object_count": lambda item: item.object_count if item.object_count is not None else -1,
+        "role": lambda item: item.role,
+        "status": lambda item: item.status or "",
+    }
+    return sorted(spaces, key=sorters.get(key, sorters["name"]), reverse=reverse)
+
+
+def _project_account_id_from_payload(project_access: PortalProjectAccess, requested_account_id: Optional[int]) -> int:
+    if requested_account_id is not None:
+        if requested_account_id not in project_access.account_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account is not associated with this project")
+        return requested_account_id
+    if len(project_access.account_links) == 1:
+        return project_access.account_links[0].account_id
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose the project account for this Storage Space")
+
+
+@router.post("/projects/{project_id}/storage-spaces", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+def create_portal_project_storage_space(
+    project_id: int,
+    payload: PortalStorageSpaceCreate,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    account_id = _project_account_id_from_payload(project_access, payload.account_id)
+    account_access = projects_service.account_access_for_project(project_access, account_id)
+    try:
+        storage_space = service.create_storage_space(
+            user,
+            account_access,
+            name=payload.name,
+            naming_mode=payload.naming_mode,
+            description=payload.description,
+            owner_label=payload.owner_label,
+            visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
+            initial_shares=payload.initial_shares,
+            project_key=payload.project_key,
+            dataset_label=payload.dataset_label,
+        )
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="create_storage_space",
+            entity_type="storage_space",
+            entity_id=storage_space.id,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": storage_space.id},
+        )
+        label = _portal_project_label(project_access, account_id)
+        return PortalStorageSpace.model_validate(
+            _with_project_space_identity(storage_space, account_id=account_id, account_label=label).model_dump()
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/projects/{project_id}/storage-spaces/import", response_model=PortalStorageSpace, status_code=status.HTTP_201_CREATED)
+def import_portal_project_storage_space(
+    project_id: int,
+    payload: PortalStorageSpaceImport,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    account_id = _project_account_id_from_payload(project_access, payload.account_id)
+    account_access = projects_service.account_access_for_project(project_access, account_id)
+    try:
+        storage_space = service.import_storage_space(
+            user,
+            account_access,
+            bucket_name=payload.bucket_name,
+            description=payload.description,
+            owner_label=payload.owner_label,
+            visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
+            initial_shares=payload.initial_shares,
+            project_key=payload.project_key,
+            dataset_label=payload.dataset_label,
+        )
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="import_storage_space",
+            entity_type="storage_space",
+            entity_id=storage_space.id,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": storage_space.id},
+        )
+        label = _portal_project_label(project_access, account_id)
+        return PortalStorageSpace.model_validate(
+            _with_project_space_identity(storage_space, account_id=account_id, account_label=label).model_dump()
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+def _project_storage_account_access(
+    project_id: int,
+    space_id: str,
+    *,
+    user: User,
+    db: Session,
+) -> tuple[PortalProjectAccess, AccountAccess, int, str]:
+    account_id, bucket_name = _parse_project_space_id(space_id)
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        account_access = projects_service.account_access_for_project(project_access, account_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    return project_access, account_access, account_id, bucket_name
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}", response_model=PortalStorageSpace)
+def portal_project_storage_space_detail(
+    project_id: int,
+    space_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        storage_space = service.get_storage_space(user, account_access, bucket_name)
+    except RuntimeError as exc:
+        detail = sanitize_error_detail(str(exc))
+        if "autorisé" in detail.lower() or "not allowed" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
+        raise_bad_gateway_from_runtime(exc)
+    if storage_space is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    label = _portal_project_label(project_access, account_id)
+    return PortalStorageSpace.model_validate(
+        _with_project_space_identity(storage_space, account_id=account_id, account_label=label).model_dump()
+    )
+
+
+@router.patch("/projects/{project_id}/storage-spaces/{space_id}", response_model=PortalStorageSpace)
+def update_portal_project_storage_space(
+    project_id: int,
+    space_id: str,
+    payload: PortalStorageSpaceUpdate,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        storage_space = service.update_storage_space(
+            user,
+            account_access,
+            bucket_name,
+            name=payload.name,
+            description=payload.description,
+            owner_label=payload.owner_label,
+            visibility=payload.visibility,
+            share_scope=payload.share_scope,
+            account_member_role=payload.account_member_role,
+            project_key=payload.project_key,
+            dataset_label=payload.dataset_label,
+            archived=payload.archived,
+        )
+        action = (
+            "archive_storage_space"
+            if payload.archived is True
+            else "restore_storage_space"
+            if payload.archived is False
+            else "update_storage_space"
+        )
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action=action,
+            entity_type="storage_space",
+            entity_id=bucket_name,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name},
+        )
+        label = _portal_project_label(project_access, account_id)
+        return PortalStorageSpace.model_validate(
+            _with_project_space_identity(storage_space, account_id=account_id, account_label=label).model_dump()
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/access-summary", response_model=PortalStorageSpaceAccessSummary)
+def portal_project_storage_space_access_summary(
+    project_id: int,
+    space_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceAccessSummary:
+    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        return service.get_storage_space_access_summary(user, account_access, bucket_name)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
+def portal_project_storage_space_share_candidates(
+    project_id: int,
+    space_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShareCandidate]:
+    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        return service.list_storage_space_share_candidates(user, account_access, bucket_name)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/shares", response_model=list[PortalStorageSpaceShare])
+def portal_project_storage_space_shares(
+    project_id: int,
+    space_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShare]:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        return [
+            _with_project_share(share, account_id=account_id)
+            for share in service.list_storage_space_shares(user, account_access, bucket_name)
+        ]
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/projects/{project_id}/storage-spaces/{space_id}/shares", response_model=PortalStorageSpaceShare, status_code=status.HTTP_201_CREATED)
+def grant_portal_project_storage_space_share(
+    project_id: int,
+    space_id: str,
+    payload: PortalStorageSpaceSharePayload,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceShare:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    target = _resolve_share_target(payload, users_service)
+    try:
+        share = service.set_storage_space_share(user, account_access, target, bucket_name, payload.role)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="grant_storage_space_share",
+            entity_type="storage_space",
+            entity_id=bucket_name,
+            account=account_access.account,
+            metadata={"project_id": project_id, "target_user_id": target.id, "role": payload.role},
+        )
+        return _with_project_share(share, account_id=account_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.put("/projects/{project_id}/storage-spaces/{space_id}/shares/{user_id}", response_model=PortalStorageSpaceShare)
+def update_portal_project_storage_space_share(
+    project_id: int,
+    space_id: str,
+    user_id: int,
+    payload: PortalStorageSpaceShareUpdate,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceShare:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    target = users_service.get_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        share = service.set_storage_space_share(user, account_access, target, bucket_name, payload.role)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="update_storage_space_share",
+            entity_type="storage_space",
+            entity_id=bucket_name,
+            account=account_access.account,
+            metadata={"project_id": project_id, "target_user_id": target.id, "role": payload.role},
+        )
+        return _with_project_share(share, account_id=account_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.delete("/projects/{project_id}/storage-spaces/{space_id}/shares/{user_id}", response_model=list[PortalStorageSpaceShare])
+def revoke_portal_project_storage_space_share(
+    project_id: int,
+    space_id: str,
+    user_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShare]:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    target = users_service.get_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    try:
+        shares = service.revoke_storage_space_share(user, account_access, target, bucket_name)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="revoke_storage_space_share",
+            entity_type="storage_space",
+            entity_id=bucket_name,
+            account=account_access.account,
+            metadata={"project_id": project_id, "target_user_id": target.id},
+        )
+        return [_with_project_share(share, account_id=account_id) for share in shares]
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/objects/detail", response_model=PortalStorageObjectDetail)
+def portal_project_storage_space_object_detail(
+    project_id: int,
+    space_id: str,
+    key: str = Query(..., min_length=1),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectDetail:
+    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        return service.get_storage_space_object_detail(user, account_access, bucket_name, key)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.delete("/projects/{project_id}/storage-spaces/{space_id}/objects", response_model=PortalStorageObjectDeleteResponse)
+def portal_delete_project_storage_space_object(
+    project_id: int,
+    space_id: str,
+    key: str = Query(..., min_length=1),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectDeleteResponse:
+    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        deleted_key = service.delete_storage_space_object(user, account_access, bucket_name, key)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="delete_object",
+            entity_type="object",
+            entity_id=deleted_key,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name},
+        )
+        return PortalStorageObjectDeleteResponse(key=deleted_key, message="Deleted")
+    except RuntimeError as exc:
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="delete_object",
+            entity_type="object",
+            entity_id=key,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name},
+            status="failed",
+            message=sanitized_error_log_detail(exc),
+        )
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/objects/download")
+def portal_download_project_storage_space_object(
+    project_id: int,
+    space_id: str,
+    key: str = Query(..., min_length=1),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> StreamingResponse:
+    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        stream, content_type, filename = service.download_storage_space_object(user, account_access, bucket_name, key)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="download_object",
+            entity_type="object",
+            entity_id=key,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name},
+        )
+        headers = {}
+        if filename:
+            headers["Content-Disposition"] = build_attachment_content_disposition(filename)
+        return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
+    except RuntimeError as exc:
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="download_object",
+            entity_type="object",
+            entity_id=key,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name},
+            status="failed",
+            message=sanitized_error_log_detail(exc),
+        )
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/storage-spaces/{space_id}/public-links", response_model=list[PortalPublicLink])
+def portal_project_storage_space_public_links(
+    project_id: int,
+    space_id: str,
+    object_key: Optional[str] = Query(None),
+    include_revoked: bool = Query(False),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalPublicLink]:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        return [
+            _with_project_public_link(link, account_id=account_id)
+            for link in service.list_storage_space_public_links(
+                user,
+                account_access,
+                bucket_name,
+                object_key=object_key,
+                include_revoked=include_revoked,
+            )
+        ]
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/projects/{project_id}/storage-spaces/{space_id}/public-links", response_model=PortalPublicLink, status_code=status.HTTP_201_CREATED)
+def create_portal_project_storage_space_public_link(
+    project_id: int,
+    space_id: str,
+    payload: PortalPublicLinkCreate,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalPublicLink:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        link = service.create_storage_space_public_link(
+            user,
+            account_access,
+            bucket_name,
+            object_key=payload.object_key,
+            label=payload.label,
+            expires_at=payload.expires_at,
+        )
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="create_public_link",
+            entity_type="object",
+            entity_id=payload.object_key,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name, "public_link_id": link.id},
+        )
+        return _with_project_public_link(link, account_id=account_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.delete("/projects/{project_id}/storage-spaces/{space_id}/public-links/{link_id}", response_model=list[PortalPublicLink])
+def revoke_portal_project_storage_space_public_link(
+    project_id: int,
+    space_id: str,
+    link_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalPublicLink]:
+    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
+        project_id,
+        space_id,
+        user=user,
+        db=db,
+    )
+    try:
+        links = service.revoke_storage_space_public_link(user, account_access, bucket_name, link_id)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="revoke_public_link",
+            entity_type="storage_space",
+            entity_id=bucket_name,
+            account=account_access.account,
+            metadata={"project_id": project_id, "storage_space_id": bucket_name, "public_link_id": link_id},
+        )
+        return [_with_project_public_link(link, account_id=account_id) for link in links]
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/share-candidates", response_model=list[PortalStorageSpaceShareCandidate])
+def portal_project_share_candidates(
+    project_id: int,
+    account_id: Optional[int] = Query(None),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalStorageSpaceShareCandidate]:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    target_account_id = _project_account_id_from_payload(project_access, account_id)
+    account_access = projects_service.account_access_for_project(project_access, target_account_id)
+    if not account_access.capabilities.can_manage_portal_users:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this project")
+    try:
+        return service.list_storage_space_share_candidates(user, account_access)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/projects/{project_id}/activity", response_model=list[PortalActivityItem])
+def portal_project_activity(
+    project_id: int,
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalActivityItem]:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    requested_account_id = requested_bucket = None
+    if space_id:
+        requested_account_id, requested_bucket = _parse_project_space_id(space_id)
+    items: list[PortalActivityItem] = []
+    for account_link in project_access.account_links:
+        if requested_account_id is not None and account_link.account_id != requested_account_id:
+            continue
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            account_items = service.list_portal_activity(
+                user,
+                account_access,
+                space_id=requested_bucket if requested_account_id is not None else None,
+                limit=limit,
+            )
+        except RuntimeError as exc:
+            _raise_portal_storage_runtime(exc)
+        for item in account_items:
+            payload = item.model_dump()
+            if item.storage_space_id:
+                payload["storage_space_id"] = _project_space_id(account_link.account_id, item.storage_space_id)
+            if account_link.display_name and item.storage_space_name:
+                payload["storage_space_name"] = f"{item.storage_space_name} ({account_link.display_name})"
+            items.append(PortalActivityItem.model_validate(payload))
+    return sorted(items, key=lambda item: item.created_at, reverse=True)[:limit]
+
+
+@router.get("/projects/{project_id}/transfers", response_model=list[PortalTransfer])
+def portal_project_transfers(
+    project_id: int,
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalTransfer]:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    requested_account_id = requested_bucket = None
+    if space_id:
+        requested_account_id, requested_bucket = _parse_project_space_id(space_id)
+    items: list[PortalTransfer] = []
+    for account_link in project_access.account_links:
+        if requested_account_id is not None and account_link.account_id != requested_account_id:
+            continue
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            account_items = service.list_portal_transfers(
+                user,
+                account_access,
+                space_id=requested_bucket if requested_account_id is not None else None,
+                limit=limit,
+            )
+        except RuntimeError as exc:
+            _raise_portal_storage_runtime(exc)
+        for item in account_items:
+            payload = item.model_dump()
+            if item.storage_space_id:
+                payload["storage_space_id"] = _project_space_id(account_link.account_id, item.storage_space_id)
+            if account_link.display_name and item.storage_space_name:
+                payload["storage_space_name"] = f"{item.storage_space_name} ({account_link.display_name})"
+            items.append(PortalTransfer.model_validate(payload))
+    return sorted(items, key=lambda item: item.started_at, reverse=True)[:limit]
+
+
+@router.get("/projects/{project_id}/alerts", response_model=list[PortalAlert])
+def portal_project_alerts(
+    project_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalAlert]:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    items: list[PortalAlert] = []
+    for account_link in project_access.account_links:
+        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
+        try:
+            account_items = service.list_portal_alerts(user, account_access, limit=limit)
+        except RuntimeError as exc:
+            _raise_portal_storage_runtime(exc)
+        for item in account_items:
+            payload = item.model_dump()
+            if item.storage_space_id:
+                payload["storage_space_id"] = _project_space_id(account_link.account_id, item.storage_space_id)
+            if account_link.display_name:
+                payload["title"] = f"{item.title} ({account_link.display_name})"
+            items.append(PortalAlert.model_validate(payload))
+    return sorted(items, key=lambda item: item.created_at or utcnow(), reverse=True)[:limit]
 
 
 @router.get("/eligibility", response_model=PortalEligibility)

@@ -2,7 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import (
+    AccountRole,
+    Project,
+    ProjectS3Account,
+    S3Account,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserProject,
+    UserRole,
+)
 from app.main import app
 from app.routers import dependencies
 
@@ -57,14 +67,14 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
         _seed_account(db_session, name="Beta", rgw_account_id="RGW-PORTAL-03", endpoint_id=endpoint.id),
     ]
     for account in accounts:
-        db_session.add(
-            UserS3Account(
-                user_id=actor.id,
-                account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
-                account_admin=False,
-                is_root=False,
-            )
+        project = Project(name=f"{account.name} project", description=None)
+        db_session.add(project)
+        db_session.flush()
+        db_session.add_all(
+            [
+                ProjectS3Account(project_id=project.id, account_id=account.id, display_name=account.name),
+                UserProject(user_id=actor.id, project_id=project.id, account_role=AccountRole.PORTAL_USER.value),
+            ]
         )
     db_session.commit()
 

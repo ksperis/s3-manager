@@ -191,6 +191,8 @@ def get_browser_settings(_: BrowserActor = Depends(get_current_account_admin)) -
 
 
 def _usage_summary_source(account: S3Account) -> tuple[str, str]:
+    if getattr(account, "_portal_project_buckets", None) is not None:
+        return "portal_project", "Project Storage Spaces"
     if getattr(account, "_portal_browser_role", None):
         return "portal", "Storage Spaces"
     if getattr(account, "s3_connection_id", None) is not None:
@@ -233,6 +235,13 @@ def _available_usage_summary(
         quota_max_size_bytes=_quota_gib_to_bytes(quota_max_size_gb),
         quota_max_objects=quota_max_objects,
     )
+
+
+def _sum_browser_bucket_values(values: list[Optional[int]]) -> Optional[int]:
+    known = [value for value in values if value is not None]
+    if not known:
+        return None
+    return sum(known)
 
 
 def _build_account_live_usage_summary(
@@ -287,6 +296,21 @@ def _build_s3_user_live_usage_summary(
 
 def _build_browser_usage_summary(account: S3Account, db: Session) -> BrowserUsageSummary:
     source, label = _usage_summary_source(account)
+    project_buckets = getattr(account, "_portal_project_buckets", None)
+    if source == "portal_project" and project_buckets is not None:
+        used_bytes = _sum_browser_bucket_values([bucket.used_bytes for bucket in project_buckets])
+        object_count = _sum_browser_bucket_values([bucket.object_count for bucket in project_buckets])
+        quota_max_size_bytes = _sum_browser_bucket_values([bucket.quota_max_size_bytes for bucket in project_buckets])
+        quota_max_objects = _sum_browser_bucket_values([bucket.quota_max_objects for bucket in project_buckets])
+        return BrowserUsageSummary(
+            available=used_bytes is not None,
+            source=source,
+            label=label,
+            used_bytes=used_bytes,
+            object_count=object_count,
+            quota_max_size_bytes=quota_max_size_bytes,
+            quota_max_objects=quota_max_objects,
+        )
     if source == "connection":
         return _unavailable_usage_summary(source=source, label=label)
     if source == "s3_user":

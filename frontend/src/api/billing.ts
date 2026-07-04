@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import { isPortalProjectSelector } from "./portal";
 
 export type BillingCoverage = {
   days_collected: number;
@@ -141,6 +142,19 @@ export async function collectBillingDaily(day: string): Promise<Record<string, u
 }
 
 export async function getPortalBillingMe(month: string, accountId?: S3AccountSelector): Promise<BillingSubjectDetail> {
+  if (isPortalProjectSelector(accountId)) {
+    return {
+      month,
+      subject_type: "portal_project",
+      subject_id: Number(accountId.replace("proj-", "")) || 0,
+      name: "Project",
+      daily: [],
+      usage: { bytes_in: 0, bytes_out: 0, ops_total: 0 },
+      storage: { avg_bytes: null, avg_gb_month: null, total_objects: null },
+      coverage: { days_collected: 0, days_in_month: 0, coverage_ratio: 0 },
+      cost: null,
+    };
+  }
   const params: Record<string, string> = { month };
   const { data } = await client.get<BillingSubjectDetail>("/portal/billing/me", {
     params: withS3AccountParam(params, accountId),
