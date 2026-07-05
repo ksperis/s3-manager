@@ -1300,6 +1300,53 @@ def test_project_global_replica_access_summary_is_read_only(db_session):
     assert summary.explicit_shares == []
 
 
+def test_project_global_replica_shares_and_public_links_are_empty(db_session):
+    endpoint_a = _global_replication_endpoint("portal-global-sharing-z1")
+    endpoint_b = _global_replication_endpoint("portal-global-sharing-z2")
+    account_a = S3Account(name="portal-global-sharing-a", rgw_account_id="portal-global-sharing-a", storage_endpoint=endpoint_a)
+    account_b = S3Account(name="portal-global-sharing-b", rgw_account_id="portal-global-sharing-b", storage_endpoint=endpoint_b)
+    user = User(email="portal-global-sharing@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Portal Global Sharing", description=None)
+    db_session.add_all([endpoint_a, endpoint_b, account_a, account_b, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            PortalStorageSpaceMetadata(
+                account_id=account_a.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=user.id,
+                visibility="shared",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    replica_id = f"a{account_b.id}:research-data"
+    service = PortalService(db_session)
+
+    shares = portal_router.portal_project_storage_space_shares(
+        project.id,
+        replica_id,
+        user=user,
+        db=db_session,
+        service=service,
+    )
+    public_links = portal_router.portal_project_storage_space_public_links(
+        project.id,
+        replica_id,
+        user=user,
+        db=db_session,
+        service=service,
+    )
+
+    assert shares == []
+    assert public_links == []
+
+
 def test_portal_project_browser_context_resolves_global_replica_account(monkeypatch, db_session):
     from fastapi import Request
     from app.routers.dependencies_internal import portal_access as portal_access_deps

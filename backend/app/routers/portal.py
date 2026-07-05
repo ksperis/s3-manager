@@ -898,12 +898,25 @@ def portal_project_storage_space_shares(
     db: Session = Depends(get_db),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[PortalStorageSpaceShare]:
-    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    _summary, account_access, account_id, bucket_name = resolved
+    if service._storage_space_metadata(account_access.account, bucket_name) is None:
+        return []
     try:
         return [
             _with_project_share(share, account_id=account_id)
@@ -1166,12 +1179,25 @@ def portal_project_storage_space_public_links(
     db: Session = Depends(get_db),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[PortalPublicLink]:
-    _project_access, account_access, account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    _summary, account_access, account_id, bucket_name = resolved
+    if service._storage_space_metadata(account_access.account, bucket_name) is None:
+        return []
     try:
         return [
             _with_project_public_link(link, account_id=account_id)

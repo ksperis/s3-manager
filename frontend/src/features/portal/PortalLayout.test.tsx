@@ -82,7 +82,7 @@ describe("PortalLayout", () => {
     vi.clearAllMocks();
   });
 
-  it("uses the shared shell with workspace and portal account selectors in the topbar", async () => {
+  it("uses the shared shell with workspace and portal project selectors in the topbar", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",

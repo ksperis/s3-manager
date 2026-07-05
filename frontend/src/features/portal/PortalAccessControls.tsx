@@ -24,9 +24,9 @@ export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceRol
 export function portalAccessModeDescription(mode: PortalAccessMode, t: ReturnType<typeof useI18n>["t"]): string {
   if (mode === "account") {
     return t({
-      en: "Current and future Portal members of this account receive this access automatically.",
-      fr: "Les membres Portal actuels et futurs de cet account reçoivent automatiquement cet accès.",
-      de: "Aktuelle und zukünftige Portal-Mitglieder dieses Accounts erhalten diesen Zugriff automatisch.",
+      en: "Current and future Portal members of this workspace receive this access automatically.",
+      fr: "Les membres Portal actuels et futurs de ce workspace reçoivent automatiquement cet accès.",
+      de: "Aktuelle und zukünftige Portal-Mitglieder dieses Workspace erhalten diesen Zugriff automatisch.",
     });
   }
   if (mode === "restricted") {
@@ -52,12 +52,12 @@ export function portalAccessModeSummary(
   if (mode === "account") {
     if (memberCount != null) {
       return t({
-        en: `All: ${memberCount} account member${memberCount > 1 ? "s" : ""}`,
-        fr: `Tous : ${memberCount} membre${memberCount > 1 ? "s" : ""} de l'account`,
-        de: `Alle: ${memberCount} Account-Mitglied${memberCount > 1 ? "er" : ""}`,
+        en: `All: ${memberCount} workspace member${memberCount > 1 ? "s" : ""}`,
+        fr: `Tous : ${memberCount} membre${memberCount > 1 ? "s" : ""} du workspace`,
+        de: `Alle: ${memberCount} Workspace-Mitglied${memberCount > 1 ? "er" : ""}`,
       });
     }
-    return t({ en: "All: all account members", fr: "Tous : tous les membres de l'account", de: "Alle: alle Account-Mitglieder" });
+    return t({ en: "All: all workspace members", fr: "Tous : tous les membres du workspace", de: "Alle: alle Workspace-Mitglieder" });
   }
   if (mode === "restricted") {
     return t({
@@ -209,14 +209,14 @@ export function PortalShareCandidatePicker({
         <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
           {term
             ? t({
-                en: "No eligible Portal member matches this search. To add someone else, request account access from an admin.",
-                fr: "Aucun membre Portal éligible ne correspond à cette recherche. Pour ajouter une autre personne, demandez un accès account à un admin.",
-                de: "Kein berechtigtes Portal-Mitglied passt zu dieser Suche. Fordern Sie für andere Personen Account-Zugriff bei einem Admin an.",
+                en: "No eligible Portal member matches this search. To add someone else, request workspace access from an admin.",
+                fr: "Aucun membre Portal éligible ne correspond à cette recherche. Pour ajouter une autre personne, demandez un accès workspace à un admin.",
+                de: "Kein berechtigtes Portal-Mitglied passt zu dieser Suche. Fordern Sie für andere Personen Workspace-Zugriff bei einem Admin an.",
               })
             : t({
-                en: "Only Portal members of this account can be selected. To add someone else, request account access from an admin.",
-                fr: "Seuls les membres Portal de cet account peuvent être sélectionnés. Pour ajouter une autre personne, demandez un accès account à un admin.",
-                de: "Nur Portal-Mitglieder dieses Accounts können ausgewählt werden. Fordern Sie für andere Personen Account-Zugriff bei einem Admin an.",
+                en: "Only Portal members of this workspace can be selected. To add someone else, request workspace access from an admin.",
+                fr: "Seuls les membres Portal de ce workspace peuvent être sélectionnés. Pour ajouter une autre personne, demandez un accès workspace à un admin.",
+                de: "Nur Portal-Mitglieder dieses Workspace können ausgewählt werden. Fordern Sie für andere Personen Workspace-Zugriff bei einem Admin an.",
               })}
         </div>
       )}

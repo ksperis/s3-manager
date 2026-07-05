@@ -216,7 +216,7 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "New key" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Disable" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-    expect(screen.getByText("Access-key management is disabled for this portal account.")).toBeInTheDocument();
+    expect(screen.getByText("Access-key management is disabled for this portal workspace.")).toBeInTheDocument();
   });
 
   it("renders project access keys by zonegroup and creates a scoped key", async () => {
@@ -232,7 +232,7 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByText("AK-PROJECT")).toBeInTheDocument();
     expect(screen.getByText("Accounts: Paris, Lyon")).toBeInTheDocument();
     expect(screen.getByText("Ceph zonegroup is not configured for this storage location.")).toBeInTheDocument();
-    expect(screen.queryByText("Access-key management is disabled for this portal account.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Access-key management is disabled for this portal workspace.")).not.toBeInTheDocument();
     expect(mocks.fetchPortalProjectAccessKeysState).toHaveBeenCalledWith("proj-1");
     expect(mocks.fetchPortalAccessKeysState).not.toHaveBeenCalled();
 

@@ -236,20 +236,28 @@ export default function PortalSharesPage() {
     }
     setApiShares(null);
     setSharesError(null);
-    Promise.all(activeSharedSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
+    Promise.allSettled(activeSharedSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
       .then((results) => {
-        if (!cancelled) {
-          setApiShares(results.flat());
-          setSharesLoadedKey(sharesRequestKey);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) {
-          setApiShares(null);
-          setSharesLoadedKey(null);
-          setSharesError(extractApiError(err, t({ en: "Unable to load shares.", fr: "Impossible de charger les partages.", de: "Freigaben können nicht geladen werden." })));
-        }
+        if (cancelled) return;
+        const fulfilled = results
+          .filter((result): result is PromiseFulfilledResult<PortalStorageSpaceShare[]> => result.status === "fulfilled")
+          .flatMap((result) => result.value);
+        const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (failed) console.error(failed.reason);
+        setApiShares(fulfilled);
+        setSharesLoadedKey(sharesRequestKey);
+        setSharesError(
+          failed
+            ? extractApiError(
+                failed.reason,
+                t({
+                  en: "Some shares could not be loaded.",
+                  fr: "Certains partages n'ont pas pu être chargés.",
+                  de: "Einige Freigaben konnten nicht geladen werden.",
+                })
+              )
+            : null
+        );
       });
     return () => {
       cancelled = true;
@@ -461,7 +469,7 @@ export default function PortalSharesPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading shares...", fr: "Chargement des partages...", de: "Freigaben werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to manage shares.", fr: "Sélectionnez un compte pour gérer les partages.", de: "Wählen Sie ein Konto aus, um Freigaben zu verwalten." }),
+    noAccountMessage: t({ en: "Select a project to manage shares.", fr: "Sélectionnez un projet pour gérer les partages.", de: "Wählen Sie ein Projekt aus, um Freigaben zu verwalten." }),
   });
   if (pageState) return pageState;
 

@@ -38,7 +38,7 @@ export default function PortalTransfersPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Transfers werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view transfers.", fr: "Sélectionnez un compte pour voir les transferts.", de: "Wählen Sie ein Konto aus, um Transfers anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view transfers.", fr: "Sélectionnez un projet pour voir les transferts.", de: "Wählen Sie ein Projekt aus, um Transfers anzuzeigen." }),
   });
   if (pageState) return pageState;
 

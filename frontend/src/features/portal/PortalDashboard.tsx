@@ -753,7 +753,7 @@ export default function PortalDashboard() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading dashboard...", fr: "Chargement du tableau de bord...", de: "Dashboard wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to open the dashboard.", fr: "Sélectionnez un compte pour ouvrir le tableau de bord.", de: "Wählen Sie ein Konto aus, um das Dashboard zu öffnen." }),
+    noAccountMessage: t({ en: "Select a project to open the dashboard.", fr: "Sélectionnez un projet pour ouvrir le tableau de bord.", de: "Wählen Sie ein Projekt aus, um das Dashboard zu öffnen." }),
   });
   if (pageState) return pageState;
 

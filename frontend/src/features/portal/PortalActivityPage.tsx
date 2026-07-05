@@ -38,7 +38,7 @@ export default function PortalActivityPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading activity...", fr: "Chargement de l'activité...", de: "Aktivität wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view activity.", fr: "Sélectionnez un compte pour voir l'activité.", de: "Wählen Sie ein Konto aus, um Aktivität anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view activity.", fr: "Sélectionnez un projet pour voir l'activité.", de: "Wählen Sie ein Projekt aus, um Aktivität anzuzeigen." }),
   });
   if (pageState) return pageState;
 

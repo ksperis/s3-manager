@@ -370,7 +370,7 @@ export default function PortalStorageSpaceDetailPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading storage space...", fr: "Chargement de l'espace de stockage...", de: "Speicherbereich wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this Storage Space.", fr: "Sélectionnez un compte pour voir cet espace de stockage.", de: "Wählen Sie ein Konto aus, um diesen Speicherbereich anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view this Storage Space.", fr: "Sélectionnez un projet pour voir cet espace de stockage.", de: "Wählen Sie ein Projekt aus, um diesen Speicherbereich anzuzeigen." }),
   });
   if (pageState) return pageState;
 
@@ -502,7 +502,7 @@ export default function PortalStorageSpaceDetailPage() {
         description={t({ en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`, fr: `${space.description} Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`, de: `${space.description} Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.` })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
         inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>}
-        actions={!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access) ? [{
+        actions={!isArchived && accessSummary?.can_manage_access ? [{
           label: t({ en: "Share", fr: "Partager", de: "Freigeben" }),
           to: `/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`,
           variant: "secondary",
@@ -590,7 +590,7 @@ export default function PortalStorageSpaceDetailPage() {
                   onAccountMemberRoleChange={setAccessAccountMemberRole}
                   disabled={accessBusy || isArchived}
                   modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                  roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+                  roleLabel={t({ en: "Default access for workspace members", fr: "Accès par défaut des membres du workspace", de: "Standardzugriff für Workspace-Mitglieder" })}
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <UiButton

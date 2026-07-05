@@ -406,8 +406,8 @@ export default function PortalUsagePage() {
     return (
       <div className="space-y-4">
         <PageEmptyState
-          title={t({ en: "Select an account to view analytics", fr: "Sélectionnez un compte pour voir les analyses", de: "Wählen Sie ein Konto aus, um Analysen anzuzeigen" })}
-          description={t({ en: "Usage, traffic and billing analytics are attached to your selected portal account.", fr: "Les analyses d'utilisation, de trafic et de facturation sont liées au compte Portal sélectionné.", de: "Nutzungs-, Traffic- und Abrechnungsanalysen sind mit Ihrem ausgewählten Portal-Konto verknüpft." })}
+          title={t({ en: "Select a project to view analytics", fr: "Sélectionnez un projet pour voir les analyses", de: "Wählen Sie ein Projekt aus, um Analysen anzuzeigen" })}
+          description={t({ en: "Usage, traffic and billing analytics are attached to your selected portal project.", fr: "Les analyses d'utilisation, de trafic et de facturation sont liées au projet Portal sélectionné.", de: "Nutzungs-, Traffic- und Abrechnungsanalysen sind mit Ihrem ausgewählten Portal-Projekt verknüpft." })}
           tone="warning"
         />
       </div>
@@ -434,7 +434,7 @@ export default function PortalUsagePage() {
       {activeTab === "storage" ? (
         <MetricsSummaryCard
           title={t({ en: "Storage snapshot", fr: "Instantané du stockage", de: "Speichermomentaufnahme" })}
-          description={t({ en: "Current storage, object and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des objets et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Objekt- und Quotennutzung für dieses Portal-Konto." })}
+          description={t({ en: "Current storage, object and quota usage for this portal project.", fr: "Utilisation actuelle du stockage, des objets et des quotas pour ce projet Portal.", de: "Aktuelle Speicher-, Objekt- und Quotennutzung für dieses Portal-Projekt." })}
         >
           {usageError ? (
             <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles du workspace restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
@@ -596,7 +596,7 @@ export default function PortalUsagePage() {
       {activeTab === "usage-composition" ? (
         <BucketUsageStatsAggregateCard
           title={t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" })}
-          description={t({ en: "Latest calculated usage composition for the Storage Spaces visible in this portal account.", fr: "Dernière composition d'utilisation calculée pour les espaces de stockage visibles dans ce compte Portal.", de: "Zuletzt berechnete Nutzungszusammensetzung für die in diesem Portal-Konto sichtbaren Speicherbereiche." })}
+          description={t({ en: "Latest calculated usage composition for the Storage Spaces visible in this portal project.", fr: "Dernière composition d'utilisation calculée pour les espaces de stockage visibles dans ce projet Portal.", de: "Zuletzt berechnete Nutzungszusammensetzung für die in diesem Portal-Projekt sichtbaren Speicherbereiche." })}
           aggregate={usageStatsAggregate}
           loading={usageStatsLoading}
           error={usageStatsError}
@@ -614,7 +614,7 @@ export default function PortalUsagePage() {
           onWindowChange={setUsageHistoryWindow}
           loading={usageHistoryLoading}
           error={usageHistoryError}
-          description={t({ en: "Stored usage snapshots for the selected portal account.", fr: "Instantanés d'utilisation stockés pour le compte Portal sélectionné.", de: "Gespeicherte Nutzungsmomentaufnahmen für das ausgewählte Portal-Konto." })}
+          description={t({ en: "Stored usage snapshots for the selected portal project.", fr: "Instantanés d'utilisation stockés pour le projet Portal sélectionné.", de: "Gespeicherte Nutzungsmomentaufnahmen für das ausgewählte Portal-Projekt." })}
         />
       ) : null}
 
@@ -627,7 +627,7 @@ export default function PortalUsagePage() {
           loading={trafficLoading}
           error={trafficError}
           showEmpty={trafficMissing}
-          description={t({ en: "Uploads, downloads and requests for this portal account.", fr: "Envois, téléchargements et requêtes de ce compte Portal.", de: "Uploads, Downloads und Anfragen für dieses Portal-Konto." })}
+          description={t({ en: "Uploads, downloads and requests for this portal project.", fr: "Envois, téléchargements et requêtes de ce projet Portal.", de: "Uploads, Downloads und Anfragen für dieses Portal-Projekt." })}
           bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
           userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
         />
@@ -636,7 +636,7 @@ export default function PortalUsagePage() {
       {activeTab === "billing" ? (
         <MetricsCard
           title={t({ en: "Billing", fr: "Facturation", de: "Abrechnung" })}
-          description={t({ en: "Estimated monthly usage and cost for this portal account.", fr: "Utilisation et coût mensuels estimés pour ce compte Portal.", de: "Geschätzte monatliche Nutzung und Kosten für dieses Portal-Konto." })}
+          description={t({ en: "Estimated monthly usage and cost for this portal project.", fr: "Utilisation et coût mensuels estimés pour ce projet Portal.", de: "Geschätzte monatliche Nutzung und Kosten für dieses Portal-Projekt." })}
           actions={billingMonthControl}
         >
           {billingLoading && !billing ? (

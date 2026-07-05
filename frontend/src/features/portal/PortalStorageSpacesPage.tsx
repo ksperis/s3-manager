@@ -279,7 +279,7 @@ export default function PortalStorageSpacesPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading storage spaces...", fr: "Chargement des espaces de stockage...", de: "Speicherbereiche werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view storage spaces.", fr: "Sélectionnez un compte pour voir les espaces de stockage.", de: "Wählen Sie ein Konto aus, um Speicherbereiche anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view storage spaces.", fr: "Sélectionnez un projet pour voir les espaces de stockage.", de: "Wählen Sie ein Projekt aus, um Speicherbereiche anzuzeigen." }),
   });
   if (pageState) return pageState;
   const headerActions = [

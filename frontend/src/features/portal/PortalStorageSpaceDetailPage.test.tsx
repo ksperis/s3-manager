@@ -259,6 +259,34 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(embedProps.onCreatePublicLinkForObject).toBeUndefined();
   });
 
+  it("does not advertise sharing actions for read-only storage spaces", async () => {
+    mocks.hookResult.workspace.spaces[0].role = "Viewer";
+    mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
+    mocks.hookResult.workspace.spaces[0].visibility = "shared";
+    mocks.fetchAccessSummaryMock.mockResolvedValue({
+      mode: "restricted",
+      default_account_member_role: null,
+      owner: {
+        user_id: 7,
+        email: "manager@example.com",
+        display_name: "Manager User",
+        role: "Owner",
+        account_role: "portal_manager",
+        access_source: "owner",
+      },
+      effective_member_count: 1,
+      explicit_shares: [],
+      public_link_count: 0,
+      can_manage_access: false,
+      can_create_public_links: false,
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Access" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Share" })).not.toBeInTheDocument();
+  });
+
   it("passes the project account id to the embedded Browser for project Storage Spaces", () => {
     mocks.hookResult.accountIdForApi = "proj-42";
     mocks.hookResult.workspace.spaces[0].id = "a12:research-data";

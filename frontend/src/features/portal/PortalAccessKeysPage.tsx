@@ -409,7 +409,7 @@ export default function PortalAccessKeysPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {!isProjectContext && state && !canManageAccessKeys && (
-        <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this portal account.", fr: "La gestion des clés d'accès est désactivée pour ce compte Portal.", de: "Die Verwaltung von Zugriffsschlüsseln ist für dieses Portal-Konto deaktiviert." })}</PageBanner>
+        <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this portal workspace.", fr: "La gestion des clés d'accès est désactivée pour ce workspace Portal.", de: "Die Verwaltung von Zugriffsschlüsseln ist für diesen Portal-Workspace deaktiviert." })}</PageBanner>
       )}
       {!isProjectContext && state && canManageAccessKeys && (
         <PageBanner tone="info">
@@ -459,7 +459,7 @@ export default function PortalAccessKeysPage() {
       )}
 
       {accountLoading ? (
-        <PageBanner tone="info">{t({ en: "Loading portal account...", fr: "Chargement du compte Portal...", de: "Portal-Konto wird geladen..." })}</PageBanner>
+        <PageBanner tone="info">{t({ en: "Loading portal workspace...", fr: "Chargement du workspace Portal...", de: "Portal-Workspace wird geladen..." })}</PageBanner>
       ) : !hasAccountContext ? (
         <PageEmptyState
           title={t({ en: "Select a portal workspace before managing access keys", fr: "Sélectionnez un workspace Portal avant de gérer les clés d'accès", de: "Wählen Sie einen Portal-Workspace aus, bevor Sie Zugriffsschlüssel verwalten" })}

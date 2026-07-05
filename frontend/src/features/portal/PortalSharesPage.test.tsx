@@ -187,7 +187,7 @@ describe("PortalSharesPage", () => {
     await user.click(await screen.findByRole("button", { name: "Shared by me" }));
     await user.type(await screen.findByPlaceholderText("Search eligible Portal users..."), "missing person");
 
-    expect(await screen.findByText(/request account access from an admin/i)).toBeInTheDocument();
+    expect(await screen.findByText(/request workspace access from an admin/i)).toBeInTheDocument();
   });
 
   it("loads shares only for active shared storage spaces", async () => {
@@ -236,6 +236,60 @@ describe("PortalSharesPage", () => {
       expect(mocks.listSharesMock).toHaveBeenCalledTimes(1);
     });
     expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
+  });
+
+  it("keeps available shares visible when one storage location fails", async () => {
+    mocks.hookResult.workspace.spaces = [
+      {
+        id: "research-data",
+        name: "Research Data",
+        role: "Owner",
+        status: "Active",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 10, 2023",
+        shareCount: 1,
+      },
+      {
+        id: "a22:research-data",
+        name: "Research Data",
+        role: "Viewer",
+        status: "Active",
+        access: "Shared",
+        ownerUserId: 7,
+        visibility: "shared",
+        region: "eu-west-3",
+        createdLabel: "May 10, 2023",
+        shareCount: 0,
+      },
+    ];
+    mocks.listSharesMock.mockImplementation((_accountId: string, spaceId: string) => {
+      if (spaceId === "a22:research-data") {
+        return Promise.reject(new Error("Replica metadata unavailable"));
+      }
+      return Promise.resolve([
+        {
+          id: "research-data:12",
+          storage_space_id: "research-data",
+          storage_space_name: "Research Data",
+          user_id: 12,
+          email: "viewer@example.com",
+          role: "Viewer",
+          direction: "with_me",
+          activity_label: "Active",
+        },
+      ]);
+    });
+
+    render(<PortalSharesPage />);
+
+    expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Replica metadata unavailable")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.listSharesMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("loads public links from real portal endpoints", async () => {

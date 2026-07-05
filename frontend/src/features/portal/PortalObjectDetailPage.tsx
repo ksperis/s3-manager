@@ -207,7 +207,7 @@ export default function PortalObjectDetailPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading object...", fr: "Chargement de l'objet...", de: "Objekt wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this object.", fr: "Sélectionnez un compte pour voir cet objet.", de: "Wählen Sie ein Konto aus, um dieses Objekt anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view this object.", fr: "Sélectionnez un projet pour voir cet objet.", de: "Wählen Sie ein Projekt aus, um dieses Objekt anzuzeigen." }),
   });
   if (pageState) return pageState;
 
@@ -219,7 +219,7 @@ export default function PortalObjectDetailPage() {
   const parentPath = object.path.split("/").slice(0, -1).join("/");
   const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
   const publicLinkUnavailableReason = !accountIdForApi
-    ? t({ en: "Select a Portal account first.", fr: "Sélectionnez d'abord un compte Portal.", de: "Wählen Sie zuerst ein Portal-Konto aus." })
+    ? t({ en: "Select a Portal project first.", fr: "Sélectionnez d'abord un projet Portal.", de: "Wählen Sie zuerst ein Portal-Projekt aus." })
     : space.status === "Archived"
       ? t({ en: "Archived Storage Spaces cannot create public links.", fr: "Les espaces de stockage archivés ne peuvent pas créer de liens publics.", de: "Archivierte Speicherbereiche können keine öffentlichen Links erstellen." })
       : space.role !== "Owner"
@@ -228,7 +228,7 @@ export default function PortalObjectDetailPage() {
           ? t({ en: "Public links are available only for shared Storage Spaces.", fr: "Les liens publics sont disponibles uniquement pour les espaces de stockage partagés.", de: "Öffentliche Links sind nur für geteilte Speicherbereiche verfügbar." })
           : null;
   const deleteUnavailableReason = !accountIdForApi
-    ? t({ en: "Select a Portal account first.", fr: "Sélectionnez d'abord un compte Portal.", de: "Wählen Sie zuerst ein Portal-Konto aus." })
+    ? t({ en: "Select a Portal project first.", fr: "Sélectionnez d'abord un projet Portal.", de: "Wählen Sie zuerst ein Portal-Projekt aus." })
     : space.role === "Viewer"
       ? t({ en: "Viewers cannot delete files.", fr: "Les Lecteurs ne peuvent pas supprimer de fichiers.", de: "Betrachter können keine Dateien löschen." })
       : null;
