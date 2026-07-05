@@ -47,8 +47,8 @@ def _resolve_portal_access_from_project(
     try:
         project_access = projects_service.resolve_portal_project_access(user, project_id)
     except ValueError as exc:
-        detail = str(exc)
-        status_code = status.HTTP_403_FORBIDDEN if "Not authorized" in detail else status.HTTP_404_NOT_FOUND
+        status_code = status.HTTP_403_FORBIDDEN if "Not authorized" in str(exc) else status.HTTP_404_NOT_FOUND
+        detail = "Not authorized for this project" if status_code == status.HTTP_403_FORBIDDEN else "Portal project not found"
         raise HTTPException(status_code=status_code, detail=detail) from exc
     if account_id is None:
         if len(project_access.account_links) != 1:
@@ -57,7 +57,7 @@ def _resolve_portal_access_from_project(
     try:
         return projects_service.account_access_for_project(project_access, account_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account") from exc
 
 
 def _resolve_portal_access_from_account(
