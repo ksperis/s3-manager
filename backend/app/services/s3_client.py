@@ -10,12 +10,47 @@ from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from typing import Iterable, Callable, Any, Optional
 import logging
-from time import perf_counter
+from time import perf_counter, sleep
 
 from app.core.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+_BUCKET_CONFIG_TRANSIENT_CODES = {"concurrentmodification", "operationaborted"}
+
+
+def _client_error_code(exc: ClientError) -> str:
+    if not hasattr(exc, "response"):
+        return ""
+    return str(exc.response.get("Error", {}).get("Code", "") or "").strip().lower()
+
+
+def _is_transient_bucket_config_error(exc: ClientError) -> bool:
+    code = _client_error_code(exc)
+    return code in _BUCKET_CONFIG_TRANSIENT_CODES or "concurrentmodification" in str(exc).lower()
+
+
+def _run_bucket_config_mutation(bucket_name: str, action_label: str, operation: Callable[[], None]) -> None:
+    for attempt in range(3):
+        try:
+            operation()
+            return
+        except ClientError as exc:
+            if _is_transient_bucket_config_error(exc) and attempt < 2:
+                delay = 0.2 * (attempt + 1)
+                logger.debug(
+                    "Retrying bucket configuration mutation after transient %s for %s (attempt %s/3)",
+                    _client_error_code(exc) or type(exc).__name__,
+                    bucket_name,
+                    attempt + 2,
+                )
+                sleep(delay)
+                continue
+            raise RuntimeError(f"Unable to {action_label} for bucket '{bucket_name}': {exc}") from exc
+        except BotoCoreError as exc:
+            raise RuntimeError(f"Unable to {action_label} for bucket '{bucket_name}': {exc}") from exc
+    raise RuntimeError(f"Unable to {action_label} for bucket '{bucket_name}'")
 
 
 class BucketNotEmptyError(RuntimeError):
@@ -232,10 +267,11 @@ def set_bucket_versioning(
         verify_tls=verify_tls,
     )
     status = "Enabled" if enabled else "Suspended"
-    try:
-        client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={"Status": status})
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Unable to update versioning for bucket '{bucket_name}': {exc}") from exc
+    _run_bucket_config_mutation(
+        bucket_name,
+        "update versioning",
+        lambda: client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={"Status": status}),
+    )
     logger.debug("Set versioning for bucket %s to %s", bucket_name, status)
 
 
@@ -865,10 +901,14 @@ def put_bucket_lifecycle(
         force_path_style=force_path_style,
         verify_tls=verify_tls,
     )
-    try:
-        client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration={"Rules": rules})
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Unable to set lifecycle for bucket '{bucket_name}': {exc}") from exc
+    _run_bucket_config_mutation(
+        bucket_name,
+        "set lifecycle",
+        lambda: client.put_bucket_lifecycle_configuration(
+            Bucket=bucket_name,
+            LifecycleConfiguration={"Rules": rules},
+        ),
+    )
     logger.debug("Updated lifecycle for bucket %s", bucket_name)
 
 
@@ -1047,10 +1087,11 @@ def put_bucket_cors(
         force_path_style=force_path_style,
         verify_tls=verify_tls,
     )
-    try:
-        client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration={"CORSRules": rules})
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Unable to set bucket CORS for '{bucket_name}': {exc}") from exc
+    _run_bucket_config_mutation(
+        bucket_name,
+        "set bucket CORS",
+        lambda: client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration={"CORSRules": rules}),
+    )
     logger.debug("Updated CORS for bucket %s", bucket_name)
 
 

@@ -87,6 +87,36 @@ def test_put_bucket_encryption_sends_rules(monkeypatch):
     ]
 
 
+def test_bucket_lifecycle_retries_concurrent_modification(monkeypatch):
+    class FlakyLifecycleClient:
+        def __init__(self):
+            self.calls = 0
+
+        def put_bucket_lifecycle_configuration(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise ClientError(
+                    {"Error": {"Code": "ConcurrentModification", "Message": "busy"}},
+                    "PutBucketLifecycleConfiguration",
+                )
+            self.kwargs = kwargs
+
+    fake_client = FlakyLifecycleClient()
+    sleep_calls = []
+    monkeypatch.setattr(s3_client, "get_s3_client", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(s3_client, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    rules = [{"ID": "ExpireDeleteMarkers", "Status": "Enabled"}]
+    s3_client.put_bucket_lifecycle("bucket-lifecycle", rules)
+
+    assert fake_client.calls == 2
+    assert fake_client.kwargs == {
+        "Bucket": "bucket-lifecycle",
+        "LifecycleConfiguration": {"Rules": rules},
+    }
+    assert sleep_calls == [0.2]
+
+
 def test_delete_bucket_encryption_ignores_missing_configuration(monkeypatch):
     class MissingConfigClient:
         def delete_bucket_encryption(self, **kwargs):

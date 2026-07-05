@@ -1397,12 +1397,14 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     assert "arn:aws:iam::rgw-policy-account:user/owner-iam" in allowed_principals
     assert "arn:aws:iam:::user/manager-iam" not in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:user/manager-iam" not in allowed_principals
-    assert "arn:aws:iam::rgw-policy-account:root" not in allowed_principals
+    assert "arn:aws:iam::rgw-policy-account:root" in allowed_principals
 
     metadata.archived_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     archived_policy = service._storage_space_bucket_policy(account, "research-data", metadata, private_policy)
     assert archived_policy is not None
     assert [stmt["Sid"] for stmt in archived_policy["Statement"]] == ["ExternalRule", service._storage_space_archived_sid]
+    archived_principals = _storage_space_policy_principals(archived_policy["Statement"][1])
+    assert "arn:aws:iam::rgw-policy-account:root" in archived_principals
 
     metadata.archived_at = None
     metadata.visibility = "shared"
@@ -2304,6 +2306,65 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
             "verify_tls": False,
         },
     }
+
+
+def test_portal_iam_service_uses_zonegroup_primary_endpoint(monkeypatch, db_session):
+    features_config = "features:\n  iam:\n    enabled: true\n"
+    primary = StorageEndpoint(
+        name="s3-z1",
+        endpoint_url="https://s3-z1.example.test",
+        provider="ceph",
+        region="zonegroup-region",
+        verify_tls=False,
+        ceph_zonegroup_name="zg-lab",
+        features_config=features_config,
+    )
+    secondary = StorageEndpoint(
+        name="s3-z2",
+        endpoint_url="https://s3-z2.example.test",
+        provider="ceph",
+        region="zonegroup-region",
+        verify_tls=True,
+        ceph_zonegroup_name="zg-lab",
+        features_config=features_config,
+    )
+    db_session.add_all([primary, secondary])
+    db_session.flush()
+    account = S3Account(
+        name="portal-zonegroup-account",
+        rgw_account_id="RGW-ZONEGROUP",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint_id=secondary.id,
+    )
+    db_session.add(account)
+    db_session.commit()
+    db_session.refresh(account)
+
+    captured = {}
+    fake_iam_service = object()
+
+    def fake_get_iam_service(access_key, secret_key, **kwargs):
+        captured["access_key"] = access_key
+        captured["secret_key"] = secret_key
+        captured["kwargs"] = kwargs
+        return fake_iam_service
+
+    monkeypatch.setattr("app.services.portal.iam.get_iam_service", fake_get_iam_service)
+
+    service = PortalService(db_session)
+
+    assert service._get_iam_service(account) is fake_iam_service
+    assert captured == {
+        "access_key": "ROOT-AK",
+        "secret_key": "ROOT-SK",
+        "kwargs": {
+            "endpoint": "https://s3-z1.example.test",
+            "region": "zonegroup-region",
+            "verify_tls": False,
+        },
+    }
+    assert service._s3_client_kwargs(account)["endpoint"] == "https://s3-z2.example.test"
 
 
 def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypatch, db_session):

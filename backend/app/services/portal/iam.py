@@ -412,11 +412,8 @@ class PortalIamMixin:
     ) -> list[str]:
         allowed_user_ids = self._portal_storage_space_allowed_user_ids(account, metadata)
         user_principals = self._portal_policy_principals_for_user_ids(account, allowed_user_ids)
-        if not user_principals:
-            return []
         principals = set(user_principals)
-        if self._metadata_visibility(metadata) == "shared":
-            principals.update(self._portal_storage_space_technical_principal_arns(account))
+        principals.update(self._portal_storage_space_technical_principal_arns(account))
         return sorted(principals)
 
     def _without_storage_space_policy_statements(self, policy: Optional[dict]) -> Optional[dict]:
@@ -456,15 +453,18 @@ class PortalIamMixin:
         resources = self._bucket_arns(bucket_name)
         actions = self._storage_space_policy_actions()
         if metadata.archived_at:
-            statements.append(
-                {
-                    "Sid": self._storage_space_archived_sid,
-                    "Effect": "Deny",
-                    "Principal": "*",
-                    "Action": actions,
-                    "Resource": resources,
-                }
-            )
+            statement: dict[str, Any] = {
+                "Sid": self._storage_space_archived_sid,
+                "Effect": "Deny",
+                "Action": actions,
+                "Resource": resources,
+            }
+            technical_principals = self._portal_storage_space_technical_principal_arns(account)
+            if technical_principals:
+                statement["NotPrincipal"] = {"AWS": technical_principals}
+            else:
+                statement["Principal"] = "*"
+            statements.append(statement)
         else:
             allowed_principals = self._portal_policy_principals_for_space(account, metadata)
             statement: dict[str, Any] = {
@@ -960,9 +960,49 @@ class PortalIamMixin:
             len(buckets),
         )
 
+    def _endpoint_provider_name(self, endpoint: Optional[StorageEndpoint]) -> str:
+        provider = getattr(endpoint, "provider", None)
+        return str(getattr(provider, "value", provider) or "").strip().lower()
+
+    def _portal_iam_endpoint(self, account: S3Account) -> Optional[StorageEndpoint]:
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None:
+            return None
+        if self._endpoint_provider_name(endpoint) != "ceph":
+            return endpoint
+        zonegroup = str(getattr(endpoint, "ceph_zonegroup_name", None) or "").strip()
+        if not zonegroup:
+            return endpoint
+        try:
+            candidates = (
+                self.db.query(StorageEndpoint)
+                .filter(StorageEndpoint.ceph_zonegroup_name == zonegroup)
+                .order_by(StorageEndpoint.id.asc())
+                .all()
+            )
+        except Exception as exc:  # pragma: no cover - defensive DB fallback
+            logger.warning("Unable to resolve Portal IAM endpoint for zonegroup %s: %s", zonegroup, exc)
+            return endpoint
+        for candidate in candidates:
+            if self._endpoint_provider_name(candidate) != "ceph":
+                continue
+            if not getattr(candidate, "endpoint_url", None):
+                continue
+            flags = resolve_feature_flags(candidate)
+            if not flags.iam_enabled or not resolve_iam_endpoint(candidate):
+                continue
+            return candidate
+        return endpoint
+
     def _get_iam_service(self, account: S3Account) -> RGWIAMService:
         access_key, secret_key = self._account_credentials(account)
-        endpoint, region, _, verify_tls = resolve_s3_client_options(account)
+        iam_endpoint = self._portal_iam_endpoint(account)
+        if iam_endpoint is not None:
+            endpoint = resolve_iam_endpoint(iam_endpoint)
+            region = resolve_iam_signing_region(iam_endpoint)
+            verify_tls = bool(getattr(iam_endpoint, "verify_tls", True))
+        else:
+            endpoint, region, _, verify_tls = resolve_s3_client_options(account)
         return get_iam_service(
             access_key,
             secret_key,
