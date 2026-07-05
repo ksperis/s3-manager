@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -33,8 +32,6 @@ from app.models.project import (
     ProjectCreate,
     ProjectGroupLink,
     ProjectGroupLinkInput,
-    ProjectProvisionAccountsRequest,
-    ProjectProvisionAccountsResponse,
     ProjectSummary,
     ProjectUpdate,
     ProjectUserLink,
@@ -42,7 +39,6 @@ from app.models.project import (
     validate_project_role,
 )
 from app.models.app_settings import PortalSettingsOverride
-from app.models.s3_account import S3AccountCreate
 from app.routers.dependencies_internal.types import AccountAccess, AccountCapabilities
 from app.services.effective_access_service import EffectiveAccountLink
 from app.services.s3_accounts_service import S3AccountsService
@@ -175,52 +171,6 @@ class ProjectsService:
         self._revoke_project_iam_links(project.id)
         self.db.delete(project)
         self.db.commit()
-
-    def provision_accounts_for_project(
-        self,
-        project_id: int,
-        payload: ProjectProvisionAccountsRequest,
-    ) -> ProjectProvisionAccountsResponse:
-        project = self.get_project(project_id)
-        if self.accounts_service is None:
-            raise ValueError("Account provisioning is unavailable")
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .filter(StorageEndpoint.id.in_(sorted({int(endpoint_id) for endpoint_id in payload.endpoint_ids})))
-            .all()
-        )
-        found_ids = {endpoint.id for endpoint in endpoints}
-        missing_ids = sorted(set(payload.endpoint_ids) - found_ids)
-        if missing_ids:
-            raise ValueError(f"Storage endpoints not found: {', '.join(str(item) for item in missing_ids)}")
-        targets = self._dedupe_endpoints_by_zonegroup(endpoints)
-        created_account_ids: list[int] = []
-        reused_endpoint_ids = sorted(set(payload.endpoint_ids) - {endpoint.id for endpoint in targets})
-        for endpoint in targets:
-            name = self._unique_account_name(
-                self._normalized_account_name(payload.base_name or project.name, endpoint)
-            )
-            created = self.accounts_service.create_account_with_manager(
-                S3AccountCreate(
-                    name=name,
-                    email=payload.email,
-                    storage_endpoint_id=endpoint.id,
-                )
-            )
-            account_id = int(created.db_id or created.id)
-            created_account_ids.append(account_id)
-            label = self._default_project_account_label(endpoint)
-            self._upsert_project_account(project, account_id=account_id, display_name=label, sort_order=len(created_account_ids))
-        project.updated_at = utcnow()
-        self.db.add(project)
-        self.db.commit()
-        self._sync_project_iam_links(project.id)
-        self.db.refresh(project)
-        return ProjectProvisionAccountsResponse(
-            project=self.project_to_out(project),
-            created_account_ids=created_account_ids,
-            reused_endpoint_ids=reused_endpoint_ids,
-        )
 
     def list_portal_projects_for_user(self, user: User) -> list[PortalProject]:
         role_by_project = self._project_roles_for_user(user)
@@ -540,39 +490,10 @@ class ProjectsService:
             using_root_key=False,
         )
 
-    def _dedupe_endpoints_by_zonegroup(self, endpoints: list[StorageEndpoint]) -> list[StorageEndpoint]:
-        selected: dict[str, StorageEndpoint] = {}
-        for endpoint in sorted(endpoints, key=lambda item: (item.ceph_zonegroup_name or item.name or "", item.id)):
-            zonegroup = (endpoint.ceph_zonegroup_name or "").strip().lower()
-            key = f"zg:{zonegroup}" if zonegroup else f"ep:{endpoint.id}"
-            selected.setdefault(key, endpoint)
-        return list(selected.values())
-
-    def _normalized_account_name(self, project_name: str, endpoint: StorageEndpoint) -> str:
-        base = self._slug(project_name)
-        suffix = self._slug(endpoint.ceph_zonegroup_name or endpoint.name)
-        value = f"{base}-{suffix}" if suffix and suffix not in base else base
-        return value[:80].strip("-") or f"project-{endpoint.id}"
-
-    def _unique_account_name(self, base_name: str) -> str:
-        candidate = base_name
-        counter = 2
-        while self.db.query(S3Account).filter(func.lower(S3Account.name) == candidate.lower()).first():
-            suffix = f"-{counter}"
-            candidate = f"{base_name[: 80 - len(suffix)].strip('-')}{suffix}"
-            counter += 1
-        return candidate
-
     def _default_project_account_label(self, endpoint: Optional[StorageEndpoint]) -> str:
         if endpoint is None:
             return "Default"
         return endpoint.ceph_zonegroup_name or endpoint.name or f"Endpoint {endpoint.id}"
-
-    @staticmethod
-    def _slug(value: str) -> str:
-        slug = re.sub(r"[^a-z0-9-]+", "-", (value or "").strip().lower())
-        slug = re.sub(r"-+", "-", slug).strip("-")
-        return slug or "project"
 
 
 def get_projects_service(db: Session, accounts_service: Optional[S3AccountsService] = None) -> ProjectsService:

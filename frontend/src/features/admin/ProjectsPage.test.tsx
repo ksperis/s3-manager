@@ -6,13 +6,11 @@ const listProjectsMock = vi.fn();
 const createProjectMock = vi.fn();
 const updateProjectMock = vi.fn();
 const deleteProjectMock = vi.fn();
-const provisionProjectAccountsMock = vi.fn();
 const fetchProjectPortalSettingsMock = vi.fn();
 const updateProjectPortalSettingsMock = vi.fn();
 const listMinimalS3AccountsMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
 const listMinimalGroupsMock = vi.fn();
-const listStorageEndpointsMock = vi.fn();
 let portalEnabled = false;
 
 const makePortalProjectSettings = (overrides?: Record<string, unknown>) => ({
@@ -41,8 +39,6 @@ vi.mock("../../api/projects", () => ({
   createProject: (payload: unknown) => createProjectMock(payload),
   updateProject: (projectId: number, payload: unknown) => updateProjectMock(projectId, payload),
   deleteProject: (projectId: number) => deleteProjectMock(projectId),
-  provisionProjectAccounts: (projectId: number, payload: unknown) =>
-    provisionProjectAccountsMock(projectId, payload),
   fetchProjectPortalSettings: (projectId: number) => fetchProjectPortalSettingsMock(projectId),
   updateProjectPortalSettings: (projectId: number, payload: unknown) =>
     updateProjectPortalSettingsMock(projectId, payload),
@@ -71,10 +67,6 @@ vi.mock("../../api/users", () => ({
 
 vi.mock("../../api/groups", () => ({
   listMinimalGroups: () => listMinimalGroupsMock(),
-}));
-
-vi.mock("../../api/storageEndpoints", () => ({
-  listStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
 describe("ProjectsPage", () => {
@@ -116,15 +108,9 @@ describe("ProjectsPage", () => {
       { id: 12, name: "Ops Team" },
       { id: 13, name: "Archive Team" },
     ]);
-    listStorageEndpointsMock.mockResolvedValue([]);
     createProjectMock.mockResolvedValue({ id: 55, name: "Research Project" });
     updateProjectMock.mockResolvedValue({ id: 55, name: "Research Project" });
     deleteProjectMock.mockResolvedValue(undefined);
-    provisionProjectAccountsMock.mockResolvedValue({
-      project: { id: 55, name: "Research Project" },
-      created_account_ids: [],
-      reused_endpoint_ids: [],
-    });
     fetchProjectPortalSettingsMock.mockResolvedValue(makePortalProjectSettings());
     updateProjectPortalSettingsMock.mockResolvedValue(makePortalProjectSettings());
   });

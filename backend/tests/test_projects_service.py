@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 from app.db import (
     AccountRole,
@@ -19,7 +18,6 @@ from app.db import (
     UserRole,
     UserUiGroup,
 )
-from app.models.project import ProjectProvisionAccountsRequest
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.projects_service import ProjectsService
 
@@ -166,48 +164,3 @@ def test_effective_access_exposes_project_links_for_workspace_guard(db_session):
     assert effective_access.portal_projects[0].id == project.id
     assert effective_access.portal_projects[0].name == "Portal Workspace"
     assert effective_access.portal_projects[0].account_role == AccountRole.PORTAL_MANAGER.value
-
-
-class _FakeAccountsService:
-    def __init__(self, db_session) -> None:
-        self.db_session = db_session
-        self.created_endpoint_ids: list[int] = []
-
-    def create_account_with_manager(self, payload):  # noqa: ANN001
-        self.created_endpoint_ids.append(payload.storage_endpoint_id)
-        account = S3Account(
-            name=payload.name,
-            rgw_account_id=f"rgw-{payload.name}",
-            rgw_access_key=f"AK-{payload.name}",
-            rgw_secret_key="SECRET",
-            storage_endpoint_id=payload.storage_endpoint_id,
-        )
-        self.db_session.add(account)
-        self.db_session.flush()
-        return SimpleNamespace(db_id=account.id, id=str(account.id))
-
-    def get_account_quota(self, _account):  # noqa: ANN001
-        return None, None
-
-
-def test_project_account_provisioning_deduplicates_zonegroup_endpoints(db_session):
-    first = _seed_endpoint(db_session, name="endpoint-a1", zonegroup="zg-a")
-    duplicate = _seed_endpoint(db_session, name="endpoint-a2", zonegroup="zg-a")
-    second = _seed_endpoint(db_session, name="endpoint-b1", zonegroup="zg-b")
-    project = Project(name="Research Data", description=None)
-    db_session.add(project)
-    db_session.commit()
-
-    fake_accounts = _FakeAccountsService(db_session)
-    service = ProjectsService(db_session, accounts_service=fake_accounts)
-
-    result = service.provision_accounts_for_project(
-        project.id,
-        ProjectProvisionAccountsRequest(endpoint_ids=[first.id, duplicate.id, second.id]),
-    )
-
-    assert fake_accounts.created_endpoint_ids == [first.id, second.id]
-    assert result.reused_endpoint_ids == [duplicate.id]
-    assert len(result.created_account_ids) == 2
-    assert [link.display_name for link in result.project.account_links] == ["zg-a", "zg-b"]
-    assert [link.storage_endpoint_id for link in result.project.account_links] == [first.id, second.id]

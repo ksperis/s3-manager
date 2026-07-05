@@ -78,3 +78,9 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
     list_resp = client.get("/api/admin/projects", params={"search": "Rennes"})
     assert list_resp.status_code == 200, list_resp.text
     assert list_resp.json()["total"] == 1
+
+
+def test_admin_projects_do_not_expose_account_provisioning(client: TestClient):
+    response = client.post("/api/admin/projects/123/provision-accounts", json={"endpoint_ids": [1]})
+
+    assert response.status_code == 404

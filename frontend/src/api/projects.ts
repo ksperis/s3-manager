@@ -93,18 +93,6 @@ export type ProjectPayload = {
 
 export type CreateProjectPayload = Required<Pick<ProjectPayload, "name">> & ProjectPayload;
 
-export type ProvisionProjectAccountsPayload = {
-  endpoint_ids: number[];
-  base_name?: string | null;
-  email?: string | null;
-};
-
-export type ProvisionProjectAccountsResponse = {
-  project: Project;
-  created_account_ids: number[];
-  reused_endpoint_ids: number[];
-};
-
 export async function listProjects(params?: ListProjectsParams): Promise<PaginatedProjectsResponse> {
   const { data } = await client.get<PaginatedProjectsResponse>("/admin/projects", { params });
   return data;
@@ -132,17 +120,6 @@ export async function updateProject(projectId: number, payload: ProjectPayload):
 
 export async function deleteProject(projectId: number): Promise<void> {
   await client.delete(`/admin/projects/${projectId}`);
-}
-
-export async function provisionProjectAccounts(
-  projectId: number,
-  payload: ProvisionProjectAccountsPayload
-): Promise<ProvisionProjectAccountsResponse> {
-  const { data } = await client.post<ProvisionProjectAccountsResponse>(
-    `/admin/projects/${projectId}/provision-accounts`,
-    payload
-  );
-  return data;
 }
 
 export async function fetchProjectPortalSettings(projectId: number): Promise<PortalProjectSettings> {

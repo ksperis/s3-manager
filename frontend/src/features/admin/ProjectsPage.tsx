@@ -8,7 +8,6 @@ import {
   deleteProject,
   fetchProjectPortalSettings,
   listProjects,
-  provisionProjectAccounts,
   updateProject,
   updateProjectPortalSettings,
   type Project,
@@ -22,7 +21,6 @@ import type { PortalSettingsOverride } from "../../api/appSettings";
 import { listMinimalS3Accounts, type S3AccountSummary } from "../../api/accounts";
 import { listMinimalUsers, type UserSummary } from "../../api/users";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
-import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
@@ -134,11 +132,6 @@ function optionMatchesSearch(option: ProjectAssociationOption, search: string): 
   return [option.label, option.detail ?? ""].some((value) => value.toLowerCase().includes(query));
 }
 
-function endpointLabel(endpoint: StorageEndpoint): string {
-  const zonegroup = endpoint.ceph_zonegroup?.name;
-  return zonegroup ? `${endpoint.name} (${zonegroup})` : endpoint.name;
-}
-
 export default function ProjectsPage() {
   const { generalSettings } = useGeneralSettings();
   const portalEnabled = generalSettings.portal_enabled;
@@ -168,11 +161,6 @@ export default function ProjectsPage() {
   const [accountSelectionIds, setAccountSelectionIds] = useState<number[]>([]);
   const [userSelectionIds, setUserSelectionIds] = useState<number[]>([]);
   const [groupSelectionIds, setGroupSelectionIds] = useState<number[]>([]);
-  const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
-  const [provisionEndpointIds, setProvisionEndpointIds] = useState<number[]>([]);
-  const [provisionBaseName, setProvisionBaseName] = useState("");
-  const [provisionEmail, setProvisionEmail] = useState("");
-  const [provisioning, setProvisioning] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [portalSettings, setPortalSettings] = useState<PortalProjectSettings | null>(null);
   const [portalSettingsLoading, setPortalSettingsLoading] = useState(false);
@@ -243,16 +231,14 @@ export default function ProjectsPage() {
   const loadAuxiliary = useCallback(async () => {
     setAuxLoading(true);
     try {
-      const [accountData, userData, groupData, endpointData] = await Promise.all([
+      const [accountData, userData, groupData] = await Promise.all([
         listMinimalS3Accounts(),
         listMinimalUsers(),
         listMinimalGroups(),
-        listStorageEndpoints(),
       ]);
       setAccounts(accountData);
       setUsers(userData);
       setGroups(groupData);
-      setEndpoints(endpointData.filter((endpoint) => endpoint.provider === "ceph" && Boolean(endpoint.capabilities?.account)));
     } catch (err) {
       console.error(err);
       setActionError(extractApiError(err, "Unable to load project association options."));
@@ -296,9 +282,6 @@ export default function ProjectsPage() {
   const openCreateModal = () => {
     setEditingProject(null);
     setForm(emptyForm());
-    setProvisionEndpointIds([]);
-    setProvisionBaseName("");
-    setProvisionEmail("");
     resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
@@ -309,9 +292,6 @@ export default function ProjectsPage() {
   const openEditModal = (project: Project) => {
     setEditingProject(project);
     setForm(formFromProject(project));
-    setProvisionEndpointIds([]);
-    setProvisionBaseName("");
-    setProvisionEmail("");
     resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
@@ -377,33 +357,6 @@ export default function ProjectsPage() {
       setActionError(extractApiError(err, "Unable to delete project."));
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const handleProvision = async () => {
-    if (!editingProject || provisionEndpointIds.length === 0) return;
-    setProvisioning(true);
-    setActionError(null);
-    setActionMessage(null);
-    try {
-      const result = await provisionProjectAccounts(editingProject.id, {
-        endpoint_ids: provisionEndpointIds,
-        base_name: provisionBaseName.trim() || null,
-        email: provisionEmail.trim() || null,
-      });
-      setEditingProject(result.project);
-      setForm(formFromProject(result.project));
-      setProvisionEndpointIds([]);
-      setActionMessage(
-        `Provisioned ${result.created_account_ids.length} account(s); ${result.reused_endpoint_ids.length} endpoint(s) already covered.`
-      );
-      await loadProjects();
-      await loadAuxiliary();
-    } catch (err) {
-      console.error(err);
-      setActionError(extractApiError(err, "Unable to provision project accounts."));
-    } finally {
-      setProvisioning(false);
     }
   };
 
@@ -648,8 +601,6 @@ export default function ProjectsPage() {
               accountCount={form.account_links.length}
               userCount={form.user_links.length}
               groupCount={form.group_links.length}
-              endpointCount={endpoints.length}
-              editing={Boolean(editingProject)}
             />
 
             <section className="space-y-3">
@@ -815,64 +766,6 @@ export default function ProjectsPage() {
               />
             </section>
 
-            {editingProject ? (
-              <section className="space-y-3 rounded-lg border border-[color:var(--ui-border)] p-3">
-                <div>
-                  <p className={cx("ui-body font-bold", uiTitleTextClass)}>Provision S3 accounts</p>
-                  <p className={cx("ui-caption", uiMutedTextClass)}>
-                    Select endpoints to create missing RGW accounts for this project. Endpoints sharing the same zonegroup are deduplicated by the backend.
-                  </p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
-                  <input
-                    className={uiInputClass}
-                    value={provisionBaseName}
-                    onChange={(event) => setProvisionBaseName(event.target.value)}
-                    placeholder="Base account name, defaults to project name"
-                  />
-                  <input
-                    className={uiInputClass}
-                    value={provisionEmail}
-                    onChange={(event) => setProvisionEmail(event.target.value)}
-                    placeholder="Optional root email"
-                  />
-                </div>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {endpoints.map((endpoint) => {
-                    const selected = provisionEndpointIds.includes(endpoint.id);
-                    return (
-                      <label key={endpoint.id} className="flex items-start gap-2 rounded-md border border-[color:var(--ui-border)] px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={(event) =>
-                            setProvisionEndpointIds((current) =>
-                              event.target.checked
-                                ? [...current, endpoint.id]
-                                : current.filter((id) => id !== endpoint.id)
-                            )
-                          }
-                        />
-                        <span>
-                          <span className="block text-xs font-bold">{endpointLabel(endpoint)}</span>
-                          <span className={cx("block text-[11px]", uiMutedTextClass)}>{endpoint.endpoint_url}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {endpoints.length === 0 ? <p className={cx("text-xs", uiMutedTextClass)}>No writable Ceph account endpoint available.</p> : null}
-                </div>
-                <button
-                  type="button"
-                  className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 text-xs")}
-                  disabled={provisionEndpointIds.length === 0 || provisioning}
-                  onClick={() => void handleProvision()}
-                >
-                  {provisioning ? "Provisioning..." : "Provision selected endpoints"}
-                </button>
-              </section>
-            ) : null}
-
             {editingProject && portalEnabled ? (
               <PortalOverridesPanel
                 settings={portalSettings}
@@ -921,14 +814,10 @@ function ProjectModalSummary({
   accountCount,
   userCount,
   groupCount,
-  endpointCount,
-  editing,
 }: {
   accountCount: number;
   userCount: number;
   groupCount: number;
-  endpointCount: number;
-  editing: boolean;
 }) {
   const principalCount = userCount + groupCount;
   const items = [
@@ -951,12 +840,10 @@ function ProjectModalSummary({
       ready: principalCount > 0,
     },
     {
-      label: editing ? "Provisioning" : "Next step",
-      value: editing ? `${endpointCount} writable endpoint${endpointCount === 1 ? "" : "s"}` : "Available after save",
-      detail: editing
-        ? "Create missing RGW accounts from the provisioning section if needed."
-        : "Save the project before provisioning missing RGW accounts.",
-      ready: editing ? endpointCount > 0 : false,
+      label: "Account source",
+      value: "Existing RGW Accounts",
+      detail: "Create RGW Accounts first, then link them to this project.",
+      ready: accountCount > 0,
     },
   ];
 

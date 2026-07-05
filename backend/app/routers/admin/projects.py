@@ -13,17 +13,14 @@ from app.models.project import (
     PaginatedProjectsResponse,
     Project,
     ProjectCreate,
-    ProjectProvisionAccountsRequest,
-    ProjectProvisionAccountsResponse,
     ProjectSummary,
     ProjectUpdate,
 )
-from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_optional_super_admin_rgw_client
+from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.portal_service import get_portal_service
 from app.services.projects_service import ProjectsService, get_projects_service
-from app.services.s3_accounts_service import get_s3_accounts_service
 
 router = APIRouter(prefix="/admin/projects", tags=["admin-projects"])
 
@@ -32,14 +29,6 @@ def get_admin_projects_service(
     db: Session = Depends(get_db),
 ) -> ProjectsService:
     return get_projects_service(db)
-
-
-def get_admin_projects_provisioning_service(
-    db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
-) -> ProjectsService:
-    accounts_service = get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
-    return get_projects_service(db, accounts_service=accounts_service)
 
 
 @router.get("", response_model=PaginatedProjectsResponse)
@@ -164,35 +153,6 @@ def update_project(
             metadata=payload.model_dump(exclude_unset=True, exclude_none=True),
         )
         return updated
-    except ValueError as exc:
-        detail = sanitize_error_detail(str(exc))
-        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-
-
-@router.post("/{project_id}/provision-accounts", response_model=ProjectProvisionAccountsResponse)
-def provision_project_accounts(
-    project_id: int,
-    payload: ProjectProvisionAccountsRequest,
-    service: ProjectsService = Depends(get_admin_projects_provisioning_service),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
-) -> ProjectProvisionAccountsResponse:
-    try:
-        result = service.provision_accounts_for_project(project_id, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="admin",
-            action="provision_project_accounts",
-            entity_type="project",
-            entity_id=str(project_id),
-            metadata={
-                "endpoint_ids": payload.endpoint_ids,
-                "created_account_ids": result.created_account_ids,
-                "reused_endpoint_ids": result.reused_endpoint_ids,
-            },
-        )
-        return result
     except ValueError as exc:
         detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST

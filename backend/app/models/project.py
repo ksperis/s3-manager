@@ -157,18 +157,6 @@ class PaginatedProjectsResponse(PaginatedResponse):
     items: list[Project]
 
 
-class ProjectProvisionAccountsRequest(BaseModel):
-    endpoint_ids: list[int] = Field(min_length=1)
-    base_name: Optional[str] = Field(default=None, max_length=80)
-    email: Optional[str] = Field(default=None, max_length=320)
-
-
-class ProjectProvisionAccountsResponse(BaseModel):
-    project: Project
-    created_account_ids: list[int] = Field(default_factory=list)
-    reused_endpoint_ids: list[int] = Field(default_factory=list)
-
-
 class PortalProjectAccount(BaseModel):
     account_id: int
     account_name: str
