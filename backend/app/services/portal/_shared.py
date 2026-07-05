@@ -24,6 +24,7 @@ from app.db import (
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
     Project,
+    ProjectIAMUser,
     ProjectS3Account,
     S3Account,
     StorageEndpoint,
@@ -48,6 +49,8 @@ from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyScope,
+    PortalAccessKeyScopeAccount,
     PortalAccessKeysState,
     PortalActivityItem,
     PortalAlert,
@@ -72,6 +75,7 @@ from app.models.portal import (
     PortalUsage,
     PortalUsageStorageSpace,
     PortalProjectSettings,
+    PortalProjectAccessKeysState,
 )
 from app.services.app_settings_service import load_app_settings as _load_app_settings
 from app.services import s3_client

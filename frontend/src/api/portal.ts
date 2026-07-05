@@ -56,6 +56,33 @@ export type PortalAccessKeysState = {
   max_access_keys: number;
 };
 
+export type PortalAccessKeyScopeAccount = {
+  account_id: number;
+  account_name: string;
+  display_name: string;
+  storage_endpoint_id?: number | null;
+  storage_endpoint_name?: string | null;
+  storage_endpoint_url?: string | null;
+  storage_endpoint_zonegroup?: string | null;
+};
+
+export type PortalAccessKeyScope = {
+  scope_id: string;
+  label: string;
+  zonegroup?: string | null;
+  s3_endpoint?: string | null;
+  accounts: PortalAccessKeyScopeAccount[];
+  iam_user: PortalIAMUser;
+  access_keys: PortalAccessKey[];
+  can_manage_access_keys: boolean;
+  max_access_keys: number;
+  unavailable_reason?: string | null;
+};
+
+export type PortalProjectAccessKeysState = {
+  scopes: PortalAccessKeyScope[];
+};
+
 export type PortalUsage = {
   used_bytes?: number | null;
   used_objects?: number | null;
@@ -469,12 +496,7 @@ export async function fetchPortalState(accountId: S3AccountSelector): Promise<Po
 
 export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): Promise<PortalAccessKeysState> {
   if (isPortalProjectSelector(accountId)) {
-    return {
-      iam_user: {},
-      access_keys: [],
-      can_manage_access_keys: false,
-      max_access_keys: 0,
-    };
+    throw new Error("Use fetchPortalProjectAccessKeysState for project access keys.");
   }
   const { data } = await client.get<PortalAccessKeysState>("/portal/access-keys", {
     params: withS3AccountParam(undefined, accountId),
@@ -482,9 +504,18 @@ export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): 
   return data;
 }
 
+export async function fetchPortalProjectAccessKeysState(accountId: S3AccountSelector): Promise<PortalProjectAccessKeysState> {
+  const projectPath = portalProjectPath(accountId, "/access-keys");
+  if (!projectPath) {
+    throw new Error("Project access keys require a project context.");
+  }
+  const { data } = await client.get<PortalProjectAccessKeysState>(projectPath);
+  return data;
+}
+
 export async function createPortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
   if (isPortalProjectSelector(accountId)) {
-    throw new Error("Access keys are scoped to a single S3 account.");
+    throw new Error("Use createPortalProjectAccessKey for project access keys.");
   }
   const { data } = await client.post<PortalAccessKey>(
     "/portal/access-keys",
@@ -494,13 +525,25 @@ export async function createPortalAccessKey(accountId: S3AccountSelector): Promi
   return data;
 }
 
+export async function createPortalProjectAccessKey(
+  accountId: S3AccountSelector,
+  scopeId: string
+): Promise<PortalAccessKey> {
+  const projectPath = portalProjectPath(accountId, `/access-keys/${encodeURIComponent(scopeId)}`);
+  if (!projectPath) {
+    throw new Error("Project access keys require a project context.");
+  }
+  const { data } = await client.post<PortalAccessKey>(projectPath);
+  return data;
+}
+
 export async function updatePortalAccessKeyStatus(
   accountId: S3AccountSelector,
   accessKeyId: string,
   active: boolean
 ): Promise<PortalAccessKey> {
   if (isPortalProjectSelector(accountId)) {
-    throw new Error("Access keys are scoped to a single S3 account.");
+    throw new Error("Use updatePortalProjectAccessKeyStatus for project access keys.");
   }
   const { data } = await client.put<PortalAccessKey>(
     `/portal/access-keys/${encodeURIComponent(accessKeyId)}/status`,
@@ -510,13 +553,45 @@ export async function updatePortalAccessKeyStatus(
   return data;
 }
 
+export async function updatePortalProjectAccessKeyStatus(
+  accountId: S3AccountSelector,
+  scopeId: string,
+  accessKeyId: string,
+  active: boolean
+): Promise<PortalAccessKey> {
+  const projectPath = portalProjectPath(
+    accountId,
+    `/access-keys/${encodeURIComponent(scopeId)}/${encodeURIComponent(accessKeyId)}/status`
+  );
+  if (!projectPath) {
+    throw new Error("Project access keys require a project context.");
+  }
+  const { data } = await client.put<PortalAccessKey>(projectPath, { active });
+  return data;
+}
+
 export async function deletePortalAccessKey(accountId: S3AccountSelector, accessKeyId: string): Promise<void> {
   if (isPortalProjectSelector(accountId)) {
-    throw new Error("Access keys are scoped to a single S3 account.");
+    throw new Error("Use deletePortalProjectAccessKey for project access keys.");
   }
   await client.delete(`/portal/access-keys/${encodeURIComponent(accessKeyId)}`, {
     params: withS3AccountParam(undefined, accountId),
   });
+}
+
+export async function deletePortalProjectAccessKey(
+  accountId: S3AccountSelector,
+  scopeId: string,
+  accessKeyId: string
+): Promise<void> {
+  const projectPath = portalProjectPath(
+    accountId,
+    `/access-keys/${encodeURIComponent(scopeId)}/${encodeURIComponent(accessKeyId)}`
+  );
+  if (!projectPath) {
+    throw new Error("Project access keys require a project context.");
+  }
+  await client.delete(projectPath);
 }
 
 export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<PortalUsage> {

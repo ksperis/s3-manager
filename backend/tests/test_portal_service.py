@@ -5,6 +5,7 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
@@ -21,6 +22,7 @@ from app.db import (
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
     Project,
+    ProjectIAMUser,
     ProjectS3Account,
     QuotaUsageDaily,
     S3Account,
@@ -58,6 +60,7 @@ from app.services.portal_service import (
     PortalAccessKeyProtected,
     PortalService,
 )
+from app.services.projects_service import ProjectsService
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
@@ -216,6 +219,45 @@ def test_portal_storage_space_grants_migration_creates_constraints(monkeypatch):
 
         migration.downgrade()
         assert "portal_storage_space_grants" not in sa.inspect(connection).get_table_names()
+
+
+def test_project_iam_users_migration_creates_project_zonegroup_scope(monkeypatch):
+    migration_path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0067_project_iam_users.py"
+    spec = import_util.spec_from_file_location("migration_0067_project_iam_users", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = import_util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = sa.create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", operations)
+
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert "project_iam_users" in inspector.get_table_names()
+        columns = {column["name"] for column in inspector.get_columns("project_iam_users")}
+        assert {
+            "id",
+            "user_id",
+            "project_id",
+            "zonegroup_key",
+            "zonegroup_name",
+            "authority_account_id",
+            "iam_user_id",
+            "iam_username",
+            "created_at",
+            "updated_at",
+        } <= columns
+        unique_columns = {
+            tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints("project_iam_users")
+        }
+        assert ("user_id", "project_id", "zonegroup_key") in unique_columns
+        assert "portal_settings_override" not in columns
+
+        migration.downgrade()
+        assert "project_iam_users" not in sa.inspect(connection).get_table_names()
 
 
 def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(monkeypatch, db_session):
@@ -4614,6 +4656,460 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
     assert created.access_key_id == "AK-NEW"
     assert created.secret_access_key == "SK-NEW"
     assert iam_service.create_calls == 1
+
+
+class _ProjectIAMFakeService:
+    def __init__(self):
+        self.users: dict[str, IAMUser] = {}
+        self.keys: dict[str, list[IAMAccessKey]] = {}
+        self.user_policies: dict[tuple[str, str], dict] = {}
+        self.group_users: dict[str, set[str]] = {}
+        self.key_counter = 0
+        self.status_updates: list[tuple[str, str, str]] = []
+        self.deleted_policies: list[tuple[str, str]] = []
+
+    def get_user(self, username):
+        return self.users.get(username)
+
+    def create_user(self, username, *, create_key=False, allow_existing=False):  # noqa: ARG002
+        user = self.users.setdefault(username, IAMUser(name=username, arn=f"arn:aws:iam:::user/{username}", user_id=f"id-{username}"))
+        created_key = self.create_access_key(username) if create_key else None
+        return user, created_key
+
+    def list_access_keys(self, username):
+        return list(self.keys.get(username, []))
+
+    def create_access_key(self, username):
+        self.key_counter += 1
+        key = IAMAccessKey(
+            access_key_id=f"AK-PROJECT-{self.key_counter}",
+            secret_access_key=f"SK-PROJECT-{self.key_counter}",
+            status="Active",
+            created_at=f"2026-06-{self.key_counter:02d}T00:00:00Z",
+        )
+        self.keys.setdefault(username, []).append(key)
+        return key
+
+    def update_access_key_status(self, username, access_key_id, status):
+        self.status_updates.append((username, access_key_id, status))
+        for key in self.keys.get(username, []):
+            if key.access_key_id == access_key_id:
+                key.status = status
+
+    def delete_access_key(self, username, access_key_id):
+        self.keys[username] = [key for key in self.keys.get(username, []) if key.access_key_id != access_key_id]
+
+    def list_groups(self):
+        return [IAMGroup(name=name) for name in self.group_users]
+
+    def create_group(self, group_name):
+        self.group_users.setdefault(group_name, set())
+        return IAMGroup(name=group_name)
+
+    def list_group_policies(self, group_name):  # noqa: ARG002
+        return []
+
+    def detach_group_policy(self, group_name, policy_arn):  # noqa: ARG002
+        return None
+
+    def put_group_inline_policy(self, group_name, policy_name, policy_document):  # noqa: ARG002
+        return None
+
+    def delete_group_inline_policy(self, group_name, policy_name):  # noqa: ARG002
+        return None
+
+    def list_group_users(self, group_name):
+        return [IAMUser(name=username) for username in sorted(self.group_users.get(group_name, set()))]
+
+    def add_user_to_group(self, group_name, username):
+        self.group_users.setdefault(group_name, set()).add(username)
+
+    def remove_user_from_group(self, group_name, username):
+        self.group_users.setdefault(group_name, set()).discard(username)
+
+    def get_user_inline_policy(self, username, policy_name):
+        return self.user_policies.get((username, policy_name))
+
+    def put_user_inline_policy(self, username, policy_name, policy_document):
+        self.user_policies[(username, policy_name)] = policy_document
+
+    def delete_user_inline_policy(self, username, policy_name):
+        self.deleted_policies.append((username, policy_name))
+        self.user_policies.pop((username, policy_name), None)
+
+
+def _project_iam_endpoint(name: str, zonegroup: str | None) -> StorageEndpoint:
+    return StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.test",
+        provider="ceph",
+        ceph_zonegroup_name=zonegroup,
+        features_config="features:\n  iam:\n    enabled: true\n",
+    )
+
+
+def test_project_access_keys_state_groups_accounts_by_zonegroup(monkeypatch, db_session):
+    endpoint_a = _project_iam_endpoint("zg-state-a", "zg-main")
+    endpoint_b = _project_iam_endpoint("zg-state-b", "ZG-Main")
+    endpoint_without_zonegroup = _project_iam_endpoint("zg-state-missing", None)
+    account_a = S3Account(
+        name="portal-project-zg-a",
+        rgw_account_id="rgw-zg-a",
+        rgw_access_key="ROOT-AK-A",
+        rgw_secret_key="ROOT-SK-A",
+        storage_endpoint=endpoint_a,
+    )
+    account_b = S3Account(
+        name="portal-project-zg-b",
+        rgw_account_id="rgw-zg-b",
+        rgw_access_key="ROOT-AK-B",
+        rgw_secret_key="ROOT-SK-B",
+        storage_endpoint=endpoint_b,
+    )
+    account_missing = S3Account(
+        name="portal-project-zg-missing",
+        rgw_account_id="rgw-zg-missing",
+        rgw_access_key="ROOT-AK-C",
+        rgw_secret_key="ROOT-SK-C",
+        storage_endpoint=endpoint_without_zonegroup,
+    )
+    user = User(email="portal-project-zg@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Project ZG", description="zonegroup test")
+    db_session.add_all([endpoint_a, endpoint_b, endpoint_without_zonegroup, account_a, account_b, account_missing, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            ProjectS3Account(project_id=project.id, account_id=account_missing.id, display_name="Missing", sort_order=2),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: pytest.fail("IAM should not initialize without a project IAM link"))
+    access = ProjectsService(db_session).resolve_portal_project_access(user, project.id)
+
+    state = service.get_project_access_keys_state(user, access)
+
+    assert len(state.scopes) == 2
+    zone_scope = next(scope for scope in state.scopes if scope.zonegroup == "zg-main")
+    assert zone_scope.can_manage_access_keys is True
+    assert zone_scope.max_access_keys >= 1
+    assert {account.account_id for account in zone_scope.accounts} == {account_a.id, account_b.id}
+    unavailable_scope = next(scope for scope in state.scopes if scope.unavailable_reason)
+    assert unavailable_scope.label == "Missing"
+    assert unavailable_scope.can_manage_access_keys is False
+    assert "zonegroup" in unavailable_scope.unavailable_reason.lower()
+
+
+def test_project_access_key_creation_uses_one_iam_user_per_zonegroup(monkeypatch, db_session):
+    endpoint_a = _project_iam_endpoint("zg-create-a", "zg-main")
+    endpoint_b = _project_iam_endpoint("zg-create-b", "zg-main")
+    account_a = S3Account(
+        name="portal-project-create-a",
+        rgw_account_id="rgw-create-a",
+        rgw_access_key="ROOT-AK-A",
+        rgw_secret_key="ROOT-SK-A",
+        storage_endpoint=endpoint_a,
+    )
+    account_b = S3Account(
+        name="portal-project-create-b",
+        rgw_account_id="rgw-create-b",
+        rgw_access_key="ROOT-AK-B",
+        rgw_secret_key="ROOT-SK-B",
+        storage_endpoint=endpoint_b,
+    )
+    user = User(email="portal-project-create@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Project Create", description="create test")
+    db_session.add_all([endpoint_a, endpoint_b, account_a, account_b, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_USER.value),
+            PortalStorageSpaceMetadata(
+                account_id=account_a.id,
+                bucket_name="owned-space",
+                owner_user_id=user.id,
+                visibility="private",
+            ),
+        ]
+    )
+    db_session.flush()
+    shared = PortalStorageSpaceMetadata(
+        account_id=account_b.id,
+        bucket_name="shared-space",
+        owner_user_id=None,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(shared)
+    db_session.flush()
+    db_session.add(PortalStorageSpaceGrant(storage_space_metadata_id=shared.id, user_id=user.id, role="Viewer"))
+    db_session.commit()
+
+    fake_iam = _ProjectIAMFakeService()
+    synced_accounts: list[int] = []
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: fake_iam)
+    monkeypatch.setattr(service, "_sync_account_storage_space_bucket_policies", lambda account: synced_accounts.append(account.id))
+    access = ProjectsService(db_session).resolve_portal_project_access(user, project.id)
+    scope_id = service.get_project_access_keys_state(user, access).scopes[0].scope_id
+
+    created = service.create_project_access_key(user, access, scope_id)
+
+    link = db_session.query(ProjectIAMUser).filter_by(user_id=user.id, project_id=project.id).one()
+    assert link.authority_account_id == account_a.id
+    assert link.iam_username in fake_iam.users
+    assert created.access_key_id == "AK-PROJECT-1"
+    assert created.secret_access_key == "SK-PROJECT-1"
+    assert len(fake_iam.keys[link.iam_username]) == 1
+    assert set(synced_accounts) == {account_a.id, account_b.id}
+    policy = fake_iam.user_policies[(link.iam_username, service._bucket_access_policy_name)]
+    policy_json = json.dumps(policy)
+    assert "owned-space" in policy_json
+    assert "shared-space" in policy_json
+    assert "portal-user" in fake_iam.group_users
+    assert link.iam_username in fake_iam.group_users["portal-user"]
+
+    monkeypatch.setattr(
+        service,
+        "_project_portal_settings",
+        lambda _access, _authority: PortalSettings(allow_portal_user_access_key_create=False, max_portal_user_access_keys=2),
+    )
+    disabled_state = service.get_project_access_keys_state(user, access).scopes[0]
+    assert disabled_state.can_manage_access_keys is False
+    assert [key.access_key_id for key in disabled_state.access_keys] == ["AK-PROJECT-1"]
+
+
+def test_project_iam_principals_are_included_in_bucket_policy_without_dropping_external_statements(db_session):
+    endpoint_a = _project_iam_endpoint("zg-policy-a", "zg-main")
+    endpoint_b = _project_iam_endpoint("zg-policy-b", "zg-main")
+    authority = S3Account(
+        name="portal-project-policy-authority",
+        rgw_account_id="rgw-authority",
+        rgw_access_key="ROOT-AK-A",
+        rgw_secret_key="ROOT-SK-A",
+        storage_endpoint=endpoint_a,
+    )
+    bucket_account = S3Account(
+        name="portal-project-policy-bucket",
+        rgw_account_id="rgw-bucket",
+        rgw_access_key="ROOT-AK-B",
+        rgw_secret_key="ROOT-SK-B",
+        storage_endpoint=endpoint_b,
+    )
+    owner = User(email="portal-project-policy-owner@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="portal-project-policy-viewer@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Project Policy", description="policy test")
+    db_session.add_all([endpoint_a, endpoint_b, authority, bucket_account, owner, viewer, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=authority.id, display_name="Authority", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=bucket_account.id, display_name="Bucket", sort_order=1),
+            UserProject(project_id=project.id, user_id=viewer.id, account_role=AccountRole.PORTAL_USER.value),
+            ProjectIAMUser(
+                user_id=viewer.id,
+                project_id=project.id,
+                zonegroup_key="zg-main",
+                zonegroup_name="zg-main",
+                authority_account_id=authority.id,
+                iam_user_id="project-viewer-iam-id",
+                iam_username="project-viewer-iam",
+            ),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=bucket_account.id,
+        bucket_name="policy-space",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add(PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=viewer.id, role="Viewer"))
+    db_session.commit()
+
+    service = PortalService(db_session)
+    existing_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "ExternalStatement",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": "s3:GetBucketLocation",
+                "Resource": "arn:aws:s3:::policy-space",
+            }
+        ],
+    }
+
+    policy = service._storage_space_bucket_policy(bucket_account, "policy-space", metadata, existing_policy)
+
+    assert policy is not None
+    assert _storage_space_policy_statement(policy, "ExternalStatement")["Effect"] == "Allow"
+    statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
+    principals = _storage_space_policy_principals(statement)
+    assert "arn:aws:iam:::user/project-viewer-iam" in principals
+    assert "arn:aws:iam::rgw-authority:user/project-viewer-iam" in principals
+    assert "arn:aws:iam::rgw-bucket:user/project-viewer-iam" in principals
+
+
+def test_project_iam_projection_revokes_keys_when_user_loses_project_access(monkeypatch, db_session):
+    endpoint = _project_iam_endpoint("zg-revoke", "zg-main")
+    account = S3Account(
+        name="portal-project-revoke",
+        rgw_account_id="rgw-revoke",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="portal-project-revoke@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Project Revoke", description="revoke test")
+    db_session.add_all([endpoint, account, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            ProjectIAMUser(
+                user_id=user.id,
+                project_id=project.id,
+                zonegroup_key="zg-main",
+                zonegroup_name="zg-main",
+                authority_account_id=account.id,
+                iam_user_id="project-revoke-iam-id",
+                iam_username="project-revoke-iam",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    fake_iam = _ProjectIAMFakeService()
+    fake_iam.users["project-revoke-iam"] = IAMUser(name="project-revoke-iam")
+    fake_iam.keys["project-revoke-iam"] = [IAMAccessKey(access_key_id="AK-REVOKE", status="Active")]
+    fake_iam.user_policies[("project-revoke-iam", PortalService(db_session)._bucket_access_policy_name)] = {"Statement": []}
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: fake_iam)
+
+    link = db_session.query(ProjectIAMUser).one()
+    service._sync_project_iam_link_projection(link)
+
+    assert ("project-revoke-iam", "AK-REVOKE", "Inactive") in fake_iam.status_updates
+    assert ("project-revoke-iam", service._bucket_access_policy_name) in fake_iam.deleted_policies
+    assert "project-revoke-iam" not in fake_iam.group_users.get(service._manager_group_name, set())
+    assert "project-revoke-iam" not in fake_iam.group_users.get(service._user_group_name, set())
+
+
+def test_portal_project_access_key_routes_record_project_scope_audit(db_session):
+    endpoint = _project_iam_endpoint("zg-route", "zg-main")
+    account = S3Account(
+        name="portal-project-route",
+        rgw_account_id="rgw-route",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
+    user = User(email="portal-project-route@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Project Route", description="route test")
+    db_session.add_all([endpoint, account, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account.id, display_name="Default", sort_order=0),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    db_session.commit()
+
+    class FakeService:
+        def _resolve_project_access_key_scope(self, access_obj, scope_id):
+            assert access_obj.project.id == project.id
+            assert scope_id == "zg-scope"
+            return SimpleNamespace(
+                scope_id="zg-scope",
+                zonegroup_name="zg-main",
+                authority_account=account,
+            )
+
+        def create_project_access_key(self, user_obj, access_obj, scope_id):
+            assert user_obj == user
+            assert access_obj.project.id == project.id
+            assert scope_id == "zg-scope"
+            return PortalAccessKey(access_key_id="AK-PROJECT", secret_access_key="SK-PROJECT", is_portal=False)
+
+        def update_project_access_key_status(self, user_obj, access_obj, scope_id, access_key_id, active):
+            assert user_obj == user
+            assert access_obj.project.id == project.id
+            assert scope_id == "zg-scope"
+            assert access_key_id == "AK-PROJECT"
+            assert active is False
+            return PortalAccessKey(access_key_id="AK-PROJECT", status="Inactive", is_active=False, is_portal=False)
+
+        def delete_project_access_key(self, user_obj, access_obj, scope_id, access_key_id):
+            assert user_obj == user
+            assert access_obj.project.id == project.id
+            assert scope_id == "zg-scope"
+            assert access_key_id == "AK-PROJECT"
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+    service = FakeService()
+
+    created = portal_router.create_portal_project_access_key(
+        project.id,
+        "zg-scope",
+        user=user,
+        db=db_session,
+        audit_service=audit_service,
+        service=service,
+    )
+    updated = portal_router.update_portal_project_access_key_status(
+        project.id,
+        "zg-scope",
+        "AK-PROJECT",
+        PortalAccessKeyStatusChange(active=False),
+        user=user,
+        db=db_session,
+        audit_service=audit_service,
+        service=service,
+    )
+    deleted = portal_router.delete_portal_project_access_key(
+        project.id,
+        "zg-scope",
+        "AK-PROJECT",
+        user=user,
+        db=db_session,
+        audit_service=audit_service,
+        service=service,
+    )
+
+    assert created.secret_access_key == "SK-PROJECT"
+    assert updated.is_active is False
+    assert deleted.status_code == 204
+    assert [entry["entity_type"] for entry in audit_service.actions] == [
+        "portal_project_access_key",
+        "portal_project_access_key",
+        "portal_project_access_key",
+    ]
+    assert audit_service.actions[0]["metadata"] == {
+        "access_key_id": "AK-PROJECT",
+        "project_id": project.id,
+        "scope_id": "zg-scope",
+        "zonegroup": "zg-main",
+        "authority_account_id": account.id,
+    }
+    assert "secret_access_key" not in audit_service.actions[0]["metadata"]
 
 
 def test_portal_access_key_routes_record_audit(db_session):

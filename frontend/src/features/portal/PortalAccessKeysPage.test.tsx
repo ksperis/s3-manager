@@ -3,9 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import PortalAccessKeysPage from "./PortalAccessKeysPage";
-import type { PortalAccessKeysState } from "../../api/portal";
+import type { PortalAccessKeysState, PortalProjectAccessKeysState } from "../../api/portal";
 
 const mocks = vi.hoisted(() => ({
+  context: {
+    accountIdForApi: "101" as string | number | null,
+    hasAccountContext: true,
+    loading: false,
+    error: null as string | null,
+  },
   state: {
     iam_user: { iam_username: "portal-101-7" },
     s3_endpoint: "https://s3.example.test",
@@ -16,26 +22,63 @@ const mocks = vi.hoisted(() => ({
       { access_key_id: "AK-USER", status: "Active", created_at: "2026-06-10T10:00:00Z", is_active: true },
     ],
   } as PortalAccessKeysState,
+  projectState: {
+    scopes: [
+      {
+        scope_id: "zg-main",
+        label: "zg-main",
+        zonegroup: "zg-main",
+        s3_endpoint: "https://s3-z1.example.test",
+        accounts: [
+          { account_id: 101, account_name: "rgw-a", display_name: "Paris" },
+          { account_id: 102, account_name: "rgw-b", display_name: "Lyon" },
+        ],
+        iam_user: { iam_username: "portal-p1-zg-u7" },
+        can_manage_access_keys: true,
+        max_access_keys: 2,
+        access_keys: [
+          { access_key_id: "AK-PROJECT", status: "Active", created_at: "2026-06-11T10:00:00Z", is_active: true },
+        ],
+      },
+      {
+        scope_id: "account-103",
+        label: "Missing",
+        zonegroup: null,
+        s3_endpoint: null,
+        accounts: [{ account_id: 103, account_name: "rgw-missing", display_name: "Missing" }],
+        iam_user: {},
+        can_manage_access_keys: false,
+        max_access_keys: 0,
+        access_keys: [],
+        unavailable_reason: "Ceph zonegroup is not configured for this storage location.",
+      },
+    ],
+  } as PortalProjectAccessKeysState,
   fetchPortalAccessKeysState: vi.fn(),
+  fetchPortalProjectAccessKeysState: vi.fn(),
   createPortalAccessKey: vi.fn(),
+  createPortalProjectAccessKey: vi.fn(),
   updatePortalAccessKeyStatus: vi.fn(),
+  updatePortalProjectAccessKeyStatus: vi.fn(),
   deletePortalAccessKey: vi.fn(),
+  deletePortalProjectAccessKey: vi.fn(),
 }));
 
 vi.mock("./PortalAccountContext", () => ({
-  usePortalAccountContext: () => ({
-    accountIdForApi: "101",
-    hasAccountContext: true,
-    loading: false,
-    error: null,
-  }),
+  usePortalAccountContext: () => mocks.context,
 }));
 
 vi.mock("../../api/portal", () => ({
   fetchPortalAccessKeysState: mocks.fetchPortalAccessKeysState,
+  fetchPortalProjectAccessKeysState: mocks.fetchPortalProjectAccessKeysState,
   createPortalAccessKey: mocks.createPortalAccessKey,
+  createPortalProjectAccessKey: mocks.createPortalProjectAccessKey,
   updatePortalAccessKeyStatus: mocks.updatePortalAccessKeyStatus,
+  updatePortalProjectAccessKeyStatus: mocks.updatePortalProjectAccessKeyStatus,
   deletePortalAccessKey: mocks.deletePortalAccessKey,
+  deletePortalProjectAccessKey: mocks.deletePortalProjectAccessKey,
+  isPortalProjectSelector: (accountId: string | number | null | undefined) =>
+    typeof accountId === "string" && accountId.startsWith("proj-"),
 }));
 
 function renderPage() {
@@ -53,6 +96,12 @@ describe("PortalAccessKeysPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.context = {
+      accountIdForApi: "101",
+      hasAccountContext: true,
+      loading: false,
+      error: null,
+    };
     mocks.state = {
       iam_user: { iam_username: "portal-101-7" },
       s3_endpoint: "https://s3.example.test",
@@ -63,15 +112,56 @@ describe("PortalAccessKeysPage", () => {
         { access_key_id: "AK-USER", status: "Active", created_at: "2026-06-10T10:00:00Z", is_active: true },
       ],
     };
+    mocks.projectState = {
+      scopes: [
+        {
+          scope_id: "zg-main",
+          label: "zg-main",
+          zonegroup: "zg-main",
+          s3_endpoint: "https://s3-z1.example.test",
+          accounts: [
+            { account_id: 101, account_name: "rgw-a", display_name: "Paris" },
+            { account_id: 102, account_name: "rgw-b", display_name: "Lyon" },
+          ],
+          iam_user: { iam_username: "portal-p1-zg-u7" },
+          can_manage_access_keys: true,
+          max_access_keys: 2,
+          access_keys: [
+            { access_key_id: "AK-PROJECT", status: "Active", created_at: "2026-06-11T10:00:00Z", is_active: true },
+          ],
+        },
+        {
+          scope_id: "account-103",
+          label: "Missing",
+          zonegroup: null,
+          s3_endpoint: null,
+          accounts: [{ account_id: 103, account_name: "rgw-missing", display_name: "Missing" }],
+          iam_user: {},
+          can_manage_access_keys: false,
+          max_access_keys: 0,
+          access_keys: [],
+          unavailable_reason: "Ceph zonegroup is not configured for this storage location.",
+        },
+      ],
+    };
     mocks.fetchPortalAccessKeysState.mockImplementation(async () => mocks.state);
+    mocks.fetchPortalProjectAccessKeysState.mockImplementation(async () => mocks.projectState);
     mocks.createPortalAccessKey.mockResolvedValue({
       access_key_id: "AK-NEW",
       status: "Active",
       is_active: true,
       secret_access_key: "SK-NEW",
     });
+    mocks.createPortalProjectAccessKey.mockResolvedValue({
+      access_key_id: "AK-PROJECT-NEW",
+      status: "Active",
+      is_active: true,
+      secret_access_key: "SK-PROJECT-NEW",
+    });
     mocks.updatePortalAccessKeyStatus.mockResolvedValue({ access_key_id: "AK-USER", status: "Inactive", is_active: false });
+    mocks.updatePortalProjectAccessKeyStatus.mockResolvedValue({ access_key_id: "AK-PROJECT", status: "Inactive", is_active: false });
     mocks.deletePortalAccessKey.mockResolvedValue(undefined);
+    mocks.deletePortalProjectAccessKey.mockResolvedValue(undefined);
   });
 
   it("lists external keys without rendering the portal key", async () => {
@@ -127,5 +217,31 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "Disable" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
     expect(screen.getByText("Access-key management is disabled for this portal account.")).toBeInTheDocument();
+  });
+
+  it("renders project access keys by zonegroup and creates a scoped key", async () => {
+    mocks.context = {
+      accountIdForApi: "proj-1",
+      hasAccountContext: true,
+      loading: false,
+      error: null,
+    };
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("AK-PROJECT")).toBeInTheDocument();
+    expect(screen.getByText("Accounts: Paris, Lyon")).toBeInTheDocument();
+    expect(screen.getByText("Ceph zonegroup is not configured for this storage location.")).toBeInTheDocument();
+    expect(screen.queryByText("Access-key management is disabled for this portal account.")).not.toBeInTheDocument();
+    expect(mocks.fetchPortalProjectAccessKeysState).toHaveBeenCalledWith("proj-1");
+    expect(mocks.fetchPortalAccessKeysState).not.toHaveBeenCalled();
+
+    const newKeyButtons = screen.getAllByRole("button", { name: "New key" });
+    await user.click(newKeyButtons.find((button) => !button.hasAttribute("disabled"))!);
+
+    await waitFor(() => expect(mocks.createPortalProjectAccessKey).toHaveBeenCalledWith("proj-1", "zg-main"));
+    expect(await screen.findByText("AK-PROJECT-NEW")).toBeInTheDocument();
+    expect(screen.getByText("SK-PROJECT-NEW")).toBeInTheDocument();
+    expect(screen.getByText("Scope: zg-main. The secret is shown only once.")).toBeInTheDocument();
   });
 });

@@ -12,7 +12,7 @@ from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .ui_group import UiGroup, UserUiGroup, UiGroupS3Account, UiGroupS3User, UiGroupS3Connection
-from .project import Project, ProjectS3Account, UiGroupProject, UserProject
+from .project import Project, ProjectIAMUser, ProjectS3Account, UiGroupProject, UserProject
 from .tag_definition import TagDefinition, StorageEndpointTag, S3AccountTag, S3UserTag, S3ConnectionTag
 from .ldap import LdapProvider
 from .oidc import OidcLoginState, OidcProvider
@@ -57,6 +57,7 @@ __all__ = [
     "UiGroupS3User",
     "UiGroupS3Connection",
     "Project",
+    "ProjectIAMUser",
     "ProjectS3Account",
     "UserProject",
     "UiGroupProject",

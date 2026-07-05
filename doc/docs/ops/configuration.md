@@ -113,13 +113,23 @@ Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
 `AppSettings.general` and are persisted in the database; UI-managed OIDC and
 LDAP providers are persisted separately in their own database tables.
 
-`FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
+`FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is
+enabled, Portal access remains explicit: admins assign `portal_user` or
+`portal_manager` on Project associations to UI users or UI groups. The legacy
+direct account-scoped Portal access-key endpoints remain supported for existing
+account contexts, but Project Portal overrides and multi-account access keys are
+configured at Project scope.
 
 The default `portal-manager` IAM group policy grants only
 `s3:ListAllMyBuckets` and `sts:GetSessionToken`. Storage Space creation, object
 access, and bucket defaults stay behind the Portal workflow: bucket creation and
 defaults are applied by backend orchestration with account credentials, and
 object access is kept in per-user Storage Space policies.
+For Project workspaces, user-managed Portal access keys are grouped by Ceph
+zonegroup. Endpoints linked to a Project must declare `ceph_zonegroup_name` for
+Project key creation to be available, and the backend uses the Project
+zonegroup authority `S3Account` credentials, not Ceph Admin endpoint
+credentials, to manage the IAM user and keys.
 
 ## Frontend runtime settings
 

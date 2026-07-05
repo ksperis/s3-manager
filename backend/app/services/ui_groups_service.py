@@ -8,6 +8,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.db import (
+    ProjectIAMUser,
     S3Account,
     S3Connection,
     S3User,
@@ -69,6 +70,7 @@ class UiGroupsService:
         group = self.db.query(UiGroup).filter(UiGroup.id == group_id).first()
         if not group:
             raise ValueError("UI group not found")
+        project_iam_user_ids: set[int] = set()
         if payload.name is not None:
             name = self._normalize_name(payload.name)
             existing = self.db.query(UiGroup).filter(func.lower(UiGroup.name) == name.lower()).first()
@@ -92,6 +94,8 @@ class UiGroupsService:
         if payload.browser_advanced_features_enabled is not None:
             group.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
         if payload.user_ids is not None:
+            project_iam_user_ids.update(link.user_id for link in group.user_links or [])
+            project_iam_user_ids.update(int(user_id) for user_id in payload.user_ids if user_id is not None)
             self._set_user_links(group, payload.user_ids)
         if payload.account_links is not None:
             self._set_account_links(group, payload.account_links)
@@ -102,6 +106,8 @@ class UiGroupsService:
         group.updated_at = utcnow()
         self.db.add(group)
         self.db.commit()
+        if project_iam_user_ids:
+            self._sync_project_iam_links_for_users(project_iam_user_ids)
         self.db.refresh(group)
         return group
 
@@ -109,8 +115,11 @@ class UiGroupsService:
         group = self.db.query(UiGroup).filter(UiGroup.id == group_id).first()
         if not group:
             raise ValueError("UI group not found")
+        project_iam_user_ids = {link.user_id for link in group.user_links or []}
         self.db.delete(group)
         self.db.commit()
+        if project_iam_user_ids:
+            self._sync_project_iam_links_for_users(project_iam_user_ids)
 
     def get_group(self, group_id: int) -> Optional[UiGroup]:
         return self.db.query(UiGroup).filter(UiGroup.id == group_id).first()
@@ -386,6 +395,22 @@ class UiGroupsService:
             UserUiGroup.group_id == group_id,
             UserUiGroup.user_id.in_(user_ids),
         ).delete(synchronize_session=False)
+
+    def _sync_project_iam_links_for_users(self, user_ids: set[int]) -> None:
+        if not user_ids:
+            return
+        links = (
+            self.db.query(ProjectIAMUser)
+            .filter(ProjectIAMUser.user_id.in_(user_ids))
+            .all()
+        )
+        if not links:
+            return
+        from app.services.portal_service import get_portal_service
+
+        portal_service = get_portal_service(self.db)
+        for link in links:
+            portal_service._sync_project_iam_link_projection(link)
 
     def _load_account_names(self, ids: list[int]) -> dict[int, tuple[str, Optional[str]]]:
         if not ids:

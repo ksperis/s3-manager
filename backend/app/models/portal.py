@@ -59,6 +59,34 @@ class PortalAccessKeysState(BaseModel):
     max_access_keys: int = Field(default=2, ge=1)
 
 
+class PortalAccessKeyScopeAccount(BaseModel):
+    account_id: int
+    account_name: str
+    display_name: str
+    storage_endpoint_id: Optional[int] = None
+    storage_endpoint_name: Optional[str] = None
+    storage_endpoint_url: Optional[str] = None
+    storage_endpoint_zonegroup: Optional[str] = None
+
+
+class PortalAccessKeyScope(BaseModel):
+    scope_id: str
+    label: str
+    zonegroup: Optional[str] = None
+    s3_endpoint: Optional[str] = None
+    authority_account_id: Optional[int] = None
+    accounts: list[PortalAccessKeyScopeAccount] = Field(default_factory=list)
+    iam_user: PortalIAMUser = Field(default_factory=PortalIAMUser)
+    access_keys: list[PortalAccessKey] = Field(default_factory=list)
+    can_manage_access_keys: bool = False
+    max_access_keys: int = Field(default=0, ge=0)
+    unavailable_reason: Optional[str] = None
+
+
+class PortalProjectAccessKeysState(BaseModel):
+    scopes: list[PortalAccessKeyScope] = Field(default_factory=list)
+
+
 class PortalUsageStorageSpace(BaseModel):
     id: str
     name: str

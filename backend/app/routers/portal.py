@@ -22,6 +22,7 @@ from app.models.portal import (
     PortalIAMUser,
     PortalPublicLink,
     PortalPublicLinkCreate,
+    PortalProjectAccessKeysState,
     PortalReplicationCreate,
     PortalReplicationList,
     PortalReplicationSummary,
@@ -1302,6 +1303,135 @@ def portal_project_alerts(
                 payload["title"] = f"{item.title} ({account_link.display_name})"
             items.append(PortalAlert.model_validate(payload))
     return sorted(items, key=lambda item: item.created_at or utcnow(), reverse=True)[:limit]
+
+
+@router.get("/projects/{project_id}/access-keys", response_model=PortalProjectAccessKeysState)
+def portal_project_access_keys(
+    project_id: int,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalProjectAccessKeysState:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        return service.get_project_access_keys_state(user, project_access)
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.post("/projects/{project_id}/access-keys/{scope_id}", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
+def create_portal_project_access_key(
+    project_id: int,
+    scope_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccessKey:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        scope = service._resolve_project_access_key_scope(project_access, scope_id)
+        key = service.create_project_access_key(user, project_access, scope_id)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="create_portal_access_key",
+            entity_type="portal_project_access_key",
+            entity_id=key.access_key_id,
+            account=scope.authority_account,
+            metadata={
+                "access_key_id": key.access_key_id,
+                "project_id": project_id,
+                "scope_id": scope.scope_id,
+                "zonegroup": scope.zonegroup_name,
+                "authority_account_id": scope.authority_account.id if scope.authority_account else None,
+            },
+        )
+        return key
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.put("/projects/{project_id}/access-keys/{scope_id}/{access_key_id}/status", response_model=PortalAccessKey)
+def update_portal_project_access_key_status(
+    project_id: int,
+    scope_id: str,
+    access_key_id: str,
+    payload: PortalAccessKeyStatusChange,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccessKey:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        scope = service._resolve_project_access_key_scope(project_access, scope_id)
+        key = service.update_project_access_key_status(user, project_access, scope_id, access_key_id, payload.active)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="update_portal_access_key_status",
+            entity_type="portal_project_access_key",
+            entity_id=access_key_id,
+            account=scope.authority_account,
+            metadata={
+                "access_key_id": access_key_id,
+                "active": payload.active,
+                "project_id": project_id,
+                "scope_id": scope.scope_id,
+                "zonegroup": scope.zonegroup_name,
+                "authority_account_id": scope.authority_account.id if scope.authority_account else None,
+            },
+        )
+        return key
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+
+
+@router.delete("/projects/{project_id}/access-keys/{scope_id}/{access_key_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_portal_project_access_key(
+    project_id: int,
+    scope_id: str,
+    access_key_id: str,
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> Response:
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        scope = service._resolve_project_access_key_scope(project_access, scope_id)
+        service.delete_project_access_key(user, project_access, scope_id, access_key_id)
+        audit_service.record_action(
+            user=user,
+            scope="portal",
+            action="delete_portal_access_key",
+            entity_type="portal_project_access_key",
+            entity_id=access_key_id,
+            account=scope.authority_account,
+            metadata={
+                "access_key_id": access_key_id,
+                "project_id": project_id,
+                "scope_id": scope.scope_id,
+                "zonegroup": scope.zonegroup_name,
+                "authority_account_id": scope.authority_account.id if scope.authority_account else None,
+            },
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        _raise_portal_access_key_runtime(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/eligibility", response_model=PortalEligibility)

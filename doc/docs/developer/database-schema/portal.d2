@@ -69,6 +69,20 @@ Legend: {
     "revoked_at": "DATETIME"
     "created_at": "DATETIME [NN]"
   }
+  "project_iam_users": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_project_iam_user_scope(user_id, project_id, zonegroup_key)\nIndexes: ix_project_iam_users_authority_account(authority_account_id) [index]; ix_project_iam_users_id(id) [index]; ix_project_iam_users_project_user(project_id, user_id) [index]"
+    "id": "INTEGER [PK, NN]"
+    "user_id": "INTEGER [FK, NN]"
+    "project_id": "INTEGER [FK, NN]"
+    "zonegroup_key": "VARCHAR [NN]"
+    "zonegroup_name": "VARCHAR"
+    "authority_account_id": "INTEGER [FK]"
+    "iam_user_id": "VARCHAR [NN]"
+    "iam_username": "VARCHAR"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
+  }
 }
 
 "External references": {
@@ -82,6 +96,10 @@ Legend: {
     class: external
     tooltip: "Full definition: doc/docs/developer/database-schema/identity-ui-access.d2"
   }
+  "projects": {
+    class: external
+    tooltip: "Full definition: project governance tables are documented with Admin/Project data."
+  }
 }
 
 "portal_public_links"."account_id" -> "s3_accounts": "ondelete=CASCADE"
@@ -91,3 +109,6 @@ Legend: {
 "portal_storage_space_grants"."created_by_user_id" -> "users"
 "portal_storage_space_grants"."storage_space_metadata_id" -> "portal_storage_space_metadata"."id": "ondelete=CASCADE"
 "portal_storage_space_grants"."user_id" -> "users": "ondelete=CASCADE"
+"project_iam_users"."authority_account_id" -> "s3_accounts": "ondelete=SET NULL"
+"project_iam_users"."project_id" -> "projects": "ondelete=CASCADE"
+"project_iam_users"."user_id" -> "users": "ondelete=CASCADE"

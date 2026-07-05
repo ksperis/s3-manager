@@ -368,7 +368,35 @@ class PortalIamMixin:
         principals: set[str] = set()
         for iam_username, iam_user_id in rows:
             principals.update(self._portal_iam_principal_arns(account, iam_username, iam_user_id))
+        principals.update(self._portal_project_policy_principals_for_user_ids(account, allowed_user_ids))
         return sorted(principals)
+
+    def _portal_project_policy_principals_for_user_ids(
+        self,
+        account: S3Account,
+        allowed_user_ids: set[int],
+    ) -> set[str]:
+        zonegroup_key = self._project_zonegroup_key(account)
+        if not zonegroup_key or not allowed_user_ids:
+            return set()
+        rows = (
+            self.db.query(ProjectIAMUser, S3Account)
+            .join(ProjectS3Account, ProjectS3Account.project_id == ProjectIAMUser.project_id)
+            .outerjoin(S3Account, S3Account.id == ProjectIAMUser.authority_account_id)
+            .filter(ProjectS3Account.account_id == account.id)
+            .filter(ProjectIAMUser.user_id.in_(allowed_user_ids))
+            .filter(ProjectIAMUser.zonegroup_key == zonegroup_key)
+            .filter(ProjectIAMUser.iam_username.isnot(None))
+            .all()
+        )
+        principals: set[str] = set()
+        for link, authority_account in rows:
+            if not link.iam_username:
+                continue
+            principals.update(self._portal_iam_principal_arns(account, link.iam_username, link.iam_user_id))
+            if authority_account is not None and authority_account.id != account.id:
+                principals.update(self._portal_iam_principal_arns(authority_account, link.iam_username, link.iam_user_id))
+        return principals
 
     def _portal_storage_space_allowed_user_ids(
         self,
@@ -688,6 +716,116 @@ class PortalIamMixin:
         row = self._portal_account_member_map(account).get(user_id)
         return row[1] if row else AccountRole.PORTAL_NONE.value
 
+    def _project_role_for_user(self, project_id: int, user_id: int) -> str:
+        roles: list[str] = [
+            role
+            for (role,) in self.db.query(UserProject.account_role)
+            .filter(UserProject.project_id == project_id, UserProject.user_id == user_id)
+            .all()
+        ]
+        roles.extend(
+            role
+            for (role,) in self.db.query(UiGroupProject.account_role)
+            .join(UserUiGroup, UserUiGroup.group_id == UiGroupProject.group_id)
+            .filter(UiGroupProject.project_id == project_id, UserUiGroup.user_id == user_id)
+            .all()
+        )
+        rank = 0
+        for role in roles:
+            if role == AccountRole.PORTAL_MANAGER.value:
+                rank = max(rank, 2)
+            elif role == AccountRole.PORTAL_USER.value:
+                rank = max(rank, 1)
+        if rank == 2:
+            return AccountRole.PORTAL_MANAGER.value
+        if rank == 1:
+            return AccountRole.PORTAL_USER.value
+        return AccountRole.PORTAL_NONE.value
+
+    def _project_accounts_for_zonegroup(self, project_id: int, zonegroup_key: str) -> list[S3Account]:
+        rows = (
+            self.db.query(S3Account)
+            .join(ProjectS3Account, ProjectS3Account.account_id == S3Account.id)
+            .filter(ProjectS3Account.project_id == project_id)
+            .all()
+        )
+        return [account for account in rows if self._project_zonegroup_key(account) == zonegroup_key]
+
+    def _project_iam_access_by_bucket(
+        self,
+        user: User,
+        project_id: int,
+        zonegroup_key: str,
+        account_role: str,
+    ) -> dict[str, PortalStorageSpaceRole]:
+        access_by_bucket: dict[str, PortalStorageSpaceRole] = {}
+        for account in self._project_accounts_for_zonegroup(project_id, zonegroup_key):
+            for bucket_name, role in self._db_storage_space_content_access(user, account, account_role).items():
+                self._merge_storage_space_role(access_by_bucket, bucket_name, role)
+        return access_by_bucket
+
+    def _disable_user_access_keys(self, iam_service: RGWIAMService, iam_username: Optional[str]) -> None:
+        if not iam_username:
+            return
+        for meta in iam_service.list_access_keys(iam_username):
+            if not meta.access_key_id:
+                continue
+            if self._is_active_status(meta.status, default=True):
+                iam_service.update_access_key_status(iam_username, meta.access_key_id, "Inactive")
+
+    def _revoke_project_iam_link(self, link: ProjectIAMUser) -> None:
+        if not link.iam_username:
+            return
+        authority = (
+            self.db.query(S3Account)
+            .filter(S3Account.id == link.authority_account_id)
+            .first()
+            if link.authority_account_id is not None
+            else None
+        )
+        if authority is None:
+            return
+        iam_service = self._get_iam_service(authority)
+        self._sync_user_group_membership(iam_service, link.iam_username, AccountRole.PORTAL_NONE.value)
+        self._clear_user_bucket_policy(iam_service, link.iam_username)
+        self._disable_user_access_keys(iam_service, link.iam_username)
+
+    def _sync_project_iam_link_projection(self, link: ProjectIAMUser) -> None:
+        if not link.iam_username:
+            return
+        user = self.db.query(User).filter(User.id == link.user_id).first()
+        project = self.db.query(Project).filter(Project.id == link.project_id).first()
+        authority = (
+            self.db.query(S3Account)
+            .filter(S3Account.id == link.authority_account_id)
+            .first()
+            if link.authority_account_id is not None
+            else None
+        )
+        if user is None or project is None or authority is None:
+            return
+        role = self._project_role_for_user(project.id, user.id)
+        if not bool(user.is_active):
+            role = AccountRole.PORTAL_NONE.value
+        iam_service = self._get_iam_service(authority)
+        if role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            self._sync_user_group_membership(iam_service, link.iam_username, AccountRole.PORTAL_NONE.value)
+            self._clear_user_bucket_policy(iam_service, link.iam_username)
+            self._disable_user_access_keys(iam_service, link.iam_username)
+            return
+        if not self._project_accounts_for_zonegroup(project.id, link.zonegroup_key):
+            self._sync_user_group_membership(iam_service, link.iam_username, AccountRole.PORTAL_NONE.value)
+            self._clear_user_bucket_policy(iam_service, link.iam_username)
+            self._disable_user_access_keys(iam_service, link.iam_username)
+            return
+        settings = self._effective_portal_settings(
+            authority,
+            admin_override=self._load_project_portal_settings_overrides(project),
+        )
+        self._sync_user_group_membership(iam_service, link.iam_username, role, portal_settings=settings)
+        access_by_bucket = self._project_iam_access_by_bucket(user, project.id, link.zonegroup_key, role)
+        self._sync_user_storage_space_policy_projection(iam_service, link.iam_username, access_by_bucket)
+
     def _sync_user_storage_space_policy_projection(
         self,
         iam_service: RGWIAMService,
@@ -788,20 +926,32 @@ class PortalIamMixin:
             .all()
         )
         member_roles = {user_id: row[1] for user_id, row in self._portal_account_member_map(account).items()}
-        rows = [(target, member_roles.get(target.id), iam_username) for target, iam_username in rows if iam_username]
-        if not rows:
+        legacy_rows = [(target, member_roles.get(target.id), iam_username) for target, iam_username in rows if iam_username]
+        if legacy_rows:
+            iam_service = self._get_iam_service(account)
+            for target, account_role, iam_username in legacy_rows:
+                if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+                    continue
+                self._sync_user_group_membership(
+                    iam_service,
+                    iam_username,
+                    account_role,
+                    portal_settings=self._effective_portal_settings(account),
+                )
+                self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
+        zonegroup_key = self._project_zonegroup_key(account)
+        if not zonegroup_key:
             return
-        iam_service = self._get_iam_service(account)
-        for target, account_role, iam_username in rows:
-            if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-                continue
-            self._sync_user_group_membership(
-                iam_service,
-                iam_username,
-                account_role,
-                portal_settings=self._effective_portal_settings(account),
-            )
-            self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
+        project_links = (
+            self.db.query(ProjectIAMUser)
+            .join(ProjectS3Account, ProjectS3Account.project_id == ProjectIAMUser.project_id)
+            .filter(ProjectS3Account.account_id == account.id)
+            .filter(ProjectIAMUser.zonegroup_key == zonegroup_key)
+            .filter(ProjectIAMUser.user_id.in_(participant_user_ids))
+            .all()
+        )
+        for project_link in project_links:
+            self._sync_project_iam_link_projection(project_link)
 
     def _portal_bucket_cors_rules(self, origins: list[str]) -> list[dict]:
         return [

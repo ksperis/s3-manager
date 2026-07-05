@@ -17,6 +17,7 @@ from app.db import (
     ApiToken,
     AuditLog,
     BucketMigration,
+    ProjectIAMUser,
     RefreshSession,
     S3Account,
     S3Connection,
@@ -235,10 +236,13 @@ class UsersService:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
             self._set_s3_connection_links(user, payload.s3_connection_ids)
+        sync_project_iam = payload.group_ids is not None or payload.is_active is not None
         if payload.group_ids is not None:
             self._set_group_links(user, payload.group_ids)
         self.db.add(user)
         self.db.commit()
+        if sync_project_iam:
+            self._sync_project_iam_links_for_user(user.id)
         self.db.refresh(user)
         logger.debug("Updated user id=%s email=%s", user.id, user.email)
         return user
@@ -816,6 +820,20 @@ class UsersService:
             )
         for group_id in to_add:
             self.db.add(UserUiGroup(user_id=user.id, group_id=group_id))
+
+    def _sync_project_iam_links_for_user(self, user_id: int) -> None:
+        links = (
+            self.db.query(ProjectIAMUser)
+            .filter(ProjectIAMUser.user_id == user_id)
+            .all()
+        )
+        if not links:
+            return
+        from app.services.portal_service import get_portal_service
+
+        portal_service = get_portal_service(self.db)
+        for link in links:
+            portal_service._sync_project_iam_link_projection(link)
 
     def groups_grant_ceph_admin(self, group_ids: list[int] | None) -> bool:
         cleaned_ids = sorted({int(group_id) for group_id in (group_ids or []) if group_id is not None})

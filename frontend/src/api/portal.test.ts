@@ -14,10 +14,13 @@ vi.mock("./client", () => ({
 
 import {
   createPortalAccessKey,
+  createPortalProjectAccessKey,
   fetchPortalActivity,
   deletePortalAccessKey,
+  deletePortalProjectAccessKey,
   fetchPortalAlerts,
   fetchPortalAccessKeysState,
+  fetchPortalProjectAccessKeysState,
   fetchPortalState,
   fetchPortalUsage,
   grantPortalStorageSpaceShare,
@@ -45,6 +48,7 @@ import {
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
   updatePortalAccessKeyStatus,
+  updatePortalProjectAccessKeyStatus,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
 } from "./portal";
@@ -263,6 +267,10 @@ describe("portal storage spaces api", () => {
     await fetchPortalActivity("proj-42", { limit: 5 });
     await fetchPortalTransfers("proj-42", { spaceId: "a7:research" });
     await fetchPortalAlerts("proj-42", 3);
+    await fetchPortalProjectAccessKeysState("proj-42");
+    await createPortalProjectAccessKey("proj-42", "zg-main");
+    await updatePortalProjectAccessKeyStatus("proj-42", "zg-main", "AK USER", false);
+    await deletePortalProjectAccessKey("proj-42", "zg-main", "AK USER");
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects");
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/state");
@@ -297,6 +305,13 @@ describe("portal storage spaces api", () => {
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/activity", { params: { limit: 5 } });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/transfers", { params: { space_id: "a7:research" } });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/alerts", { params: { limit: 3 } });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/projects/42/access-keys");
+    expect(clientMock.post).toHaveBeenCalledWith("/portal/projects/42/access-keys/zg-main");
+    expect(clientMock.put).toHaveBeenCalledWith(
+      "/portal/projects/42/access-keys/zg-main/AK%20USER/status",
+      { active: false }
+    );
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/projects/42/access-keys/zg-main/AK%20USER");
   });
 
   it("manages portal access keys through user-facing endpoints", async () => {
@@ -321,6 +336,18 @@ describe("portal storage spaces api", () => {
     expect(clientMock.delete).toHaveBeenCalledWith("/portal/access-keys/AK%20USER", {
       params: { account_id: "101" },
     });
+  });
+
+  it("rejects project selectors on legacy account-scoped access-key helpers", async () => {
+    await expect(fetchPortalAccessKeysState("proj-42")).rejects.toThrow("project access keys");
+    await expect(createPortalAccessKey("proj-42")).rejects.toThrow("project access keys");
+    await expect(updatePortalAccessKeyStatus("proj-42", "AK USER", false)).rejects.toThrow("project access keys");
+    await expect(deletePortalAccessKey("proj-42", "AK USER")).rejects.toThrow("project access keys");
+
+    expect(clientMock.get).not.toHaveBeenCalled();
+    expect(clientMock.post).not.toHaveBeenCalled();
+    expect(clientMock.put).not.toHaveBeenCalled();
+    expect(clientMock.delete).not.toHaveBeenCalled();
   });
 
   it("fetches portal usage trends for dashboard KPI baselines", async () => {

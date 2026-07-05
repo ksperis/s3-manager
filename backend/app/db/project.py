@@ -25,6 +25,7 @@ class Project(Base):
     account_links = relationship("ProjectS3Account", back_populates="project", cascade="all, delete-orphan")
     user_links = relationship("UserProject", back_populates="project", cascade="all, delete-orphan")
     group_links = relationship("UiGroupProject", back_populates="project", cascade="all, delete-orphan")
+    project_iam_links = relationship("ProjectIAMUser", back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectS3Account(Base):
@@ -44,6 +45,30 @@ class ProjectS3Account(Base):
 
     project = relationship("Project", back_populates="account_links")
     account = relationship("S3Account", back_populates="project_links")
+
+
+class ProjectIAMUser(Base):
+    __tablename__ = "project_iam_users"
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_id", "zonegroup_key", name="uq_project_iam_user_scope"),
+        Index("ix_project_iam_users_project_user", "project_id", "user_id"),
+        Index("ix_project_iam_users_authority_account", "authority_account_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    zonegroup_key = Column(String, nullable=False)
+    zonegroup_name = Column(String, nullable=True)
+    authority_account_id = Column(Integer, ForeignKey("s3_accounts.id", ondelete="SET NULL"), nullable=True)
+    iam_user_id = Column(String, nullable=False)
+    iam_username = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    user = relationship("User")
+    project = relationship("Project", back_populates="project_iam_links")
+    authority_account = relationship("S3Account")
 
 
 class UserProject(Base):

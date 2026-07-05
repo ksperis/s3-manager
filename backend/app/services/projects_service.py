@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import (
     AccountRole,
     Project,
+    ProjectIAMUser,
     ProjectS3Account,
     S3Account,
     StorageEndpoint,
@@ -165,11 +166,13 @@ class ProjectsService:
         project.updated_at = utcnow()
         self.db.add(project)
         self.db.commit()
+        self._sync_project_iam_links(project.id)
         self.db.refresh(project)
         return self.project_to_out(project)
 
     def delete_project(self, project_id: int) -> None:
         project = self.get_project(project_id)
+        self._revoke_project_iam_links(project.id)
         self.db.delete(project)
         self.db.commit()
 
@@ -211,6 +214,7 @@ class ProjectsService:
         project.updated_at = utcnow()
         self.db.add(project)
         self.db.commit()
+        self._sync_project_iam_links(project.id)
         self.db.refresh(project)
         return ProjectProvisionAccountsResponse(
             project=self.project_to_out(project),
@@ -416,6 +420,34 @@ class ProjectsService:
         link.updated_at = utcnow()
         self.db.add(link)
         return link
+
+    def _sync_project_iam_links(self, project_id: int) -> None:
+        links = (
+            self.db.query(ProjectIAMUser)
+            .filter(ProjectIAMUser.project_id == project_id)
+            .all()
+        )
+        if not links:
+            return
+        from app.services.portal_service import get_portal_service
+
+        portal_service = get_portal_service(self.db)
+        for link in links:
+            portal_service._sync_project_iam_link_projection(link)
+
+    def _revoke_project_iam_links(self, project_id: int) -> None:
+        links = (
+            self.db.query(ProjectIAMUser)
+            .filter(ProjectIAMUser.project_id == project_id)
+            .all()
+        )
+        if not links:
+            return
+        from app.services.portal_service import get_portal_service
+
+        portal_service = get_portal_service(self.db)
+        for link in links:
+            portal_service._revoke_project_iam_link(link)
 
     def _account_link_to_model(self, link: ProjectS3Account) -> ProjectAccountLink:
         account = link.account
