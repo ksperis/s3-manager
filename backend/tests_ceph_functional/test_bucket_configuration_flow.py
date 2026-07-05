@@ -1056,6 +1056,32 @@ def test_portal_bucket_replication_roundtrip_between_lab_zones(
             and item["target_bucket_name"] == target_bucket
             for item in listed["replications"]
         )
+
+        object_key = f"portal-replication/{uuid.uuid4().hex}.txt"
+        object_body = f"portal-replication {uuid.uuid4().hex}\n".encode("utf-8")
+        upload_response = source_account.manager_session.request(
+            "POST",
+            f"/manager/buckets/{source_bucket}/objects/upload",
+            params=_account_params(source_account.account_id),
+            data={"prefix": "", "key": object_key},
+            files={"file": ("portal-replication.txt", io.BytesIO(object_body), "text/plain")},
+            expected_status=201,
+        ).json()
+        assert upload_response["key"] == object_key
+
+        replicated_object = _wait_for_value(
+            "portal replicated object on destination storage",
+            lambda: target_account.manager_session.get(
+                f"/browser/buckets/{target_bucket}/object-meta",
+                params={"account_id": target_account.account_id, "key": object_key},
+            ),
+            lambda current: isinstance(current, dict)
+            and current.get("key") == object_key
+            and int(current.get("size") or -1) == len(object_body),
+            timeout=300.0,
+            interval=5.0,
+        )
+        assert replicated_object["key"] == object_key
     finally:
         if replication_configured:
             try:

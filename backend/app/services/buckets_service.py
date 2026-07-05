@@ -57,7 +57,7 @@ from app.utils.rgw import (
     is_rgw_account_id,
 )
 from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags, resolve_replication_endpoint
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.size_units import size_to_bytes
 
@@ -429,6 +429,15 @@ class BucketsService:
     def _account_admin_client_kwargs(self, account: S3Account) -> dict:
         kwargs = self._client_kwargs(account)
         kwargs["session_token"] = None
+        return kwargs
+
+    def _replication_client_kwargs(self, account: S3Account, *, account_admin: bool = False) -> dict:
+        kwargs = self._account_admin_client_kwargs(account) if account_admin else self._client_kwargs(account)
+        endpoint_obj = getattr(account, "storage_endpoint", None)
+        if endpoint_obj is not None:
+            replication_endpoint = resolve_replication_endpoint(endpoint_obj)
+            if replication_endpoint:
+                kwargs["endpoint"] = replication_endpoint
         return kwargs
 
     def ensure_account_admin_credentials(self, account: S3Account) -> None:
@@ -1649,7 +1658,7 @@ class BucketsService:
             name,
             access_key=access_key,
             secret_key=secret_key,
-            **self._client_kwargs(account),
+            **self._replication_client_kwargs(account),
         ) or {}
         return BucketReplicationConfiguration(configuration=config)
 
@@ -1659,7 +1668,7 @@ class BucketsService:
             name,
             access_key=access_key,
             secret_key=secret_key,
-            **self._account_admin_client_kwargs(account),
+            **self._replication_client_kwargs(account, account_admin=True),
         ) or {}
         return BucketReplicationConfiguration(configuration=config)
 
@@ -1690,7 +1699,7 @@ class BucketsService:
             configuration=configuration,
             access_key=access_key,
             secret_key=secret_key,
-            **self._client_kwargs(account),
+            **self._replication_client_kwargs(account),
         )
         return self.get_bucket_replication(name, account)
 
@@ -1707,7 +1716,7 @@ class BucketsService:
             configuration=configuration,
             access_key=access_key,
             secret_key=secret_key,
-            **self._account_admin_client_kwargs(account),
+            **self._replication_client_kwargs(account, account_admin=True),
         )
         logger.info(
             "Account admin credentials configured bucket replication on bucket %s for S3Account %s",
@@ -1722,7 +1731,7 @@ class BucketsService:
             name,
             access_key=access_key,
             secret_key=secret_key,
-            **self._client_kwargs(account),
+            **self._replication_client_kwargs(account),
         )
 
     def set_bucket_notifications(

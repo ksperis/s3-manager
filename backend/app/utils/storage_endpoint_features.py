@@ -136,6 +136,7 @@ class EndpointFeatureFlags:
     sns_enabled: bool
     sse_enabled: bool
     replication_enabled: bool
+    replication_endpoint: Optional[str]
     healthcheck_enabled: bool
     healthcheck_mode: str
     healthcheck_url: Optional[str]
@@ -227,7 +228,7 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
     for key in FEATURE_KEYS:
         entry: dict[str, Any] = {"enabled": bool(features.get(key, {}).get("enabled"))}
         endpoint = features.get(key, {}).get("endpoint")
-        if key in {"admin", "sts", "iam"} and endpoint:
+        if key in {"admin", "sts", "iam", "replication"} and endpoint:
             entry["endpoint"] = endpoint
         if key == "healthcheck":
             mode = str(features.get(key, {}).get("mode") or "http").strip().lower()
@@ -260,6 +261,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         sns_enabled=bool(features.get("sns", {}).get("enabled")),
         sse_enabled=bool(features.get("sse", {}).get("enabled")),
         replication_enabled=bool(features.get("replication", {}).get("enabled")),
+        replication_endpoint=features.get("replication", {}).get("endpoint"),
         healthcheck_enabled=bool(features.get("healthcheck", {}).get("enabled", True)),
         healthcheck_mode=str(features.get("healthcheck", {}).get("mode") or "http").strip().lower(),
         healthcheck_url=features.get("healthcheck", {}).get("url"),
@@ -300,6 +302,13 @@ def resolve_iam_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     if provider == StorageProvider.AWS:
         return aws_iam_endpoint_for_region(getattr(endpoint, "region", None))
     return _normalize_url(endpoint.endpoint_url)
+
+
+def resolve_replication_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
+    flags = resolve_feature_flags(endpoint)
+    if not flags.replication_enabled:
+        return None
+    return flags.replication_endpoint or _normalize_url(endpoint.endpoint_url)
 
 
 def resolve_iam_signing_region(endpoint: StorageEndpoint) -> Optional[str]:

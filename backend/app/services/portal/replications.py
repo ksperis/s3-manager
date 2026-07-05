@@ -73,6 +73,24 @@ class PortalReplicationsMixin:
             and source.api.storage_endpoint_zonegroup
             and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
             and source.api.id != target.api.id
+            and not self._portal_replication_pair_has_global_replication(source, target)
+        )
+
+    def _portal_replication_pair_has_global_replication(
+        self,
+        source: _PortalReplicationSpaceContext,
+        target: _PortalReplicationSpaceContext,
+    ) -> bool:
+        return bool(
+            source.api.global_replication_configured
+            and target.api.global_replication_configured
+            and source.bucket_name == target.bucket_name
+            and source.api.storage_endpoint_id
+            and target.api.storage_endpoint_id
+            and source.api.storage_endpoint_id != target.api.storage_endpoint_id
+            and source.api.storage_endpoint_zonegroup
+            and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
+            and source.api.id != target.api.id
         )
 
     def _portal_replication_rule_destination(self, rule: dict[str, Any]) -> str | None:
@@ -209,7 +227,7 @@ class PortalReplicationsMixin:
             if not source.api.bucket_replication_allowed:
                 continue
             try:
-                current = bucket_service.get_bucket_replication(source.bucket_name, source.account)
+                current = bucket_service.get_bucket_replication_as_account_admin(source.bucket_name, source.account)
             except RuntimeError as exc:
                 rows.append(
                     PortalReplicationSummary(
@@ -242,6 +260,16 @@ class PortalReplicationsMixin:
                     ),
                     None,
                 )
+                same_location_candidates = [
+                    candidate
+                    for candidate in target_by_zone_bucket.get((source.api.storage_endpoint_zonegroup or "", target_bucket), [])
+                    if candidate.api.id != source.api.id
+                    and candidate.api.storage_endpoint_id == source.api.storage_endpoint_id
+                ]
+                if target is None and same_location_candidates:
+                    message = "Destination bucket is on the same storage location and cannot be shown as a cross-zone replication."
+                else:
+                    message = None if target is not None else "Destination bucket is not visible in this Portal workspace."
                 rows.append(
                     PortalReplicationSummary(
                         id=f"bucket:{source.api.id}:{rule.get('ID') or target_bucket}",
@@ -253,7 +281,7 @@ class PortalReplicationsMixin:
                         zonegroup=source.api.storage_endpoint_zonegroup,
                         rule_id=str(rule.get("ID") or ""),
                         role_arn=str(configuration.get("Role") or "") or None,
-                        message=None if target is not None else "Destination bucket is not visible in this Portal workspace.",
+                        message=message,
                     )
                 )
         return rows
@@ -272,11 +300,15 @@ class PortalReplicationsMixin:
             *self._portal_bucket_replication_rows(spaces, bucket_service=bucket_service),
         ]
         can_create = any(self._portal_replication_pair_allowed(source, target) for source in spaces for target in spaces)
+        has_global_pair = any(self._portal_replication_pair_has_global_replication(source, target) for source in spaces for target in spaces)
         unavailable_reason = None
         if not spaces:
             unavailable_reason = "No Storage Space is available in this workspace."
         elif not can_create:
-            unavailable_reason = "Replication requires a Portal manager role and two compatible storage locations."
+            if has_global_pair:
+                unavailable_reason = "Platform replication already covers the compatible storage locations in this workspace."
+            else:
+                unavailable_reason = "Replication requires a Portal manager role and two compatible storage locations."
         return PortalReplicationList(
             storage_spaces=[space.api for space in spaces],
             replications=replications,

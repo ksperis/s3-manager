@@ -36,7 +36,7 @@ const paris = {
   storage_endpoint_name: "s3-z1",
   storage_endpoint_zonegroup: "zg-lab",
   bucket_replication_allowed: true,
-  global_replication_configured: true,
+  global_replication_configured: false,
   can_manage: true,
 };
 
@@ -58,14 +58,15 @@ describe("PortalReplicationsPage", () => {
       storage_spaces: [paris, lyon],
       replications: [
         {
-          id: "global:a101:research<->a102:research",
-          mode: "global",
+          id: "bucket:a101:raw-research-paris:portal-research",
+          mode: "bucket_level",
           status: "configured",
           source: paris,
           target: lyon,
           target_bucket_name: "raw-research-lyon",
           zonegroup: "zg-lab",
-          message: "Global zonegroup replication applies to this storage pair.",
+          rule_id: "portal-research",
+          message: "Bucket-level replication configured.",
         },
       ],
       can_create: true,
@@ -88,10 +89,10 @@ describe("PortalReplicationsPage", () => {
     render(<PortalReplicationsPage />);
 
     expect(await screen.findByRole("heading", { name: "Replications" })).toBeInTheDocument();
-    expect(screen.getByText("Platform replication")).toBeInTheDocument();
+    expect(screen.getByText("Workspace replication")).toBeInTheDocument();
     expect(screen.getAllByText("Research (Paris)").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Research (Lyon)").length).toBeGreaterThan(0);
-    expect(screen.getByText("Managed by the storage platform.")).toBeInTheDocument();
+    expect(screen.getByText("Bucket-level replication configured.")).toBeInTheDocument();
     expect(screen.queryByText("raw-research-paris")).not.toBeInTheDocument();
     expect(screen.queryByText("raw-research-lyon")).not.toBeInTheDocument();
     expect(screen.queryByText("zg-lab")).not.toBeInTheDocument();
@@ -109,6 +110,46 @@ describe("PortalReplicationsPage", () => {
     });
     expect(await screen.findByText("Replication configured from Research.")).toBeInTheDocument();
     expect(mocks.listPortalReplications).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows platform replication as already covering matching storage locations", async () => {
+    const globalParis = {
+      ...paris,
+      id: "a101:research",
+      bucket_name: "research",
+      global_replication_configured: true,
+    };
+    const globalLyon = {
+      ...lyon,
+      id: "a102:research",
+      bucket_name: "research",
+      global_replication_configured: true,
+    };
+    mocks.listPortalReplications.mockResolvedValueOnce({
+      storage_spaces: [globalParis, globalLyon],
+      replications: [
+        {
+          id: "global:a101:research<->a102:research",
+          mode: "global",
+          status: "configured",
+          source: globalParis,
+          target: globalLyon,
+          target_bucket_name: "research",
+          zonegroup: "zg-lab",
+          message: "Global zonegroup replication applies to this storage pair.",
+        },
+      ],
+      can_create: false,
+      unavailable_reason: "Platform replication already covers the compatible storage locations in this workspace.",
+    });
+
+    render(<PortalReplicationsPage />);
+
+    expect(await screen.findByText("Platform replication")).toBeInTheDocument();
+    expect(screen.getByText("Managed by the storage platform.")).toBeInTheDocument();
+    expect(screen.getByText("Platform replication already covers the compatible storage locations in this workspace.")).toBeInTheDocument();
+    expect(screen.getByText("Storage pairs already protected by platform replication do not need an extra workspace replication.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure" })).toBeDisabled();
   });
 
   it("does not offer a destination on the same storage location", async () => {

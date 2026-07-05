@@ -78,6 +78,7 @@ nav:
           - "Portal: Storage Spaces": user/portal-storage-spaces.md
           - "Portal: Files": user/portal-files.md
           - "Portal: Sharing": user/portal-sharing.md
+          - "Portal: Replications": user/portal-replications.md
           - "Portal: Access Keys": user/portal-access-keys.md
           - "Portal: Usage and Alerts": user/portal-usage-alerts.md
           - "Portal: Activity": user/portal-activity.md

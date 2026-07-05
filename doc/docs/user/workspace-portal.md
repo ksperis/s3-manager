@@ -3,7 +3,8 @@
 ## When to use
 
 Use **Portal** for an end-user Storage Workspace focused on storage spaces,
-sharing, activity, transfers, usage, alerts, and simple preferences.
+sharing, replication, activity, transfers, usage, alerts, and simple
+preferences.
 
 ## Prerequisites
 
@@ -28,9 +29,11 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
    Portal runtime key is not shown in this list.
 6. Use **Shares** to review items shared with you, items shared by you, and
    public links when enabled.
-7. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
+7. Use **Replications** to review platform-managed copies and configure guided
+   workspace replications when your Portal role and storage locations allow it.
+8. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
    history, usage composition, usage history, and consumption tracking.
-8. Use **Settings** for simple account and preference changes.
+9. Use **Settings** for simple account and preference changes.
 
 ## Main workflows
 
@@ -39,6 +42,7 @@ sharing, activity, transfers, usage, alerts, and simple preferences.
 | Open, create, import, or archive a Storage Space | [Portal: Storage Spaces](portal-storage-spaces.md) | Access modes, active/archived states, creation, and imports. |
 | Browse, upload, download, or inspect files | [Portal: Files](portal-files.md) | Object list, folders, safe details, and Portal-specific limits. |
 | Share with collaborators or understand roles | [Portal: Sharing](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
+| Review or configure Storage Space replication | [Portal: Replications](portal-replications.md) | Platform replication, workspace replication, and compatibility requirements. |
 | Create credentials for external S3 tools | [Portal: Access Keys](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
 | Understand quota, usage, traffic, and alerts | [Portal: Usage and Alerts](portal-usage-alerts.md) | Storage used, per-space usage, history, billing source, and unavailable metrics. |
 | Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible Storage Space and file events. |
@@ -90,6 +94,7 @@ collaborator grants as their source of truth.
 - [Portal: Storage Spaces](portal-storage-spaces.md)
 - [Portal: Files](portal-files.md)
 - [Portal: Sharing](portal-sharing.md)
+- [Portal: Replications](portal-replications.md)
 - [Portal: Access Keys](portal-access-keys.md)
 - [Portal: Usage and Alerts](portal-usage-alerts.md)
 - [Portal: Activity](portal-activity.md)

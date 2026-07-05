@@ -98,6 +98,7 @@ class _BucketService:
     def __init__(self):
         self.versioning_calls: list[tuple[str, int, bool]] = []
         self.admin_credential_checks: list[int] = []
+        self.admin_read_calls: list[tuple[str, int]] = []
         self.replication_calls: list[tuple[str, int, dict]] = []
         self.admin_replication_calls: list[tuple[str, int, dict]] = []
         self.replication_by_bucket: dict[str, dict] = {}
@@ -107,6 +108,7 @@ class _BucketService:
 
     def get_bucket_replication_as_account_admin(self, name: str, account: S3Account):
         self._require_account_admin_credentials(account)
+        self.admin_read_calls.append((name, account.id))
         return self.get_bucket_replication(name, account)
 
     def _require_account_admin_credentials(self, account: S3Account):
@@ -156,7 +158,8 @@ def test_portal_replications_show_global_storage_pair(db_session):
         bucket_service=_BucketService(),
     )
 
-    assert payload.can_create is True
+    assert payload.can_create is False
+    assert payload.unavailable_reason == "Platform replication already covers the compatible storage locations in this workspace."
     assert [(space.id, space.project_account_label, space.storage_endpoint_zonegroup) for space in payload.storage_spaces] == [
         (f"a{account_z1.id}:research", "Paris", "zg-lab"),
         (f"a{account_z2.id}:research", "Lyon", "zg-lab"),
@@ -323,7 +326,7 @@ def test_portal_create_bucket_level_replication_requires_distinct_storage_locati
     assert payload.can_create is False
     assert len(payload.replications) == 1
     assert payload.replications[0].target is None
-    assert payload.replications[0].message == "Destination bucket is not visible in this Portal workspace."
+    assert payload.replications[0].message == "Destination bucket is on the same storage location and cannot be shown as a cross-zone replication."
     try:
         service.create_replication(
             user,
@@ -369,3 +372,44 @@ def test_portal_create_bucket_level_replication_requires_same_zonegroup(db_sessi
         assert "same Ceph zonegroup" in str(exc)
     else:
         raise AssertionError("cross-zonegroup replication should be rejected")
+
+
+def test_portal_list_bucket_level_replication_uses_account_admin_identity(db_session):
+    user = _user(db_session)
+    endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab")
+    endpoint_z2 = _endpoint(db_session, name="s3-z2", zonegroup="zg-lab")
+    account_z1 = _account(db_session, name="project-z1", endpoint=endpoint_z1)
+    account_z2 = _account(db_session, name="project-z2", endpoint=endpoint_z2)
+    _metadata(db_session, account=account_z1, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_z2, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    bucket_service = _BucketService()
+    bucket_service.replication_by_bucket["research-source"] = {
+        "Role": "arn:aws:iam::000000000000:role/existing-replication",
+        "Rules": [
+            {
+                "ID": "source-to-target",
+                "Status": "Enabled",
+                "Priority": 1,
+                "Destination": {"Bucket": "arn:aws:s3:::research-target"},
+            }
+        ],
+    }
+
+    payload = PortalService(db_session).list_replications(
+        user,
+        [
+            PortalReplicationAccountContext(access=_access(account_z1, user), label="Paris"),
+            PortalReplicationAccountContext(access=_access(account_z2, user), label="Lyon"),
+        ],
+        bucket_service=bucket_service,
+    )
+
+    assert bucket_service.admin_read_calls == [
+        ("research-source", account_z1.id),
+        ("research-target", account_z2.id),
+    ]
+    assert len(payload.replications) == 1
+    assert payload.replications[0].target is not None
+    assert payload.replications[0].target.project_account_label == "Lyon"

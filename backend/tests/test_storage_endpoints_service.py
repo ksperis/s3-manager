@@ -45,9 +45,11 @@ from app.utils.storage_endpoint_features import (
     aws_iam_endpoint_for_region,
     aws_s3_endpoint_for_region,
     aws_sts_endpoint_for_region,
+    dump_features_config,
     normalize_features_config,
     resolve_feature_flags,
     resolve_iam_endpoint,
+    resolve_replication_endpoint,
     resolve_sts_endpoint,
 )
 from app.utils.time import utcnow
@@ -433,6 +435,25 @@ def test_replication_feature_defaults_to_disabled_and_can_be_enabled_for_ceph():
         "    enabled: true\n",
     )
     assert enabled_features["replication"]["enabled"] is True
+
+    endpoint_features = normalize_features_config(
+        StorageProvider.CEPH,
+        "features:\n"
+        "  replication:\n"
+        "    enabled: true\n"
+        "    endpoint: https://replication.example.test\n",
+    )
+    dumped = dump_features_config(endpoint_features)
+    assert endpoint_features["replication"]["endpoint"] == "https://replication.example.test"
+    assert "endpoint: https://replication.example.test" in dumped
+
+    endpoint = StorageEndpoint(
+        name="ceph",
+        endpoint_url="https://s3.example.test",
+        provider=StorageProvider.CEPH.value,
+        features_config=dumped,
+    )
+    assert resolve_replication_endpoint(endpoint) == "https://replication.example.test"
 
 
 def test_features_config_requires_canonical_account_and_healthcheck_keys():

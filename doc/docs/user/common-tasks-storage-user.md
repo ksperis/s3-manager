@@ -11,6 +11,7 @@ Use this page when you know what you want to do, but not which workspace or page
 | Upload or download files | [Feature: Object operations in Browser](feature-objects-browser.md) | You have write access for upload, and read access for download. |
 | Recover or inspect a previous object version | [Feature: Object versions in Browser](feature-object-versions-browser.md) | Versioning is enabled on the bucket. |
 | Create credentials for an external S3 client | [Portal: Access keys](portal-access-keys.md) | Portal access-key creation is enabled for your account. |
+| Review or configure Storage Space replication | [Portal: Replications](portal-replications.md) | You have Portal manager rights and two compatible storage locations. |
 | Understand usage, quota, or alerts | [Portal: Usage and alerts](portal-usage-alerts.md) | Usage collection is available for the selected account. |
 | Report missing access | [Troubleshooting](troubleshooting.md) | Capture workspace, account/context, bucket or Storage Space, and exact error text. |
 

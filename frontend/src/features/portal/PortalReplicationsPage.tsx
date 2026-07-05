@@ -59,6 +59,13 @@ export default function PortalReplicationsPage() {
         de: "In diesem Workspace ist kein Speicherbereich verfügbar.",
       });
     }
+    if (normalized.includes("platform replication already covers")) {
+      return t({
+        en: "Platform replication already covers the compatible storage locations in this workspace.",
+        fr: "La réplication plateforme couvre déjà les emplacements de stockage compatibles de ce workspace.",
+        de: "Die Plattform-Replikation deckt bereits die kompatiblen Speicherorte in diesem Workspace ab.",
+      });
+    }
     if (normalized.includes("portal manager") || normalized.includes("compatible storage")) {
       return t({
         en: "Replication needs manager access and two compatible storage locations in this workspace.",
@@ -244,6 +251,7 @@ export default function PortalReplicationsPage() {
   const storageSpaces = data?.storage_spaces ?? [];
   const canCreate = Boolean(data?.can_create && manageableSources.length > 0 && targetOptions.length > 0);
   const noCompatibleTarget = Boolean(sourceId && manageableSources.length > 0 && targetOptions.length === 0);
+  const hasPlatformReplication = replications.some((replication) => replication.mode === "global" && replication.status === "configured");
 
   return (
     <div className="space-y-4">
@@ -292,6 +300,15 @@ export default function PortalReplicationsPage() {
               en: "No compatible destination is available for the selected source.",
               fr: "Aucune destination compatible n'est disponible pour la source sélectionnée.",
               de: "Für die ausgewählte Quelle ist kein kompatibles Ziel verfügbar.",
+            })}
+          </UiInlineMessage>
+        ) : null}
+        {hasPlatformReplication ? (
+          <UiInlineMessage tone="info" className="mt-3">
+            {t({
+              en: "Storage pairs already protected by platform replication do not need an extra workspace replication.",
+              fr: "Les paires de stockage déjà protégées par la réplication plateforme n'ont pas besoin d'une réplication workspace supplémentaire.",
+              de: "Durch Plattform-Replikation geschützte Speicherpaare benötigen keine zusätzliche Workspace-Replikation.",
             })}
           </UiInlineMessage>
         ) : null}

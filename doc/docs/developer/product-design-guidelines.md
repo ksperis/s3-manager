@@ -70,7 +70,7 @@ workspace-specific visual themes when a shared product pattern fits.
 
 | Workspace | User job | Design posture | Preferred patterns | Avoid |
 | --- | --- | --- | --- | --- |
-| `/portal` | End-user storage workspace for files, shares, activity, transfers, usage, and personal settings. | Approachable, compact, user-facing, and bounded to visible Storage Spaces. | `PageHeader`, `WorkspaceDashboardKit`, `PageTabs variant="bar"`, `PortalSettingsLayout`, locked `BrowserEmbed` with the `portal-basic` profile. | IAM jargon, ARNs, principals, policy JSON, bucket diagnostics, lifecycle, replication, versioning, `/portal/browser`, fake production data. |
+| `/portal` | End-user storage workspace for files, shares, activity, transfers, usage, replication, and personal settings. | Approachable, compact, user-facing, and bounded to visible Storage Spaces. | `PageHeader`, `WorkspaceDashboardKit`, `PageTabs variant="bar"`, `PortalSettingsLayout`, locked `BrowserEmbed` with the `portal-basic` profile. | IAM jargon, ARNs, principals, policy JSON, bucket diagnostics, raw bucket lifecycle/replication/versioning settings, `/portal/browser`, fake production data. |
 | `/browser` | Advanced object explorer and object-operation workspace. | Task-first, technical, and explicit about selected execution context. | `BrowserPage`, `BrowserEmbed`, compact embedded profiles, advanced root profile only when access allows it. | Duplicate browser implementations, hidden context switching, advanced chrome for simple embedded surfaces. |
 | `/manager` | S3 and IAM configuration console for accounts, connections, users, groups, roles, policies, buckets, and bucket features. | Dense, accurate, and native to S3/IAM semantics. | `PageHeader`, `PageTabs`, `ManagerTable`, `ListToolbar`, `BucketFeatureCard`, shared metrics and dashboard components. | Hiding native S3/IAM meaning, Portal wording, platform-governance settings that belong in Admin. |
 | `/admin` | Platform governance for UI users, endpoints, accounts, feature flags, audit, billing, health, and global settings. | Administrative, auditable, and oriented around platform state. | `PageHeader`, settings panels, `AdminModalTabs`, shared association summaries, shared metrics cards. | Generic S3 object workflows, tenant operations without explicit governance context, local-only visual patterns. |
@@ -101,7 +101,7 @@ workspace-specific visual themes when a shared product pattern fits.
 | Access level | Viewer, Editor, Owner | IAM policy, group, role, access key, bucket policy | UI user, UI group, feature access, account binding |
 | File operations | Files, folders, uploads, downloads, shares | Objects, prefixes, metadata, versions, storage class | Usually out of scope unless auditing or governance requires it |
 | Usage | Usage & Analytics, storage, transfers, billing source | Traffic, usage history, bucket usage, metrics | Usage history, billing, quota monitoring, platform health |
-| Advanced configuration | Hidden from Portal | Lifecycle, replication, CORS, website, notification, policy, encryption | Feature flags, endpoint settings, governance and audit |
+| Advanced configuration | Hidden from Portal except guided workspace replication | Lifecycle, raw bucket replication rules, CORS, website, notification, policy, encryption | Feature flags, endpoint settings, governance and audit |
 
 When in doubt, keep Portal copy user-facing and keep Manager/Browser copy
 faithful to S3/IAM.

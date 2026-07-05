@@ -28,6 +28,7 @@ def _build_endpoint(endpoint_id: int = 1, *, replication_enabled: bool = True) -
             "features:\n"
             "  replication:\n"
             f"    enabled: {'true' if replication_enabled else 'false'}\n"
+            "    endpoint: https://replication.example.test\n"
         ),
     )
     endpoint.id = endpoint_id
@@ -199,6 +200,7 @@ def test_buckets_service_account_admin_replication_uses_stored_account_credentia
     assert captured["put"]["access_key"] == "AK"
     assert captured["put"]["secret_key"] == "SK"
     assert captured["put"]["configuration"] == payload.configuration
+    assert captured["put"]["endpoint"] == "https://replication.example.test"
     assert captured["put"]["session_token"] is None
 
 
