@@ -213,6 +213,25 @@ describe("PortalStorageSpacesPage", () => {
     expect(within(archivedRow!).getByText("Archived")).toBeInTheDocument();
   });
 
+  it("uses restrained scope badges and access-level role colors", () => {
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    const researchRow = screen.getByText("Research Data").closest("tr");
+    expect(researchRow).not.toBeNull();
+
+    const scopeBadge = within(researchRow!).getByText("Restricted").closest("span");
+    const roleBadge = within(researchRow!).getByText("Owner").closest("span");
+    expect(scopeBadge).toHaveClass("bg-[var(--ui-surface-muted)]");
+    expect(scopeBadge).toHaveClass("text-[var(--ui-text-muted)]");
+    expect(scopeBadge).not.toHaveClass("bg-primary-50");
+    expect(roleBadge).toHaveClass("bg-primary-50");
+    expect(roleBadge).not.toHaveClass("bg-emerald-50");
+  });
+
   it("shows the named bucket creation mode only when allowed by portal state", () => {
     mocks.hookResult.state = {
       account_role: "portal_manager",

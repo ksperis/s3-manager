@@ -17,7 +17,7 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, type UiTone, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
@@ -32,9 +32,7 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
-  portalRoleTone,
   portalStorageSpaceStatusTone,
-  portalVisibilityTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
 import {
@@ -47,6 +45,15 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 function visibleStatus(space: { status: string }) {
   if (space.status === "Active") return null;
   return space.status;
+}
+
+const accessScopeBadgeClass =
+  "border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text-muted)]";
+
+function portalAccessRoleTone(role: PortalStorageSpaceRole): UiTone {
+  if (role === "Owner") return "primary";
+  if (role === "Editor") return "info";
+  return "neutral";
 }
 
 export default function PortalStorageSpacesPage() {
@@ -539,8 +546,8 @@ export default function PortalStorageSpacesPage() {
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
                       <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
                       <div className="flex flex-wrap items-center gap-2">
-                        <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
-                        <UiBadge tone={portalRoleTone(space.contentRole ?? space.role)}>{portalRoleLabel(space.contentRole ?? space.role, t)}</UiBadge>
+                        <UiBadge disableToneStyles className={accessScopeBadgeClass}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
+                        <UiBadge tone={portalAccessRoleTone(space.contentRole ?? space.role)}>{portalRoleLabel(space.contentRole ?? space.role, t)}</UiBadge>
                         {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
                       </div>
                     </td>
