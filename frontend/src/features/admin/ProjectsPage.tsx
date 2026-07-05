@@ -49,6 +49,7 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
 } from "./AdminAssociationPicker";
+import AdminModalTabs, { type AdminModalTab } from "./AdminModalTabs";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PortalOverridesPanel from "./PortalOverridesPanel";
 
@@ -63,6 +64,8 @@ type ProjectForm = {
   user_links: ProjectFormUserLink[];
   group_links: ProjectFormGroupLink[];
 };
+
+type ProjectModalTab = "details" | "accounts" | "access" | "overrides";
 
 const ROLE_OPTIONS: { value: ProjectPortalRole; label: string }[] = [
   { value: "portal_user", label: "Portal user" },
@@ -146,6 +149,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [projectModalTab, setProjectModalTab] = useState<ProjectModalTab>("details");
   const [form, setForm] = useState<ProjectForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [auxLoading, setAuxLoading] = useState(false);
@@ -206,6 +210,15 @@ export default function ProjectsPage() {
   const visibleAccountOptions = useMemo(() => availableAccountOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableAccountOptions]);
   const visibleUserOptions = useMemo(() => availableUserOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableUserOptions]);
   const visibleGroupOptions = useMemo(() => availableGroupOptions.slice(0, MAX_VISIBLE_OPTIONS), [availableGroupOptions]);
+  const projectModalTabs = useMemo<AdminModalTab<ProjectModalTab>[]>(
+    () => [
+      { id: "details", label: "Details" },
+      { id: "accounts", label: `S3 accounts (${form.account_links.length})` },
+      { id: "access", label: `Portal access (${form.user_links.length + form.group_links.length})` },
+      { id: "overrides", label: "Portal overrides", visible: Boolean(editingProject && portalEnabled) },
+    ],
+    [editingProject, form.account_links.length, form.group_links.length, form.user_links.length, portalEnabled]
+  );
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -218,6 +231,15 @@ export default function ProjectsPage() {
         sort_by: "name",
         sort_dir: "asc",
       });
+      const totalPages = Math.max(1, Math.ceil((data.total || 0) / pageSize));
+      if (data.total > 0 && page > totalPages) {
+        setPage(totalPages);
+        return;
+      }
+      if (data.total === 0 && page !== 1) {
+        setPage(1);
+        return;
+      }
       setProjects(data.items);
       setTotal(data.total);
     } catch (err) {
@@ -282,6 +304,7 @@ export default function ProjectsPage() {
   const openCreateModal = () => {
     setEditingProject(null);
     setForm(emptyForm());
+    setProjectModalTab("details");
     resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
@@ -292,6 +315,7 @@ export default function ProjectsPage() {
   const openEditModal = (project: Project) => {
     setEditingProject(project);
     setForm(formFromProject(project));
+    setProjectModalTab("details");
     resetAssociationPickers();
     setActionError(null);
     setActionMessage(null);
@@ -471,7 +495,7 @@ export default function ProjectsPage() {
       />
 
       {actionMessage ? <PageBanner tone="success">{actionMessage}</PageBanner> : null}
-      {actionError ? <PageBanner tone="error">{actionError}</PageBanner> : null}
+      {actionError && !showModal ? <PageBanner tone="error">{actionError}</PageBanner> : null}
 
       <div className="ui-surface-card overflow-hidden">
         <ListToolbar
@@ -547,6 +571,9 @@ export default function ProjectsPage() {
                   </td>
                 </tr>
               ))}
+              {tableStatus === "loading" ? (
+                <TableEmptyState colSpan={5} message="Loading projects..." />
+              ) : null}
               {tableStatus === "empty" ? (
                 <TableEmptyState colSpan={5} title="No projects" description="Create a project to expose S3 accounts in the Portal." />
               ) : null}
@@ -577,6 +604,11 @@ export default function ProjectsPage() {
           maxBodyHeightClass="max-h-[78vh]"
         >
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {actionError ? <PageBanner tone="error">{actionError}</PageBanner> : null}
+
+            <AdminModalTabs activeTab={projectModalTab} onTabChange={setProjectModalTab} tabs={projectModalTabs} />
+
+            {projectModalTab === "details" ? (
             <section className="grid gap-3 md:grid-cols-[1fr_1.5fr]">
               <label className="space-y-1">
                 <span className="ui-caption font-semibold text-[var(--ui-text-muted)]">Name</span>
@@ -596,6 +628,7 @@ export default function ProjectsPage() {
                 />
               </label>
             </section>
+            ) : null}
 
             <ProjectModalSummary
               accountCount={form.account_links.length}
@@ -603,6 +636,7 @@ export default function ProjectsPage() {
               groupCount={form.group_links.length}
             />
 
+            {projectModalTab === "accounts" ? (
             <section className="space-y-3">
               <AdminAssociationSectionHeader
                 title="S3 accounts"
@@ -618,6 +652,7 @@ export default function ProjectsPage() {
                 <AdminAssociationPickerPanel
                   title="Add S3 accounts"
                   hint="Search by account, endpoint, or RGW id"
+                  searchLabel="Search S3 accounts"
                   search={accountPickerSearch}
                   onSearchChange={setAccountPickerSearch}
                   loading={auxLoading}
@@ -708,7 +743,9 @@ export default function ProjectsPage() {
                 </table>
               </div>
             </section>
+            ) : null}
 
+            {projectModalTab === "access" ? (
             <section className="grid gap-4 lg:grid-cols-2">
               <AssociationTable
                 title="UI users"
@@ -722,6 +759,7 @@ export default function ProjectsPage() {
                 }}
                 pickerTitle="Add UI users"
                 pickerHint="Search by email"
+                pickerSearchLabel="Search UI users"
                 pickerSearch={userPickerSearch}
                 onPickerSearchChange={setUserPickerSearch}
                 loading={auxLoading}
@@ -749,6 +787,7 @@ export default function ProjectsPage() {
                 }}
                 pickerTitle="Add UI groups"
                 pickerHint="Search by group name"
+                pickerSearchLabel="Search UI groups"
                 pickerSearch={groupPickerSearch}
                 onPickerSearchChange={setGroupPickerSearch}
                 loading={auxLoading}
@@ -765,8 +804,9 @@ export default function ProjectsPage() {
                 onChange={(rows) => setForm((current) => ({ ...current, group_links: rows as ProjectFormGroupLink[] }))}
               />
             </section>
+            ) : null}
 
-            {editingProject && portalEnabled ? (
+            {projectModalTab === "overrides" && editingProject && portalEnabled ? (
               <PortalOverridesPanel
                 settings={portalSettings}
                 loading={portalSettingsLoading}
@@ -877,6 +917,7 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
   onTogglePicker,
   pickerTitle,
   pickerHint,
+  pickerSearchLabel,
   pickerSearch,
   onPickerSearchChange,
   loading,
@@ -899,6 +940,7 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
   onTogglePicker: () => void;
   pickerTitle: string;
   pickerHint: string;
+  pickerSearchLabel: string;
   pickerSearch: string;
   onPickerSearchChange: (value: string) => void;
   loading: boolean;
@@ -921,6 +963,7 @@ function AssociationTable<T extends ProjectFormUserLink | ProjectFormGroupLink>(
         <AdminAssociationPickerPanel
           title={pickerTitle}
           hint={pickerHint}
+          searchLabel={pickerSearchLabel}
           search={pickerSearch}
           onSearchChange={onPickerSearchChange}
           loading={loading}

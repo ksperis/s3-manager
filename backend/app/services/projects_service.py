@@ -91,6 +91,8 @@ class ProjectsService:
                 .outerjoin(S3Account, ProjectS3Account.account_id == S3Account.id)
                 .outerjoin(UserProject, UserProject.project_id == Project.id)
                 .outerjoin(User, UserProject.user_id == User.id)
+                .outerjoin(UiGroupProject, UiGroupProject.project_id == Project.id)
+                .outerjoin(UiGroup, UiGroupProject.group_id == UiGroup.id)
                 .filter(
                     or_(
                         Project.name.ilike(pattern),
@@ -99,6 +101,7 @@ class ProjectsService:
                         func.coalesce(S3Account.rgw_account_id, "").ilike(pattern),
                         func.coalesce(ProjectS3Account.display_name, "").ilike(pattern),
                         func.coalesce(User.email, "").ilike(pattern),
+                        func.coalesce(UiGroup.name, "").ilike(pattern),
                     )
                 )
                 .distinct()

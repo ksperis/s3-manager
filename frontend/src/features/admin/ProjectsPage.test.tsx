@@ -115,28 +115,53 @@ describe("ProjectsPage", () => {
     updateProjectPortalSettingsMock.mockResolvedValue(makePortalProjectSettings());
   });
 
+  it("shows a table loading state while projects load", async () => {
+    let resolveList: (value: unknown) => void = () => {};
+    listProjectsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      })
+    );
+
+    render(<ProjectsPage />);
+
+    expect(screen.getByText("Loading projects...")).toBeInTheDocument();
+
+    resolveList({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+    await screen.findByText("No projects");
+  });
+
   it("creates project links with searchable account, user, and group pickers", async () => {
     render(<ProjectsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "New project" }));
+    expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Research Project" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
       target: { value: "Shared research storage" },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /S3 accounts/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
-    fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "paris" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search S3 accounts" }), { target: { value: "paris" } });
     expect(screen.queryByRole("checkbox", { name: /project-tokyo/ })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("checkbox", { name: /project-paris/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
+    fireEvent.click(screen.getByRole("button", { name: /Portal access/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add UI users" }));
-    fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "alice" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search UI users" }), { target: { value: "alice" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: /alice@example.com/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
-    fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "ops" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search UI groups" }), { target: { value: "ops" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: /Ops Team/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -181,6 +206,7 @@ describe("ProjectsPage", () => {
 
     await screen.findByText("Research Project");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Portal overrides" }));
 
     expect(fetchProjectPortalSettingsMock).toHaveBeenCalledWith(55);
     await screen.findByText("Portal user Storage Space creation");
@@ -233,6 +259,7 @@ describe("ProjectsPage", () => {
 
     await screen.findByText("Research Project");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Portal overrides" }));
     await screen.findByText("Portal user Storage Space creation");
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
 

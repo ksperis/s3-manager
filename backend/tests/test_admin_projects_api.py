@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole
+from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, UiGroup, User, UserRole
 
 
 def _endpoint(db_session) -> StorageEndpoint:
@@ -39,10 +39,12 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
         role=UserRole.UI_USER.value,
         is_active=True,
     )
-    db_session.add_all([account, user])
+    group = UiGroup(name="Research Group", description="Project members")
+    db_session.add_all([account, user, group])
     db_session.commit()
     db_session.refresh(account)
     db_session.refresh(user)
+    db_session.refresh(group)
 
     create_resp = client.post(
         "/api/admin/projects",
@@ -51,6 +53,7 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
             "description": "Created by API",
             "account_links": [{"account_id": account.id, "display_name": "Paris"}],
             "user_links": [{"user_id": user.id, "account_role": AccountRole.PORTAL_USER.value}],
+            "group_links": [{"group_id": group.id, "account_role": AccountRole.PORTAL_MANAGER.value}],
         },
     )
 
@@ -59,6 +62,7 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
     project_id = payload["id"]
     assert payload["account_links"][0]["display_name"] == "Paris"
     assert payload["user_links"][0]["account_role"] == AccountRole.PORTAL_USER.value
+    assert payload["group_links"][0]["account_role"] == AccountRole.PORTAL_MANAGER.value
 
     update_resp = client.put(
         f"/api/admin/projects/{project_id}",
@@ -66,6 +70,7 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
             "description": None,
             "account_links": [{"account_id": account.id, "display_name": "Rennes"}],
             "user_links": [{"user_id": user.id, "account_role": AccountRole.PORTAL_MANAGER.value}],
+            "group_links": [{"group_id": group.id, "account_role": AccountRole.PORTAL_USER.value}],
         },
     )
 
@@ -74,10 +79,15 @@ def test_admin_projects_crud_manages_account_and_user_links(client: TestClient, 
     assert updated["description"] is None
     assert updated["account_links"][0]["display_name"] == "Rennes"
     assert updated["user_links"][0]["account_role"] == AccountRole.PORTAL_MANAGER.value
+    assert updated["group_links"][0]["account_role"] == AccountRole.PORTAL_USER.value
 
     list_resp = client.get("/api/admin/projects", params={"search": "Rennes"})
     assert list_resp.status_code == 200, list_resp.text
     assert list_resp.json()["total"] == 1
+
+    group_search_resp = client.get("/api/admin/projects", params={"search": "Research Group"})
+    assert group_search_resp.status_code == 200, group_search_resp.text
+    assert group_search_resp.json()["total"] == 1
 
 
 def test_admin_projects_do_not_expose_account_provisioning(client: TestClient):

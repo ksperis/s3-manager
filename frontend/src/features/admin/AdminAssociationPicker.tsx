@@ -38,6 +38,7 @@ export function AdminAssociationSectionHeader({
 type AdminAssociationPickerPanelProps = {
   title: ReactNode;
   hint?: ReactNode;
+  searchLabel?: string;
   search: string;
   onSearchChange: (value: string) => void;
   loading: boolean;
@@ -92,6 +93,7 @@ export function AdminAssociationPickerOption({
 export function AdminAssociationPickerPanel({
   title,
   hint,
+  searchLabel = "Search options",
   search,
   onSearchChange,
   loading,
@@ -115,6 +117,7 @@ export function AdminAssociationPickerPanel({
         </div>
         <input
           type="text"
+          aria-label={searchLabel}
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search..."
