@@ -214,22 +214,51 @@ describe("PortalStorageSpacesPage", () => {
   });
 
   it("uses restrained scope badges and access-level role colors", () => {
+    const [baseSpace] = mocks.hookResult.workspace.spaces;
+    mocks.hookResult.workspace.spaces = [
+      {
+        ...baseSpace,
+        id: "owner-data",
+        name: "Owner Data",
+        role: "Owner",
+      },
+      {
+        ...baseSpace,
+        id: "editor-data",
+        name: "Editor Data",
+        role: "Editor",
+      },
+      {
+        ...baseSpace,
+        id: "viewer-data",
+        name: "Viewer Data",
+        role: "Viewer",
+      },
+    ];
+
     render(
       <MemoryRouter>
         <PortalStorageSpacesPage />
       </MemoryRouter>
     );
 
-    const researchRow = screen.getByText("Research Data").closest("tr");
-    expect(researchRow).not.toBeNull();
+    const ownerRow = screen.getByText("Owner Data").closest("tr");
+    const editorRow = screen.getByText("Editor Data").closest("tr");
+    const viewerRow = screen.getByText("Viewer Data").closest("tr");
+    expect(ownerRow).not.toBeNull();
+    expect(editorRow).not.toBeNull();
+    expect(viewerRow).not.toBeNull();
 
-    const scopeBadge = within(researchRow!).getByText("Restricted").closest("span");
-    const roleBadge = within(researchRow!).getByText("Owner").closest("span");
+    const scopeBadge = within(ownerRow!).getByText("Restricted").closest("span");
+    const ownerBadge = within(ownerRow!).getByText("Owner").closest("span");
+    const editorBadge = within(editorRow!).getByText("Editor").closest("span");
+    const viewerBadge = within(viewerRow!).getByText("Viewer").closest("span");
     expect(scopeBadge).toHaveClass("bg-[var(--ui-surface-muted)]");
     expect(scopeBadge).toHaveClass("text-[var(--ui-text-muted)]");
     expect(scopeBadge).not.toHaveClass("bg-primary-50");
-    expect(roleBadge).toHaveClass("bg-primary-50");
-    expect(roleBadge).not.toHaveClass("bg-emerald-50");
+    expect(ownerBadge).toHaveClass("bg-emerald-50");
+    expect(editorBadge).toHaveClass("bg-primary-50");
+    expect(viewerBadge).toHaveClass("bg-slate-50");
   });
 
   it("shows the named bucket creation mode only when allowed by portal state", () => {
