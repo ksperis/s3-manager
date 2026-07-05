@@ -872,7 +872,10 @@ describe("BrowserPage interactions", () => {
     expect(rowA).toHaveClass("h-9");
     expect(screen.getByRole("button", { name: "Selected storage space" })).toHaveTextContent("Research Data");
     expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
-    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
+    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", {
+      workspaceSurface: "portal",
+      portalProjectAccountId: null,
+    });
     expect(listBrowserObjectsMock).toHaveBeenCalledWith(
       "acc-portal",
       "portal-bucket",
@@ -946,7 +949,10 @@ describe("BrowserPage interactions", () => {
     renderPage({ initialEntry: "/browser" });
 
     await findRowByLabel("a.txt");
-    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
+    expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", {
+      workspaceSurface: "portal",
+      portalProjectAccountId: null,
+    });
     expect(searchBrowserBucketsMock).toHaveBeenCalledWith(
       "acc-portal",
       expect.objectContaining({ workspaceSurface: "portal" }),

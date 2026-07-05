@@ -111,6 +111,6 @@ test("uses portal workspace headers for a portal project browser context", async
 
   await page.goto("/browser?ctx=proj-42&bucket=space-a");
 
-  await expect(page.getByRole("button", { name: "Select bucket" })).toContainText("space-a");
+  await expect(page.getByRole("button", { name: "Select storage space" })).toContainText("Lab Paris");
   await expect.poll(() => portalRequests.length).toBeGreaterThan(0);
 });
