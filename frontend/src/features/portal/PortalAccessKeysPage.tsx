@@ -27,8 +27,12 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import { cx, type UiTone, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalAccessKeyStatusLabel, portalDateTimeLabel } from "./portalI18n";
@@ -62,9 +66,17 @@ function scopedBusyKey(prefix: "delete" | "toggle", scope: PortalAccessKeyScope 
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
-  const handleCopy = () => {
-    if (!value || typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
-    navigator.clipboard.writeText(value).catch(() => {});
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    if (!value) return;
+    try {
+      await copyTextToClipboard(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
   };
   return (
     <button
@@ -72,9 +84,13 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       onClick={handleCopy}
       className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
     >
-      {label}
+      {copied ? t({ en: "Copied", fr: "Copié", de: "Kopiert" }) : label}
     </button>
   );
+}
+
+function accessKeyStatusTone(active: boolean): UiTone {
+  return active ? "success" : "neutral";
 }
 
 export default function PortalAccessKeysPage() {
@@ -248,22 +264,39 @@ export default function PortalAccessKeysPage() {
     return keys.map((key) => {
       const active = isKeyActive(key);
       const disabled = Boolean(busy) || !scopedCanManage;
+      const statusLabel = portalAccessKeyStatusLabel(key.status, active, t);
+      const createdLabel = portalDateTimeLabel(key.created_at, locale);
       return (
         <tr
           key={`${scope?.scope_id ?? "account"}:${key.access_key_id}`}
-          className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${active ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
+          className={cx(
+            "hover:bg-slate-50 dark:hover:bg-slate-800/50 max-md:block max-md:w-full max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3",
+            active ? "" : "bg-slate-50/70 dark:bg-slate-800/40"
+          )}
         >
-          <td className="manager-table-cell max-w-[18rem] break-all px-6 py-4 font-mono text-slate-800 dark:text-slate-100">
+          <td className="manager-table-cell max-w-[18rem] break-all px-6 py-4 font-mono text-slate-800 dark:text-slate-100 max-md:block max-md:max-w-full max-md:border-0 max-md:p-0">
+            <span className={cx("hidden font-sans text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
+              {t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}
+            </span>
             {key.access_key_id}
           </td>
-          <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-            {portalAccessKeyStatusLabel(key.status, active, t)}
+          <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200 max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+            <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
+              {t({ en: "Status", fr: "Statut", de: "Status" })}
+            </span>
+            <UiBadge tone={accessKeyStatusTone(active)}>{statusLabel}</UiBadge>
           </td>
-          <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-            {portalDateTimeLabel(key.created_at, locale)}
+          <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300 max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
+            <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
+              {t({ en: "Created on", fr: "Créée le", de: "Erstellt am" })}
+            </span>
+            {createdLabel}
           </td>
-          <td className="px-6 py-4 text-right">
-            <div className="flex flex-wrap justify-end gap-2">
+          <td className="px-6 py-4 text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
+            <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
+              {t({ en: "Actions", fr: "Actions", de: "Aktionen" })}
+            </span>
+            <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
               <button
                 type="button"
                 onClick={() => handleToggleKey(key, scope)}
@@ -292,8 +325,8 @@ export default function PortalAccessKeysPage() {
   };
 
   const renderKeysTable = (keys: PortalAccessKey[], status: ReturnType<typeof resolveListTableStatus>, scope?: PortalAccessKeyScope) => (
-    <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-      <thead className="bg-slate-50 dark:bg-slate-900/50">
+    <table className="ui-data-table min-w-[720px] divide-y divide-slate-200 dark:divide-slate-800 max-md:block max-md:w-full max-md:min-w-0">
+      <thead className="bg-slate-50 dark:bg-slate-900/50 max-md:hidden">
         <tr>
           <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
             {t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}
@@ -309,10 +342,10 @@ export default function PortalAccessKeysPage() {
           </th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 max-md:block max-md:w-full max-md:space-y-3 max-md:divide-y-0">
         {status === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
         {status === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
-        {status === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })} />}
+        {status === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys yet. Create a key when you need to connect an external S3 tool.", fr: "Aucune clé d'accès externe pour le moment. Créez une clé lorsque vous devez connecter un outil S3 externe.", de: "Noch keine externen Zugriffsschlüssel. Erstellen Sie einen Schlüssel, wenn Sie ein externes S3-Werkzeug verbinden müssen." })} />}
         {renderKeyRows(keys, scope)}
       </tbody>
     </table>
@@ -337,17 +370,19 @@ export default function PortalAccessKeysPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0 space-y-1">
             <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {scope.zonegroup || t({ en: "Zonegroup not configured", fr: "Zonegroup non configurée", de: "Zonegroup nicht konfiguriert" })}
+              {scope.zonegroup
+                ? t({ en: "Storage zone", fr: "Zone de stockage", de: "Speicherzone" })
+                : t({ en: "Storage zone not configured", fr: "Zone de stockage non configurée", de: "Speicherzone nicht konfiguriert" })}
             </p>
             <h2 className="break-words ui-card-title text-slate-900 dark:text-white">{scope.label}</h2>
             <p className="ui-body text-slate-600 dark:text-slate-300">
               {scope.s3_endpoint
-                ? t({ en: `Endpoint ${scope.s3_endpoint}`, fr: `Endpoint ${scope.s3_endpoint}`, de: `Endpoint ${scope.s3_endpoint}` })
-                : t({ en: "No endpoint available for this scope.", fr: "Aucun endpoint disponible pour ce périmètre.", de: "Kein Endpoint für diesen Scope verfügbar." })}
+                ? t({ en: `S3 endpoint ${scope.s3_endpoint}`, fr: `Endpoint S3 ${scope.s3_endpoint}`, de: `S3-Endpunkt ${scope.s3_endpoint}` })
+                : t({ en: "No S3 endpoint is available for this storage zone.", fr: "Aucun endpoint S3 n'est disponible pour cette zone de stockage.", de: "Für diese Speicherzone ist kein S3-Endpunkt verfügbar." })}
             </p>
             {accountsLabel && (
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                {t({ en: `Accounts: ${accountsLabel}`, fr: `Accounts : ${accountsLabel}`, de: `Accounts: ${accountsLabel}` })}
+                {t({ en: `Storage locations: ${accountsLabel}`, fr: `Localisations de stockage : ${accountsLabel}`, de: `Speicherorte: ${accountsLabel}` })}
               </p>
             )}
           </div>
@@ -355,16 +390,15 @@ export default function PortalAccessKeysPage() {
             <span className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
               {countLabel}
             </span>
-            <button
-              type="button"
+            <UiButton
               onClick={() => handleCreateProjectKey(scope)}
-              className="inline-flex items-center justify-center rounded-md bg-brand-600 px-4 py-2 ui-button font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+              size="sm"
               disabled={!scopeCanCreate}
             >
               {busy === busyKey("create", scope)
                 ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
                 : t({ en: "New key", fr: "Nouvelle clé", de: "Neuer Schlüssel" })}
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -373,10 +407,12 @@ export default function PortalAccessKeysPage() {
           <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this project scope.", fr: "La gestion des clés d'accès est désactivée pour ce périmètre projet.", de: "Die Verwaltung von Zugriffsschlüsseln ist für diesen Projekt-Scope deaktiviert." })}</PageBanner>
         )}
         {!scope.unavailable_reason && scope.can_manage_access_keys && scopeMaxReached && (
-          <PageBanner tone="info">{t({ en: "The maximum number of project access keys has been reached for this zonegroup.", fr: "Le nombre maximal de clés d'accès projet est atteint pour cette zonegroup.", de: "Die maximale Anzahl von Projekt-Zugriffsschlüsseln ist für diese Zonegroup erreicht." })}</PageBanner>
+          <PageBanner tone="info">{t({ en: "The maximum number of project access keys has been reached for this storage zone.", fr: "Le nombre maximal de clés d'accès projet est atteint pour cette zone de stockage.", de: "Die maximale Anzahl von Projekt-Zugriffsschlüsseln ist für diese Speicherzone erreicht." })}</PageBanner>
         )}
 
-        {renderKeysTable(keys, status, scope)}
+        <div className="overflow-x-auto max-md:overflow-visible">
+          {renderKeysTable(keys, status, scope)}
+        </div>
       </div>
     );
   };
@@ -387,7 +423,7 @@ export default function PortalAccessKeysPage() {
         title={t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" })}
         description={
           isProjectContext
-            ? t({ en: "Create S3 access keys for external tools. Project keys are scoped by zonegroup and inherit your Storage Space permissions.", fr: "Créez des clés d'accès S3 pour les outils externes. Les clés projet sont limitées par zonegroup et héritent de vos droits sur les Storage Spaces.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Projektschlüssel sind auf eine Zonegroup begrenzt und erben Ihre Storage-Space-Rechte." })
+            ? t({ en: "Create S3 access keys for external tools. Project keys are scoped by storage zone and inherit your Storage Space permissions.", fr: "Créez des clés d'accès S3 pour les outils externes. Les clés projet sont limitées par zone de stockage et héritent de vos droits sur les Storage Spaces.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Projektschlüssel sind auf eine Speicherzone begrenzt und erben Ihre Storage-Space-Rechte." })
             : t({ en: "Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des clés d'accès S3 pour les outils externes. Utilisez l'endpoint indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Verwenden Sie den hier angezeigten Endpoint; jedes Secret wird nur einmal angezeigt." })
         }
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }) })}
@@ -408,6 +444,11 @@ export default function PortalAccessKeysPage() {
       {accountError && <PageBanner tone="error">{accountError}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
+      {isProjectContext && projectState && (
+        <PageBanner tone="info">
+          {t({ en: "Choose the storage zone that matches your external tool, create a key, then copy the secret immediately. The same key inherits your visible Storage Space permissions.", fr: "Choisissez la zone de stockage correspondant à votre outil externe, créez une clé, puis copiez immédiatement le secret. La clé hérite de vos droits sur les Storage Spaces visibles.", de: "Wählen Sie die Speicherzone für Ihr externes Werkzeug, erstellen Sie einen Schlüssel und kopieren Sie das Secret sofort. Der Schlüssel erbt Ihre Rechte auf sichtbare Storage Spaces." })}
+        </PageBanner>
+      )}
       {!isProjectContext && state && !canManageAccessKeys && (
         <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this portal workspace.", fr: "La gestion des clés d'accès est désactivée pour ce workspace Portal.", de: "Die Verwaltung von Zugriffsschlüsseln ist für diesen Portal-Workspace deaktiviert." })}</PageBanner>
       )}
@@ -490,7 +531,9 @@ export default function PortalAccessKeysPage() {
             showHeading={false}
             countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} clé(s)`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Schlüssel` })}
           />
-          {renderKeysTable(visibleKeys, tableStatus)}
+          <div className="overflow-x-auto max-md:overflow-visible">
+            {renderKeysTable(visibleKeys, tableStatus)}
+          </div>
         </div>
       )}
 

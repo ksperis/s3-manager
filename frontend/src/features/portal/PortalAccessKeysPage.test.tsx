@@ -169,6 +169,7 @@ describe("PortalAccessKeysPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Access keys" })).toBeInTheDocument();
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
+    expect(screen.getByText("AK-USER").closest("tr")).toHaveClass("max-md:block");
     expect(screen.queryByText("AK-PORTAL")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New key" })).toBeEnabled();
     expect(screen.getByText(/Use endpoint https:\/\/s3\.example\.test with these keys/i)).toBeInTheDocument();
@@ -230,14 +231,16 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     expect(await screen.findByText("AK-PROJECT")).toBeInTheDocument();
-    expect(screen.getByText("Accounts: Paris, Lyon")).toBeInTheDocument();
+    expect(screen.getByText("Storage locations: Paris, Lyon")).toBeInTheDocument();
     expect(screen.getByText("Ceph zonegroup is not configured for this storage location.")).toBeInTheDocument();
     expect(screen.queryByText("Access-key management is disabled for this portal workspace.")).not.toBeInTheDocument();
     expect(mocks.fetchPortalProjectAccessKeysState).toHaveBeenCalledWith("proj-1");
     expect(mocks.fetchPortalAccessKeysState).not.toHaveBeenCalled();
 
     const newKeyButtons = screen.getAllByRole("button", { name: "New key" });
-    await user.click(newKeyButtons.find((button) => !button.hasAttribute("disabled"))!);
+    const enabledNewKeyButton = newKeyButtons.find((button) => !button.hasAttribute("disabled"))!;
+    expect(enabledNewKeyButton).toHaveClass("ui-button-primary");
+    await user.click(enabledNewKeyButton);
 
     await waitFor(() => expect(mocks.createPortalProjectAccessKey).toHaveBeenCalledWith("proj-1", "zg-main"));
     expect(await screen.findByText("AK-PROJECT-NEW")).toBeInTheDocument();
