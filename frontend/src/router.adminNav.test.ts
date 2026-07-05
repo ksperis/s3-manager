@@ -73,6 +73,18 @@ describe("buildAdminNav", () => {
     expect(projectsLink?.iconName).toBe("project");
   });
 
+  it("places Projects after RGW Users in managed tenants", () => {
+    const managedTenants = buildAdminNav(true, true, false, false, false, true).find(
+      (section) => section.label === "Managed Tenants"
+    );
+
+    expect(managedTenants?.links.map((link) => link.label)).toEqual([
+      "RGW Accounts",
+      "RGW Users",
+      "Projects",
+    ]);
+  });
+
   it("groups metrics in overview and billing with audit reporting", () => {
     const adminNav = buildAdminNav(true, true, true, true, false, true);
     const overview = adminNav.find((section) => section.label === "Overview");
