@@ -70,7 +70,7 @@ describe("buildAdminNav", () => {
   it("sets an explicit icon for Projects", () => {
     const projectsLink = getManagedTenantsLink("Projects", [true, true, false, false, false, true]);
 
-    expect(projectsLink?.iconName).toBe("stack");
+    expect(projectsLink?.iconName).toBe("project");
   });
 
   it("groups metrics in overview and billing with audit reporting", () => {

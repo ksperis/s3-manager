@@ -348,6 +348,7 @@ export type SidebarLinkIconName =
   | "integrity"
   | "purge"
   | "migration"
+  | "project"
   | "stack"
   | "dot";
 
@@ -408,6 +409,7 @@ function resolveSidebarLinkIcon(link: SidebarLink) {
   if (iconName === "integrity") return <NavIntegrityIcon />;
   if (iconName === "purge") return <NavPurgeIcon />;
   if (iconName === "migration") return <NavMigrationIcon />;
+  if (iconName === "project") return <NavProjectIcon />;
   if (iconName === "stack") return <NavStackIcon />;
   return <NavDotIcon />;
 }
@@ -629,6 +631,17 @@ function NavStackIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M3 6.2 10 3l7 3.2L10 9.5 3 6.2Zm0 4.3L10 14l7-3.5M3 14.2 10 17l7-2.8" />
+    </svg>
+  );
+}
+
+function NavProjectIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <rect x="3.5" y="4.2" width="5.2" height="4.6" rx="1.2" strokeWidth={1.6} />
+      <rect x="11.3" y="4.2" width="5.2" height="4.6" rx="1.2" strokeWidth={1.6} />
+      <rect x="7.4" y="11.2" width="5.2" height="4.6" rx="1.2" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M8.7 6.5h2.6M10 8.8v2.4" />
     </svg>
   );
 }

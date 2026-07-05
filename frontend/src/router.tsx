@@ -170,7 +170,7 @@ export const buildAdminNav = (
     {
       label: "Managed Tenants",
       links: [
-        { to: "/admin/projects", label: "Projects", iconName: "stack" },
+        { to: "/admin/projects", label: "Projects", iconName: "project" },
         { to: "/admin/s3-accounts", label: "RGW Accounts" },
         { to: "/admin/s3-users", label: "RGW Users" },
       ],
