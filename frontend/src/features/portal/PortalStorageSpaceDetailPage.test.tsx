@@ -112,9 +112,9 @@ vi.mock("../browser/BrowserEmbed", () => ({
   default: vi.fn(() => <div data-testid="portal-browser-embed" />),
 }));
 
-function renderPage() {
+function renderPage(initialEntry = "/portal/storage-spaces/research-data") {
   return render(
-    <MemoryRouter initialEntries={["/portal/storage-spaces/research-data"]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/portal/storage-spaces" element={<div>Storage Spaces</div>} />
         <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
@@ -189,6 +189,9 @@ describe("PortalStorageSpaceDetailPage", () => {
     });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
+    mocks.hookResult.accountIdForApi = "101";
+    mocks.hookResult.workspace.spaces[0].id = "research-data";
+    mocks.hookResult.workspace.spaces[0].internalName = "research-data-internal";
     mocks.hookResult.workspace.spaces[0].role = "Owner";
     mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
     mocks.hookResult.workspace.spaces[0].canBrowse = true;
@@ -254,6 +257,23 @@ describe("PortalStorageSpaceDetailPage", () => {
       "delete",
     ]);
     expect(embedProps.onCreatePublicLinkForObject).toBeUndefined();
+  });
+
+  it("passes the project account id to the embedded Browser for project Storage Spaces", () => {
+    mocks.hookResult.accountIdForApi = "proj-42";
+    mocks.hookResult.workspace.spaces[0].id = "a12:research-data";
+    mocks.hookResult.workspace.spaces[0].internalName = "research-data";
+    mocks.hookResult.workspace.spaces[0].role = "Viewer";
+    mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
+
+    renderPage("/portal/storage-spaces/a12:research-data");
+
+    const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
+    expect(embedProps).toMatchObject({
+      accountIdForApi: "proj-42",
+      lockedBucketName: "research-data",
+      portalProjectAccountId: 12,
+    });
   });
 
   it("creates a public link from a Browser-selected file", async () => {

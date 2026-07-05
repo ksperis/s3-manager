@@ -25,6 +25,11 @@ Use this page when you need to review or request a guided replication between St
 | Workspace replication | A bucket-level replication rule was configured for a source Storage Space and a destination Storage Space. |
 | Destination outside this workspace | A rule exists, but the destination Storage Space is not visible to you in the selected workspace. |
 
+When platform replication covers a Project storage location, the matching
+replica Storage Space is also listed in Portal automatically when the replica
+account belongs to the same Project. Replica entries are read-only so users can
+verify or download replicated data without accidentally writing to the copy.
+
 ## Create a workspace replication
 
 1. Open **Portal > Replications**.

@@ -18,6 +18,11 @@ Use this page when you need to open, create, import, archive, or understand a Po
 | Archive a space | Space actions | Archived spaces keep metadata but suspend browsing, sharing, and public links. |
 | Understand access | Space details > Access | The Access panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
 
+In a Project workspace, Storage Spaces may appear once per linked storage
+location. When platform global replication is configured for the same Ceph
+zonegroup, Portal also shows the replicated copies automatically. Those
+replicas are marked with Viewer access and are browse-only.
+
 ## Access modes
 
 | Mode | Meaning |

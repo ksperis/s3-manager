@@ -167,6 +167,16 @@ def _portal_browser_target_bucket(request: Request) -> Optional[str]:
     return None
 
 
+def _portal_browser_project_account_id(request: Request) -> Optional[int]:
+    value = request.query_params.get("portal_project_account_id")
+    if value is None or not str(value).strip():
+        return None
+    cleaned = str(value).strip()
+    if not cleaned.isdigit():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Portal project account identifier")
+    return int(cleaned)
+
+
 def _parse_project_selector(account_ref: Optional[str]) -> Optional[int]:
     if not isinstance(account_ref, str) or not account_ref.startswith("proj-"):
         return None
@@ -273,37 +283,56 @@ def _resolve_portal_project_browser_context(
     portal_service = PortalService(db)
     project_buckets: list[BrowserBucket] = []
     target_bucket = _portal_browser_target_bucket(request)
+    target_project_account_id = _portal_browser_project_account_id(request)
     target_candidates: list[tuple[S3Account, str, object]] = []
-    for project_account_link in project_access.account_links:
-        account_access = projects_service.account_access_for_project(project_access, project_account_link.account_id)
+    account_access_by_id = {
+        project_account_link.account_id: projects_service.account_access_for_project(
+            project_access,
+            project_account_link.account_id,
+        )
+        for project_account_link in project_access.account_links
+    }
+    for account_access in account_access_by_id.values():
+        _validate_portal_account_surface(account_access.account)
+    try:
+        spaces = portal_service.list_project_storage_spaces(
+            user,
+            [
+                (account_access_by_id[project_account_link.account_id], project_account_link.display_name)
+                for project_account_link in project_access.account_links
+            ],
+            project_identity=False,
+        )
+    except RuntimeError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    for space in spaces:
+        if not space.can_browse:
+            continue
+        bucket_name = space.internal_bucket_name or space.id
+        if not bucket_name or space.account_id is None:
+            continue
+        account_access = account_access_by_id.get(space.account_id)
+        if account_access is None:
+            continue
         account = account_access.account
-        _validate_portal_account_surface(account)
-        try:
-            spaces = portal_service.list_storage_spaces(user, account_access)
-        except RuntimeError as exc:
-            raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
-        for space in spaces:
-            if not space.can_browse:
-                continue
-            bucket_name = space.internal_bucket_name or space.id
-            if not bucket_name:
-                continue
-            project_buckets.append(
-                BrowserBucket(
-                    name=bucket_name,
-                    display_name=space.name,
-                    workspace_label=project_account_link.display_name,
-                    used_bytes=space.used_bytes,
-                    object_count=space.object_count,
-                    quota_max_size_bytes=space.quota_max_size_bytes,
-                    quota_max_objects=space.quota_max_objects,
-                    status=space.status,
-                    role=space.role,
-                    internal_bucket_name=bucket_name,
-                )
+        project_buckets.append(
+            BrowserBucket(
+                name=bucket_name,
+                display_name=space.name,
+                workspace_label=space.project_account_label,
+                used_bytes=space.used_bytes,
+                object_count=space.object_count,
+                quota_max_size_bytes=space.quota_max_size_bytes,
+                quota_max_objects=space.quota_max_objects,
+                status=space.status,
+                role=space.content_role or space.role,
+                internal_bucket_name=bucket_name,
             )
-            if target_bucket and target_bucket == bucket_name:
-                target_candidates.append((account, account_access.role, space))
+        )
+        if target_bucket and target_bucket == bucket_name:
+            if target_project_account_id is not None and target_project_account_id != space.account_id:
+                continue
+            target_candidates.append((account, account_access.role, space))
 
     if not target_bucket:
         synthetic = S3Account(name=project_access.project.name, rgw_account_id=None)
@@ -321,7 +350,7 @@ def _resolve_portal_project_browser_context(
             detail = "Storage Space name is ambiguous in this project"
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
-    account, role, _space = target_candidates[0]
+    account, role, space = target_candidates[0]
     try:
         access_key, secret_key = portal_service.get_portal_credentials(user, account, role)
     except RuntimeError as exc:
@@ -342,6 +371,9 @@ def _resolve_portal_project_browser_context(
     )
     account._portal_browser_role = role  # type: ignore[attr-defined]
     account._portal_allowed_buckets = {target_bucket}  # type: ignore[attr-defined]
+    account._portal_readonly_buckets = {  # type: ignore[attr-defined]
+        target_bucket
+    } if getattr(space, "content_role", None) == "Viewer" or getattr(space, "role", None) == "Viewer" else set()
     account._portal_project_id = project_access.project.id  # type: ignore[attr-defined]
     return account
 

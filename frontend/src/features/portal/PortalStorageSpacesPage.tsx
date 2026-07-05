@@ -32,6 +32,7 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
+  portalRoleTone,
   portalStorageSpaceStatusTone,
   portalVisibilityTone,
   resolvePortalWorkspacePageState,
@@ -539,6 +540,7 @@ export default function PortalStorageSpacesPage() {
                       <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
                       <div className="flex flex-wrap items-center gap-2">
                         <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
+                        <UiBadge tone={portalRoleTone(space.contentRole ?? space.role)}>{portalRoleLabel(space.contentRole ?? space.role, t)}</UiBadge>
                         {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
                       </div>
                     </td>

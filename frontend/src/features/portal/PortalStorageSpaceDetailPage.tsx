@@ -386,6 +386,11 @@ export default function PortalStorageSpaceDetailPage() {
   const canRename = space.role === "Owner" && space.nameEditable;
   const canModifyObjects = canBrowse && (contentRole === "Owner" || contentRole === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
+  const projectAccountMatch = /^a(\d+):/.exec(space.id);
+  const portalProjectAccountId =
+    typeof accountIdForApi === "string" && accountIdForApi.startsWith("proj-") && projectAccountMatch
+      ? Number(projectAccountMatch[1])
+      : null;
   const quotaPercent =
     space.quotaBytes && space.usedBytes
       ? Math.min(100, (space.usedBytes / space.quotaBytes) * 100)
@@ -726,6 +731,7 @@ export default function PortalStorageSpaceDetailPage() {
             actionProfile="portal-basic"
             hiddenActionIds={canModifyObjects ? undefined : VIEWER_HIDDEN_BROWSER_ACTION_IDS}
             lockedBucketName={lockedBucketName}
+            portalProjectAccountId={portalProjectAccountId}
             lockedBucketLabel={space.name}
             storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
             quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}

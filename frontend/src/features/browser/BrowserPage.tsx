@@ -333,6 +333,7 @@ type BrowserPageProps = {
   workspaceSurface?: BrowserWorkspaceSurface;
   actionProfile?: BrowserActionProfile;
   lockedBucketName?: string;
+  portalProjectAccountId?: number | null;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
   contextEndpointProvider?: "ceph" | "aws" | "other" | null;
@@ -899,6 +900,7 @@ export default function BrowserPage({
   workspaceSurface: workspaceSurfaceOverride,
   actionProfile: actionProfileOverride,
   lockedBucketName,
+  portalProjectAccountId,
   lockedBucketLabel,
   storageEndpointCapabilities,
   contextEndpointProvider,
@@ -936,9 +938,9 @@ export default function BrowserPage({
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
       workspaceSurface === "portal"
-        ? { workspaceSurface }
+        ? { workspaceSurface, portalProjectAccountId: portalProjectAccountId ?? null }
         : undefined,
-    [workspaceSurface],
+    [portalProjectAccountId, workspaceSurface],
   );
   const isMainBrowserPath = normalizedPath === "/browser";
   const isEmbeddedBrowserPath =

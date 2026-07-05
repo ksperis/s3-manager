@@ -31,6 +31,7 @@ from app.models.portal import (
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
     PortalStorageSpace,
+    PortalStorageSpaceAccessPerson,
     PortalStorageSpaceAccessSummary,
     PortalStorageSpaceCreate,
     PortalStorageSpaceImport,
@@ -159,6 +160,61 @@ def _project_replication_contexts(project_access: PortalProjectAccess, projects_
         )
         for account_link in project_access.account_links
     ]
+
+
+def _project_storage_contexts(project_access: PortalProjectAccess, projects_service: ProjectsService) -> list[tuple[AccountAccess, Optional[str]]]:
+    return [
+        (
+            projects_service.account_access_for_project(project_access, account_link.account_id),
+            account_link.display_name,
+        )
+        for account_link in project_access.account_links
+    ]
+
+
+def _resolve_project_storage_space_summary(
+    *,
+    user: User,
+    project_access: PortalProjectAccess,
+    projects_service: ProjectsService,
+    service: PortalService,
+    space_id: str,
+    include_archived: bool = True,
+) -> tuple[PortalStorageSpaceSummary, AccountAccess, int, str] | None:
+    spaces = service.list_project_storage_spaces(
+        user,
+        _project_storage_contexts(project_access, projects_service),
+        include_archived=include_archived,
+    )
+    summary = next((space for space in spaces if space.id == space_id), None)
+    if summary is None:
+        return None
+    account_id, bucket_name = _parse_project_space_id(summary.id)
+    account_access = projects_service.account_access_for_project(project_access, account_id)
+    return summary, account_access, account_id, bucket_name
+
+
+def _read_only_project_replica_access_summary(summary: PortalStorageSpaceSummary) -> PortalStorageSpaceAccessSummary:
+    mode = "private"
+    if summary.visibility == "shared":
+        mode = "all" if summary.share_scope == "account" else "restricted"
+    owner_label = summary.owner_label or "Storage Space owner"
+    return PortalStorageSpaceAccessSummary(
+        mode=mode,
+        default_account_member_role=summary.account_member_role,
+        owner=PortalStorageSpaceAccessPerson(
+            user_id=summary.owner_user_id,
+            email=owner_label,
+            display_name=owner_label,
+            role="Owner",
+            access_source="owner",
+        ),
+        effective_member_count=1,
+        explicit_shares=[],
+        public_link_count=0,
+        can_manage_access=False,
+        can_create_public_links=False,
+    )
 
 
 def _portal_usage_account(account_link, usage: PortalUsage) -> PortalUsageAccount:
@@ -488,36 +544,18 @@ def portal_project_storage_spaces(
         project_access = projects_service.resolve_portal_project_access(user, project_id)
     except ValueError as exc:
         _raise_project_access_error(exc)
-    spaces: list[PortalStorageSpaceSummary] = []
-    for account_link in project_access.account_links:
-        account_access = projects_service.account_access_for_project(project_access, account_link.account_id)
-        try:
-            account_spaces = service.list_storage_spaces(
-                user,
-                account_access,
-                search=search,
-                role=role,
-                status=status_filter,
-                sort=sort,
-                include_archived=include_archived,
-            )
-        except RuntimeError as exc:
-            raise_bad_gateway_from_runtime(exc)
-        spaces.extend(
-            _with_project_space_identity(space, account_id=account_link.account_id, account_label=account_link.display_name)
-            for space in account_spaces
+    try:
+        return service.list_project_storage_spaces(
+            user,
+            _project_storage_contexts(project_access, projects_service),
+            search=search,
+            role=role,
+            status=status_filter,
+            sort=sort,
+            include_archived=include_archived,
         )
-    reverse = sort.startswith("-")
-    key = sort[1:] if reverse else sort
-    sorters = {
-        "name": lambda item: ((item.project_account_label or "").lower(), item.name.lower()),
-        "created_at": lambda item: item.created_at or utcnow(),
-        "used_bytes": lambda item: item.used_bytes if item.used_bytes is not None else -1,
-        "object_count": lambda item: item.object_count if item.object_count is not None else -1,
-        "role": lambda item: item.role,
-        "status": lambda item: item.status or "",
-    }
-    return sorted(spaces, key=sorters.get(key, sorters["name"]), reverse=reverse)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/projects/{project_id}/replications", response_model=PortalReplicationList)
@@ -712,12 +750,23 @@ def portal_project_storage_space_detail(
     db: Session = Depends(get_db),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpace:
-    project_access, account_access, account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    summary, account_access, account_id, bucket_name = resolved
     try:
         storage_space = service.get_storage_space(user, account_access, bucket_name)
     except RuntimeError as exc:
@@ -726,7 +775,7 @@ def portal_project_storage_space_detail(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
         raise_bad_gateway_from_runtime(exc)
     if storage_space is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+        return PortalStorageSpace.model_validate(summary.model_dump())
     label = _portal_project_label(project_access, account_id)
     return PortalStorageSpace.model_validate(
         _with_project_space_identity(storage_space, account_id=account_id, account_label=label).model_dump()
@@ -796,12 +845,25 @@ def portal_project_storage_space_access_summary(
     db: Session = Depends(get_db),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceAccessSummary:
-    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
+    try:
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    summary, account_access, _account_id, bucket_name = resolved
+    if service._storage_space_metadata(account_access.account, bucket_name) is None:
+        return _read_only_project_replica_access_summary(summary)
     try:
         return service.get_storage_space_access_summary(user, account_access, bucket_name)
     except RuntimeError as exc:
@@ -967,14 +1029,27 @@ def portal_project_storage_space_object_detail(
     db: Session = Depends(get_db),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageObjectDetail:
-    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
     try:
-        return service.get_storage_space_object_detail(user, account_access, bucket_name, key)
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    summary, account_access, _account_id, bucket_name = resolved
+    if not summary.can_browse or summary.content_role is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Space content access not allowed for this role.")
+    try:
+        return service.get_visible_storage_space_object_detail(user, account_access, bucket_name, key)
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
 
@@ -1032,14 +1107,27 @@ def portal_download_project_storage_space_object(
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> StreamingResponse:
-    _project_access, account_access, _account_id, bucket_name = _project_storage_account_access(
-        project_id,
-        space_id,
-        user=user,
-        db=db,
-    )
+    projects_service = get_projects_service(db)
     try:
-        stream, content_type, filename = service.download_storage_space_object(user, account_access, bucket_name, key)
+        project_access = projects_service.resolve_portal_project_access(user, project_id)
+        resolved = _resolve_project_storage_space_summary(
+            user=user,
+            project_access=project_access,
+            projects_service=projects_service,
+            service=service,
+            space_id=space_id,
+        )
+    except ValueError as exc:
+        _raise_project_access_error(exc)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    if resolved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    summary, account_access, _account_id, bucket_name = resolved
+    if not summary.can_browse or summary.content_role is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Space content access not allowed for this role.")
+    try:
+        stream, content_type, filename = service.download_visible_storage_space_object(user, account_access, bucket_name, key)
         audit_service.record_action(
             user=user,
             scope="portal",

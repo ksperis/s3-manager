@@ -86,6 +86,30 @@ class PortalObjectsMixin:
         except BotoCoreError as exc:
             raise RuntimeError(f"Unable to load object '{target_key}' in storage space '{space_id}': {exc}") from exc
 
+    def download_visible_storage_space_object(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+        key: str,
+    ):
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        self.get_portal_credentials(user, access.account, access.role)
+        client = self._portal_object_client(user, access.account)
+        try:
+            resp = client.get_object(Bucket=bucket_name, Key=target_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to download object '{target_key}' in storage space '{bucket_name}': {exc}") from exc
+        body = resp.get("Body")
+        if not body:
+            raise RuntimeError(f"Unable to download object '{target_key}': empty response body")
+        stream = body.iter_chunks(chunk_size=1024 * 1024) if hasattr(body, "iter_chunks") else body
+        content_type = resp.get("ContentType")
+        filename = self._object_name(target_key) or "download"
+        return stream, content_type, filename
+
     def download_storage_space_object(
         self,
         user: User,
@@ -157,6 +181,34 @@ class PortalObjectsMixin:
         self._require_storage_space_content_role(user, access, bucket_name)
         client = self._portal_object_client(user, access.account)
         resp = self._head_storage_space_object(client, bucket_name, space_id, target_key)
+        content_type = resp.get("ContentType")
+        preview_type, preview_text, preview_reason = self._safe_content_preview(client, bucket_name, target_key, content_type)
+        return PortalStorageObjectDetail(
+            key=target_key,
+            name=self._object_name(target_key),
+            size=resp.get("ContentLength"),
+            last_modified=resp.get("LastModified"),
+            content_type=content_type,
+            storage_class=resp.get("StorageClass") or "STANDARD",
+            encryption=resp.get("ServerSideEncryption"),
+            preview_type=preview_type,
+            preview_text=preview_text,
+            preview_unavailable_reason=preview_reason,
+        )
+
+    def get_visible_storage_space_object_detail(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+        key: str,
+    ) -> PortalStorageObjectDetail:
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        self.get_portal_credentials(user, access.account, access.role)
+        client = self._portal_object_client(user, access.account)
+        resp = self._head_storage_space_object(client, bucket_name, bucket_name, target_key)
         content_type = resp.get("ContentType")
         preview_type, preview_text, preview_reason = self._safe_content_preview(client, bucket_name, target_key, content_type)
         return PortalStorageObjectDetail(

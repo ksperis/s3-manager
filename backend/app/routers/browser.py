@@ -129,6 +129,15 @@ def _is_portal_browser_context(account: S3Account) -> bool:
     return bool(getattr(account, "_portal_browser_role", None))
 
 
+def _require_portal_bucket_write_allowed(account: S3Account, bucket_name: str) -> None:
+    readonly_buckets = getattr(account, "_portal_readonly_buckets", None)
+    if readonly_buckets is not None and bucket_name in readonly_buckets:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This replicated Storage Space is read-only in Portal.",
+        )
+
+
 def _record_browser_or_portal_action(
     audit_service: AuditService,
     *,
@@ -1721,6 +1730,7 @@ def delete_objects(
 ) -> dict:
     if not payload.objects:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing objects")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     portal_target_key = payload.objects[0].key if payload.objects else None
     try:
         deleted = service.delete_objects(bucket_name, account, payload)
@@ -1800,6 +1810,7 @@ def create_folder(
 ) -> dict:
     if not payload.prefix:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing prefix")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     try:
         service.create_folder(bucket_name, account, payload.prefix)
         _record_browser_or_portal_action(
@@ -1847,6 +1858,7 @@ def upload_via_proxy(
 ) -> ProxyUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     if sse_customer:
         _common_require_sse_feature(account)
     try:
@@ -1948,6 +1960,8 @@ def presign(
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> PresignedUrl:
+    if payload.operation != "get_object":
+        _require_portal_bucket_write_allowed(account, bucket_name)
     if sse_customer:
         _common_require_sse_feature(account)
     try:
@@ -1968,6 +1982,7 @@ def multipart_init(
 ) -> MultipartUploadInitResponse:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     if sse_customer:
         _common_require_sse_feature(account)
     try:
@@ -2043,6 +2058,7 @@ def presign_part_for_upload(
 ) -> PresignPartResponse:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     payload.upload_id = upload_id
     if sse_customer:
         _common_require_sse_feature(account)
@@ -2065,6 +2081,7 @@ def complete_multipart_upload(
 ) -> dict:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     try:
         service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
         _record_browser_or_portal_action(
@@ -2106,6 +2123,7 @@ def abort_multipart_upload(
 ) -> dict:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    _require_portal_bucket_write_allowed(account, bucket_name)
     try:
         service.abort_multipart_upload(bucket_name, account, key, upload_id)
         _common_record_browser_action(audit_service, actor=actor, scope="browser",

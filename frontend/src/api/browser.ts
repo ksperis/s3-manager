@@ -10,6 +10,7 @@ export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "po
 
 export type BrowserRequestOptions = {
   workspaceSurface?: BrowserWorkspaceSurface;
+  portalProjectAccountId?: number | null;
 };
 
 export type BrowserBucket = {
@@ -302,6 +303,18 @@ function buildBrowserWorkspaceHeaders(options?: BrowserRequestOptions): Record<s
   return options?.workspaceSurface === "portal" ? { "X-S3-Workspace": "portal" } : {};
 }
 
+function buildBrowserWorkspaceParams(options?: BrowserRequestOptions): Record<string, unknown> {
+  return options?.portalProjectAccountId ? { portal_project_account_id: options.portalProjectAccountId } : {};
+}
+
+function withBrowserRequestParams(
+  params: Record<string, unknown> | undefined,
+  accountId: S3AccountSelector,
+  options?: BrowserRequestOptions
+): Record<string, unknown> {
+  return withS3AccountParam({ ...buildBrowserWorkspaceParams(options), ...(params ?? {}) }, accountId) ?? {};
+}
+
 function mergeBrowserHeaders(
   ...headers: Array<Record<string, string> | undefined>
 ): Record<string, string> | undefined {
@@ -439,14 +452,15 @@ export async function searchBrowserBuckets(
     pageSize?: number;
   } & BrowserRequestOptions
 ): Promise<PaginatedBrowserBucketsResponse> {
-  const params = withS3AccountParam(
+  const params = withBrowserRequestParams(
     {
       search: options?.search?.trim() || undefined,
       exact: options?.exact ? true : undefined,
       page: options?.page ?? undefined,
       page_size: options?.pageSize ?? undefined,
     },
-    accountId
+    accountId,
+    options
   );
   const { data } = await client.get<PaginatedBrowserBucketsResponse>("/browser/buckets/search", {
     params,
@@ -460,7 +474,7 @@ export async function fetchBrowserUsageSummary(
   options?: BrowserRequestOptions
 ): Promise<BrowserUsageSummary> {
   const { data } = await client.get<BrowserUsageSummary>("/browser/usage-summary", {
-    params: withS3AccountParam(undefined, accountId),
+    params: withBrowserRequestParams(undefined, accountId, options),
     headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;
@@ -499,7 +513,7 @@ export async function fetchBrowserSettings(
   options?: BrowserRequestOptions
 ): Promise<BrowserSettings> {
   const { data } = await client.get<BrowserSettings>("/browser/settings", {
-    params: withS3AccountParam(undefined, accountId),
+    params: withBrowserRequestParams(undefined, accountId, options),
     headers: buildBrowserWorkspaceHeaders(options),
   });
   return data;
@@ -510,7 +524,7 @@ export async function listBrowserObjects(
   bucketName: string,
   options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal; forceRefresh?: boolean } & BrowserObjectsQuery & BrowserRequestOptions
 ): Promise<ListBrowserObjectsResponse> {
-  const params = withS3AccountParam(
+  const params = withBrowserRequestParams(
     {
       prefix: options?.prefix ?? "",
       continuation_token: options?.continuationToken ?? undefined,
@@ -531,7 +545,8 @@ export async function listBrowserObjects(
           ? options.sortDir
           : undefined,
     },
-    accountId
+    accountId,
+    options
   );
   const { data } = await client.get<ListBrowserObjectsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
@@ -570,7 +585,7 @@ export async function getBucketCorsStatus(
   origin?: string,
   options?: BrowserRequestOptions
 ): Promise<BucketCorsStatus> {
-  const params = withS3AccountParam(origin ? { origin } : undefined, accountId);
+  const params = withBrowserRequestParams(origin ? { origin } : undefined, accountId, options);
   const { data } = await client.get<BucketCorsStatus>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
     { params, headers: buildBrowserWorkspaceHeaders(options) }
@@ -791,7 +806,7 @@ export async function presignObject(
     `/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
     payload,
     {
-      params: withS3AccountParam(undefined, accountId),
+      params: withBrowserRequestParams(undefined, accountId, options),
       headers: mergeBrowserHeaders(
         buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
         buildBrowserWorkspaceHeaders(options),
@@ -823,7 +838,7 @@ export async function deleteObjects(
   const { data } = await client.post<{ deleted: number }>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
     { objects },
-    { params: withS3AccountParam(undefined, accountId), headers: buildBrowserWorkspaceHeaders(options), signal }
+    { params: withBrowserRequestParams(undefined, accountId, options), headers: buildBrowserWorkspaceHeaders(options), signal }
   );
   return data.deleted;
 }
@@ -851,7 +866,7 @@ export async function createFolder(
   await client.post(
     `/browser/buckets/${encodeURIComponent(bucketName)}/folders`,
     { prefix },
-    { params: withS3AccountParam(undefined, accountId), headers: buildBrowserWorkspaceHeaders(options) }
+    { params: withBrowserRequestParams(undefined, accountId, options), headers: buildBrowserWorkspaceHeaders(options) }
   );
 }
 
@@ -875,7 +890,7 @@ export async function proxyUpload(
       : "upload.bin");
   form.append("file", file, inferredName);
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
-    params: withS3AccountParam(undefined, accountId),
+    params: withBrowserRequestParams(undefined, accountId, options),
     headers: mergeBrowserHeaders(
       buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
       buildBrowserWorkspaceHeaders(options),
@@ -894,7 +909,7 @@ export async function proxyDownload(
   options?: BrowserRequestOptions
 ): Promise<Blob> {
   const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/download`, {
-    params: withS3AccountParam({ key }, accountId),
+    params: withBrowserRequestParams({ key }, accountId, options),
     headers: mergeBrowserHeaders(
       buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
       buildBrowserWorkspaceHeaders(options),
@@ -916,7 +931,7 @@ export async function initiateMultipartUpload(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
     payload,
     {
-      params: withS3AccountParam(undefined, accountId),
+      params: withBrowserRequestParams(undefined, accountId, options),
       headers: mergeBrowserHeaders(
         buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
         buildBrowserWorkspaceHeaders(options),
@@ -959,7 +974,7 @@ export async function presignPart(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
     payload,
     {
-      params: withS3AccountParam(undefined, accountId),
+      params: withBrowserRequestParams(undefined, accountId, options),
       headers: mergeBrowserHeaders(
         buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
         buildBrowserWorkspaceHeaders(options),
@@ -981,7 +996,7 @@ export async function completeMultipartUpload(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/complete`,
     payload,
     {
-      params: withS3AccountParam({ key }, accountId),
+      params: withBrowserRequestParams({ key }, accountId, options),
       headers: buildBrowserWorkspaceHeaders(options),
     }
   );
@@ -995,7 +1010,7 @@ export async function abortMultipartUpload(
   options?: BrowserRequestOptions
 ): Promise<void> {
   await client.delete(`/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}`, {
-    params: withS3AccountParam({ key }, accountId),
+    params: withBrowserRequestParams({ key }, accountId, options),
     headers: buildBrowserWorkspaceHeaders(options),
   });
 }

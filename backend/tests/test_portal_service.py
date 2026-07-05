@@ -1196,6 +1196,167 @@ def test_storage_space_metadata_filters_sorting_and_archive(db_session):
     assert [(space.id, space.status) for space in archived] == [("old-data", "Archived")]
 
 
+def _global_replication_endpoint(name: str, zonegroup: str = "zg-global") -> StorageEndpoint:
+    return StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.test",
+        provider="ceph",
+        ceph_zonegroup_name=zonegroup,
+        ceph_zonegroup_global_replication_configured=True,
+        features_config="features:\n  iam:\n    enabled: true\n",
+    )
+
+
+def test_project_storage_spaces_include_global_replicas_as_read_only(db_session):
+    endpoint_a = _global_replication_endpoint("portal-global-z1")
+    endpoint_b = _global_replication_endpoint("portal-global-z2")
+    account_a = S3Account(name="portal-global-a", rgw_account_id="portal-global-a", storage_endpoint=endpoint_a)
+    account_b = S3Account(name="portal-global-b", rgw_account_id="portal-global-b", storage_endpoint=endpoint_b)
+    user = User(email="portal-global@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Portal Global Replication", description=None)
+    db_session.add_all([endpoint_a, endpoint_b, account_a, account_b, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            PortalStorageSpaceMetadata(
+                account_id=account_a.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=user.id,
+                visibility="shared",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    projects_service = ProjectsService(db_session)
+    project_access = projects_service.resolve_portal_project_access(user, project.id)
+    service = PortalService(db_session)
+
+    spaces = service.list_project_storage_spaces(
+        user,
+        [
+            (projects_service.account_access_for_project(project_access, link.account_id), link.display_name)
+            for link in project_access.account_links
+        ],
+    )
+
+    assert sorted(
+        ((space.id, space.project_account_label, space.role, space.content_role) for space in spaces),
+        key=lambda item: item[1],
+    ) == [
+        (f"a{account_b.id}:research-data", "Lyon", "Viewer", "Viewer"),
+        (f"a{account_a.id}:research-data", "Paris", "Owner", "Owner"),
+    ]
+    replica = next(space for space in spaces if space.account_id == account_b.id)
+    assert replica.can_browse is True
+    assert replica.description == "Read-only replica of Research Data from Paris."
+    assert replica.internal_bucket_name == "research-data"
+    assert replica.used_bytes is None
+
+
+def test_project_global_replica_access_summary_is_read_only(db_session):
+    endpoint_a = _global_replication_endpoint("portal-global-summary-z1")
+    endpoint_b = _global_replication_endpoint("portal-global-summary-z2")
+    account_a = S3Account(name="portal-global-summary-a", rgw_account_id="portal-global-summary-a", storage_endpoint=endpoint_a)
+    account_b = S3Account(name="portal-global-summary-b", rgw_account_id="portal-global-summary-b", storage_endpoint=endpoint_b)
+    user = User(email="portal-global-summary@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Portal Global Summary", description=None)
+    db_session.add_all([endpoint_a, endpoint_b, account_a, account_b, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            PortalStorageSpaceMetadata(
+                account_id=account_a.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=user.id,
+                visibility="shared",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    summary = portal_router.portal_project_storage_space_access_summary(
+        project.id,
+        f"a{account_b.id}:research-data",
+        user=user,
+        db=db_session,
+        service=PortalService(db_session),
+    )
+
+    assert summary.mode == "restricted"
+    assert summary.owner.user_id == user.id
+    assert summary.owner.role == "Owner"
+    assert summary.can_manage_access is False
+    assert summary.can_create_public_links is False
+    assert summary.public_link_count == 0
+    assert summary.explicit_shares == []
+
+
+def test_portal_project_browser_context_resolves_global_replica_account(monkeypatch, db_session):
+    from fastapi import Request
+    from app.routers.dependencies_internal import portal_access as portal_access_deps
+
+    endpoint_a = _global_replication_endpoint("portal-browser-global-z1")
+    endpoint_b = _global_replication_endpoint("portal-browser-global-z2")
+    account_a = S3Account(name="portal-browser-global-a", rgw_account_id="portal-browser-global-a", storage_endpoint=endpoint_a)
+    account_b = S3Account(name="portal-browser-global-b", rgw_account_id="portal-browser-global-b", storage_endpoint=endpoint_b)
+    user = User(email="portal-browser-global@example.com", hashed_password="x", role="ui_user")
+    project = Project(name="Portal Browser Global", description=None)
+    db_session.add_all([endpoint_a, endpoint_b, account_a, account_b, user, project])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=project.id, account_id=account_a.id, display_name="Paris", sort_order=0),
+            ProjectS3Account(project_id=project.id, account_id=account_b.id, display_name="Lyon", sort_order=1),
+            UserProject(project_id=project.id, user_id=user.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            PortalStorageSpaceMetadata(
+                account_id=account_a.id,
+                bucket_name="research-data",
+                display_name="Research Data",
+                owner_user_id=user.id,
+                visibility="shared",
+            ),
+        ]
+    )
+    db_session.commit()
+    app_settings = AppSettings()
+    app_settings.general.portal_enabled = True
+    app_settings.general.browser_portal_enabled = True
+    monkeypatch.setattr(portal_access_deps, "load_app_settings", lambda: app_settings)
+    monkeypatch.setattr(portal_access_deps, "_validate_portal_account_surface", lambda _account: None)
+    monkeypatch.setattr(PortalService, "get_portal_credentials", lambda *_args, **_kwargs: ("AK", "SK"))
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/browser/buckets/research-data/objects",
+            "headers": [],
+            "query_string": f"portal_project_account_id={account_b.id}".encode(),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    scoped_account = portal_access_deps._resolve_portal_project_browser_context(
+        db_session,
+        user,
+        project.id,
+        request=request,
+    )
+
+    assert scoped_account.id == account_b.id
+    assert scoped_account._portal_allowed_buckets == {"research-data"}
+    assert scoped_account._portal_readonly_buckets == {"research-data"}
+
+
 def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_session):
     account = S3Account(name="portal-private-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private@example.com", hashed_password="x", role="ui_user")

@@ -13,6 +13,7 @@ type BrowserEmbedProps = {
   workspaceSurface?: BrowserWorkspaceSurface;
   actionProfile?: "full" | "portal-basic";
   lockedBucketName?: string;
+  portalProjectAccountId?: number | null;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
   endpointProvider?: "ceph" | "aws" | "other" | null;
@@ -31,6 +32,7 @@ export default function BrowserEmbed({
   workspaceSurface,
   actionProfile,
   lockedBucketName,
+  portalProjectAccountId,
   lockedBucketLabel,
   storageEndpointCapabilities,
   endpointProvider,
@@ -49,6 +51,7 @@ export default function BrowserEmbed({
       workspaceSurface={workspaceSurface}
       actionProfile={actionProfile}
       lockedBucketName={lockedBucketName}
+      portalProjectAccountId={portalProjectAccountId}
       lockedBucketLabel={lockedBucketLabel}
       storageEndpointCapabilities={storageEndpointCapabilities}
       contextEndpointProvider={endpointProvider}

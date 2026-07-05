@@ -43,4 +43,22 @@ describe("browser api", () => {
       }),
     );
   });
+
+  it("passes the Portal project account discriminator for embedded project buckets", async () => {
+    await listBrowserObjects("proj-42", "research-data", {
+      workspaceSurface: "portal",
+      portalProjectAccountId: 12,
+    });
+
+    expect(clientMock.get).toHaveBeenCalledWith(
+      "/browser/buckets/research-data/objects",
+      expect.objectContaining({
+        headers: { "X-S3-Workspace": "portal" },
+        params: expect.objectContaining({
+          account_id: "proj-42",
+          portal_project_account_id: 12,
+        }),
+      }),
+    );
+  });
 });

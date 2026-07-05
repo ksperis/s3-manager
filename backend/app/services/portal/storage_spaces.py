@@ -145,6 +145,184 @@ class PortalStorageSpacesMixin:
             name_editable=bool(metadata and metadata.name_editable),
         )
 
+    def _project_space_id(self, account_id: int, bucket_name: str) -> str:
+        return f"a{account_id}:{bucket_name}"
+
+    def _with_project_storage_space_identity(
+        self,
+        space: PortalStorageSpaceSummary,
+        *,
+        account_id: int,
+        account_label: Optional[str],
+        project_identity: bool,
+    ) -> PortalStorageSpaceSummary:
+        bucket_name = space.internal_bucket_name or space.id
+        payload = space.model_dump()
+        payload["id"] = self._project_space_id(account_id, bucket_name) if project_identity else bucket_name
+        payload["account_id"] = account_id
+        payload["project_account_label"] = account_label
+        return PortalStorageSpaceSummary.model_validate(payload)
+
+    def _global_replication_zonegroup_key(self, account: S3Account) -> str | None:
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None:
+            return None
+        if not getattr(endpoint, "ceph_zonegroup_global_replication_configured", False):
+            return None
+        value = str(getattr(endpoint, "ceph_zonegroup_name", None) or "").strip()
+        return value.lower() or None
+
+    def _global_replication_endpoint_id(self, account: S3Account) -> int | None:
+        endpoint = getattr(account, "storage_endpoint", None)
+        endpoint_id = getattr(endpoint, "id", None) if endpoint is not None else None
+        return int(endpoint_id) if endpoint_id is not None else None
+
+    def _replica_storage_space_summary(
+        self,
+        source: PortalStorageSpaceSummary,
+        *,
+        source_account_label: Optional[str],
+        target_account: S3Account,
+    ) -> PortalStorageSpaceSummary:
+        bucket_name = source.internal_bucket_name or source.id
+        endpoint = getattr(target_account, "storage_endpoint", None)
+        source_label = source_account_label or source.project_account_label or source.owner_label or "another storage location"
+        payload = source.model_dump()
+        payload.update(
+            {
+                "id": bucket_name,
+                "account_id": target_account.id,
+                "project_account_label": None,
+                "role": "Viewer",
+                "content_role": "Viewer",
+                "can_browse": True,
+                "status": "Active" if not source.archived_at else "Archived",
+                "description": f"Read-only replica of {source.name} from {source_label}.",
+                "region": getattr(endpoint, "region", None) if endpoint is not None else None,
+                "used_bytes": None,
+                "object_count": None,
+                "quota_max_size_bytes": None,
+                "quota_max_objects": None,
+                "internal_bucket_name": bucket_name,
+                "origin": "imported",
+                "name_editable": False,
+            }
+        )
+        return PortalStorageSpaceSummary.model_validate(payload)
+
+    def list_project_storage_spaces(
+        self,
+        user: User,
+        account_contexts: list[tuple["AccountAccess", Optional[str]]],
+        search: Optional[str] = None,
+        role: Optional[str] = None,
+        status: Optional[str] = None,
+        sort: str = "name",
+        include_archived: bool = False,
+        *,
+        project_identity: bool = True,
+    ) -> list[PortalStorageSpaceSummary]:
+        account_by_id = {access.account.id: access.account for access, _label in account_contexts}
+        label_by_id = {access.account.id: label for access, label in account_contexts}
+        raw_spaces_by_account: dict[int, list[PortalStorageSpaceSummary]] = {}
+        spaces: list[PortalStorageSpaceSummary] = []
+        for access, account_label in account_contexts:
+            account_spaces = self.list_storage_spaces(
+                user,
+                access,
+                include_archived=include_archived,
+            )
+            raw_spaces_by_account[access.account.id] = account_spaces
+            spaces.extend(
+                self._with_project_storage_space_identity(
+                    space,
+                    account_id=access.account.id,
+                    account_label=account_label,
+                    project_identity=project_identity,
+                )
+                for space in account_spaces
+            )
+
+        existing = {
+            (account_id, space.internal_bucket_name or space.id)
+            for account_id, account_spaces in raw_spaces_by_account.items()
+            for space in account_spaces
+            if space.internal_bucket_name or space.id
+        }
+        source_spaces = [
+            (account_id, space)
+            for account_id, account_spaces in raw_spaces_by_account.items()
+            for space in account_spaces
+            if space.internal_bucket_name or space.id
+        ]
+        for source_account_id, source in source_spaces:
+            source_account = account_by_id.get(source_account_id)
+            if source_account is None:
+                continue
+            source_zonegroup = self._global_replication_zonegroup_key(source_account)
+            source_endpoint_id = self._global_replication_endpoint_id(source_account)
+            if not source_zonegroup or source_endpoint_id is None:
+                continue
+            bucket_name = source.internal_bucket_name or source.id
+            for target_account_id, target_account in account_by_id.items():
+                if target_account_id == source_account_id:
+                    continue
+                if (target_account_id, bucket_name) in existing:
+                    continue
+                if self._global_replication_zonegroup_key(target_account) != source_zonegroup:
+                    continue
+                target_endpoint_id = self._global_replication_endpoint_id(target_account)
+                if target_endpoint_id is None or target_endpoint_id == source_endpoint_id:
+                    continue
+                replica = self._replica_storage_space_summary(
+                    source,
+                    source_account_label=label_by_id.get(source_account_id),
+                    target_account=target_account,
+                )
+                spaces.append(
+                    self._with_project_storage_space_identity(
+                        replica,
+                        account_id=target_account_id,
+                        account_label=label_by_id.get(target_account_id),
+                        project_identity=project_identity,
+                    )
+                )
+                existing.add((target_account_id, bucket_name))
+
+        if search:
+            term = search.strip().lower()
+            if term:
+                spaces = [
+                    space
+                    for space in spaces
+                    if term in space.name.lower()
+                    or term in space.id.lower()
+                    or term in (space.description or "").lower()
+                    or term in (space.owner_label or "").lower()
+                    or term in (space.visibility or "").lower()
+                    or term in (space.project_key or "").lower()
+                    or term in (space.dataset_label or "").lower()
+                    or term in (space.project_account_label or "").lower()
+                    or term in (space.internal_bucket_name or "").lower()
+                ]
+        if role:
+            role_term = role.strip().lower()
+            spaces = [space for space in spaces if space.role.lower() == role_term]
+        if status:
+            status_term = status.strip().lower()
+            spaces = [space for space in spaces if space.status.lower() == status_term]
+        reverse = sort.startswith("-")
+        sort_key = sort[1:] if reverse else sort
+        sorters = {
+            "name": lambda item: ((item.project_account_label or "").lower(), item.name.lower()),
+            "created_at": lambda item: item.created_at or datetime.min,
+            "used_bytes": lambda item: item.used_bytes if item.used_bytes is not None else -1,
+            "object_count": lambda item: item.object_count if item.object_count is not None else -1,
+            "role": lambda item: item.role,
+            "status": lambda item: item.status or "",
+        }
+        return sorted(spaces, key=sorters.get(sort_key, sorters["name"]), reverse=reverse)
+
     def list_storage_spaces(
         self,
         user: User,

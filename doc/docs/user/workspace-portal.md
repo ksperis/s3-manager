@@ -11,13 +11,14 @@ preferences.
 - The global `portal_enabled` setting is enabled.
 - The global `browser_enabled` and `browser_portal_enabled` settings are
   enabled to browse files inside a Storage Space.
-- Your UI user is explicitly linked to the account with Portal access.
+- Your UI user is explicitly linked to the project or account with Portal
+  access.
 - The account is backed by a storage endpoint configured by the platform team.
 
 ## Steps
 
 1. Open `/portal`.
-2. Select the portal account context in the top bar.
+2. Select the Portal project or account context in the top bar.
 3. Use **Home** for the dashboard, quota, usage by Storage Space, recent
    activity, shared spaces, transfers, and simple alerts.
 4. Use **Storage Spaces** to open an assigned space, browse files when content
@@ -51,7 +52,7 @@ preferences.
 
 ## Portal model in one minute
 
-- **Storage Spaces** are the user-facing storage areas registered in Portal. They may map to buckets internally, but buckets that are not registered as Portal Storage Spaces stay hidden from Portal lists.
+- **Storage Spaces** are the user-facing storage areas registered in Portal. They may map to buckets internally, but buckets that are not registered as Portal Storage Spaces stay hidden from Portal lists unless they are read-only replicas exposed by platform global replication in the selected Project.
 - **Private** spaces are visible to their owner and Portal managers. Portal
   managers can administer private-space metadata, visibility, and archive state,
   but they cannot browse files in a private space owned by someone else.
@@ -66,7 +67,7 @@ preferences.
   they can access; undisclosed usage can appear only as the anonymous `Other`
   aggregate.
 - File browsing inside a Storage Space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
-- `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
+- `/browser` can also run with a Portal project or account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
 - Portal roles come from the owner, the Storage Space access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.
