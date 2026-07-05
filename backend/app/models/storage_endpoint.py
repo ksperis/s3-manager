@@ -42,17 +42,55 @@ class StorageEndpointAdminOpsPermissions(BaseModel):
     accounts_write: bool = False
 
 
+CephBucketReplicationOwnerMode = Literal["rgw_user_only", "rgw_account_supported"]
+
+
 class StorageEndpointCephZonegroup(BaseModel):
     name: Optional[str] = None
+    zone_name: Optional[str] = None
     global_replication_configured: bool = False
     bucket_replication_allowed: bool = False
+    bucket_replication_target_zones: list[str] = Field(default_factory=list)
+    bucket_replication_owner_mode: CephBucketReplicationOwnerMode = "rgw_user_only"
 
-    @field_validator("name", mode="before")
+    @field_validator("name", "zone_name", mode="before")
     @classmethod
     def trim_name(cls, value: Optional[str]) -> Optional[str]:
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("bucket_replication_target_zones", mode="before")
+    @classmethod
+    def normalize_target_zones(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        raw_items: list[object]
+        if isinstance(value, str):
+            raw_items = value.replace("\n", ",").split(",")
+        elif isinstance(value, list):
+            raw_items = value
+        else:
+            return []
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            cleaned = str(item or "").strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    @field_validator("bucket_replication_owner_mode", mode="before")
+    @classmethod
+    def normalize_owner_mode(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or "rgw_user_only"
+        return value or "rgw_user_only"
 
 
 class StorageEndpointBase(BaseModel):

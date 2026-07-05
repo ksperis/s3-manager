@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Optional
 
@@ -177,13 +178,26 @@ def build_ceph_admin_endpoint_payload(endpoint: StorageEndpoint) -> dict:
     features = normalize_features_config(endpoint.provider, endpoint.features_config)
     ceph_zonegroup = None
     if getattr(endpoint, "ceph_zonegroup_name", None):
+        try:
+            target_zones = json.loads(getattr(endpoint, "ceph_bucket_replication_target_zones_json", "[]") or "[]")
+        except json.JSONDecodeError:
+            target_zones = []
+        if not isinstance(target_zones, list):
+            target_zones = []
         ceph_zonegroup = {
             "name": endpoint.ceph_zonegroup_name,
+            "zone_name": getattr(endpoint, "ceph_zone_name", None),
             "global_replication_configured": bool(
                 getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
             ),
             "bucket_replication_allowed": bool(
                 getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
+            ),
+            "bucket_replication_target_zones": [
+                str(zone).strip() for zone in target_zones if str(zone or "").strip()
+            ],
+            "bucket_replication_owner_mode": str(
+                getattr(endpoint, "ceph_bucket_replication_owner_mode", None) or "rgw_user_only"
             ),
         }
     return {

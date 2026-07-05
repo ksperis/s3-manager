@@ -122,8 +122,11 @@ describe("StorageEndpointsPage tags", () => {
         },
         ceph_zonegroup: {
           name: "zg-a",
+          zone_name: "z1",
           global_replication_configured: true,
           bucket_replication_allowed: true,
+          bucket_replication_target_zones: ["z2"],
+          bucket_replication_owner_mode: "rgw_account_supported",
         },
       }),
     ]);
@@ -143,7 +146,9 @@ describe("StorageEndpointsPage tags", () => {
     expect(endpointRow.getByText("https://ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getByText("https://admin.ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getByText("zg-a")).toBeInTheDocument();
-    expect(endpointRow.getByText("Global + Bucket")).toBeInTheDocument();
+    expect(endpointRow.getByText("z1")).toBeInTheDocument();
+    expect(endpointRow.getByText("Global + Bucket -> z2")).toBeInTheDocument();
+    expect(endpointRow.getByText("RGW Accounts supported")).toBeInTheDocument();
     expect(endpointRow.getAllByText("Default")).toHaveLength(2);
     expect(endpointRow.getByText("prod")).toBeInTheDocument();
     expect(endpointRow.getByText("Ceph")).toBeInTheDocument();
@@ -224,6 +229,9 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Ceph Replication" } });
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://ceph-repl.example.test" } });
     fireEvent.change(screen.getByLabelText("Zonegroup name (optional)"), { target: { value: "zg-a" } });
+    fireEvent.change(screen.getByLabelText("Ceph zone name (optional)"), { target: { value: "z1" } });
+    fireEvent.change(screen.getByLabelText(/Bucket replication target zones/), { target: { value: "z2" } });
+    fireEvent.change(screen.getByLabelText("Bucket owner support"), { target: { value: "rgw_account_supported" } });
     fireEvent.click(screen.getByLabelText("Global replication configured"));
     fireEvent.click(screen.getByLabelText("Bucket replication allowed"));
     fireEvent.click(screen.getByLabelText("Bucket replication enabled"));
@@ -237,8 +245,11 @@ describe("StorageEndpointsPage tags", () => {
           provider: "ceph",
           ceph_zonegroup: {
             name: "zg-a",
+            zone_name: "z1",
             global_replication_configured: true,
             bucket_replication_allowed: true,
+            bucket_replication_target_zones: ["z2"],
+            bucket_replication_owner_mode: "rgw_account_supported",
           },
         })
       );

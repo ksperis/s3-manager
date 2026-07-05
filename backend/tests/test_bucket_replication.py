@@ -204,6 +204,26 @@ def test_buckets_service_account_admin_replication_uses_stored_account_credentia
     assert captured["put"]["session_token"] is None
 
 
+def test_buckets_service_maps_ceph_not_implemented_for_rgw_account(monkeypatch: pytest.MonkeyPatch):
+    def fake_put_bucket_replication(name: str, **kwargs):  # noqa: ANN003
+        raise RuntimeError("An error occurred (NotImplemented) when calling the PutBucketReplication operation: None")
+
+    monkeypatch.setattr("app.services.buckets_service.s3_client.put_bucket_replication", fake_put_bucket_replication)
+
+    service = BucketsService()
+    account = _build_account()
+    account.rgw_account_id = "RGW123"
+    payload = BucketReplicationConfiguration(
+        configuration={
+            "Role": "arn:aws:iam::123456789012:role/replication",
+            "Rules": [{"Status": "Enabled", "Destination": {"Bucket": "arn:aws:s3:::target-bucket"}}],
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="RGW Account-owned buckets"):
+        service.set_bucket_replication_as_account_admin("demo-bucket", account, payload)
+
+
 def test_ceph_admin_put_bucket_replication_invalidates_listing_cache(monkeypatch: pytest.MonkeyPatch):
     invalidated: list[int] = []
 

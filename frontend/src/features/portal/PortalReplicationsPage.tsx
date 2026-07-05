@@ -66,6 +66,27 @@ export default function PortalReplicationsPage() {
         de: "Die Plattform-Replikation deckt bereits die kompatiblen Speicherorte in diesem Workspace ab.",
       });
     }
+    if (normalized.includes("rgw account-owned buckets")) {
+      return t({
+        en: "Ceph bucket replication is not available for RGW Account-owned buckets on this storage location.",
+        fr: "La réplication bucket Ceph n'est pas disponible pour les buckets possédés par un RGW Account sur cet emplacement de stockage.",
+        de: "Ceph Bucket-Replikation ist für Buckets im Besitz eines RGW Accounts an diesem Speicherort nicht verfügbar.",
+      });
+    }
+    if (normalized.includes("zone name")) {
+      return t({
+        en: "The storage location is missing its Ceph zone name.",
+        fr: "Il manque le nom de zone Ceph sur l'emplacement de stockage.",
+        de: "Dem Speicherort fehlt der Ceph-Zonenname.",
+      });
+    }
+    if (normalized.includes("zone direction")) {
+      return t({
+        en: "No allowed Ceph zone direction is configured for these storage locations.",
+        fr: "Aucune direction de zone Ceph autorisée n'est configurée pour ces emplacements de stockage.",
+        de: "Für diese Speicherorte ist keine erlaubte Ceph-Zonenrichtung konfiguriert.",
+      });
+    }
     if (normalized.includes("portal manager") || normalized.includes("compatible storage")) {
       return t({
         en: "Replication needs manager access and two compatible storage locations in this workspace.",
@@ -82,6 +103,27 @@ export default function PortalReplicationsPage() {
       t({ en: "Unable to configure replication.", fr: "Impossible de configurer la réplication.", de: "Replikation kann nicht konfiguriert werden." })
     );
     const normalized = raw.toLowerCase();
+    if (normalized.includes("rgw account-owned buckets")) {
+      return t({
+        en: "Ceph bucket replication is not available for RGW Account-owned buckets on this storage location.",
+        fr: "La réplication bucket Ceph n'est pas disponible pour les buckets possédés par un RGW Account sur cet emplacement de stockage.",
+        de: "Ceph Bucket-Replikation ist für Buckets im Besitz eines RGW Accounts an diesem Speicherort nicht verfügbar.",
+      });
+    }
+    if (normalized.includes("source zone") || normalized.includes("zone direction")) {
+      return t({
+        en: "This source and destination direction is not allowed by the platform.",
+        fr: "Cette direction source/destination n'est pas autorisée par la plateforme.",
+        de: "Diese Quell-/Zielrichtung ist durch die Plattform nicht erlaubt.",
+      });
+    }
+    if (normalized.includes("zone names")) {
+      return t({
+        en: "The selected storage locations need Ceph zone names before replication can be configured.",
+        fr: "Les emplacements sélectionnés doivent avoir des noms de zones Ceph avant de configurer la réplication.",
+        de: "Die ausgewählten Speicherorte benötigen Ceph-Zonennamen, bevor Replikation konfiguriert werden kann.",
+      });
+    }
     if (normalized.includes("not implemented") || normalized.includes("unsupported") || normalized.includes("not support")) {
       return t({
         en: "This storage platform does not support this replication setup yet. Contact your platform admin.",
@@ -101,8 +143,9 @@ export default function PortalReplicationsPage() {
 
   const spaceDetail = (space: PortalReplicationStorageSpace): string => {
     const location = storageLocationLabel(space);
+    const zone = space.storage_endpoint_zone_name ? ` (${space.storage_endpoint_zone_name})` : "";
     return location
-      ? t({ en: `Storage location: ${location}`, fr: `Emplacement de stockage : ${location}`, de: `Speicherort: ${location}` })
+      ? t({ en: `Storage location: ${location}${zone}`, fr: `Emplacement de stockage : ${location}${zone}`, de: `Speicherort: ${location}${zone}` })
       : t({ en: "Workspace storage", fr: "Stockage du workspace", de: "Workspace-Speicher" });
   };
 
@@ -185,6 +228,7 @@ export default function PortalReplicationsPage() {
   const targetOptions = useMemo(() => {
     const source = manageableSources.find((space) => space.id === sourceId);
     if (!source) return [];
+    const allowedTargetZones = new Set(source.bucket_replication_target_zones.map((zone) => zone.toLowerCase()));
     return (data?.storage_spaces ?? []).filter(
       (space) =>
         space.id !== source.id &&
@@ -192,7 +236,9 @@ export default function PortalReplicationsPage() {
         Boolean(space.storage_endpoint_id) &&
         space.storage_endpoint_id !== source.storage_endpoint_id &&
         Boolean(space.storage_endpoint_zonegroup) &&
-        space.storage_endpoint_zonegroup === source.storage_endpoint_zonegroup
+        space.storage_endpoint_zonegroup === source.storage_endpoint_zonegroup &&
+        Boolean(space.storage_endpoint_zone_name) &&
+        allowedTargetZones.has((space.storage_endpoint_zone_name ?? "").toLowerCase())
     );
   }, [data?.storage_spaces, manageableSources, sourceId]);
 

@@ -27,6 +27,7 @@ DEFAULT_LAB_ZONEGROUP = {
     "name": "zg-lab",
     "global_replication_configured": False,
     "bucket_replication_allowed": True,
+    "bucket_replication_owner_mode": "rgw_user_only",
 }
 
 
@@ -145,6 +146,27 @@ def _lab_zone_endpoint(entry: dict[str, object]) -> bool:
     return name in {"s3-z1", "s3-z2"}
 
 
+def _lab_zonegroup_for_endpoint(name: str) -> dict[str, object]:
+    normalized = name.strip().lower()
+    if normalized == "s3-z1":
+        return {
+            **DEFAULT_LAB_ZONEGROUP,
+            "zone_name": "z1",
+            "bucket_replication_target_zones": ["z2"],
+        }
+    if normalized == "s3-z2":
+        return {
+            **DEFAULT_LAB_ZONEGROUP,
+            "zone_name": "z2",
+            "bucket_replication_target_zones": [],
+        }
+    return {
+        **DEFAULT_LAB_ZONEGROUP,
+        "zone_name": "z1",
+        "bucket_replication_target_zones": ["z2"],
+    }
+
+
 def _normalize_existing_endpoint_payload(payload: str) -> str:
     try:
         entries = json.loads(payload)
@@ -162,7 +184,7 @@ def _normalize_existing_endpoint_payload(payload: str) -> str:
             continue
         if not _storage_feature_enabled(entry, "replication"):
             continue
-        entry["ceph_zonegroup"] = dict(DEFAULT_LAB_ZONEGROUP)
+        entry["ceph_zonegroup"] = _lab_zonegroup_for_endpoint(str(entry.get("name") or ""))
         changed = True
     return json.dumps(entries) if changed else payload
 
@@ -250,7 +272,7 @@ def _build_endpoint_payload(source: dict[str, str] | None = None) -> str:
                 "healthcheck": {"enabled": True, "mode": "s3"},
             },
             "ceph_zonegroup": {
-                **DEFAULT_LAB_ZONEGROUP,
+                **_lab_zonegroup_for_endpoint(name),
             },
             "is_default": is_default,
         }

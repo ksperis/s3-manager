@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
+
 from app.db import AccountRole, PortalStorageSpaceMetadata, S3Account, StorageEndpoint, StorageProvider, User, UserRole
 from app.models.bucket import BucketReplicationConfiguration
 from app.models.portal import PortalReplicationCreate
@@ -17,14 +19,28 @@ def _endpoint(
     zonegroup: str,
     bucket_allowed: bool = True,
     global_configured: bool = False,
+    zone_name: str | None = None,
+    target_zones: list[str] | None = None,
+    owner_mode: str = "rgw_account_supported",
 ):
+    resolved_zone_name = zone_name
+    if resolved_zone_name is None and name in {"s3-z1", "s3-z2"}:
+        resolved_zone_name = name.removeprefix("s3-")
+    resolved_target_zones = target_zones
+    if resolved_target_zones is None and resolved_zone_name == "z1":
+        resolved_target_zones = ["z2"]
+    if resolved_target_zones is None:
+        resolved_target_zones = []
     endpoint = StorageEndpoint(
         name=name,
         endpoint_url=f"https://{name}.example.test",
         provider=StorageProvider.CEPH.value,
         ceph_zonegroup_name=zonegroup,
+        ceph_zone_name=resolved_zone_name,
         ceph_zonegroup_bucket_replication_allowed=bucket_allowed,
         ceph_zonegroup_global_replication_configured=global_configured,
+        ceph_bucket_replication_target_zones_json=json.dumps(resolved_target_zones),
+        ceph_bucket_replication_owner_mode=owner_mode,
         features_config=(
             "features:\n"
             "  iam:\n"
@@ -293,6 +309,83 @@ def test_portal_create_bucket_level_replication_requires_account_admin_credentia
         raise AssertionError("account admin credentials should be required for portal replication setup")
     assert bucket_service.versioning_calls == []
     assert bucket_service.admin_replication_calls == []
+
+
+def test_portal_bucket_level_replication_blocks_rgw_account_owned_buckets_when_endpoint_disallows_accounts(db_session):
+    user = _user(db_session)
+    endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab", owner_mode="rgw_user_only")
+    endpoint_z2 = _endpoint(db_session, name="s3-z2", zonegroup="zg-lab", owner_mode="rgw_user_only")
+    account_z1 = _account(db_session, name="project-z1", endpoint=endpoint_z1)
+    account_z2 = _account(db_session, name="project-z2", endpoint=endpoint_z2)
+    _metadata(db_session, account=account_z1, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_z2, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    service = PortalService(db_session)
+    contexts = [
+        PortalReplicationAccountContext(access=_access(account_z1, user), label="Paris"),
+        PortalReplicationAccountContext(access=_access(account_z2, user), label="Lyon"),
+    ]
+
+    payload = service.list_replications(user, contexts, bucket_service=_BucketService())
+
+    assert payload.can_create is False
+    assert payload.unavailable_reason == "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint."
+    assert [space.bucket_replication_allowed for space in payload.storage_spaces] == [False, False]
+    assert {
+        space.bucket_replication_unavailable_reason for space in payload.storage_spaces
+    } == {"Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint."}
+    try:
+        service.create_replication(
+            user,
+            contexts,
+            PortalReplicationCreate(
+                source_storage_space_id=f"a{account_z1.id}:research-source",
+                target_storage_space_id=f"a{account_z2.id}:research-target",
+            ),
+            bucket_service=_BucketService(),
+        )
+    except ValueError as exc:
+        assert "RGW Account-owned buckets" in str(exc)
+    else:
+        raise AssertionError("RGW Account-owned buckets should be blocked when the endpoint declares rgw_user_only")
+
+
+def test_portal_bucket_level_replication_rejects_undeclared_zone_direction(db_session):
+    user = _user(db_session)
+    endpoint_z1 = _endpoint(db_session, name="s3-z1", zonegroup="zg-lab", target_zones=["z2"])
+    endpoint_z2 = _endpoint(db_session, name="s3-z2", zonegroup="zg-lab", target_zones=[])
+    account_z1 = _account(db_session, name="project-z1", endpoint=endpoint_z1)
+    account_z2 = _account(db_session, name="project-z2", endpoint=endpoint_z2)
+    _metadata(db_session, account=account_z1, bucket_name="research-source", display_name="Source")
+    _metadata(db_session, account=account_z2, bucket_name="research-target", display_name="Target")
+    db_session.commit()
+
+    service = PortalService(db_session)
+    contexts = [
+        PortalReplicationAccountContext(access=_access(account_z2, user), label="Lyon"),
+        PortalReplicationAccountContext(access=_access(account_z1, user), label="Paris"),
+    ]
+
+    payload = service.list_replications(user, contexts, bucket_service=_BucketService())
+
+    assert payload.can_create is True
+    lyon_space = next(space for space in payload.storage_spaces if space.project_account_label == "Lyon")
+    assert lyon_space.bucket_replication_target_zones == []
+    try:
+        service.create_replication(
+            user,
+            contexts,
+            PortalReplicationCreate(
+                source_storage_space_id=f"a{account_z2.id}:research-target",
+                target_storage_space_id=f"a{account_z1.id}:research-source",
+            ),
+            bucket_service=_BucketService(),
+        )
+    except ValueError as exc:
+        assert "source zone" in str(exc)
+    else:
+        raise AssertionError("z2 -> z1 should be rejected when only z1 -> z2 is configured")
 
 
 def test_portal_create_bucket_level_replication_requires_distinct_storage_locations(db_session):

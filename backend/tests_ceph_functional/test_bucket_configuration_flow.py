@@ -184,6 +184,31 @@ def _delete_topic(manager_session: BackendSession, account_id: int, topic_arn: s
         return
 
 
+def _endpoint_zonegroup(endpoint: dict[str, Any]) -> dict[str, Any]:
+    ceph_zonegroup = endpoint.get("ceph_zonegroup") if isinstance(endpoint.get("ceph_zonegroup"), dict) else {}
+    return ceph_zonegroup if isinstance(ceph_zonegroup, dict) else {}
+
+
+def _endpoint_zone_name(endpoint: dict[str, Any]) -> str:
+    return str(_endpoint_zonegroup(endpoint).get("zone_name") or "").strip()
+
+
+def _endpoint_target_zones(endpoint: dict[str, Any]) -> set[str]:
+    raw = _endpoint_zonegroup(endpoint).get("bucket_replication_target_zones")
+    if not isinstance(raw, list):
+        return set()
+    return {str(zone or "").strip().lower() for zone in raw if str(zone or "").strip()}
+
+
+def _endpoint_owner_mode(endpoint: dict[str, Any]) -> str:
+    return str(_endpoint_zonegroup(endpoint).get("bucket_replication_owner_mode") or "rgw_user_only").strip()
+
+
+def _endpoint_direction_allowed(source: dict[str, Any], target: dict[str, Any]) -> bool:
+    target_zone = _endpoint_zone_name(target).lower()
+    return bool(target_zone and target_zone in _endpoint_target_zones(source))
+
+
 def _find_replication_endpoints(super_admin_session: BackendSession) -> tuple[dict[str, Any], dict[str, Any]]:
     endpoints = super_admin_session.get("/ceph-admin/endpoints")
     if not isinstance(endpoints, list):
@@ -199,10 +224,16 @@ def _find_replication_endpoints(super_admin_session: BackendSession) -> tuple[di
     source = next((endpoint for endpoint in replication_endpoints if bool(endpoint.get("is_default"))), None)
     if source is None:
         pytest.skip("Bucket replication validation requires a default replication-capable endpoint")
-    source_id = int(source["id"])
-    target = next((endpoint for endpoint in replication_endpoints if int(endpoint["id"]) != source_id), None)
+    target = next(
+        (
+            endpoint
+            for endpoint in replication_endpoints
+            if int(endpoint["id"]) != int(source["id"]) and _endpoint_direction_allowed(source, endpoint)
+        ),
+        None,
+    )
     if target is None:
-        pytest.skip("Bucket replication validation requires a second replication-capable Ceph endpoint")
+        pytest.skip("Bucket replication validation requires a declared source-to-target Ceph zone direction")
     return source, target
 
 
@@ -215,7 +246,7 @@ def _find_portal_replication_endpoints(super_admin_session: BackendSession) -> t
     for endpoint in endpoints:
         if not isinstance(endpoint, dict) or endpoint.get("id") is None:
             continue
-        ceph_zonegroup = endpoint.get("ceph_zonegroup") if isinstance(endpoint.get("ceph_zonegroup"), dict) else {}
+        ceph_zonegroup = _endpoint_zonegroup(endpoint)
         zonegroup = str(ceph_zonegroup.get("name") or "").strip()
         if not zonegroup:
             continue
@@ -225,10 +256,19 @@ def _find_portal_replication_endpoints(super_admin_session: BackendSession) -> t
             continue
         by_zonegroup.setdefault(zonegroup, []).append(endpoint)
     for candidates in by_zonegroup.values():
-        if len(candidates) >= 2:
-            sorted_candidates = sorted(candidates, key=lambda item: (not bool(item.get("is_default")), str(item.get("name") or ""), int(item["id"])))
-            return sorted_candidates[0], sorted_candidates[1]
-    pytest.skip("Portal replication validation requires two bucket-replication-capable endpoints in the same zonegroup")
+        sorted_candidates = sorted(candidates, key=lambda item: (not bool(item.get("is_default")), str(item.get("name") or ""), int(item["id"])))
+        for source in sorted_candidates:
+            target = next(
+                (
+                    candidate
+                    for candidate in sorted_candidates
+                    if int(candidate["id"]) != int(source["id"]) and _endpoint_direction_allowed(source, candidate)
+                ),
+                None,
+            )
+            if target is not None:
+                return source, target
+    pytest.skip("Portal replication validation requires two endpoints with a declared source-to-target Ceph zone direction")
 
 
 def _register_portal_storage_space_metadata(*, account_id: int, bucket_name: str, owner_user_id: int) -> None:
@@ -1009,9 +1049,20 @@ def test_portal_bucket_replication_roundtrip_between_lab_zones(
         target_space_id = f"a{target_account.account_id}:{target_bucket}"
 
         replications_state = portal_session.get(f"/portal/projects/{project_id}/replications")
-        assert replications_state["can_create"] is True
         assert {space["project_account_label"] for space in replications_state["storage_spaces"]} == {"z1", "z2"}
         assert {space["id"] for space in replications_state["storage_spaces"]} == {source_space_id, target_space_id}
+        owner_modes = {_endpoint_owner_mode(source_endpoint), _endpoint_owner_mode(target_endpoint)}
+        if owner_modes != {"rgw_account_supported"}:
+            assert replications_state["can_create"] is False
+            assert "RGW Account-owned buckets" in str(replications_state.get("unavailable_reason") or "")
+            assert any(
+                space.get("bucket_replication_unavailable_reason")
+                == "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint."
+                for space in replications_state["storage_spaces"]
+            )
+            return
+
+        assert replications_state["can_create"] is True
 
         try:
             created = portal_session.post(

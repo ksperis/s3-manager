@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -22,6 +23,10 @@ from ._shared import AccountRole, User
 
 
 _PORTAL_REPLICATION_ROLE_ARN = "arn:aws:iam::000000000000:role/portal-bucket-replication"
+_RGW_ACCOUNT_OWNER_UNSUPPORTED_REASON = (
+    "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint."
+)
+_MISSING_ZONE_NAME_REASON = "Ceph bucket replication requires a Ceph zone name on this storage endpoint."
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,58 @@ class PortalReplicationsMixin:
         cleaned = str(value or "").strip()
         return cleaned or None
 
+    def _portal_replication_zone_name(self, account: S3Account) -> str | None:
+        endpoint = getattr(account, "storage_endpoint", None)
+        value = getattr(endpoint, "ceph_zone_name", None) if endpoint is not None else None
+        cleaned = str(value or "").strip()
+        return cleaned or None
+
+    def _portal_replication_target_zones(self, account: S3Account) -> list[str]:
+        endpoint = getattr(account, "storage_endpoint", None)
+        raw = getattr(endpoint, "ceph_bucket_replication_target_zones_json", "[]") if endpoint is not None else "[]"
+        if not isinstance(raw, str) or not raw.strip():
+            return []
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(parsed, list):
+            return []
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in parsed:
+            cleaned = str(item or "").strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(cleaned)
+        return normalized
+
+    def _portal_replication_owner_mode(self, account: S3Account) -> str:
+        endpoint = getattr(account, "storage_endpoint", None)
+        value = getattr(endpoint, "ceph_bucket_replication_owner_mode", None) if endpoint is not None else None
+        mode = str(value or "rgw_user_only").strip()
+        return mode if mode == "rgw_account_supported" else "rgw_user_only"
+
+    def _portal_replication_unavailable_reason(
+        self,
+        account: S3Account,
+        *,
+        base_allowed: bool,
+        zone_name: str | None,
+        owner_mode: str,
+    ) -> str | None:
+        if not base_allowed:
+            return None
+        if not zone_name:
+            return _MISSING_ZONE_NAME_REASON
+        if getattr(account, "rgw_account_id", None) and owner_mode != "rgw_account_supported":
+            return _RGW_ACCOUNT_OWNER_UNSUPPORTED_REASON
+        return None
+
     def _portal_replication_bucket_name_from_arn(self, value: Any) -> str | None:
         text = str(value or "").strip()
         if not text:
@@ -62,6 +119,16 @@ class PortalReplicationsMixin:
         normalized = re.sub(r"[^a-z0-9-]+", "-", raw).strip("-")
         return (normalized[:120].strip("-") or "portal-replication")[:120]
 
+    def _portal_replication_direction_allowed(
+        self,
+        source: PortalReplicationStorageSpace,
+        target: PortalReplicationStorageSpace,
+    ) -> bool:
+        target_zone = str(target.storage_endpoint_zone_name or "").strip().lower()
+        if not target_zone:
+            return False
+        return target_zone in {str(zone or "").strip().lower() for zone in source.bucket_replication_target_zones}
+
     def _portal_replication_pair_allowed(self, source: _PortalReplicationSpaceContext, target: _PortalReplicationSpaceContext) -> bool:
         return bool(
             source.api.can_manage
@@ -72,6 +139,9 @@ class PortalReplicationsMixin:
             and source.api.storage_endpoint_id != target.api.storage_endpoint_id
             and source.api.storage_endpoint_zonegroup
             and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
+            and source.api.storage_endpoint_zone_name
+            and target.api.storage_endpoint_zone_name
+            and self._portal_replication_direction_allowed(source.api, target.api)
             and source.api.id != target.api.id
             and not self._portal_replication_pair_has_global_replication(source, target)
         )
@@ -133,6 +203,22 @@ class PortalReplicationsMixin:
             endpoint = getattr(account, "storage_endpoint", None)
             features = resolve_feature_flags(endpoint) if endpoint is not None else None
             zonegroup = self._portal_replication_zonegroup(account)
+            zone_name = self._portal_replication_zone_name(account)
+            target_zones = self._portal_replication_target_zones(account)
+            owner_mode = self._portal_replication_owner_mode(account)
+            base_bucket_replication_allowed = bool(
+                endpoint is not None
+                and features is not None
+                and features.replication_enabled
+                and getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
+                and zonegroup
+            )
+            unavailable_reason = self._portal_replication_unavailable_reason(
+                account,
+                base_allowed=base_bucket_replication_allowed,
+                zone_name=zone_name,
+                owner_mode=owner_mode,
+            )
             spaces = self.list_storage_spaces(user, access, include_archived=False)
             for space in spaces:
                 bucket_name = space.internal_bucket_name or space.id
@@ -148,12 +234,11 @@ class PortalReplicationsMixin:
                     storage_endpoint_id=endpoint.id if endpoint is not None else None,
                     storage_endpoint_name=endpoint.name if endpoint is not None else None,
                     storage_endpoint_zonegroup=zonegroup,
-                    bucket_replication_allowed=bool(
-                        endpoint is not None
-                        and features is not None
-                        and features.replication_enabled
-                        and getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
-                    ),
+                    storage_endpoint_zone_name=zone_name,
+                    bucket_replication_allowed=bool(base_bucket_replication_allowed and unavailable_reason is None),
+                    bucket_replication_target_zones=target_zones,
+                    bucket_replication_owner_mode=owner_mode,
+                    bucket_replication_unavailable_reason=unavailable_reason,
                     global_replication_configured=bool(
                         endpoint is not None and getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
                     ),
@@ -257,6 +342,10 @@ class PortalReplicationsMixin:
                         for candidate in target_by_zone_bucket.get((source.api.storage_endpoint_zonegroup or "", target_bucket), [])
                         if candidate.api.id != source.api.id
                         and candidate.api.storage_endpoint_id != source.api.storage_endpoint_id
+                        and (
+                            not candidate.api.storage_endpoint_zone_name
+                            or self._portal_replication_direction_allowed(source.api, candidate.api)
+                        )
                     ),
                     None,
                 )
@@ -301,12 +390,31 @@ class PortalReplicationsMixin:
         ]
         can_create = any(self._portal_replication_pair_allowed(source, target) for source in spaces for target in spaces)
         has_global_pair = any(self._portal_replication_pair_has_global_replication(source, target) for source in spaces for target in spaces)
+        first_unavailable_reason = next(
+            (space.api.bucket_replication_unavailable_reason for space in spaces if space.api.bucket_replication_unavailable_reason),
+            None,
+        )
+        has_same_zonegroup_pair = any(
+            source.api.id != target.api.id
+            and source.api.can_manage
+            and source.api.storage_endpoint_id
+            and target.api.storage_endpoint_id
+            and source.api.storage_endpoint_id != target.api.storage_endpoint_id
+            and source.api.storage_endpoint_zonegroup
+            and source.api.storage_endpoint_zonegroup == target.api.storage_endpoint_zonegroup
+            for source in spaces
+            for target in spaces
+        )
         unavailable_reason = None
         if not spaces:
             unavailable_reason = "No Storage Space is available in this workspace."
         elif not can_create:
             if has_global_pair:
                 unavailable_reason = "Platform replication already covers the compatible storage locations in this workspace."
+            elif first_unavailable_reason:
+                unavailable_reason = first_unavailable_reason
+            elif has_same_zonegroup_pair:
+                unavailable_reason = "Bucket-level replication is not allowed for the configured Ceph zone direction in this workspace."
             else:
                 unavailable_reason = "Replication requires a Portal manager role and two compatible storage locations."
         return PortalReplicationList(
@@ -336,6 +444,9 @@ class PortalReplicationsMixin:
         if not source.api.can_manage:
             raise PermissionError("Portal manager role is required to configure bucket replication.")
         if not source.api.bucket_replication_allowed or not target.api.bucket_replication_allowed:
+            reason = source.api.bucket_replication_unavailable_reason or target.api.bucket_replication_unavailable_reason
+            if reason:
+                raise ValueError(reason)
             raise ValueError("Bucket-level replication is not allowed on both selected storage endpoints.")
         if not source.api.storage_endpoint_id or not target.api.storage_endpoint_id:
             raise ValueError("Both Storage Spaces must be attached to a storage location.")
@@ -345,6 +456,10 @@ class PortalReplicationsMixin:
             raise ValueError("Both storage endpoints must define a Ceph zonegroup.")
         if source.api.storage_endpoint_zonegroup != target.api.storage_endpoint_zonegroup:
             raise ValueError("Bucket-level replication requires two Storage Spaces in the same Ceph zonegroup.")
+        if not source.api.storage_endpoint_zone_name or not target.api.storage_endpoint_zone_name:
+            raise ValueError("Ceph bucket replication requires zone names on both storage endpoints.")
+        if not self._portal_replication_direction_allowed(source.api, target.api):
+            raise ValueError("Bucket-level replication is not allowed from this source zone to the selected destination zone.")
 
         try:
             bucket_service.ensure_account_admin_credentials(source.account)

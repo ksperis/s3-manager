@@ -31,8 +31,11 @@ def test_ci_endpoint_payload_enables_replication(monkeypatch):
     assert payload[0]["features"]["replication"] == {"enabled": True}
     assert payload[0]["ceph_zonegroup"] == {
         "name": "zg-lab",
+        "zone_name": "z1",
         "global_replication_configured": False,
         "bucket_replication_allowed": True,
+        "bucket_replication_target_zones": ["z2"],
+        "bucket_replication_owner_mode": "rgw_user_only",
     }
 
 
@@ -55,8 +58,22 @@ def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):
     assert payload[0]["admin_access_key"] == payload[1]["admin_access_key"] == "admin-ak"
     assert payload[0]["ceph_admin_secret_key"] == payload[1]["ceph_admin_secret_key"] == "ceph-admin-sk"
     assert [item["ceph_zonegroup"] for item in payload] == [
-        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
-        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+        {
+            "name": "zg-lab",
+            "global_replication_configured": False,
+            "bucket_replication_allowed": True,
+            "bucket_replication_owner_mode": "rgw_user_only",
+            "zone_name": "z1",
+            "bucket_replication_target_zones": ["z2"],
+        },
+        {
+            "name": "zg-lab",
+            "global_replication_configured": False,
+            "bucket_replication_allowed": True,
+            "bucket_replication_owner_mode": "rgw_user_only",
+            "zone_name": "z2",
+            "bucket_replication_target_zones": [],
+        },
     ]
 
 
@@ -124,8 +141,22 @@ def test_ci_endpoint_payload_adds_lab_zonegroup_to_existing_z1_z2_payload():
     payload = json.loads(run_ci._build_endpoint_payload(env))
 
     assert [item.get("ceph_zonegroup") for item in payload] == [
-        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
-        {"name": "zg-lab", "global_replication_configured": False, "bucket_replication_allowed": True},
+        {
+            "name": "zg-lab",
+            "global_replication_configured": False,
+            "bucket_replication_allowed": True,
+            "bucket_replication_owner_mode": "rgw_user_only",
+            "zone_name": "z1",
+            "bucket_replication_target_zones": ["z2"],
+        },
+        {
+            "name": "zg-lab",
+            "global_replication_configured": False,
+            "bucket_replication_allowed": True,
+            "bucket_replication_owner_mode": "rgw_user_only",
+            "zone_name": "z2",
+            "bucket_replication_target_zones": [],
+        },
         None,
     ]
 

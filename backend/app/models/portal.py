@@ -124,6 +124,7 @@ PortalAlertTone = Literal["info", "warning", "danger"]
 PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 PortalReplicationMode = Literal["bucket_level", "global"]
 PortalReplicationStatus = Literal["configured", "unavailable", "error"]
+PortalReplicationOwnerMode = Literal["rgw_user_only", "rgw_account_supported"]
 
 
 class PortalStorageSpaceSummary(BaseModel):
@@ -239,7 +240,11 @@ class PortalReplicationStorageSpace(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_zonegroup: Optional[str] = None
+    storage_endpoint_zone_name: Optional[str] = None
     bucket_replication_allowed: bool = False
+    bucket_replication_target_zones: list[str] = Field(default_factory=list)
+    bucket_replication_owner_mode: PortalReplicationOwnerMode = "rgw_user_only"
+    bucket_replication_unavailable_reason: Optional[str] = None
     global_replication_configured: bool = False
     can_manage: bool = False
 

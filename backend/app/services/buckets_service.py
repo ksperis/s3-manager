@@ -1686,6 +1686,17 @@ class BucketsService:
                 raise ValueError("Destination.Zone is not supported in V1.")
         return configuration
 
+    def _map_bucket_replication_runtime_error(self, exc: RuntimeError, account: S3Account) -> RuntimeError:
+        message = str(exc)
+        normalized = message.lower()
+        if getattr(account, "rgw_account_id", None) and (
+            "notimplemented" in normalized or "not implemented" in normalized
+        ):
+            return RuntimeError(
+                "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint."
+            )
+        return exc
+
     def set_bucket_replication(
         self,
         name: str,
@@ -1694,13 +1705,16 @@ class BucketsService:
     ) -> BucketReplicationConfiguration:
         configuration = self._validate_bucket_replication_configuration(payload.configuration)
         access_key, secret_key = self._account_credentials(account)
-        s3_client.put_bucket_replication(
-            name,
-            configuration=configuration,
-            access_key=access_key,
-            secret_key=secret_key,
-            **self._replication_client_kwargs(account),
-        )
+        try:
+            s3_client.put_bucket_replication(
+                name,
+                configuration=configuration,
+                access_key=access_key,
+                secret_key=secret_key,
+                **self._replication_client_kwargs(account),
+            )
+        except RuntimeError as exc:
+            raise self._map_bucket_replication_runtime_error(exc, account) from exc
         return self.get_bucket_replication(name, account)
 
     def set_bucket_replication_as_account_admin(
@@ -1711,13 +1725,16 @@ class BucketsService:
     ) -> BucketReplicationConfiguration:
         configuration = self._validate_bucket_replication_configuration(payload.configuration)
         access_key, secret_key = self._account_admin_credentials(account)
-        s3_client.put_bucket_replication(
-            name,
-            configuration=configuration,
-            access_key=access_key,
-            secret_key=secret_key,
-            **self._replication_client_kwargs(account, account_admin=True),
-        )
+        try:
+            s3_client.put_bucket_replication(
+                name,
+                configuration=configuration,
+                access_key=access_key,
+                secret_key=secret_key,
+                **self._replication_client_kwargs(account, account_admin=True),
+            )
+        except RuntimeError as exc:
+            raise self._map_bucket_replication_runtime_error(exc, account) from exc
         logger.info(
             "Account admin credentials configured bucket replication on bucket %s for S3Account %s",
             name,

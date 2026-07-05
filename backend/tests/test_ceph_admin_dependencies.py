@@ -169,14 +169,20 @@ def test_build_ceph_admin_endpoint_payload_exposes_ceph_zonegroup():
         region="us-east-1",
         is_default=False,
         ceph_zonegroup_name="zg-a",
+        ceph_zone_name="z1",
         ceph_zonegroup_global_replication_configured=True,
         ceph_zonegroup_bucket_replication_allowed=True,
+        ceph_bucket_replication_target_zones_json='["z2"]',
+        ceph_bucket_replication_owner_mode="rgw_account_supported",
     )
 
     payload = deps.build_ceph_admin_endpoint_payload(endpoint)
 
     assert payload["ceph_zonegroup"] == {
         "name": "zg-a",
+        "zone_name": "z1",
         "global_replication_configured": True,
         "bucket_replication_allowed": True,
+        "bucket_replication_target_zones": ["z2"],
+        "bucket_replication_owner_mode": "rgw_account_supported",
     }

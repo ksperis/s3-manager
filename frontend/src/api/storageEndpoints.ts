@@ -39,10 +39,15 @@ export type StorageEndpointAdminOpsPermissions = {
   accounts_write: boolean;
 };
 
+export type CephBucketReplicationOwnerMode = "rgw_user_only" | "rgw_account_supported";
+
 export type StorageEndpointCephZonegroup = {
   name?: string | null;
+  zone_name?: string | null;
   global_replication_configured: boolean;
   bucket_replication_allowed: boolean;
+  bucket_replication_target_zones?: string[];
+  bucket_replication_owner_mode?: CephBucketReplicationOwnerMode;
 };
 
 export type StorageEndpoint = {

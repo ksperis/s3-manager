@@ -88,6 +88,10 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_S3_ENDPOINT` (default: `http://localhost:9000`)
 - `SEED_S3_ENDPOINT_FEATURES` (YAML or JSON, used to seed default endpoint features)
 - `ENV_STORAGE_ENDPOINTS` (JSON array, authoritative list of storage endpoints managed by env)
+  Ceph endpoint entries may include `ceph_zonegroup.zone_name`,
+  `ceph_zonegroup.bucket_replication_target_zones`, and
+  `ceph_zonegroup.bucket_replication_owner_mode` to control Portal bucket-level
+  replication availability.
 - `SEED_S3_ACCESS_KEY` / `SEED_S3_SECRET_KEY`
 - `SEED_S3_REGION` (default: `us-east-1`)
 - `SEED_RGW_ADMIN_ACCESS_KEY` / `SEED_RGW_ADMIN_SECRET_KEY` (optional override for the default endpoint admin credentials)

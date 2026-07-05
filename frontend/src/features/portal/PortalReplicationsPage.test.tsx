@@ -35,7 +35,11 @@ const paris = {
   storage_endpoint_id: 11,
   storage_endpoint_name: "s3-z1",
   storage_endpoint_zonegroup: "zg-lab",
+  storage_endpoint_zone_name: "z1",
   bucket_replication_allowed: true,
+  bucket_replication_target_zones: ["z2"],
+  bucket_replication_owner_mode: "rgw_account_supported" as const,
+  bucket_replication_unavailable_reason: null,
   global_replication_configured: false,
   can_manage: true,
 };
@@ -49,6 +53,8 @@ const lyon = {
   project_account_label: "Lyon",
   storage_endpoint_id: 12,
   storage_endpoint_name: "s3-z2",
+  storage_endpoint_zone_name: "z2",
+  bucket_replication_target_zones: [],
 };
 
 describe("PortalReplicationsPage", () => {
@@ -92,6 +98,7 @@ describe("PortalReplicationsPage", () => {
     expect(screen.getByText("Workspace replication")).toBeInTheDocument();
     expect(screen.getAllByText("Research (Paris)").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Research (Lyon)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Storage location: Paris (z1)").length).toBeGreaterThan(0);
     expect(screen.getByText("Bucket-level replication configured.")).toBeInTheDocument();
     expect(screen.queryByText("raw-research-paris")).not.toBeInTheDocument();
     expect(screen.queryByText("raw-research-lyon")).not.toBeInTheDocument();
@@ -173,6 +180,38 @@ describe("PortalReplicationsPage", () => {
 
     expect(await screen.findByText("Replication needs manager access and two compatible storage locations in this workspace.")).toBeInTheDocument();
     expect(screen.getByText("No compatible destination is available for the selected source.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure" })).toBeDisabled();
+  });
+
+  it("shows a clear unavailable reason for RGW Account-owned buckets", async () => {
+    mocks.listPortalReplications.mockResolvedValueOnce({
+      storage_spaces: [
+        {
+          ...paris,
+          bucket_replication_allowed: false,
+          bucket_replication_target_zones: ["z2"],
+          bucket_replication_owner_mode: "rgw_user_only",
+          bucket_replication_unavailable_reason:
+            "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint.",
+        },
+        {
+          ...lyon,
+          bucket_replication_allowed: false,
+          bucket_replication_owner_mode: "rgw_user_only",
+          bucket_replication_unavailable_reason:
+            "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint.",
+        },
+      ],
+      replications: [],
+      can_create: false,
+      unavailable_reason: "Ceph bucket replication is not supported for RGW Account-owned buckets on this endpoint.",
+    });
+
+    render(<PortalReplicationsPage />);
+
+    expect(
+      await screen.findByText("Ceph bucket replication is not available for RGW Account-owned buckets on this storage location.")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Configure" })).toBeDisabled();
   });
 });

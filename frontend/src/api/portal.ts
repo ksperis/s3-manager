@@ -329,7 +329,11 @@ export type PortalReplicationStorageSpace = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_zonegroup?: string | null;
+  storage_endpoint_zone_name?: string | null;
   bucket_replication_allowed: boolean;
+  bucket_replication_target_zones: string[];
+  bucket_replication_owner_mode: "rgw_user_only" | "rgw_account_supported";
+  bucket_replication_unavailable_reason?: string | null;
   global_replication_configured: boolean;
   can_manage: boolean;
 };

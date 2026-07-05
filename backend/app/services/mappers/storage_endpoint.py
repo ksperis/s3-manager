@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
+
 from app.db import StorageEndpoint as DBStorageEndpoint
 from app.db import StorageProvider
 from app.models.storage_endpoint import (
@@ -10,6 +12,31 @@ from app.models.storage_endpoint import (
     StorageEndpointCephZonegroup,
 )
 from app.models.tagging import TagDefinitionSummary
+
+
+def _load_target_zones(raw: object) -> list[str]:
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        items = parsed if isinstance(parsed, list) else []
+    else:
+        items = []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        cleaned = str(item or "").strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(cleaned)
+    return normalized
 
 
 def storage_endpoint_from_db(
@@ -25,11 +52,18 @@ def storage_endpoint_from_db(
     if getattr(endpoint, "ceph_zonegroup_name", None):
         ceph_zonegroup = StorageEndpointCephZonegroup(
             name=endpoint.ceph_zonegroup_name,
+            zone_name=getattr(endpoint, "ceph_zone_name", None),
             global_replication_configured=bool(
                 getattr(endpoint, "ceph_zonegroup_global_replication_configured", False)
             ),
             bucket_replication_allowed=bool(
                 getattr(endpoint, "ceph_zonegroup_bucket_replication_allowed", False)
+            ),
+            bucket_replication_target_zones=_load_target_zones(
+                getattr(endpoint, "ceph_bucket_replication_target_zones_json", "[]")
+            ),
+            bucket_replication_owner_mode=str(
+                getattr(endpoint, "ceph_bucket_replication_owner_mode", None) or "rgw_user_only"
             ),
         )
     return StorageEndpoint(

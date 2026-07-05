@@ -6,6 +6,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
+  type CephBucketReplicationOwnerMode,
   StorageEndpoint,
   StorageEndpointPayload,
   StorageProvider,
@@ -53,8 +54,11 @@ type FormState = {
   has_admin_secret: boolean;
   has_supervision_secret: boolean;
   ceph_zonegroup_name: string;
+  ceph_zone_name: string;
   ceph_zonegroup_global_replication_configured: boolean;
   ceph_zonegroup_bucket_replication_allowed: boolean;
+  ceph_bucket_replication_target_zones: string;
+  ceph_bucket_replication_owner_mode: CephBucketReplicationOwnerMode;
   features: FeaturesState;
 };
 
@@ -204,6 +208,22 @@ function parseCoordinateInput(value: string, label: string, min: number, max: nu
   return parsed;
 }
 
+function parseCephTargetZones(value: string): string[] {
+  const seen = new Set<string>();
+  const zones: string[] = [];
+  value
+    .split(/[,\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((zone) => {
+      const key = zone.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      zones.push(zone);
+    });
+  return zones;
+}
+
 const SUPERVISION_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-supervision" \\',
@@ -315,7 +335,7 @@ function buildFeaturesYaml(features: FeaturesState): string {
     const entry = features[key];
     lines.push(`  ${key}:`);
     lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
-    if ((key === "admin" || key === "sts" || key === "iam") && entry.enabled && entry.endpoint.trim()) {
+    if ((key === "admin" || key === "sts" || key === "iam" || key === "replication") && entry.enabled && entry.endpoint.trim()) {
       lines.push(`    endpoint: ${entry.endpoint.trim()}`);
     }
     if (key === "healthcheck") {
@@ -349,8 +369,11 @@ function createEmptyForm(): FormState {
     has_admin_secret: false,
     has_supervision_secret: false,
     ceph_zonegroup_name: "",
+    ceph_zone_name: "",
     ceph_zonegroup_global_replication_configured: false,
     ceph_zonegroup_bucket_replication_allowed: false,
+    ceph_bucket_replication_target_zones: "",
+    ceph_bucket_replication_owner_mode: "rgw_user_only",
     features,
   };
 }
@@ -377,8 +400,11 @@ function createFormFromEndpoint(endpoint: StorageEndpoint): FormState {
     has_admin_secret: Boolean(endpoint.has_admin_secret),
     has_supervision_secret: Boolean(endpoint.has_supervision_secret),
     ceph_zonegroup_name: endpoint.ceph_zonegroup?.name ?? "",
+    ceph_zone_name: endpoint.ceph_zonegroup?.zone_name ?? "",
     ceph_zonegroup_global_replication_configured: Boolean(endpoint.ceph_zonegroup?.global_replication_configured),
     ceph_zonegroup_bucket_replication_allowed: Boolean(endpoint.ceph_zonegroup?.bucket_replication_allowed),
+    ceph_bucket_replication_target_zones: (endpoint.ceph_zonegroup?.bucket_replication_target_zones ?? []).join(", "),
+    ceph_bucket_replication_owner_mode: endpoint.ceph_zonegroup?.bucket_replication_owner_mode ?? "rgw_user_only",
     features: resolveFeatureState(endpoint, endpoint.provider),
   };
 }
@@ -522,7 +548,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
         },
         replication: {
           enabled: Boolean(endpoint.features.replication?.enabled),
-          endpoint: "",
+          endpoint: endpoint.features.replication?.endpoint ?? "",
         },
         healthcheck: {
           enabled: endpoint.features.healthcheck?.enabled !== false,
@@ -799,10 +825,15 @@ export default function StorageEndpointsPage() {
         ceph_admin_access_key: provider === "ceph" ? prev.ceph_admin_access_key : "",
         ceph_admin_secret_key: provider === "ceph" ? prev.ceph_admin_secret_key : "",
         ceph_zonegroup_name: provider === "ceph" ? prev.ceph_zonegroup_name : "",
+        ceph_zone_name: provider === "ceph" ? prev.ceph_zone_name : "",
         ceph_zonegroup_global_replication_configured:
           provider === "ceph" ? prev.ceph_zonegroup_global_replication_configured : false,
         ceph_zonegroup_bucket_replication_allowed:
           provider === "ceph" ? prev.ceph_zonegroup_bucket_replication_allowed : false,
+        ceph_bucket_replication_target_zones:
+          provider === "ceph" ? prev.ceph_bucket_replication_target_zones : "",
+        ceph_bucket_replication_owner_mode:
+          provider === "ceph" ? prev.ceph_bucket_replication_owner_mode : "rgw_user_only",
         features: constrained,
       };
     });
@@ -930,6 +961,10 @@ export default function StorageEndpointsPage() {
     const trimmedCephAdminAccess = form.ceph_admin_access_key.trim();
     const trimmedCephAdminSecret = form.ceph_admin_secret_key.trim();
     const trimmedCephZonegroupName = form.ceph_zonegroup_name.trim();
+    const trimmedCephZoneName = form.ceph_zone_name.trim();
+    const cephTargetZones = parseCephTargetZones(form.ceph_bucket_replication_target_zones).filter(
+      (zone) => zone.toLowerCase() !== trimmedCephZoneName.toLowerCase()
+    );
     let latitude: number | null;
     let longitude: number | null;
     const featuresSource =
@@ -976,16 +1011,27 @@ export default function StorageEndpointsPage() {
     if (form.provider === "ceph") {
       if (
         !trimmedCephZonegroupName &&
-        (form.ceph_zonegroup_global_replication_configured || form.ceph_zonegroup_bucket_replication_allowed)
+        (trimmedCephZoneName ||
+          cephTargetZones.length > 0 ||
+          form.ceph_zonegroup_global_replication_configured ||
+          form.ceph_zonegroup_bucket_replication_allowed ||
+          form.ceph_bucket_replication_owner_mode !== "rgw_user_only")
       ) {
         setFormError("Ceph zonegroup name is required when replication metadata is enabled.");
+        return null;
+      }
+      if (cephTargetZones.length > 0 && !trimmedCephZoneName) {
+        setFormError("Ceph zone name is required when bucket replication target zones are configured.");
         return null;
       }
       payload.ceph_zonegroup = trimmedCephZonegroupName
         ? {
             name: trimmedCephZonegroupName,
+            zone_name: trimmedCephZoneName || null,
             global_replication_configured: Boolean(form.ceph_zonegroup_global_replication_configured),
             bucket_replication_allowed: Boolean(form.ceph_zonegroup_bucket_replication_allowed),
+            bucket_replication_target_zones: cephTargetZones,
+            bucket_replication_owner_mode: form.ceph_bucket_replication_owner_mode,
           }
         : null;
       if (adminEnabled && !trimmedAdminAccess) {
@@ -1161,6 +1207,11 @@ export default function StorageEndpointsPage() {
                 <span className="font-semibold text-[var(--ui-text)]">{cephZonegroup.name}</span>
               </DetailLine>
             )}
+            {cephZonegroup?.zone_name && (
+              <DetailLine label="Zone">
+                <span className="font-semibold text-[var(--ui-text)]">{cephZonegroup.zone_name}</span>
+              </DetailLine>
+            )}
           </div>
         </td>
         <td className="min-w-[260px] align-top">
@@ -1191,10 +1242,25 @@ export default function StorageEndpointsPage() {
                 <span className="font-semibold text-[var(--ui-text)]">
                   {[
                     cephZonegroup.global_replication_configured ? "Global" : null,
-                    cephZonegroup.bucket_replication_allowed ? "Bucket" : null,
+                    cephZonegroup.bucket_replication_allowed
+                      ? `Bucket${
+                          cephZonegroup.bucket_replication_target_zones?.length
+                            ? ` -> ${cephZonegroup.bucket_replication_target_zones.join(", ")}`
+                            : ""
+                        }`
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" + ") || "Metadata only"}
+                </span>
+              </DetailLine>
+            )}
+            {cephZonegroup?.name && (
+              <DetailLine label="Bucket owner">
+                <span className="font-semibold text-[var(--ui-text)]">
+                  {cephZonegroup.bucket_replication_owner_mode === "rgw_account_supported"
+                    ? "RGW Accounts supported"
+                    : "Classic RGW users only"}
                 </span>
               </DetailLine>
             )}
@@ -1678,6 +1744,49 @@ export default function StorageEndpointsPage() {
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="zg-a"
                       />
+                    </label>
+                    <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                      Ceph zone name (optional)
+                      <input
+                        type="text"
+                        value={form.ceph_zone_name}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ceph_zone_name: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="z1"
+                      />
+                    </label>
+                    <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                      Bucket owner support
+                      <select
+                        value={form.ceph_bucket_replication_owner_mode}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            ceph_bucket_replication_owner_mode: e.target.value as CephBucketReplicationOwnerMode,
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="rgw_user_only">Classic RGW users only</option>
+                        <option value="rgw_account_supported">RGW Accounts supported</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100 sm:col-span-2">
+                      Bucket replication target zones (optional)
+                      <textarea
+                        value={form.ceph_bucket_replication_target_zones}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            ceph_bucket_replication_target_zones: e.target.value,
+                          }))
+                        }
+                        className="min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="z2"
+                      />
+                      <span className="block ui-caption font-normal text-slate-500 dark:text-slate-400">
+                        Comma or line separated outgoing Ceph zones allowed by the zonegroup sync-policy.
+                      </span>
                     </label>
                     <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       Global replication configured

@@ -312,41 +312,59 @@ def test_create_update_and_serialize_ceph_zonegroup(db_session):
             provider=StorageProvider.CEPH,
             ceph_zonegroup=StorageEndpointCephZonegroup(
                 name=" zg-a ",
+                zone_name=" z1 ",
                 global_replication_configured=True,
                 bucket_replication_allowed=False,
+                bucket_replication_target_zones=["z2", " z2 ", "z3"],
+                bucket_replication_owner_mode="rgw_account_supported",
             ),
         )
     )
 
     assert created.ceph_zonegroup is not None
     assert created.ceph_zonegroup.name == "zg-a"
+    assert created.ceph_zonegroup.zone_name == "z1"
     assert created.ceph_zonegroup.global_replication_configured is True
     assert created.ceph_zonegroup.bucket_replication_allowed is False
+    assert created.ceph_zonegroup.bucket_replication_target_zones == ["z2", "z3"]
+    assert created.ceph_zonegroup.bucket_replication_owner_mode == "rgw_account_supported"
     persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
     assert persisted is not None
     assert persisted.ceph_zonegroup_name == "zg-a"
+    assert persisted.ceph_zone_name == "z1"
     assert persisted.ceph_zonegroup_global_replication_configured is True
     assert persisted.ceph_zonegroup_bucket_replication_allowed is False
+    assert json.loads(persisted.ceph_bucket_replication_target_zones_json) == ["z2", "z3"]
+    assert persisted.ceph_bucket_replication_owner_mode == "rgw_account_supported"
 
     updated = service.update_endpoint(
         created.id,
         StorageEndpointUpdate(
             ceph_zonegroup=StorageEndpointCephZonegroup(
                 name="zg-b",
+                zone_name="z2",
                 global_replication_configured=False,
                 bucket_replication_allowed=True,
+                bucket_replication_target_zones=["z1", "z2"],
+                bucket_replication_owner_mode="rgw_user_only",
             )
         ),
     )
 
     assert updated.ceph_zonegroup is not None
     assert updated.ceph_zonegroup.name == "zg-b"
+    assert updated.ceph_zonegroup.zone_name == "z2"
     assert updated.ceph_zonegroup.global_replication_configured is False
     assert updated.ceph_zonegroup.bucket_replication_allowed is True
+    assert updated.ceph_zonegroup.bucket_replication_target_zones == ["z1"]
+    assert updated.ceph_zonegroup.bucket_replication_owner_mode == "rgw_user_only"
     db_session.refresh(persisted)
     assert persisted.ceph_zonegroup_name == "zg-b"
+    assert persisted.ceph_zone_name == "z2"
     assert persisted.ceph_zonegroup_global_replication_configured is False
     assert persisted.ceph_zonegroup_bucket_replication_allowed is True
+    assert json.loads(persisted.ceph_bucket_replication_target_zones_json) == ["z1"]
+    assert persisted.ceph_bucket_replication_owner_mode == "rgw_user_only"
 
 
 def test_ceph_zonegroup_requires_ceph_provider_and_name_for_flags(db_session):
@@ -372,6 +390,16 @@ def test_ceph_zonegroup_requires_ceph_provider_and_name_for_flags(db_session):
             )
         )
 
+    with pytest.raises(ValueError, match="zone name is required"):
+        service.create_endpoint(
+            StorageEndpointCreate(
+                name="Ceph Zone Missing Name",
+                endpoint_url="https://ceph-zone-missing-name.example.test",
+                provider=StorageProvider.CEPH,
+                ceph_zonegroup=StorageEndpointCephZonegroup(name="zg-a", bucket_replication_target_zones=["z2"]),
+            )
+        )
+
 
 def test_update_endpoint_clears_ceph_zonegroup_for_non_ceph_provider(db_session):
     service = StorageEndpointsService(db_session)
@@ -382,8 +410,11 @@ def test_update_endpoint_clears_ceph_zonegroup_for_non_ceph_provider(db_session)
             provider=StorageProvider.CEPH,
             ceph_zonegroup=StorageEndpointCephZonegroup(
                 name="zg-a",
+                zone_name="z1",
                 global_replication_configured=True,
                 bucket_replication_allowed=True,
+                bucket_replication_target_zones=["z2"],
+                bucket_replication_owner_mode="rgw_account_supported",
             ),
         )
     )
@@ -398,8 +429,11 @@ def test_update_endpoint_clears_ceph_zonegroup_for_non_ceph_provider(db_session)
     persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == created.id).first()
     assert persisted is not None
     assert persisted.ceph_zonegroup_name is None
+    assert persisted.ceph_zone_name is None
     assert persisted.ceph_zonegroup_global_replication_configured is False
     assert persisted.ceph_zonegroup_bucket_replication_allowed is False
+    assert persisted.ceph_bucket_replication_target_zones_json == "[]"
+    assert persisted.ceph_bucket_replication_owner_mode == "rgw_user_only"
 
 
 def test_endpoint_coordinates_reject_invalid_ranges():
@@ -562,8 +596,11 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
                     "features_config": "features:\n  admin:\n    enabled: true\n",
                     "ceph_zonegroup": {
                         "name": "zg-env",
+                        "zone_name": "z1",
                         "global_replication_configured": True,
                         "bucket_replication_allowed": True,
+                        "bucket_replication_target_zones": ["z2"],
+                        "bucket_replication_owner_mode": "rgw_account_supported",
                     },
                     "latitude": 43.6047,
                     "longitude": 1.4442,
@@ -595,8 +632,11 @@ def test_sync_env_endpoints_skips_admin_ops_permissions_resolution(db_session, m
     assert synced[0].force_path_style is True
     assert synced[0].ceph_zonegroup is not None
     assert synced[0].ceph_zonegroup.name == "zg-env"
+    assert synced[0].ceph_zonegroup.zone_name == "z1"
     assert synced[0].ceph_zonegroup.global_replication_configured is True
     assert synced[0].ceph_zonegroup.bucket_replication_allowed is True
+    assert synced[0].ceph_zonegroup.bucket_replication_target_zones == ["z2"]
+    assert synced[0].ceph_zonegroup.bucket_replication_owner_mode == "rgw_account_supported"
     assert synced[0].latitude == 43.6047
     assert synced[0].longitude == 1.4442
     assert calls["count"] == 0
