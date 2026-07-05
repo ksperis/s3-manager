@@ -231,7 +231,14 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     expect(await screen.findByText("AK-PROJECT")).toBeInTheDocument();
-    expect(screen.getByText("Storage locations: Paris, Lyon")).toBeInTheDocument();
+    const projectScope = screen.getByRole("heading", { name: "zg-main" }).closest(".ui-surface-card");
+    expect(projectScope).not.toBeNull();
+    expect(within(projectScope!).getByText("Storage zone")).toBeInTheDocument();
+    expect(within(projectScope!).getByText("https://s3-z1.example.test")).toBeInTheDocument();
+    expect(within(projectScope!).getByText("Storage locations")).toBeInTheDocument();
+    expect(within(projectScope!).getByText("Paris")).toBeInTheDocument();
+    expect(within(projectScope!).getByText("Lyon")).toBeInTheDocument();
+    expect(within(projectScope!).getByText("1/2 key(s)")).toBeInTheDocument();
     expect(screen.getByText("Ceph zonegroup is not configured for this storage location.")).toBeInTheDocument();
     expect(screen.queryByText("Access-key management is disabled for this portal workspace.")).not.toBeInTheDocument();
     expect(mocks.fetchPortalProjectAccessKeysState).toHaveBeenCalledWith("proj-1");

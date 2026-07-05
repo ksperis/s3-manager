@@ -325,24 +325,24 @@ export default function PortalAccessKeysPage() {
   };
 
   const renderKeysTable = (keys: PortalAccessKey[], status: ReturnType<typeof resolveListTableStatus>, scope?: PortalAccessKeyScope) => (
-    <table className="ui-data-table min-w-[720px] divide-y divide-slate-200 dark:divide-slate-800 max-md:block max-md:w-full max-md:min-w-0">
-      <thead className="bg-slate-50 dark:bg-slate-900/50 max-md:hidden">
+    <table className="ui-data-table min-w-[720px] max-md:block max-md:w-full max-md:min-w-0">
+      <thead className="max-md:hidden">
         <tr>
-          <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <th>
             {t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}
           </th>
-          <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <th>
             {t({ en: "Status", fr: "Statut", de: "Status" })}
           </th>
-          <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <th>
             {t({ en: "Created on", fr: "Créée le", de: "Erstellt am" })}
           </th>
-          <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <th className="text-right">
             {t({ en: "Actions", fr: "Actions", de: "Aktionen" })}
           </th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 max-md:block max-md:w-full max-md:space-y-3 max-md:divide-y-0">
+      <tbody className="max-md:block max-md:w-full max-md:space-y-3">
         {status === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
         {status === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
         {status === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys yet. Create a key when you need to connect an external S3 tool.", fr: "Aucune clé d'accès externe pour le moment. Créez une clé lorsque vous devez connecter un outil S3 externe.", de: "Noch keine externen Zugriffsschlüssel. Erstellen Sie einen Schlüssel, wenn Sie ein externes S3-Werkzeug verbinden müssen." })} />}
@@ -356,40 +356,46 @@ export default function PortalAccessKeysPage() {
     const scopeMaxReached = scope.max_access_keys > 0 && keys.length >= scope.max_access_keys;
     const scopeCanCreate = scope.can_manage_access_keys && !scope.unavailable_reason && !scopeMaxReached && !busy;
     const countLabel = t({ en: `${keys.length}/${scope.max_access_keys || "-"} key(s)`, fr: `${keys.length}/${scope.max_access_keys || "-"} clé(s)`, de: `${keys.length}/${scope.max_access_keys || "-"} Schlüssel` });
-    const accountsLabel = scope.accounts
+    const accountLabels = scope.accounts
       .map((account) => account.display_name || account.account_name)
-      .filter(Boolean)
-      .join(", ");
+      .filter(Boolean);
+    const scopeKindLabel = scope.zonegroup
+      ? t({ en: "Storage zone", fr: "Zone de stockage", de: "Speicherzone" })
+      : t({ en: "Storage zone not configured", fr: "Zone de stockage non configurée", de: "Speicherzone nicht konfiguriert" });
     const status = resolveListTableStatus({
       loading: loading && !projectState,
       error: error && !projectState ? error : null,
       rowCount: keys.length,
     });
     return (
-      <div key={scope.scope_id} className="ui-surface-card space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {scope.zonegroup
-                ? t({ en: "Storage zone", fr: "Zone de stockage", de: "Speicherzone" })
-                : t({ en: "Storage zone not configured", fr: "Zone de stockage non configurée", de: "Speicherzone nicht konfiguriert" })}
-            </p>
-            <h2 className="break-words ui-card-title text-slate-900 dark:text-white">{scope.label}</h2>
-            <p className="ui-body text-slate-600 dark:text-slate-300">
-              {scope.s3_endpoint
-                ? t({ en: `S3 endpoint ${scope.s3_endpoint}`, fr: `Endpoint S3 ${scope.s3_endpoint}`, de: `S3-Endpunkt ${scope.s3_endpoint}` })
-                : t({ en: "No S3 endpoint is available for this storage zone.", fr: "Aucun endpoint S3 n'est disponible pour cette zone de stockage.", de: "Für diese Speicherzone ist kein S3-Endpunkt verfügbar." })}
-            </p>
-            {accountsLabel && (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                {t({ en: `Storage locations: ${accountsLabel}`, fr: `Localisations de stockage : ${accountsLabel}`, de: `Speicherorte: ${accountsLabel}` })}
-              </p>
+      <div key={scope.scope_id} className="ui-surface-card overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-[color:var(--ui-border-soft)] px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <UiBadge tone={scope.zonegroup ? "neutral" : "warning"}>{scopeKindLabel}</UiBadge>
+              <h2 className="min-w-0 break-words ui-body font-semibold text-[var(--ui-text)]">{scope.label}</h2>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 ui-caption text-[var(--ui-text-muted)]">
+              <span className="font-semibold">{t({ en: "Endpoint", fr: "Endpoint", de: "Endpoint" })}</span>
+              {scope.s3_endpoint ? (
+                <span className="min-w-0 max-w-full break-all font-mono text-[var(--ui-text)]">{scope.s3_endpoint}</span>
+              ) : (
+                <span>{t({ en: "No S3 endpoint is available", fr: "Aucun endpoint S3 disponible", de: "Kein S3-Endpunkt verfügbar" })}</span>
+              )}
+            </div>
+            {accountLabels.length > 0 && (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="ui-caption font-semibold text-[var(--ui-text-muted)]">
+                  {t({ en: "Storage locations", fr: "Localisations de stockage", de: "Speicherorte" })}
+                </span>
+                {accountLabels.map((label) => (
+                  <UiBadge key={label} tone="neutral">{label}</UiBadge>
+                ))}
+              </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <span className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              {countLabel}
-            </span>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <UiBadge tone="neutral">{countLabel}</UiBadge>
             <UiButton
               onClick={() => handleCreateProjectKey(scope)}
               size="sm"
@@ -402,16 +408,18 @@ export default function PortalAccessKeysPage() {
           </div>
         </div>
 
-        {scope.unavailable_reason && <PageBanner tone="warning">{scope.unavailable_reason}</PageBanner>}
-        {!scope.unavailable_reason && !scope.can_manage_access_keys && (
-          <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this project scope.", fr: "La gestion des clés d'accès est désactivée pour ce périmètre projet.", de: "Die Verwaltung von Zugriffsschlüsseln ist für diesen Projekt-Scope deaktiviert." })}</PageBanner>
-        )}
-        {!scope.unavailable_reason && scope.can_manage_access_keys && scopeMaxReached && (
-          <PageBanner tone="info">{t({ en: "The maximum number of project access keys has been reached for this storage zone.", fr: "Le nombre maximal de clés d'accès projet est atteint pour cette zone de stockage.", de: "Die maximale Anzahl von Projekt-Zugriffsschlüsseln ist für diese Speicherzone erreicht." })}</PageBanner>
-        )}
+        <div className="space-y-3 p-4">
+          {scope.unavailable_reason && <PageBanner tone="warning">{scope.unavailable_reason}</PageBanner>}
+          {!scope.unavailable_reason && !scope.can_manage_access_keys && (
+            <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this project scope.", fr: "La gestion des clés d'accès est désactivée pour ce périmètre projet.", de: "Die Verwaltung von Zugriffsschlüsseln ist für diesen Projekt-Scope deaktiviert." })}</PageBanner>
+          )}
+          {!scope.unavailable_reason && scope.can_manage_access_keys && scopeMaxReached && (
+            <PageBanner tone="info">{t({ en: "The maximum number of project access keys has been reached for this storage zone.", fr: "Le nombre maximal de clés d'accès projet est atteint pour cette zone de stockage.", de: "Die maximale Anzahl von Projekt-Zugriffsschlüsseln ist für diese Speicherzone erreicht." })}</PageBanner>
+          )}
 
-        <div className="overflow-x-auto max-md:overflow-visible">
-          {renderKeysTable(keys, status, scope)}
+          <div className="overflow-x-auto max-md:overflow-visible">
+            {renderKeysTable(keys, status, scope)}
+          </div>
         </div>
       </div>
     );
