@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -39,6 +40,7 @@ from app.models.project import (
     ProjectUserLinkInput,
     validate_project_role,
 )
+from app.models.app_settings import PortalSettingsOverride
 from app.models.s3_account import S3AccountCreate
 from app.routers.dependencies_internal.types import AccountAccess, AccountCapabilities
 from app.services.effective_access_service import EffectiveAccountLink
@@ -276,7 +278,26 @@ class ProjectsService:
             ),
             capabilities=self._portal_capabilities(access.role),
             role=access.role,
+            portal_settings_override=self._project_portal_settings_override(access.project),
         )
+
+    def _project_portal_settings_override(self, project: Project) -> PortalSettingsOverride:
+        raw = project.portal_settings_override
+        if not raw:
+            return PortalSettingsOverride()
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            return PortalSettingsOverride()
+        if not isinstance(payload, dict):
+            return PortalSettingsOverride()
+        admin_payload = payload.get("admin")
+        if not isinstance(admin_payload, dict):
+            return PortalSettingsOverride()
+        try:
+            return PortalSettingsOverride.model_validate(admin_payload)
+        except Exception:
+            return PortalSettingsOverride()
 
     def project_to_summary(self, project: Project) -> ProjectSummary:
         return ProjectSummary(

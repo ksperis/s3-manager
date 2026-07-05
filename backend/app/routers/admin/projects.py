@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User
+from app.db import Project as ProjectDb, User
+from app.models.app_settings import PortalSettingsOverride
+from app.models.portal import PortalProjectSettings
 from app.models.project import (
     PaginatedProjectsResponse,
     Project,
@@ -19,6 +21,7 @@ from app.models.project import (
 from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_optional_super_admin_rgw_client
 from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
+from app.services.portal_service import get_portal_service
 from app.services.projects_service import ProjectsService, get_projects_service
 from app.services.s3_accounts_service import get_s3_accounts_service
 
@@ -76,6 +79,43 @@ def get_project(
         return service.project_to_out(service.get_project(project_id))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=sanitize_error_detail(str(exc))) from exc
+
+
+@router.get("/{project_id}/portal-settings", response_model=PortalProjectSettings, response_model_exclude_unset=True)
+def get_project_portal_settings(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_super_admin),
+) -> PortalProjectSettings:
+    project = db.query(ProjectDb).filter(ProjectDb.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    service = get_portal_service(db)
+    return service.get_portal_project_settings(project)
+
+
+@router.put("/{project_id}/portal-settings", response_model=PortalProjectSettings, response_model_exclude_unset=True)
+def update_project_portal_settings(
+    project_id: int,
+    payload: PortalSettingsOverride,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> PortalProjectSettings:
+    project = db.query(ProjectDb).filter(ProjectDb.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    service = get_portal_service(db)
+    updated = service.update_admin_project_portal_settings_override(project, payload)
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="update_project_portal_settings",
+        entity_type="project",
+        entity_id=str(project_id),
+        metadata={"admin_override": payload.model_dump(exclude_unset=True, exclude_none=False)},
+    )
+    return updated
 
 
 @router.post("", response_model=Project, status_code=status.HTTP_201_CREATED)

@@ -63,7 +63,13 @@ from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
 
 
-def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
+def _portal_access(
+    account,
+    user,
+    role=AccountRole.PORTAL_USER.value,
+    can_manage_buckets=False,
+    portal_settings_override: PortalSettingsOverride | None = None,
+):
     return AccountAccess(
         account=account,
         actor=user,
@@ -76,6 +82,7 @@ def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage
             can_view_root_key=False,
             using_root_key=False,
         ),
+        portal_settings_override=portal_settings_override,
     )
 
 
@@ -998,6 +1005,27 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     assert state.can_create_storage_spaces is False
 
 
+def test_get_state_uses_project_portal_settings_override(db_session):
+    account = S3Account(name="portal-project-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-project-user-create-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(
+        account,
+        user,
+        role=AccountRole.PORTAL_USER.value,
+        can_manage_buckets=False,
+        portal_settings_override=PortalSettingsOverride(allow_portal_user_bucket_create=False),
+    )
+    service = PortalService(db_session)
+
+    state = service.get_state(user, access)
+
+    assert state.can_manage_buckets is False
+    assert state.can_create_storage_spaces is False
+
+
 def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session):
     account = S3Account(name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-empty-scope@example.com", hashed_password="x", role="ui_user")
@@ -1687,6 +1715,50 @@ def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatc
     assert metadata.visibility == "private"
 
 
+def test_portal_user_storage_space_creation_uses_project_override(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-project-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-project-create@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(
+        account,
+        user,
+        role=AccountRole.PORTAL_USER.value,
+        can_manage_buckets=False,
+        portal_settings_override=PortalSettingsOverride(allow_portal_user_bucket_create=True),
+    )
+    service = PortalService(db_session)
+    base_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    created_buckets = []
+    monkeypatch.setattr(service, "_portal_settings", lambda: base_settings)
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        service,
+        "create_bucket",
+        lambda _user, _access, bucket_name, **kwargs: created_buckets.append((bucket_name, kwargs.get("portal_settings"))),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data")
+
+    assert storage_space.name == "Research Data"
+    assert len(created_buckets) == 1
+    _bucket_name, applied_settings = created_buckets[0]
+    assert applied_settings.allow_portal_user_bucket_create is True
+
+
 def test_portal_user_cannot_create_shared_storage_space(monkeypatch, db_session):
     account = S3Account(name="portal-storage-user-shared-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-user-shared-denied@example.com", hashed_password="x", role="ui_user")
@@ -2215,11 +2287,15 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     assert db_session.query(PortalPublicLink).filter_by(token="restore-link-token").one().revoked_at is None
 
 
-def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_session):
+def test_project_portal_settings_override_applies_only_to_project_context(monkeypatch, db_session):
     account = S3Account(
         name="portal-storage-override",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
+    )
+    project = Project(
+        name="Project portal overrides",
+        description=None,
         portal_settings_override=json.dumps(
             {
                 "admin": {"allow_portal_user_bucket_create": False},
@@ -2231,7 +2307,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
             }
         ),
     )
-    db_session.add(account)
+    db_session.add_all([account, project])
     db_session.commit()
 
     base = PortalSettings()
@@ -2239,27 +2315,37 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
 
     effective = service.get_effective_portal_settings(account)
-    assert effective.allow_portal_user_bucket_create is False
+    assert effective.allow_portal_user_bucket_create is True
     assert effective.allow_portal_named_bucket_create is False
     assert effective.allow_portal_user_access_key_create is True
     assert effective.bucket_defaults.enable_cors is True
 
-    account_settings = service.get_portal_account_settings(account).model_dump(exclude_unset=True)
-    assert account_settings["admin_override"]["allow_portal_user_bucket_create"] is False
-    assert "portal_manager_override" not in account_settings
-    assert "override_policy" not in account_settings
+    project_settings = service.get_portal_project_settings(project).model_dump(exclude_unset=True)
+    assert project_settings["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert project_settings["effective"]["allow_portal_user_bucket_create"] is False
+    assert "portal_manager_override" not in project_settings
+    assert "override_policy" not in project_settings
 
-    service.update_admin_portal_settings_override(
+    project_access = _portal_access(
         account,
+        User(email="project-override-user@example.test", hashed_password="x", role="ui_user"),
+        portal_settings_override=PortalSettingsOverride.model_validate(project_settings["admin_override"]),
+    )
+    project_effective = service._effective_portal_settings_for_access(project_access)
+    assert project_effective.allow_portal_user_bucket_create is False
+
+    service.update_admin_project_portal_settings_override(
+        project,
         PortalSettingsOverride(
             allow_portal_user_bucket_create=True,
             bucket_defaults={"enable_cors": False},
         ),
     )
-    db_session.refresh(account)
-    stored = json.loads(account.portal_settings_override)
+    db_session.refresh(project)
+    stored = json.loads(project.portal_settings_override)
     assert stored == {"admin": {"allow_portal_user_bucket_create": True, "bucket_defaults": {"enable_cors": False}}}
-    assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
+    assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is True
+    assert service.get_portal_project_settings(project).effective.bucket_defaults.enable_cors is False
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):

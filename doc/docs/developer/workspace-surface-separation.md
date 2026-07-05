@@ -215,9 +215,9 @@ removed from the Portal router and API client:
 - `/portal/settings` advanced Portal settings payloads.
 
 Use `/portal/storage-spaces*` and `/portal/storage-spaces/{spaceId}/shares*`
-for end-user collaboration workflows. Use `/admin/accounts/{accountId}/portal-settings`
+for end-user collaboration workflows. Use `/admin/projects/{projectId}/portal-settings`
 for super-admin-only Portal override governance. Portal managers cannot manage
-or apply account Portal overrides. Native IAM, policy compliance, access-key, and
+or apply Project Portal overrides. Native IAM, policy compliance, access-key, and
 bucket administration workflows belong outside the Portal user surface. Future
 Portal preferences use the simple `/users/me` `ui_preferences` contract, not
 the advanced Portal settings payload. Stored preferences such as theme and
@@ -239,7 +239,7 @@ Use these replacement surfaces instead:
 - External S3 credentials:
   `/portal/access-keys`, excluding the active Portal runtime key.
 - Super-admin Portal override governance:
-  `/admin/accounts/{accountId}/portal-settings`.
+  `/admin/projects/{projectId}/portal-settings`.
 
 Native IAM access keys, IAM compliance remediation, bucket-user grants, and
 bucket-centric administration should be implemented in Manager or Admin when

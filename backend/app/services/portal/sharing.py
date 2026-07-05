@@ -362,7 +362,7 @@ class PortalSharingMixin:
                     iam_service,
                     iam_link.iam_username,
                     account_role,
-                    portal_settings=self._effective_portal_settings(access.account),
+                    portal_settings=self._effective_portal_settings_for_access(access),
                 )
                 self._sync_user_storage_space_projection(
                     target,

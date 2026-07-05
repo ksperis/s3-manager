@@ -6,15 +6,19 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   createProject,
   deleteProject,
+  fetchProjectPortalSettings,
   listProjects,
   provisionProjectAccounts,
   updateProject,
+  updateProjectPortalSettings,
   type Project,
   type ProjectAccountLinkInput,
   type ProjectGroupLinkInput,
   type ProjectPortalRole,
+  type PortalProjectSettings,
   type ProjectUserLinkInput,
 } from "../../api/projects";
+import type { PortalSettingsOverride } from "../../api/appSettings";
 import { listMinimalS3Accounts, type S3AccountSummary } from "../../api/accounts";
 import { listMinimalUsers, type UserSummary } from "../../api/users";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
@@ -25,6 +29,7 @@ import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PaginationControls from "../../components/PaginationControls";
 import TableEmptyState from "../../components/TableEmptyState";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -47,6 +52,7 @@ import {
   AdminAssociationSectionHeader,
 } from "./AdminAssociationPicker";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
+import PortalOverridesPanel from "./PortalOverridesPanel";
 
 type ProjectFormAccountLink = ProjectAccountLinkInput & { account_id: number | "" };
 type ProjectFormUserLink = ProjectUserLinkInput & { user_id: number | "" };
@@ -134,6 +140,8 @@ function endpointLabel(endpoint: StorageEndpoint): string {
 }
 
 export default function ProjectsPage() {
+  const { generalSettings } = useGeneralSettings();
+  const portalEnabled = generalSettings.portal_enabled;
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +174,11 @@ export default function ProjectsPage() {
   const [provisionEmail, setProvisionEmail] = useState("");
   const [provisioning, setProvisioning] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [portalSettings, setPortalSettings] = useState<PortalProjectSettings | null>(null);
+  const [portalSettingsLoading, setPortalSettingsLoading] = useState(false);
+  const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
+  const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
+  const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
 
   const accountById = useMemo(() => new Map(accounts.map((account) => [accountId(account), account])), [accounts]);
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
@@ -263,6 +276,22 @@ export default function ProjectsPage() {
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
+
+  useEffect(() => {
+    setPortalSettings(null);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    setPortalSettingsLoading(false);
+    if (!showModal || !editingProject || !portalEnabled) return;
+    setPortalSettingsLoading(true);
+    fetchProjectPortalSettings(editingProject.id)
+      .then((data) => setPortalSettings(data))
+      .catch((err) => {
+        console.error(err);
+        setPortalSettingsError(extractApiError(err, "Unable to load project portal overrides."));
+      })
+      .finally(() => setPortalSettingsLoading(false));
+  }, [editingProject, portalEnabled, showModal]);
 
   const openCreateModal = () => {
     setEditingProject(null);
@@ -375,6 +404,41 @@ export default function ProjectsPage() {
       setActionError(extractApiError(err, "Unable to provision project accounts."));
     } finally {
       setProvisioning(false);
+    }
+  };
+
+  const handleSavePortalOverrides = async (payload: PortalSettingsOverride) => {
+    if (!editingProject || portalSettingsSaving) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    try {
+      const updated = await updateProjectPortalSettings(editingProject.id, payload);
+      setPortalSettings(updated);
+      setPortalSettingsMessage("Portal overrides saved.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError(extractApiError(err, "Unable to save project portal overrides."));
+    } finally {
+      setPortalSettingsSaving(false);
+    }
+  };
+
+  const handleResetPortalOverrides = async () => {
+    if (!editingProject || portalSettingsSaving) return;
+    if (!confirmAction("Reset portal overrides for this project?")) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    try {
+      const updated = await updateProjectPortalSettings(editingProject.id, {});
+      setPortalSettings(updated);
+      setPortalSettingsMessage("Portal overrides reset.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError(extractApiError(err, "Unable to reset project portal overrides."));
+    } finally {
+      setPortalSettingsSaving(false);
     }
   };
 
@@ -807,6 +871,19 @@ export default function ProjectsPage() {
                   {provisioning ? "Provisioning..." : "Provision selected endpoints"}
                 </button>
               </section>
+            ) : null}
+
+            {editingProject && portalEnabled ? (
+              <PortalOverridesPanel
+                settings={portalSettings}
+                loading={portalSettingsLoading}
+                saving={portalSettingsSaving}
+                error={portalSettingsError}
+                message={portalSettingsMessage}
+                targetLabel="project"
+                onSave={(payload) => void handleSavePortalOverrides(payload)}
+                onReset={() => void handleResetPortalOverrides()}
+              />
             ) : null}
 
             <div className="flex justify-end gap-2 border-t border-[color:var(--ui-border-soft)] pt-4">

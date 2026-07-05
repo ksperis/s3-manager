@@ -82,7 +82,7 @@ class PortalStateUsageMixin:
                 )
                 iam_provisioned = has_active_portal_credentials
         quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
-        portal_settings = self._effective_portal_settings(account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         can_create_storage_spaces = bool(
             access.capabilities.can_manage_buckets
             or (

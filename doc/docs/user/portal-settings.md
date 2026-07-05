@@ -30,7 +30,7 @@ The setting is saved and the related Portal page reflects the new behavior.
 
 ## If you do not see this action
 
-Some Portal settings are controlled by Admin or by account-level Portal policy. Ask an admin when a card is missing, locked, or disabled.
+Some Portal settings are controlled by Admin or by Project-level Portal policy. Ask an admin when a card is missing, locked, or disabled.
 
 ## Limits / feature flags
 

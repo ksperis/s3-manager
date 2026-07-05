@@ -419,6 +419,10 @@ class PortalAccountSettings(BaseModel):
     admin_override: PortalSettingsOverride
 
 
+class PortalProjectSettings(PortalAccountSettings):
+    pass
+
+
 class PortalEligibility(BaseModel):
     eligible: bool
     reasons: list[str] = Field(default_factory=list)

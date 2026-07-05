@@ -8,8 +8,6 @@ const updateS3AccountMock = vi.fn();
 const createS3AccountMock = vi.fn();
 const deleteS3AccountMock = vi.fn();
 const importS3AccountsMock = vi.fn();
-const fetchAccountPortalSettingsMock = vi.fn();
-const updateAccountPortalSettingsMock = vi.fn();
 
 const listStorageEndpointsMock = vi.fn();
 const getStorageEndpointMock = vi.fn();
@@ -24,27 +22,6 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
   label,
   color_key,
   scope,
-});
-
-const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
-  effective: {
-    allow_portal_key: false,
-    allow_portal_user_bucket_create: true,
-    allow_portal_named_bucket_create: false,
-    allow_portal_user_access_key_create: true,
-    max_portal_user_access_keys: 2,
-    iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"], advanced_policy: null },
-    iam_group_user_policy: { actions: ["s3:ListAllMyBuckets"], advanced_policy: null },
-    bucket_access_policy: { actions: ["s3:GetObject"], advanced_policy: null },
-    bucket_defaults: {
-      versioning: false,
-      enable_cors: false,
-      enable_lifecycle: false,
-      cors_allowed_origins: ["https://portal.example.test"],
-    },
-  },
-  admin_override: {},
-  ...overrides,
 });
 
 vi.mock("./useAdminAccountStats", () => ({
@@ -62,9 +39,6 @@ vi.mock("../../api/accounts", () => ({
   createS3Account: (payload: unknown) => createS3AccountMock(payload),
   deleteS3Account: (accountId: number, options?: unknown) => deleteS3AccountMock(accountId, options),
   importS3Accounts: (payload: unknown) => importS3AccountsMock(payload),
-  fetchAccountPortalSettings: (accountId: number) => fetchAccountPortalSettingsMock(accountId),
-  updateAccountPortalSettings: (accountId: number, payload: unknown) =>
-    updateAccountPortalSettingsMock(accountId, payload),
 }));
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -186,8 +160,6 @@ describe("AccountsPage modal tabs", () => {
     createS3AccountMock.mockResolvedValue(undefined);
     deleteS3AccountMock.mockResolvedValue(undefined);
     importS3AccountsMock.mockResolvedValue([]);
-    fetchAccountPortalSettingsMock.mockResolvedValue(makePortalAccountSettings());
-    updateAccountPortalSettingsMock.mockResolvedValue(makePortalAccountSettings());
   });
 
   it("shows the compact empty state when no RGW accounts exist", async () => {
@@ -463,82 +435,15 @@ describe("AccountsPage modal tabs", () => {
     );
   });
 
-  it("shows portal overrides tab when the portal feature is enabled", async () => {
+  it("does not expose portal overrides from account edits", async () => {
     portalEnabled = true;
-    fetchAccountPortalSettingsMock.mockResolvedValueOnce(makePortalAccountSettings());
 
-    render(<AccountsPage />);
-
-    await screen.findByText("acc-1");
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-
-    expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
-    expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
-    expect(screen.queryByText("Portal manager overrides are active for this account.")).not.toBeInTheDocument();
-    expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
-  });
-
-  it("hides portal overrides tab when the portal feature is disabled", async () => {
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
     expect(screen.queryByRole("button", { name: "Portal overrides" })).not.toBeInTheDocument();
-    expect(fetchAccountPortalSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it("saves account portal overrides from the portal tab", async () => {
-    portalEnabled = true;
-    updateAccountPortalSettingsMock.mockResolvedValueOnce(
-      makePortalAccountSettings({
-        admin_override: { allow_portal_user_bucket_create: false },
-      })
-    );
-
-    render(<AccountsPage />);
-
-    await screen.findByText("acc-1");
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Portal user Storage Space creation");
-
-    const storageSpaceCreation = screen
-      .getByText("Portal user Storage Space creation")
-      .closest("div")?.parentElement?.parentElement;
-    const namedBucketCreation = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
-    expect(storageSpaceCreation).not.toBeNull();
-    expect(namedBucketCreation).not.toBeNull();
-    fireEvent.change(within(storageSpaceCreation as HTMLElement).getByRole("combobox"), {
-      target: { value: "disabled" },
-    });
-    fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
-
-    await waitFor(() => {
-      expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
-        allow_portal_user_bucket_create: false,
-        allow_portal_named_bucket_create: true,
-      });
-    });
-  });
-
-  it("resets account portal overrides from the portal tab", async () => {
-    portalEnabled = true;
-
-    render(<AccountsPage />);
-
-    await screen.findByText("acc-1");
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Portal user Storage Space creation");
-
-    fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
-
-    await waitFor(() => {
-      expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {});
-    });
   });
 
   it("edits tags inline from the general tab", async () => {

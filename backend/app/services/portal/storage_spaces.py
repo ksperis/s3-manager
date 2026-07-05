@@ -281,7 +281,7 @@ class PortalStorageSpacesMixin:
         project_key: Optional[str] = None,
         dataset_label: Optional[str] = None,
     ) -> PortalStorageSpace:
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         allow_portal_user_create = portal_settings.allow_portal_user_bucket_create
         is_portal_user = access.role == AccountRole.PORTAL_USER.value
         if not (access.capabilities.can_manage_buckets or (allow_portal_user_create and is_portal_user)):
@@ -393,7 +393,7 @@ class PortalStorageSpacesMixin:
         )
         if cleaned_bucket_name not in {bucket.get("name") for bucket in buckets}:
             raise RuntimeError("Bucket not found for this account.")
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)

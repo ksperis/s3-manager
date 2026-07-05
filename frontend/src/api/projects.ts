@@ -3,6 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
+import type { PortalSettingsOverride } from "./appSettings";
+import type { PortalAccountSettings } from "./portal";
 import type { PaginatedResponse } from "./types";
 
 export type ProjectPortalRole = "portal_user" | "portal_manager";
@@ -71,6 +73,7 @@ export type ProjectSummary = {
 };
 
 export type PaginatedProjectsResponse = PaginatedResponse<Project>;
+export type PortalProjectSettings = PortalAccountSettings;
 
 export type ListProjectsParams = {
   page?: number;
@@ -139,5 +142,18 @@ export async function provisionProjectAccounts(
     `/admin/projects/${projectId}/provision-accounts`,
     payload
   );
+  return data;
+}
+
+export async function fetchProjectPortalSettings(projectId: number): Promise<PortalProjectSettings> {
+  const { data } = await client.get<PortalProjectSettings>(`/admin/projects/${projectId}/portal-settings`);
+  return data;
+}
+
+export async function updateProjectPortalSettings(
+  projectId: number,
+  payload: PortalSettingsOverride
+): Promise<PortalProjectSettings> {
+  const { data } = await client.put<PortalProjectSettings>(`/admin/projects/${projectId}/portal-settings`, payload);
   return data;
 }

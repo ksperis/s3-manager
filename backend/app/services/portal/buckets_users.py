@@ -15,7 +15,7 @@ class PortalBucketsUsersMixin:
         portal_settings: Optional[PortalSettings] = None,
     ) -> Bucket:
         account = access.account
-        portal_defaults = portal_settings or self._effective_portal_settings(account)
+        portal_defaults = portal_settings or self._effective_portal_settings_for_access(access)
         versioning_flag = portal_defaults.bucket_defaults.versioning if versioning is None else versioning
         is_portal_user_creation = bool(
             access.role == AccountRole.PORTAL_USER.value and portal_defaults.allow_portal_user_bucket_create
@@ -80,7 +80,7 @@ class PortalBucketsUsersMixin:
         use_root: bool = False,
     ) -> None:
         account = access.account
-        portal_settings = self._effective_portal_settings(account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)

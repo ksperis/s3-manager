@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from app.db import (
@@ -99,6 +100,48 @@ def test_portal_projects_use_project_links_and_group_role_precedence(db_session)
     account_access = service.account_access_for_project(access, primary.id)
     assert account_access.role == AccountRole.PORTAL_MANAGER.value
     assert account_access.account.id == primary.id
+
+
+def test_same_account_project_access_uses_project_specific_portal_settings_override(db_session):
+    endpoint = _seed_endpoint(db_session, name="shared", zonegroup="zg-shared")
+    account = _seed_account(db_session, name="shared-account", endpoint=endpoint)
+    user = _seed_user(db_session, "project-specific-settings@example.test")
+    first = Project(
+        name="First project",
+        description=None,
+        portal_settings_override=json.dumps({"admin": {"allow_portal_user_bucket_create": False}}),
+    )
+    second = Project(
+        name="Second project",
+        description=None,
+        portal_settings_override=json.dumps({"admin": {"allow_portal_user_bucket_create": True}}),
+    )
+    db_session.add_all([first, second])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectS3Account(project_id=first.id, account_id=account.id, display_name="First", sort_order=0),
+            ProjectS3Account(project_id=second.id, account_id=account.id, display_name="Second", sort_order=0),
+            UserProject(user_id=user.id, project_id=first.id, account_role=AccountRole.PORTAL_USER.value),
+            UserProject(user_id=user.id, project_id=second.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    db_session.commit()
+
+    service = ProjectsService(db_session)
+
+    first_access = service.account_access_for_project(
+        service.resolve_portal_project_access(user, first.id),
+        account.id,
+    )
+    second_access = service.account_access_for_project(
+        service.resolve_portal_project_access(user, second.id),
+        account.id,
+    )
+
+    assert first_access.account.id == second_access.account.id == account.id
+    assert first_access.portal_settings_override.allow_portal_user_bucket_create is False
+    assert second_access.portal_settings_override.allow_portal_user_bucket_create is True
 
 
 def test_effective_access_exposes_project_links_for_workspace_guard(db_session):

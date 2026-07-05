@@ -2,9 +2,9 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
-from app.db import S3Account
+from app.db import Project
 from app.main import app
-from app.routers.admin import s3_accounts as admin_accounts_router
+from app.routers.admin import projects as admin_projects_router
 
 
 class _CapturingAuditService:
@@ -15,22 +15,20 @@ class _CapturingAuditService:
         self.actions.append(kwargs)
 
 
-def _seed_account(db_session, *, overrides: dict | None = None) -> S3Account:
-    account = S3Account(
-        name="portal-admin-account",
-        rgw_account_id="RGW-PORTAL-ADMIN",
-        rgw_access_key="AK",
-        rgw_secret_key="SK",
+def _seed_project(db_session, *, overrides: dict | None = None) -> Project:
+    project = Project(
+        name="portal-admin-project",
+        description="Portal project settings test",
         portal_settings_override=json.dumps(overrides) if overrides else None,
     )
-    db_session.add(account)
+    db_session.add(project)
     db_session.commit()
-    db_session.refresh(account)
-    return account
+    db_session.refresh(project)
+    return project
 
 
-def test_admin_get_account_portal_settings_returns_account_overrides(client, db_session):
-    account = _seed_account(
+def test_admin_get_project_portal_settings_returns_project_overrides(client, db_session):
+    project = _seed_project(
         db_session,
         overrides={
             "admin": {"allow_portal_user_bucket_create": False},
@@ -38,19 +36,20 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
         },
     )
 
-    response = client.get(f"/api/admin/accounts/{account.id}/portal-settings")
+    response = client.get(f"/api/admin/projects/{project.id}/portal-settings")
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert body["effective"]["allow_portal_user_bucket_create"] is False
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
 
 
-def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_override_and_audits(client, db_session):
+def test_admin_put_project_portal_settings_replaces_legacy_portal_manager_override_and_audits(client, db_session):
     audit = _CapturingAuditService()
-    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: audit
-    account = _seed_account(
+    app.dependency_overrides[admin_projects_router.get_audit_logger] = lambda: audit
+    project = _seed_project(
         db_session,
         overrides={
             "portal_manager": {
@@ -61,7 +60,7 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
     )
 
     response = client.put(
-        f"/api/admin/accounts/{account.id}/portal-settings",
+        f"/api/admin/projects/{project.id}/portal-settings",
         json={
             "allow_portal_user_bucket_create": False,
             "bucket_defaults": {"versioning": True},
@@ -75,19 +74,34 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
 
-    db_session.refresh(account)
-    stored = json.loads(account.portal_settings_override)
+    db_session.refresh(project)
+    stored = json.loads(project.portal_settings_override)
     assert stored["admin"]["allow_portal_user_bucket_create"] is False
     assert "portal_manager" not in stored
 
     assert len(audit.actions) == 1
-    assert audit.actions[0]["action"] == "update_account_portal_settings"
+    assert audit.actions[0]["action"] == "update_project_portal_settings"
     assert audit.actions[0]["scope"] == "admin"
-    assert audit.actions[0]["account_id"] == account.id
+    assert audit.actions[0]["entity_type"] == "project"
+    assert audit.actions[0]["entity_id"] == str(project.id)
     assert audit.actions[0]["metadata"]["admin_override"]["bucket_defaults"]["versioning"] is True
 
 
-def test_admin_account_portal_settings_returns_404_for_unknown_account(client):
-    response = client.get("/api/admin/accounts/999999/portal-settings")
+def test_admin_put_project_portal_settings_resets_with_empty_payload(client, db_session):
+    project = _seed_project(
+        db_session,
+        overrides={"admin": {"allow_portal_user_bucket_create": False}},
+    )
+
+    response = client.put(f"/api/admin/projects/{project.id}/portal-settings", json={})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["admin_override"] == {}
+    db_session.refresh(project)
+    assert project.portal_settings_override is None
+
+
+def test_admin_project_portal_settings_returns_404_for_unknown_project(client):
+    response = client.get("/api/admin/projects/999999/portal-settings")
 
     assert response.status_code == 404

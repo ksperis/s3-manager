@@ -17,7 +17,7 @@ class PortalAccessKeysMixin:
         return self._list_access_keys(link, iam_service, include_portal=False)
 
     def get_access_keys_state(self, user: User, access: "AccountAccess") -> PortalAccessKeysState:
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         link = self._existing_portal_link(user, access.account)
         iam_user = None
         access_keys: list[PortalAccessKey] = []
@@ -40,13 +40,13 @@ class PortalAccessKeysMixin:
         )
 
     def _ensure_access_key_management_allowed(self, access: "AccountAccess") -> PortalSettings:
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         if not portal_settings.allow_portal_user_access_key_create:
             raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         return portal_settings
 
     def create_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         if not portal_settings.allow_portal_user_access_key_create:
             raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         iam_service = self._get_iam_service(access.account)
@@ -91,7 +91,7 @@ class PortalAccessKeysMixin:
         account = access.account
         iam_service = self._get_iam_service(account)
         link, _, created = self._ensure_portal_user(user, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         self._ensure_policy_and_key(link, iam_service)
         state = self.get_state(user, access)
@@ -101,7 +101,7 @@ class PortalAccessKeysMixin:
     def rotate_portal_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
+        portal_settings = self._effective_portal_settings_for_access(access)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
