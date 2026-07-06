@@ -147,6 +147,8 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
                         listed_versions=1,
                         deleted_objects=2,
                         deleted_versions=1,
+                        total_entries_estimate=3,
+                        total_entries_final=True,
                     )
                 )
             return _result()
@@ -179,6 +181,8 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     assert "event: progress" in response.text
     assert "event: result" in response.text
     assert '"status":"completed"' in response.text
+    assert '"total_entries_estimate":3' in response.text
+    assert '"total_entries_final":true' in response.text
     targets = captured["targets"]
     assert targets[0].bucket_name == "bucket-a"
     assert targets[0].context_id == "s3u-1"
@@ -203,6 +207,8 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
                         listed_versions=1,
                         deleted_objects=2,
                         deleted_versions=1,
+                        total_entries_estimate=3,
+                        total_entries_final=True,
                     )
                 )
             return _result().model_copy(update={"status": "completed", "bucket_deleted": True})
@@ -235,6 +241,8 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     assert "event: progress" in response.text
     assert "event: result" in response.text
     assert '"bucket_deleted":true' in response.text
+    assert '"total_entries_estimate":3' in response.text
+    assert '"total_entries_final":true' in response.text
     target = captured["target"]
     assert target.bucket_name == "bucket-a"
     assert target.context_id == "s3u-1"

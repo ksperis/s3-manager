@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.services import bucket_purge_service
 from app.services.bucket_purge_service import (
     BucketPurgeOptions,
     BucketPurgeResolvedTarget,
@@ -94,3 +95,76 @@ def test_delete_bucket_with_purge_deletes_large_bucket_without_entry_limit(monke
     assert result.deleted_versions == 0
     assert sum(len(call) for call in client.delete_object_calls) == 11000
     assert client.delete_bucket_calls == ["bucket-huge"]
+
+
+def test_purge_progress_uses_rgw_stats_entry_estimate_before_listing(monkeypatch):
+    class EstimateBucketsService:
+        def list_buckets(self, account, *, with_stats=True):
+            assert with_stats is True
+            return [SimpleNamespace(name="bucket-a", object_count=5)]
+
+    class PurgeClient:
+        def list_objects_v2(self, **kwargs):
+            return {"Contents": [{"Key": "one.txt"}, {"Key": "two.txt"}]}
+
+        def list_object_versions(self, **kwargs):
+            return {}
+
+        def delete_objects(self, **kwargs):
+            objects = list(kwargs["Delete"]["Objects"])
+            return {"Deleted": objects}
+
+    monkeypatch.setattr(bucket_purge_service, "BucketsService", EstimateBucketsService)
+    monkeypatch.setattr(BucketPurgeService, "_build_client", lambda self, account: PurgeClient())
+    progress_events = []
+
+    result = BucketPurgeService().run(
+        [BucketPurgeResolvedTarget(account=SimpleNamespace(), bucket_name="bucket-a", context_id="s3u-1")],
+        BucketPurgeOptions(parallelism=4, include_versions=True),
+        progress_callback=progress_events.append,
+    )
+
+    assert result.status == "completed"
+    assert progress_events[0].stage == "prepare"
+    assert progress_events[0].total_entries_estimate == 5
+    assert progress_events[0].total_entries_final is False
+    list_progress = next(event for event in progress_events if event.stage == "list" and event.listed_objects == 2)
+    assert list_progress.total_entries_estimate == 5
+    assert list_progress.total_entries_final is False
+    assert progress_events[-1].stage == "completed"
+    assert progress_events[-1].total_entries_estimate == 2
+    assert progress_events[-1].total_entries_final is True
+
+
+def test_purge_progress_continues_when_rgw_stats_are_unavailable(monkeypatch):
+    class BrokenBucketsService:
+        def list_buckets(self, account, *, with_stats=True):
+            raise RuntimeError("stats unavailable")
+
+    class PurgeClient:
+        def list_objects_v2(self, **kwargs):
+            return {"Contents": [{"Key": "one.txt"}]}
+
+        def list_object_versions(self, **kwargs):
+            return {}
+
+        def delete_objects(self, **kwargs):
+            objects = list(kwargs["Delete"]["Objects"])
+            return {"Deleted": objects}
+
+    monkeypatch.setattr(bucket_purge_service, "BucketsService", BrokenBucketsService)
+    monkeypatch.setattr(BucketPurgeService, "_build_client", lambda self, account: PurgeClient())
+    progress_events = []
+
+    result = BucketPurgeService().run(
+        [BucketPurgeResolvedTarget(account=SimpleNamespace(), bucket_name="bucket-a", context_id="s3u-1")],
+        BucketPurgeOptions(parallelism=4, include_versions=True),
+        progress_callback=progress_events.append,
+    )
+
+    assert result.status == "completed"
+    assert progress_events[0].stage == "prepare"
+    assert progress_events[0].total_entries_estimate is None
+    assert progress_events[-1].stage == "completed"
+    assert progress_events[-1].total_entries_estimate == 1
+    assert progress_events[-1].total_entries_final is True

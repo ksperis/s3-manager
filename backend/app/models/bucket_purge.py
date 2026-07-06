@@ -98,6 +98,8 @@ class BucketPurgeProgress(BaseModel):
     listed_versions: int = 0
     deleted_objects: int = 0
     deleted_versions: int = 0
+    total_entries_estimate: Optional[int] = None
+    total_entries_final: bool = False
     failed_count: int = 0
     bucket_deleted: bool = False
     message: Optional[str] = None

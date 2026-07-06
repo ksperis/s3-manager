@@ -29,6 +29,9 @@ Review the target list before typing the confirmation phrase. Bucket purge delet
 5. Type the exact confirmation phrase shown by the modal, for example
    `PURGE 2 BUCKETS`.
 6. Start the purge and monitor progress until a result is displayed.
+   When RGW bucket stats are available, progress starts from that object-count
+   estimate. If the exact total is still being discovered, the modal marks the
+   denominator as non-final until listing has completed.
 
 ## Expected result
 

@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic
@@ -17,10 +18,12 @@ from app.models.bucket_purge import (
     BucketPurgeResult,
 )
 from app.services import s3_client
+from app.services.buckets_service import BucketsService
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.routers.http_errors import sanitized_error_log_detail
 
 
+logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[BucketPurgeProgress], None]
 CancelCheck = Callable[[], None]
 
@@ -70,6 +73,67 @@ class BucketPurgeService:
             **self._client_kwargs(account),
         )
 
+    def _resolve_initial_entry_estimates(self, targets: list[BucketPurgeResolvedTarget]) -> list[int | None]:
+        estimates: list[int | None] = [None for _ in targets]
+        if not targets:
+            return estimates
+
+        grouped_indexes: dict[str, list[int]] = {}
+        for index, target in enumerate(targets):
+            context_key = target.context_id or f"account-object:{id(target.account)}"
+            grouped_indexes.setdefault(context_key, []).append(index)
+
+        buckets_service = BucketsService()
+        for indexes in grouped_indexes.values():
+            account = targets[indexes[0]].account
+            try:
+                buckets = buckets_service.list_buckets(account, with_stats=True)
+            except Exception as exc:  # noqa: BLE001 - stats are best-effort only.
+                logger.info(
+                    "Unable to resolve bucket purge entry estimates for context=%s: %s",
+                    targets[indexes[0]].context_id,
+                    sanitized_error_log_detail(exc),
+                )
+                continue
+
+            object_counts_by_name: dict[str, int] = {}
+            for bucket in buckets:
+                if bucket.object_count is None:
+                    continue
+                try:
+                    object_count = int(bucket.object_count)
+                except (TypeError, ValueError):
+                    continue
+                if object_count >= 0:
+                    object_counts_by_name[bucket.name] = object_count
+            for index in indexes:
+                estimates[index] = object_counts_by_name.get(targets[index].bucket_name)
+
+        return estimates
+
+    def _sum_known_entry_estimates(self, estimates: list[int | None]) -> int | None:
+        known_estimates = [estimate for estimate in estimates if estimate is not None]
+        if not known_estimates:
+            return None
+        return sum(known_estimates)
+
+    def _progress_total_entries_estimate(
+        self,
+        initial_total_entries_estimate: int | None,
+        *,
+        listed_objects: int,
+        listed_versions: int,
+        deleted_objects: int,
+        deleted_versions: int,
+        total_entries_final: bool = False,
+    ) -> int | None:
+        discovered_total = max(listed_objects + listed_versions, deleted_objects + deleted_versions)
+        if total_entries_final:
+            return discovered_total
+        if initial_total_entries_estimate is None:
+            return discovered_total if discovered_total > 0 else None
+        return max(initial_total_entries_estimate, discovered_total)
+
     def run(
         self,
         targets: list[BucketPurgeResolvedTarget],
@@ -85,6 +149,8 @@ class BucketPurgeService:
         total_deleted_objects = 0
         total_deleted_versions = 0
         total_failed = 0
+        initial_entry_estimates = self._resolve_initial_entry_estimates(targets)
+        initial_total_entries_estimate = self._sum_known_entry_estimates(initial_entry_estimates)
 
         def emit(progress: BucketPurgeProgress) -> None:
             if progress_callback:
@@ -95,6 +161,8 @@ class BucketPurgeService:
                 stage="prepare",
                 total_buckets=len(targets),
                 completed_buckets=0,
+                total_entries_estimate=initial_total_entries_estimate,
+                total_entries_final=False,
                 message="Preparing bucket purge...",
             )
         )
@@ -112,6 +180,8 @@ class BucketPurgeService:
                 base_deleted_objects=total_deleted_objects,
                 base_deleted_versions=total_deleted_versions,
                 base_failed_count=total_failed,
+                total_entries_estimate=initial_total_entries_estimate,
+                is_last_bucket=index == len(targets) - 1,
                 progress_callback=emit,
                 cancel_check=cancel_check,
             )
@@ -121,6 +191,15 @@ class BucketPurgeService:
             total_deleted_objects += bucket_result.deleted_objects
             total_deleted_versions += bucket_result.deleted_versions
             total_failed += bucket_result.failed_count
+            total_entries_estimate = self._progress_total_entries_estimate(
+                initial_total_entries_estimate,
+                listed_objects=total_listed_objects,
+                listed_versions=total_listed_versions,
+                deleted_objects=total_deleted_objects,
+                deleted_versions=total_deleted_versions,
+                total_entries_final=index == len(targets) - 1 and bucket_result.status != "failed",
+            )
+            total_entries_final = index == len(targets) - 1 and bucket_result.status != "failed"
             emit(
                 BucketPurgeProgress(
                     stage="completed",
@@ -133,6 +212,8 @@ class BucketPurgeService:
                     listed_versions=total_listed_versions,
                     deleted_objects=total_deleted_objects,
                     deleted_versions=total_deleted_versions,
+                    total_entries_estimate=total_entries_estimate,
+                    total_entries_final=total_entries_final,
                     failed_count=total_failed,
                     message=f"Completed purge for {target.bucket_name}.",
                 )
@@ -169,6 +250,8 @@ class BucketPurgeService:
         cancel_check: CancelCheck | None = None,
     ) -> BucketPurgeResult:
         started_at = datetime.now(timezone.utc)
+        initial_entry_estimates = self._resolve_initial_entry_estimates([target])
+        initial_total_entries_estimate = self._sum_known_entry_estimates(initial_entry_estimates)
 
         def emit(progress: BucketPurgeProgress) -> None:
             if progress_callback:
@@ -182,12 +265,15 @@ class BucketPurgeService:
                 context_name=target.context_name,
                 total_buckets=1,
                 completed_buckets=0,
+                total_entries_estimate=initial_total_entries_estimate,
+                total_entries_final=False,
                 message="Preparing bucket deletion...",
             )
         )
         bucket_result = self._run_bucket_delete_with_purge(
             target,
             options,
+            total_entries_estimate=initial_total_entries_estimate,
             progress_callback=emit,
             cancel_check=cancel_check,
         )
@@ -220,6 +306,8 @@ class BucketPurgeService:
         base_deleted_objects: int,
         base_deleted_versions: int,
         base_failed_count: int,
+        total_entries_estimate: int | None,
+        is_last_bucket: bool,
         progress_callback: ProgressCallback,
         cancel_check: CancelCheck | None,
     ) -> BucketPurgeBucketResult:
@@ -231,6 +319,10 @@ class BucketPurgeService:
                 if progress.stage in {"list", "delete", "versions", "delete_bucket", "completed"}
                 else "delete"
             )
+            listed_objects = base_listed_objects + progress.listed_objects
+            listed_versions = base_listed_versions + progress.listed_versions
+            deleted_objects = base_deleted_objects + progress.deleted_objects
+            deleted_versions = base_deleted_versions + progress.deleted_versions
             progress_callback(
                 BucketPurgeProgress(
                     stage=stage,  # type: ignore[arg-type]
@@ -239,10 +331,19 @@ class BucketPurgeService:
                     context_name=target.context_name,
                     total_buckets=total_buckets,
                     completed_buckets=completed_buckets,
-                    listed_objects=base_listed_objects + progress.listed_objects,
-                    listed_versions=base_listed_versions + progress.listed_versions,
-                    deleted_objects=base_deleted_objects + progress.deleted_objects,
-                    deleted_versions=base_deleted_versions + progress.deleted_versions,
+                    listed_objects=listed_objects,
+                    listed_versions=listed_versions,
+                    deleted_objects=deleted_objects,
+                    deleted_versions=deleted_versions,
+                    total_entries_estimate=self._progress_total_entries_estimate(
+                        total_entries_estimate,
+                        listed_objects=listed_objects,
+                        listed_versions=listed_versions,
+                        deleted_objects=deleted_objects,
+                        deleted_versions=deleted_versions,
+                        total_entries_final=is_last_bucket and stage == "completed",
+                    ),
+                    total_entries_final=is_last_bucket and stage == "completed",
                     failed_count=base_failed_count + progress.failed_count,
                     bucket_deleted=False,
                     message=progress.message,
@@ -310,6 +411,7 @@ class BucketPurgeService:
         target: BucketPurgeResolvedTarget,
         options: BucketPurgeOptions,
         *,
+        total_entries_estimate: int | None,
         progress_callback: ProgressCallback,
         cancel_check: CancelCheck | None,
     ) -> BucketPurgeBucketResult:
@@ -325,6 +427,14 @@ class BucketPurgeService:
                 if progress.stage in {"list", "delete", "versions", "delete_bucket", "completed"}
                 else "delete"
             )
+            next_total_entries_estimate = self._progress_total_entries_estimate(
+                total_entries_estimate,
+                listed_objects=progress.listed_objects,
+                listed_versions=progress.listed_versions,
+                deleted_objects=progress.deleted_objects,
+                deleted_versions=progress.deleted_versions,
+                total_entries_final=stage == "completed",
+            )
             progress_callback(
                 BucketPurgeProgress(
                     stage=stage,  # type: ignore[arg-type]
@@ -337,6 +447,8 @@ class BucketPurgeService:
                     listed_versions=progress.listed_versions,
                     deleted_objects=progress.deleted_objects,
                     deleted_versions=progress.deleted_versions,
+                    total_entries_estimate=next_total_entries_estimate,
+                    total_entries_final=stage == "completed",
                     failed_count=progress.failed_count,
                     bucket_deleted=False,
                     message=progress.message,
@@ -428,6 +540,15 @@ class BucketPurgeService:
                     listed_versions=listed_versions,
                     deleted_objects=deleted_objects,
                     deleted_versions=deleted_versions,
+                    total_entries_estimate=self._progress_total_entries_estimate(
+                        total_entries_estimate,
+                        listed_objects=listed_objects,
+                        listed_versions=listed_versions,
+                        deleted_objects=deleted_objects,
+                        deleted_versions=deleted_versions,
+                        total_entries_final=True,
+                    ),
+                    total_entries_final=True,
                     failed_count=0,
                     bucket_deleted=False,
                     message=f"Deleting bucket {target.bucket_name}...",
@@ -461,6 +582,15 @@ class BucketPurgeService:
                     listed_versions=listed_versions,
                     deleted_objects=deleted_objects,
                     deleted_versions=deleted_versions,
+                    total_entries_estimate=self._progress_total_entries_estimate(
+                        total_entries_estimate,
+                        listed_objects=listed_objects,
+                        listed_versions=listed_versions,
+                        deleted_objects=deleted_objects,
+                        deleted_versions=deleted_versions,
+                        total_entries_final=True,
+                    ),
+                    total_entries_final=True,
                     failed_count=0,
                     bucket_deleted=True,
                     message=f"Deleted bucket {target.bucket_name}.",

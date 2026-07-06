@@ -19,6 +19,7 @@ import {
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatCompactNumber } from "../../utils/format";
 
@@ -98,6 +99,33 @@ function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
 }
 
+function progressDeletedEntries(progress: BucketPurgeProgress): number {
+  return progress.deleted_objects + progress.deleted_versions;
+}
+
+function progressListedEntries(progress: BucketPurgeProgress): number {
+  return progress.listed_objects + progress.listed_versions;
+}
+
+function progressTotalEntries(progress: BucketPurgeProgress): number | null {
+  const discoveredTotal = Math.max(progressListedEntries(progress), progressDeletedEntries(progress));
+  const estimatedTotal = progress.total_entries_estimate ?? null;
+  if (estimatedTotal === null) return discoveredTotal > 0 ? discoveredTotal : null;
+  return Math.max(estimatedTotal, discoveredTotal);
+}
+
+function progressEntriesLabel(progress: BucketPurgeProgress): string {
+  const deletedTotal = progressDeletedEntries(progress);
+  const totalEntries = progressTotalEntries(progress);
+  if (totalEntries === null) {
+    return `${formatCompactNumber(deletedTotal)} entries deleted`;
+  }
+  const totalLabel = progress.total_entries_final
+    ? formatCompactNumber(totalEntries)
+    : `at least ${formatCompactNumber(totalEntries)}`;
+  return `${formatCompactNumber(deletedTotal)} / ${totalLabel} entries deleted`;
+}
+
 export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
   const [parallelism, setParallelism] = useState(10);
   const [confirmation, setConfirmation] = useState("");
@@ -117,13 +145,15 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
   const operationLabel = isDeleteMode ? "Bucket deletion" : "Purge";
   const progressPercent = useMemo(() => {
     if (!progress) return null;
-    const listedTotal = progress.listed_objects + progress.listed_versions;
-    const deletedTotal = progress.deleted_objects + progress.deleted_versions;
-    if (listedTotal > 0) {
-      return Math.max(0, Math.min(100, Math.round((deletedTotal / listedTotal) * 100)));
+    const totalEntries = progressTotalEntries(progress);
+    const deletedTotal = progressDeletedEntries(progress);
+    if (totalEntries !== null && totalEntries > 0) {
+      const rawPercent = Math.max(0, Math.min(100, Math.round((deletedTotal / totalEntries) * 100)));
+      return progress.total_entries_final ? rawPercent : Math.min(rawPercent, 96);
     }
     if (progress.total_buckets > 0) {
-      return Math.max(0, Math.min(100, Math.round((progress.completed_buckets / progress.total_buckets) * 100)));
+      const rawPercent = Math.max(0, Math.min(100, Math.round((progress.completed_buckets / progress.total_buckets) * 100)));
+      return progress.total_entries_final ? rawPercent : Math.min(rawPercent, 96);
     }
     return null;
   }, [progress]);
@@ -318,21 +348,31 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
                 {progress.bucket_name ? `${progress.bucket_name} - ${progress.stage}` : progress.stage}
               </p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                {formatCompactNumber(progress.deleted_objects + progress.deleted_versions)} /{" "}
-                {formatCompactNumber(progress.listed_objects + progress.listed_versions)} entries deleted
+                {progressEntriesLabel(progress)}
               </p>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
+            {progressPercent === null ? (
               <div
-                className="h-full rounded-full bg-rose-600 transition-[width] duration-150 ease-out"
-                style={{ width: `${progressPercent ?? 100}%` }}
+                className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
+                role="progressbar"
+                aria-label="Bucket purge progress"
+              >
+                <div className="h-full w-full animate-pulse rounded-full bg-rose-500/70" />
+              </div>
+            ) : (
+              <UiProgressBar
+                value={progressPercent}
+                label="Bucket purge progress"
+                className="mt-2 h-2 bg-slate-200 dark:bg-slate-800"
+                barClassName="bg-rose-600 transition-[width] duration-150 ease-out"
               />
-            </div>
+            )}
             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
               {formatCompactNumber(progress.completed_buckets)} / {formatCompactNumber(progress.total_buckets)} buckets completed
               {" - "}
               {formatCompactNumber(progress.deleted_objects)} current object(s),{" "}
               {formatCompactNumber(progress.deleted_versions)} version/delete marker entries
+              {!progress.total_entries_final ? " - Total still being discovered" : ""}
               {progress.failed_count > 0 ? ` - ${formatCompactNumber(progress.failed_count)} error(s)` : ""}
             </p>
           </div>

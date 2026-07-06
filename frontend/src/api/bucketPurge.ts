@@ -59,6 +59,8 @@ export type BucketPurgeProgress = {
   listed_versions: number;
   deleted_objects: number;
   deleted_versions: number;
+  total_entries_estimate?: number | null;
+  total_entries_final?: boolean;
   failed_count: number;
   bucket_deleted: boolean;
   message?: string | null;

@@ -96,6 +96,8 @@ describe("BucketPurgeRunModal", () => {
         listed_versions: 3,
         deleted_objects: 3,
         deleted_versions: 1,
+        total_entries_estimate: 7,
+        total_entries_final: false,
         failed_count: 0,
         bucket_deleted: false,
       });
@@ -110,6 +112,8 @@ describe("BucketPurgeRunModal", () => {
         listed_versions: 1,
         deleted_objects: 2,
         deleted_versions: 1,
+        total_entries_estimate: 3,
+        total_entries_final: true,
         failed_count: 0,
         bucket_deleted: false,
       });
@@ -165,10 +169,45 @@ describe("BucketPurgeRunModal", () => {
       include_versions: true,
       confirmation: "PURGE 2 BUCKETS",
     });
-    expect(
-      await screen.findByText((_, node) => node?.textContent === "4 / 7 entries deleted")
-    ).toBeInTheDocument();
+    expect(await screen.findByText((_, node) => node?.textContent === "4 / at least 7 entries deleted")).toBeInTheDocument();
+    expect(screen.getByText(/Total still being discovered/)).toBeInTheDocument();
     expect(screen.getByText("Purge completed with errors.")).toBeInTheDocument();
+  });
+
+  it("caps non-final progress when discovered totals match deleted totals", async () => {
+    const user = userEvent.setup();
+    streamManagerBucketPurgeMock.mockImplementationOnce((_contextId, _payload, options) => {
+      options?.onProgress?.({
+        stage: "delete",
+        total_buckets: 1,
+        completed_buckets: 0,
+        listed_objects: 4,
+        listed_versions: 0,
+        deleted_objects: 4,
+        deleted_versions: 0,
+        total_entries_estimate: null,
+        total_entries_final: false,
+        failed_count: 0,
+        bucket_deleted: false,
+      });
+      return Promise.resolve(buildPurgeResult());
+    });
+    render(
+      <BucketPurgeRunModal
+        mode="manager"
+        contextId="ctx-1"
+        contextName="Context 1"
+        targets={[{ bucketName: "bucket-a" }]}
+        onClose={() => undefined}
+      />
+    );
+
+    await user.type(screen.getByLabelText("Type PURGE 1 BUCKETS"), "PURGE 1 BUCKETS");
+    await user.click(screen.getByRole("button", { name: "Start purge" }));
+
+    expect(await screen.findByText((_, node) => node?.textContent === "4 / at least 4 entries deleted")).toBeInTheDocument();
+    const progressBar = screen.getByRole("progressbar", { name: "Bucket purge progress" });
+    expect(progressBar.firstElementChild).toHaveStyle({ width: "96%" });
   });
 
   it("renders expandable bucket purge failures", async () => {
