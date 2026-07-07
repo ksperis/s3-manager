@@ -2,6 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import UiButton from "../../../components/ui/UiButton";
+
 type BucketFeatureModeOption<T extends string> = {
   value: T;
   label: string;
@@ -23,19 +25,17 @@ export default function BucketFeatureModeToggle<T extends string>({
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((option) => (
-        <button
+        <UiButton
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
-          className={`rounded-md px-3 py-1 ui-caption font-semibold transition ${
-            value === option.value
-              ? "bg-primary text-white"
-              : "border border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-          }`}
+          variant={value === option.value ? "primary" : "secondary"}
+          size="xs"
+          className="px-3"
           disabled={disabled}
         >
           {option.label}
-        </button>
+        </UiButton>
       ))}
     </div>
   );
