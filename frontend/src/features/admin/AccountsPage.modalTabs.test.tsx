@@ -283,7 +283,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
-    expect(screen.getByLabelText("Search UI users")).toHaveClass("ui-control");
+    expect(screen.getByRole("textbox", { name: "Search UI users" })).toHaveClass("ui-caption");
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -318,7 +318,7 @@ describe("AccountsPage modal tabs", () => {
 
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
-    expect(screen.getByLabelText("Search UI groups")).toHaveClass("ui-control");
+    expect(screen.getByRole("textbox", { name: "Search UI groups" })).toHaveClass("ui-caption");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Research Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 

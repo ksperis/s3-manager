@@ -48,6 +48,11 @@ import AssociationSummary, {
   type AssociationAccountItem,
 } from "./AssociationSummary";
 import AdminModalTabs from "./AdminModalTabs";
+import {
+  AdminAssociationPickerPanel,
+  AdminAssociationSectionHeader,
+  adminAssociationAccountOptionRowClass,
+} from "./AdminAssociationPicker";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -1670,26 +1675,17 @@ export default function S3AccountsPage() {
               )}
               {showUsersTab && (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {assignedUsers.length} linked{loadingUsers ? " · loading..." : ""}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!showUserPanel) {
-                          void loadUsersIfNeeded();
-                        }
-                        setShowUserPanel((prev) => !prev);
-                      }}
-                      className={tableActionButtonClasses}
-                    >
-                      {showUserPanel ? "Close" : "Add UI users"}
-                    </button>
-                  </div>
+                  <AdminAssociationSectionHeader
+                    title="Linked UI users"
+                    countLabel={`${assignedUsers.length} linked${loadingUsers ? " · loading..." : ""}`}
+                    actionLabel={showUserPanel ? "Close" : "Add UI users"}
+                    onAction={() => {
+                      if (!showUserPanel) {
+                        void loadUsersIfNeeded();
+                      }
+                      setShowUserPanel((prev) => !prev);
+                    }}
+                  />
                   <div className={associationTableContainerClass}>
                     <table className={associationTableClass}>
                       <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1786,37 +1782,47 @@ export default function S3AccountsPage() {
                     </table>
                   </div>
                   {showUserPanel && (
-                    <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
-                        </div>
-                        <UiInput
-                          aria-label="Search UI users"
-                          size="compact"
-                          fieldClassName="w-44"
-                          type="text"
-                          value={userSearch}
-                          onChange={(e) => setUserSearch(e.target.value)}
-                          placeholder="Search..."
-                        />
-                      </div>
-                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {availableUsers.length === 0 && (
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                        )}
+                    <AdminAssociationPickerPanel
+                      title="Add UI users"
+                      hint="(filter by email)"
+                      search={userSearch}
+                      onSearchChange={setUserSearch}
+                      searchAriaLabel="Search UI users"
+                      loading={loadingUsers}
+                      availableCount={availableUsers.length}
+                      maxVisibleOptions={MAX_LINK_OPTIONS}
+                      selectedCount={userSelections.length}
+                      loadingLabel="Loading UI users..."
+                      onCancel={() => {
+                        setShowUserPanel(false);
+                        setUserSelections([]);
+                        setUserSearch("");
+                      }}
+                      onAdd={() => {
+                        if (userSelections.length === 0) return;
+                        const toAdd = userSelections.map((id) => ({
+                          user_id: id,
+                          account_admin: userAdminChoice[id] ?? false,
+                          account_role: "portal_none" as PortalAccountRole,
+                          user_email: userLabelById.get(id) ?? undefined,
+                        }));
+                        setEditForm((prev) => ({
+                          ...prev,
+                          user_links: [...prev.user_links, ...toAdd],
+                        }));
+                        setShowUserPanel(false);
+                        setUserSelections([]);
+                        setUserSearch("");
+                      }}
+                      addDisabled={userSelections.length === 0}
+                    >
                         {visibleAvailableUsers.map((u) => {
                           const isSelected = userSelections.includes(u.id);
                           const adminChecked = userAdminChoice[u.id] ?? false;
                           return (
                             <div
                               key={u.id}
-                              className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                                isSelected
-                                  ? "bg-slate-50 dark:bg-slate-800/60"
-                                  : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                              }`}
+                              className={adminAssociationAccountOptionRowClass(isSelected)}
                             >
                               <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                                 <input
@@ -1844,78 +1850,23 @@ export default function S3AccountsPage() {
                             </div>
                           );
                         })}
-                        {availableUsers.length > MAX_LINK_OPTIONS && (
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">
-                          {userSelections.length} selected
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <UiButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setShowUserPanel(false);
-                              setUserSelections([]);
-                              setUserSearch("");
-                            }}
-                          >
-                            Cancel
-                          </UiButton>
-                          <UiButton
-                            size="sm"
-                            disabled={userSelections.length === 0}
-                            onClick={() => {
-                              if (userSelections.length === 0) return;
-                              const toAdd = userSelections.map((id) => ({
-                                user_id: id,
-                                account_admin: userAdminChoice[id] ?? false,
-                                account_role: "portal_none" as PortalAccountRole,
-                                user_email: userLabelById.get(id) ?? undefined,
-                              }));
-                              setEditForm((prev) => ({
-                                ...prev,
-                                user_links: [...prev.user_links, ...toAdd],
-                              }));
-                              setShowUserPanel(false);
-                              setUserSelections([]);
-                              setUserSearch("");
-                            }}
-                          >
-                            Add selected
-                          </UiButton>
-                        </div>
-                      </div>
-                    </div>
+                    </AdminAssociationPickerPanel>
                   )}
                 </div>
               )}
               {showGroupsTab && (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {assignedGroups.length} linked{loadingGroups ? " · loading..." : ""}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!showGroupPanel) {
-                          void loadGroupsIfNeeded();
-                        }
-                        setShowGroupPanel((prev) => !prev);
-                      }}
-                      className={tableActionButtonClasses}
-                    >
-                      {showGroupPanel ? "Close" : "Add UI groups"}
-                    </button>
-                  </div>
+                  <AdminAssociationSectionHeader
+                    title="Linked UI groups"
+                    countLabel={`${assignedGroups.length} linked${loadingGroups ? " · loading..." : ""}`}
+                    actionLabel={showGroupPanel ? "Close" : "Add UI groups"}
+                    onAction={() => {
+                      if (!showGroupPanel) {
+                        void loadGroupsIfNeeded();
+                      }
+                      setShowGroupPanel((prev) => !prev);
+                    }}
+                  />
                   <div className={associationTableContainerClass}>
                     <table className={associationTableClass}>
                       <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -2012,37 +1963,47 @@ export default function S3AccountsPage() {
                     </table>
                   </div>
                   {showGroupPanel && (
-                    <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
-                        </div>
-                        <UiInput
-                          aria-label="Search UI groups"
-                          size="compact"
-                          fieldClassName="w-44"
-                          type="text"
-                          value={groupSearch}
-                          onChange={(e) => setGroupSearch(e.target.value)}
-                          placeholder="Search..."
-                        />
-                      </div>
-                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {availableGroups.length === 0 && (
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                        )}
+                    <AdminAssociationPickerPanel
+                      title="Add UI groups"
+                      hint="(filter by name)"
+                      search={groupSearch}
+                      onSearchChange={setGroupSearch}
+                      searchAriaLabel="Search UI groups"
+                      loading={loadingGroups}
+                      availableCount={availableGroups.length}
+                      maxVisibleOptions={MAX_LINK_OPTIONS}
+                      selectedCount={groupSelections.length}
+                      loadingLabel="Loading UI groups..."
+                      onCancel={() => {
+                        setShowGroupPanel(false);
+                        setGroupSelections([]);
+                        setGroupSearch("");
+                      }}
+                      onAdd={() => {
+                        if (groupSelections.length === 0) return;
+                        const toAdd = groupSelections.map((id) => ({
+                          group_id: id,
+                          group_name: groupLabelById.get(id) ?? undefined,
+                          account_admin: groupAdminChoice[id] ?? false,
+                          account_role: "portal_none" as PortalAccountRole,
+                        }));
+                        setEditForm((prev) => ({
+                          ...prev,
+                          group_links: [...prev.group_links, ...toAdd],
+                        }));
+                        setShowGroupPanel(false);
+                        setGroupSelections([]);
+                        setGroupSearch("");
+                      }}
+                      addDisabled={groupSelections.length === 0}
+                    >
                         {visibleAvailableGroups.map((group) => {
                           const isSelected = groupSelections.includes(group.id);
                           const adminChecked = groupAdminChoice[group.id] ?? false;
                           return (
                             <div
                               key={group.id}
-                              className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                                isSelected
-                                  ? "bg-slate-50 dark:bg-slate-800/60"
-                                  : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                              }`}
+                              className={adminAssociationAccountOptionRowClass(isSelected)}
                             >
                               <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                                 <input
@@ -2070,53 +2031,7 @@ export default function S3AccountsPage() {
                             </div>
                           );
                         })}
-                        {availableGroups.length > MAX_LINK_OPTIONS && (
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">
-                          {groupSelections.length} selected
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <UiButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setShowGroupPanel(false);
-                              setGroupSelections([]);
-                              setGroupSearch("");
-                            }}
-                          >
-                            Cancel
-                          </UiButton>
-                          <UiButton
-                            size="sm"
-                            disabled={groupSelections.length === 0}
-                            onClick={() => {
-                              if (groupSelections.length === 0) return;
-                              const toAdd = groupSelections.map((id) => ({
-                                group_id: id,
-                                group_name: groupLabelById.get(id) ?? undefined,
-                                account_admin: groupAdminChoice[id] ?? false,
-                                account_role: "portal_none" as PortalAccountRole,
-                              }));
-                              setEditForm((prev) => ({
-                                ...prev,
-                                group_links: [...prev.group_links, ...toAdd],
-                              }));
-                              setShowGroupPanel(false);
-                              setGroupSelections([]);
-                              setGroupSearch("");
-                            }}
-                          >
-                            Add selected
-                          </UiButton>
-                        </div>
-                      </div>
-                    </div>
+                    </AdminAssociationPickerPanel>
                   )}
                 </div>
               )}
