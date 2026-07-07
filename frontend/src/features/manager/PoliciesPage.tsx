@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
@@ -10,10 +10,16 @@ import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import ManagerTable, {
+  managerTableCellClass,
+  managerTablePrimaryCellClass,
+  type ManagerTableColumn,
+} from "../../components/list/ManagerTable";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -25,6 +31,14 @@ const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   null,
   2
 );
+
+const policyTableColumns: ManagerTableColumn[] = [
+  { key: "name", label: "Name", mobileRole: "primary" },
+  { key: "arn", label: "ARN" },
+  { key: "version", label: "Version" },
+];
+
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function PoliciesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
@@ -43,11 +57,7 @@ export default function PoliciesPage() {
     stableSignature({ advancedName: "", documentText: DEFAULT_POLICY_DOCUMENT })
   );
 
-  const extractError = (err: unknown): string => {
-    return extractApiError(err, "Unexpected error");
-  };
-
-  const load = async (accountId: S3AccountSelector) => {
+  const load = useCallback(async (accountId: S3AccountSelector) => {
     setLoading(true);
     setError(null);
     try {
@@ -58,7 +68,7 @@ export default function PoliciesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -67,7 +77,7 @@ export default function PoliciesPage() {
       return;
     }
     load(accountIdForApi);
-  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode, load]);
 
   const handleAdvancedCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -177,33 +187,28 @@ export default function PoliciesPage() {
                 value={policyFilter}
                 onChange={(e) => setPolicyFilter(e.target.value)}
                 placeholder="Search by name or ARN"
-                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={`${toolbarCompactInputClasses} w-full sm:w-72`}
               />
             }
           />
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Version</th>
+          <ManagerTable columns={policyTableColumns} responsiveCards>
+            {filteredTableStatus === "loading" && (
+              <TableEmptyState colSpan={policyTableColumns.length} message="Loading policies..." />
+            )}
+            {filteredTableStatus === "error" && (
+              <TableEmptyState colSpan={policyTableColumns.length} message="Unable to load policies." tone="error" />
+            )}
+            {filteredTableStatus === "empty" && <TableEmptyState colSpan={policyTableColumns.length} message="No policies." />}
+            {filteredPolicies.map((p) => (
+              <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <td className={managerTablePrimaryCellClass}>
+                  <span>{p.name}</span>
+                </td>
+                <td className={managerTableCellClass}>{p.arn}</td>
+                <td className={managerTableCellClass}>{p.default_version_id ?? "-"}</td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading policies..." />}
-              {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load policies." tone="error" />}
-              {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No policies." />}
-              {filteredPolicies.map((p) => (
-                  <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <span>{p.name}</span>
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+            ))}
+          </ManagerTable>
         </div>
       )}
 

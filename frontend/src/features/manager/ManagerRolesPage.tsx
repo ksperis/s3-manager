@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
@@ -21,11 +21,19 @@ import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import ManagerTable, {
+  managerTableActionCellClass,
+  managerTableCellClass,
+  managerTablePrimaryCellClass,
+  managerTableWideCellClass,
+  type ManagerTableColumn,
+} from "../../components/list/ManagerTable";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
@@ -47,6 +55,16 @@ const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   2
 );
 const DEFAULT_ROLE_PATH = "/";
+
+const roleTableColumns: ManagerTableColumn[] = [
+  { key: "name", label: "Name", mobileRole: "primary" },
+  { key: "path", label: "Path" },
+  { key: "arn", label: "ARN" },
+  { key: "policies", label: "Policies" },
+  { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
+];
+
+const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function ManagerRolesPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
@@ -94,11 +112,7 @@ export default function ManagerRolesPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const extractError = (err: unknown): string => {
-    return extractApiError(err, "Unexpected error");
-  };
-
-  const load = async (accountId: S3AccountSelector) => {
+  const load = useCallback(async (accountId: S3AccountSelector) => {
     setLoading(true);
     setError(null);
     try {
@@ -109,16 +123,16 @@ export default function ManagerRolesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadPolicies = async (accountId: S3AccountSelector) => {
+  const loadPolicies = useCallback(async (accountId: S3AccountSelector) => {
     try {
       const data = await listIamPolicies(accountId);
       setPolicies(data);
     } catch (err) {
       setError(extractError(err));
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -135,7 +149,7 @@ export default function ManagerRolesPage() {
     setInlinePolicyText("");
     setInlineDraftMode("create");
     setShowInlinePolicyOptions(false);
-  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode, load, loadPolicies]);
 
   useEffect(() => {
     if (selectedPolicies.length > 0) {
@@ -516,76 +530,66 @@ export default function ManagerRolesPage() {
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
                 placeholder="Search by name, path, or ARN"
-                className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={`${toolbarCompactInputClasses} w-full sm:w-72`}
               />
             }
           />
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Path</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policies</th>
-                <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+          <ManagerTable columns={roleTableColumns} responsiveCards>
+            {filteredTableStatus === "loading" && (
+              <TableEmptyState colSpan={roleTableColumns.length} message="Loading roles..." />
+            )}
+            {filteredTableStatus === "error" && (
+              <TableEmptyState colSpan={roleTableColumns.length} message="Unable to load roles." tone="error" />
+            )}
+            {filteredTableStatus === "empty" && <TableEmptyState colSpan={roleTableColumns.length} message="No roles." />}
+            {filteredRoles.map((r) => (
+              <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <td className={managerTablePrimaryCellClass}>
+                  <span>{r.name}</span>
+                </td>
+                <td className={managerTableCellClass}>{r.path ?? "-"}</td>
+                <td className={managerTableCellClass}>{r.arn ?? "-"}</td>
+                <td className={managerTableWideCellClass}>
+                  {r.policies && r.policies.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {r.policies.map((p) => (
+                        <span
+                          key={p}
+                          className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          title={p}
+                        >
+                          {p.split("/").pop()}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                  )}
+                </td>
+                <td className={managerTableActionCellClass}>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      onClick={() => openEditModal(r.name)}
+                      className={tableActionButtonClasses}
+                      disabled={loadingRoleDetails && editingRole?.name === r.name}
+                    >
+                      Edit
+                    </button>
+                    <Link to={`/manager/roles/${encodeURIComponent(r.name)}/policies`} className={tableActionButtonClasses}>
+                      Policies
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(r.name)}
+                      className={tableDeleteActionClasses}
+                      disabled={deletingRole === r.name}
+                    >
+                      {deletingRole === r.name ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {filteredTableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading roles..." />}
-              {filteredTableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load roles." tone="error" />}
-              {filteredTableStatus === "empty" && <TableEmptyState colSpan={5} message="No roles." />}
-              {filteredRoles.map((r) => (
-                  <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <span>{r.name}</span>
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.path ?? "-"}</td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{r.arn ?? "-"}</td>
-                    <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {r.policies && r.policies.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {r.policies.map((p) => (
-                            <span
-                              key={p}
-                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                              title={p}
-                            >
-                              {p.split("/").pop()}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(r.name)}
-                          className={tableActionButtonClasses}
-                          disabled={loadingRoleDetails && editingRole?.name === r.name}
-                        >
-                          Edit
-                        </button>
-                        <Link
-                          to={`/manager/roles/${encodeURIComponent(r.name)}/policies`}
-                          className={tableActionButtonClasses}
-                        >
-                          Policies
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(r.name)}
-                          className={tableDeleteActionClasses}
-                          disabled={deletingRole === r.name}
-                        >
-                          {deletingRole === r.name ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+            ))}
+          </ManagerTable>
         </div>
       )}
 
