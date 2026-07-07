@@ -82,9 +82,12 @@ Before changing documentation styling:
 2. Keep MkDocs colors, borders, radii, shadows, active navigation, tables, and
    screenshot components on the mirrored `--ui-*` and `--shell-*` tokens in
    `doc/docs/assets/stylesheets/docs-theme.css`.
-3. Avoid documentation-only palettes or decorative effects that do not exist in
+3. Preserve the compact application posture: restrained headings, reduced
+   vertical gaps, dense tables, and screenshot controls that do not crowd the
+   actual capture.
+4. Avoid documentation-only palettes or decorative effects that do not exist in
    the application workspace surfaces.
-4. Validate the rendered result on desktop and mobile, especially pages with
+5. Validate the rendered result on desktop and mobile, especially pages with
    wide tables and screenshot galleries.
 
 ## User screenshot workflow
