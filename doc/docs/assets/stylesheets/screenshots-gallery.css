@@ -137,18 +137,17 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 .docs-screenshot-carousel__image-button::after {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.18) 100%);
+  border: 2px solid transparent;
   content: "";
-  opacity: 0.92;
   pointer-events: none;
-  transition: opacity 160ms ease;
+  transition: border-color 160ms ease;
 }
 
 .docs-screenshot-trigger:hover::after,
 .docs-screenshot-trigger:focus-visible::after,
 .docs-screenshot-carousel__image-button:hover::after,
 .docs-screenshot-carousel__image-button:focus-visible::after {
-  opacity: 1;
+  border-color: rgba(37, 99, 235, 0.46);
 }
 
 .docs-screenshot-trigger__hint,
@@ -244,6 +243,7 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 
 .docs-screenshot-lightbox__dialog {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.6rem;
   width: min(98vw, 110rem);
@@ -265,15 +265,25 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 .docs-screenshot-lightbox__figure {
   position: relative;
   margin: 0;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .docs-screenshot-lightbox__media {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-areas:
+    "topbar"
+    "image"
+    "caption";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -283,16 +293,18 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 }
 
 .docs-screenshot-lightbox__topbar {
-  position: absolute;
-  inset: 0 0 auto;
+  position: relative;
+  grid-area: topbar;
   z-index: 3;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.95rem 1rem 3.5rem;
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.94) 0%, rgba(2, 6, 23, 0.74) 38%, rgba(2, 6, 23, 0) 100%);
-  pointer-events: none;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(2, 6, 23, 0.96);
+  pointer-events: auto;
 }
 
 .docs-screenshot-lightbox__meta {
@@ -336,9 +348,14 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 }
 
 .docs-screenshot-lightbox__image {
+  grid-area: image;
+  align-self: center;
+  justify-self: center;
   display: block;
   width: auto;
   height: auto;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
   margin: 0 auto;
@@ -346,13 +363,13 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 }
 
 .docs-screenshot-lightbox__nav {
-  position: absolute;
-  top: 0;
-  bottom: 0;
+  position: relative;
+  grid-area: image;
+  align-self: center;
   z-index: 2;
-  width: 14%;
+  width: auto;
   min-width: 4rem;
-  padding: 1rem 0.75rem;
+  padding: 0.75rem;
   border: 0;
   background: transparent;
   color: #fff;
@@ -360,13 +377,11 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 }
 
 .docs-screenshot-lightbox__nav--prev {
-  left: 0;
-  background: linear-gradient(90deg, rgba(15, 23, 42, 0.52) 0%, rgba(15, 23, 42, 0) 100%);
+  justify-self: start;
 }
 
 .docs-screenshot-lightbox__nav--next {
-  right: 0;
-  background: linear-gradient(270deg, rgba(15, 23, 42, 0.52) 0%, rgba(15, 23, 42, 0) 100%);
+  justify-self: end;
 }
 
 .docs-screenshot-lightbox__nav:disabled {
@@ -410,12 +425,14 @@ html[data-md-color-scheme="slate"] .md-typeset .docs-themed-shot__image--dark {
 }
 
 .docs-screenshot-lightbox__caption-wrap {
-  position: absolute;
-  inset: auto 0 0;
+  position: relative;
+  grid-area: caption;
   z-index: 3;
-  padding: 4rem 1rem 1rem;
-  background: linear-gradient(0deg, rgba(2, 6, 23, 0.96) 0%, rgba(2, 6, 23, 0.82) 42%, rgba(2, 6, 23, 0) 100%);
-  pointer-events: none;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(2, 6, 23, 0.96);
+  pointer-events: auto;
 }
 
 .docs-screenshot-lightbox__caption {
@@ -518,7 +535,7 @@ html[data-md-color-scheme="slate"] .docs-screenshot-lightbox__dialog {
 
   .docs-screenshot-lightbox__topbar {
     gap: 0.75rem;
-    padding: 0.75rem 0.75rem 2.8rem;
+    padding: 0.65rem 0.75rem;
   }
 
   .docs-screenshot-lightbox__meta {
@@ -548,7 +565,7 @@ html[data-md-color-scheme="slate"] .docs-screenshot-lightbox__dialog {
   }
 
   .docs-screenshot-lightbox__caption-wrap {
-    padding: 3rem 0.75rem 0.75rem;
+    padding: 0.65rem 0.75rem;
   }
 
   .docs-screenshot-lightbox__caption {
