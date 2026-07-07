@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
+import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -93,7 +93,7 @@ export default function BrowserBulkRestoreModal({
         {bulkRestoreSummary && (
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
         )}
-        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <div className={browserPanelCardClasses}>
           <label className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             <input
               type="checkbox"
@@ -141,7 +141,7 @@ export default function BrowserBulkRestoreModal({
           </label>
         </div>
         {bulkRestorePreview && (
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <p className="font-semibold text-slate-800 dark:text-slate-100">Preview</p>
             <p className="ui-caption text-slate-500 dark:text-slate-400">
               Restore {bulkRestorePreview.totalRestore} · Delete {bulkRestorePreview.totalDelete} · Unchanged{" "}

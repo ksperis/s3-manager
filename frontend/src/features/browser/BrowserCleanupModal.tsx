@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
+import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -67,7 +67,7 @@ export default function BrowserCleanupModal({
         {cleanupSummary && (
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{cleanupSummary}</p>
         )}
-        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <div className={browserPanelCardClasses}>
           <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
             Keep only the N most recent versions per object
           </label>

@@ -9,6 +9,7 @@ import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { stableSignature } from "../../utils/stableSignature";
 import {
   aclOptions,
+  browserPanelCardClasses,
   bulkActionClasses,
   formInputClasses,
   storageClassOptions,
@@ -158,7 +159,7 @@ export default function BrowserBulkAttributesModal({
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkAttributesSummary}</p>
         )}
         <div className="space-y-3">
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyMetadata}
               onChange={(event) => setBulkApplyMetadata(event.target.checked)}
@@ -231,7 +232,7 @@ export default function BrowserBulkAttributesModal({
               </div>
             )}
           </div>
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyTags}
               onChange={(event) => setBulkApplyTags(event.target.checked)}
@@ -248,7 +249,7 @@ export default function BrowserBulkAttributesModal({
               />
             )}
           </div>
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyStorageClass}
               onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
@@ -271,7 +272,7 @@ export default function BrowserBulkAttributesModal({
               </select>
             )}
           </div>
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyAcl}
               onChange={(event) => setBulkApplyAcl(event.target.checked)}
@@ -293,7 +294,7 @@ export default function BrowserBulkAttributesModal({
               </select>
             )}
           </div>
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyLegalHold}
               onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
@@ -312,7 +313,7 @@ export default function BrowserBulkAttributesModal({
               </select>
             )}
           </div>
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <div className={browserPanelCardClasses}>
             <UiCheckboxField
               checked={bulkApplyRetention}
               onChange={(event) => setBulkApplyRetention(event.target.checked)}
