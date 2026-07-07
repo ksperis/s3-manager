@@ -132,7 +132,9 @@ describe("BucketIntegrityCheckModal results", () => {
     const maxMbInput = screen.getByLabelText("Max MB per object") as HTMLInputElement;
     expect(maxMbInput).toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: "Run check" }));
+    const runButton = screen.getByRole("button", { name: "Run check" });
+    expect(runButton).toHaveClass("ui-button-base");
+    await user.click(runButton);
     await waitFor(() => {
       expect(streamManagerBucketIntegrityCheckMock).toHaveBeenCalledTimes(1);
     });

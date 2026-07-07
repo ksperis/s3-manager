@@ -17,6 +17,7 @@ import {
 } from "../../api/bucketIntegrity";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import UiButton from "../../components/ui/UiButton";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
@@ -247,22 +248,24 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {running ? (
-              <button
+              <UiButton
                 type="button"
                 onClick={cancelCheck}
-                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                variant="danger"
+                size="sm"
               >
                 Cancel
-              </button>
+              </UiButton>
             ) : (
-              <button
+              <UiButton
                 type="button"
                 onClick={runCheck}
                 disabled={targetCount === 0}
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                variant="primary"
+                size="sm"
               >
                 Run check
-              </button>
+              </UiButton>
             )}
           </div>
         </div>

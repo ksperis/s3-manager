@@ -67,7 +67,9 @@ describe("BucketUsageStatsRunModal", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Run calculation" }));
+    const runButton = screen.getByRole("button", { name: "Run calculation" });
+    expect(runButton).toHaveClass("ui-button-base");
+    await user.click(runButton);
 
     expect(await screen.findByText("bucket-a - list")).toBeInTheDocument();
     expect(screen.getByText("12 version(s) - 2.0 KB")).toBeInTheDocument();

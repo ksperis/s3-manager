@@ -18,6 +18,7 @@ import {
 } from "../../api/bucketPurge";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import UiButton from "../../components/ui/UiButton";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
@@ -261,22 +262,24 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {running ? (
-                <button
+                <UiButton
                   type="button"
                   onClick={cancelPurge}
-                  className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                  variant="danger"
+                  size="sm"
                 >
                   Cancel
-                </button>
+                </UiButton>
               ) : (
-                <button
+                <UiButton
                   type="button"
                   onClick={runPurge}
                   disabled={targetCount === 0 || !confirmationValid}
-                  className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  variant="danger"
+                  size="sm"
                 >
                   {isDeleteMode ? "Delete bucket" : "Start purge"}
-                </button>
+                </UiButton>
               )}
             </div>
           </div>

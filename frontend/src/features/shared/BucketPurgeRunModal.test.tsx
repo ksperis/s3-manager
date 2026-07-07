@@ -152,6 +152,7 @@ describe("BucketPurgeRunModal", () => {
     );
 
     const startButton = screen.getByRole("button", { name: "Start purge" });
+    expect(startButton).toHaveClass("ui-button-base");
     expect(startButton).toBeDisabled();
     await user.type(screen.getByLabelText("Type PURGE 2 BUCKETS"), "PURGE 1 BUCKETS");
     expect(startButton).toBeDisabled();
