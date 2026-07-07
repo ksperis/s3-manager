@@ -3,6 +3,16 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { StorageEndpoint } from "../../api/storageEndpoints";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
+import {
+  cx,
+  uiCheckboxClass,
+  uiLabelClass,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+} from "../../components/ui/styles";
 
 export type S3ConnectionEndpointMode = "preset" | "custom";
 
@@ -36,11 +46,6 @@ type S3ConnectionEndpointFieldsProps = {
   errorMessage?: string | null;
 };
 
-const inputClasses =
-  "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
-const labelClasses = "ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
-const checkboxLabelClasses = "flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300";
-
 export default function S3ConnectionEndpointFields({
   mode,
   onModeChange,
@@ -56,118 +61,103 @@ export default function S3ConnectionEndpointFields({
   const hasConfiguredEndpoints = endpoints.length > 0;
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+    <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
       <div>
-        <p className={labelClasses}>Endpoint</p>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">
+        <p className={uiLabelClass}>Endpoint</p>
+        <p className={cx("ui-caption", uiMutedTextClass)}>
           Choose a configured endpoint or enter a public HTTPS custom endpoint.
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className={checkboxLabelClasses}>
+        <label className={cx("flex items-center gap-2 ui-caption font-semibold", uiMutedTextClass)}>
           <input
             type="radio"
             name={modeInputName}
             checked={mode === "preset"}
             onChange={() => onModeChange("preset")}
             disabled={!hasConfiguredEndpoints}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+            className={cx(uiCheckboxClass, "rounded-full disabled:opacity-60")}
           />
           Configured endpoint
         </label>
-        <label className={checkboxLabelClasses}>
+        <label className={cx("flex items-center gap-2 ui-caption font-semibold", uiMutedTextClass)}>
           <input
             type="radio"
             name={modeInputName}
             checked={mode === "custom"}
             onChange={() => onModeChange("custom")}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            className={cx(uiCheckboxClass, "rounded-full")}
           />
           Custom endpoint
         </label>
       </div>
       {mode === "preset" ? (
-        <label className="block">
-          <span className={labelClasses}>Configured endpoint</span>
-          <select
-            value={endpointId}
-            onChange={(event) => onEndpointIdChange(event.target.value)}
-            disabled={loadingEndpoints || !hasConfiguredEndpoints}
-            className={inputClasses}
-          >
-            <option value="">
-              {loadingEndpoints
-                ? "Loading endpoints..."
-                : hasConfiguredEndpoints
-                  ? "Select endpoint"
-                  : "No configured endpoint"}
+        <UiSelect
+          label="Configured endpoint"
+          value={endpointId}
+          onChange={(event) => onEndpointIdChange(event.target.value)}
+          disabled={loadingEndpoints || !hasConfiguredEndpoints}
+        >
+          <option value="">
+            {loadingEndpoints
+              ? "Loading endpoints..."
+              : hasConfiguredEndpoints
+                ? "Select endpoint"
+                : "No configured endpoint"}
+          </option>
+          {endpoints.map((endpoint) => (
+            <option key={endpoint.id} value={endpoint.id}>
+              {endpoint.name} ({endpoint.endpoint_url})
             </option>
-            {endpoints.map((endpoint) => (
-              <option key={endpoint.id} value={endpoint.id}>
-                {endpoint.name} ({endpoint.endpoint_url})
-              </option>
-            ))}
-          </select>
-        </label>
+          ))}
+        </UiSelect>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className={labelClasses}>Provider</span>
-            <select
-              value={form.provider_hint}
-              onChange={(event) => onFormChange("provider_hint", event.target.value)}
-              className={inputClasses}
-            >
-              {S3_CONNECTION_PROVIDER_HINT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className={labelClasses}>Region</span>
-            <input
-              type="text"
-              value={form.region}
-              onChange={(event) => onFormChange("region", event.target.value)}
-              className={inputClasses}
-              placeholder="us-east-1"
-            />
-          </label>
-          <label className="block sm:col-span-2">
-            <span className={labelClasses}>Endpoint URL</span>
-            <input
-              type="url"
-              value={form.endpoint_url}
-              onChange={(event) => onFormChange("endpoint_url", event.target.value)}
-              className={inputClasses}
-              placeholder="https://s3.example.com"
-            />
-          </label>
+          <UiSelect
+            label="Provider"
+            value={form.provider_hint}
+            onChange={(event) => onFormChange("provider_hint", event.target.value)}
+          >
+            {S3_CONNECTION_PROVIDER_HINT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </UiSelect>
+          <UiInput
+            type="text"
+            label="Region"
+            value={form.region}
+            onChange={(event) => onFormChange("region", event.target.value)}
+            placeholder="us-east-1"
+          />
+          <UiInput
+            type="url"
+            label="Endpoint URL"
+            fieldClassName="sm:col-span-2"
+            value={form.endpoint_url}
+            onChange={(event) => onFormChange("endpoint_url", event.target.value)}
+            placeholder="https://s3.example.com"
+          />
           <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-            <label className={checkboxLabelClasses}>
-              <input
-                type="checkbox"
-                checked={form.force_path_style}
-                onChange={(event) => onFormChange("force_path_style", event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-              />
+            <UiCheckboxField
+              checked={form.force_path_style}
+              onChange={(event) => onFormChange("force_path_style", event.target.checked)}
+              className={cx("ui-caption font-semibold", uiMutedTextClass)}
+            >
               Force path style
-            </label>
-            <label className={checkboxLabelClasses}>
-              <input
-                type="checkbox"
-                checked={form.verify_tls}
-                onChange={(event) => onFormChange("verify_tls", event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-              />
+            </UiCheckboxField>
+            <UiCheckboxField
+              checked={form.verify_tls}
+              onChange={(event) => onFormChange("verify_tls", event.target.checked)}
+              className={cx("ui-caption font-semibold", uiMutedTextClass)}
+            >
               Verify TLS
-            </label>
+            </UiCheckboxField>
           </div>
         </div>
       )}
-      {errorMessage && <p className="ui-caption text-amber-700 dark:text-amber-300">{errorMessage}</p>}
+      {errorMessage ? <p className="ui-caption text-amber-700 dark:text-amber-300">{errorMessage}</p> : null}
     </div>
   );
 }
