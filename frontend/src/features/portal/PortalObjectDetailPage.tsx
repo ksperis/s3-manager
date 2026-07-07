@@ -23,6 +23,7 @@ import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiInput from "../../components/ui/UiInput";
 import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -448,10 +449,12 @@ export default function PortalObjectDetailPage() {
 
           {space.role === "Owner" ? (
             <UiCard title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}>
-              <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto]">
-                <input
+              <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto] sm:items-end">
+                <UiInput
                   type="datetime-local"
-                  className="ui-control h-9 text-xs"
+                  label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
+                  size="compact"
+                  className="h-9"
                   value={linkExpiration}
                   onChange={(event) => setLinkExpiration(event.target.value)}
                   aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
