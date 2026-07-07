@@ -18,12 +18,7 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import ManagerTable, {
-  managerTableActionCellClass,
-  managerTableCellClass,
-  managerTableMutedRowClass,
-  managerTablePrimaryCellClass,
-} from "../../components/list/ManagerTable";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { cx } from "../../components/ui/styles";
@@ -163,6 +158,60 @@ export default function PortalAccessKeysPage() {
   };
 
   const createDisabled = !state || !canManageAccessKeys || maxReached || Boolean(busy);
+  const accessKeyColumns: DataTableColumn<PortalAccessKey>[] = [
+    {
+      id: "access-key",
+      label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }),
+      primary: true,
+      cellClassName: "max-w-[18rem] break-all font-mono",
+      render: (key) => key.access_key_id,
+    },
+    {
+      id: "status",
+      label: t({ en: "Status", fr: "Statut", de: "Status" }),
+      cellClassName: "text-slate-700 dark:text-slate-200",
+      render: (key) => portalAccessKeyStatusLabel(key.status, isKeyActive(key), t),
+    },
+    {
+      id: "created",
+      label: t({ en: "Created on", fr: "Créée le", de: "Erstellt am" }),
+      render: (key) => portalDateTimeLabel(key.created_at, locale),
+    },
+    {
+      id: "actions",
+      label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }),
+      align: "right",
+      mobileRole: "actions",
+      render: (key) => {
+        const active = isKeyActive(key);
+        const disabled = Boolean(busy) || !canManageAccessKeys;
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => handleToggleKey(key)}
+              className={tableActionButtonClasses}
+              disabled={disabled}
+            >
+              {busy === `toggle:${key.access_key_id}`
+                ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
+                : active
+                  ? t({ en: "Disable", fr: "Désactiver", de: "Deaktivieren" })
+                  : t({ en: "Enable", fr: "Activer", de: "Aktivieren" })}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteKey(key)}
+              className={tableDeleteActionClasses}
+              disabled={disabled}
+            >
+              {busy === `delete:${key.access_key_id}` ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete", fr: "Supprimer", de: "Löschen" })}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -239,59 +288,22 @@ export default function PortalAccessKeysPage() {
             showHeading={false}
             countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} clé(s)`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Schlüssel` })}
           />
-          <ManagerTable
+          <DataTableShell
+            columns={accessKeyColumns}
+            rows={visibleKeys}
+            rowKey={(key) => key.access_key_id}
+            status={tableStatus}
+            loadingMessage={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })}
+            errorMessage={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })}
+            emptyMessage={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })}
+            rowClassName={(key) =>
+              cx(
+                "hover:bg-slate-50 dark:hover:bg-slate-800/40",
+                !isKeyActive(key) && "bg-slate-50/70 dark:bg-slate-900/40"
+              )
+            }
             responsiveCards
-            columns={[
-              { key: "access-key", label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), mobileRole: "primary" },
-              { key: "status", label: t({ en: "Status", fr: "Statut", de: "Status" }) },
-              { key: "created", label: t({ en: "Created on", fr: "Créée le", de: "Erstellt am" }) },
-              { key: "actions", label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }), align: "right", mobileRole: "actions" },
-            ]}
-            listState={{
-              status: tableStatus,
-              loadingMessage: t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." }),
-              errorMessage: t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." }),
-              emptyMessage: t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." }),
-            }}
-          >
-            {visibleKeys.map((key) => {
-              const active = isKeyActive(key);
-              const disabled = Boolean(busy) || !canManageAccessKeys;
-              return (
-                <tr key={key.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
-                  <td className={cx(managerTablePrimaryCellClass, "max-w-[18rem] break-all font-mono")}>{key.access_key_id}</td>
-                  <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
-                    {portalAccessKeyStatusLabel(key.status, active, t)}
-                  </td>
-                  <td className={managerTableCellClass}>{portalDateTimeLabel(key.created_at, locale)}</td>
-                  <td className={managerTableActionCellClass}>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleKey(key)}
-                        className={tableActionButtonClasses}
-                        disabled={disabled}
-                      >
-                        {busy === `toggle:${key.access_key_id}`
-                          ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
-                          : active
-                            ? t({ en: "Disable", fr: "Désactiver", de: "Deaktivieren" })
-                            : t({ en: "Enable", fr: "Activer", de: "Aktivieren" })}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteKey(key)}
-                        className={tableDeleteActionClasses}
-                        disabled={disabled}
-                      >
-                        {busy === `delete:${key.access_key_id}` ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete", fr: "Supprimer", de: "Löschen" })}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </ManagerTable>
+          />
         </div>
       )}
 
