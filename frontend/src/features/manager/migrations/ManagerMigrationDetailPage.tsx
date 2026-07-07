@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageHeader from "../../../components/PageHeader";
+import UiButton from "../../../components/ui/UiButton";
 import {
   continueManagerMigration,
   deleteManagerMigration,
@@ -352,7 +353,7 @@ export default function ManagerMigrationDetailPage() {
                 <p className="ui-caption text-slate-600 dark:text-slate-300">{nextAction.description}</p>
                 {nextAction.action && (
                   <div className="mt-2">
-                    <button
+                    <UiButton
                       type="button"
                       onClick={() =>
                         nextAction.action === "retry_failed_items"
@@ -360,13 +361,14 @@ export default function ManagerMigrationDetailPage() {
                           : runAction(nextAction.action as MigrationOperatorAction)
                       }
                       disabled={actionLoading != null || (nextAction.action === "start" && !canLaunchFromDraft)}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      variant="secondary"
+                      size="sm"
                     >
                       {actionLoading === nextAction.action ||
                       (nextAction.action === "retry_failed_items" && actionLoading === "retry-failed-items")
                         ? `${nextAction.actionLabel}...`
                         : nextAction.actionLabel}
-                    </button>
+                    </UiButton>
                   </div>
                 )}
               </div>
@@ -445,119 +447,129 @@ export default function ManagerMigrationDetailPage() {
 
             <div className="flex flex-wrap gap-2">
               {migrationDetail.status === "draft" && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("start")}
                   disabled={actionLoading != null || !canLaunchFromDraft}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                  variant="secondary"
+                  size="sm"
                 >
                   {actionLoading === "start" ? "Launching..." : "Launch replication"}
-                </button>
+                </UiButton>
               )}
 
               {canRunPrecheck && (
-                <button
+                <UiButton
                   type="button"
                   onClick={runPrecheck}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
+                  variant="warning"
+                  size="sm"
                 >
                   {actionLoading === "precheck"
                     ? "Running precheck..."
                     : migrationDetail.precheck_status === "failed"
                       ? "Re-run precheck"
                       : "Run precheck"}
-                </button>
+                </UiButton>
               )}
 
               {["queued", "running", "pause_requested"].includes(migrationDetail.status) && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("pause")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                  variant="secondary"
+                  size="sm"
                 >
                   {actionLoading === "pause" ? "Pausing..." : "Pause"}
-                </button>
+                </UiButton>
               )}
 
               {migrationDetail.status === "paused" && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("resume")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                  variant="secondary"
+                  size="sm"
                 >
                   {actionLoading === "resume" ? "Resuming..." : "Resume"}
-                </button>
+                </UiButton>
               )}
 
               {migrationDetail.status === "awaiting_cutover" && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("continue")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-slate-300 px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                  variant="secondary"
+                  size="sm"
                 >
                   {actionLoading === "continue" ? "Continuing..." : "Continue after pre-sync"}
-                </button>
+                </UiButton>
               )}
 
               {canOfferFullRollback(migrationDetail) && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("rollback")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
+                  variant="warning"
+                  size="sm"
                 >
                   {actionLoading === "rollback" ? "Rolling back..." : "Rollback migration"}
-                </button>
+                </UiButton>
               )}
 
               {failedItemCount > 0 && canManageFailedItems && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runFailedItemsAction("retry_failed_items")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-sky-300 px-3 py-1.5 ui-caption font-semibold text-sky-700 disabled:opacity-50 dark:border-sky-700 dark:text-sky-200"
+                  variant="secondary"
+                  size="sm"
                 >
                   {actionLoading === "retry-failed-items" ? "Retrying failed..." : `Retry all failed (${failedItemCount})`}
-                </button>
+                </UiButton>
               )}
 
               {failedItemCount > 0 && canManageFailedItems && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runFailedItemsAction("rollback_failed_items")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
+                  variant="warning"
+                  size="sm"
                 >
                   {actionLoading === "rollback-failed-items"
                     ? "Rolling back failed..."
                     : `Rollback all failed (${failedItemCount})`}
-                </button>
+                </UiButton>
               )}
 
               {canStopMigration && (
-                <button
+                <UiButton
                   type="button"
                   onClick={() => runAction("stop")}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-rose-300 px-3 py-1.5 ui-caption font-semibold text-rose-700 disabled:opacity-50 dark:border-rose-700 dark:text-rose-200"
+                  variant="danger"
+                  size="sm"
                 >
                   {actionLoading === "stop" ? "Stopping..." : "Stop"}
-                </button>
+                </UiButton>
               )}
 
               {isFinalMigrationStatus(migrationDetail.status) && (
-                <button
+                <UiButton
                   type="button"
                   onClick={runDeleteMigration}
                   disabled={actionLoading != null}
-                  className="rounded-lg border border-rose-300 px-3 py-1.5 ui-caption font-semibold text-rose-700 disabled:opacity-50 dark:border-rose-700 dark:text-rose-200"
+                  variant="danger"
+                  size="sm"
                 >
                   {actionLoading === "delete-migration" ? "Deleting..." : "Delete migration"}
-                </button>
+                </UiButton>
               )}
             </div>
           </section>
@@ -566,50 +578,38 @@ export default function ManagerMigrationDetailPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="ui-body text-base font-semibold text-slate-900 dark:text-slate-100">Bucket replication progress</h3>
               <div className="flex flex-wrap gap-1">
-                <button
+                <UiButton
                   type="button"
                   onClick={() => setBucketFocus("focus")}
-                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                    bucketFocus === "focus"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300"
-                  }`}
+                  variant={bucketFocus === "focus" ? "primary" : "secondary"}
+                  size="xs"
                 >
                   Focused
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
                   onClick={() => setBucketFocus("failed")}
-                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                    bucketFocus === "failed"
-                      ? "border-rose-300 bg-rose-100 text-rose-700 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200"
-                      : "border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300"
-                  }`}
+                  variant={bucketFocus === "failed" ? "danger" : "secondary"}
+                  size="xs"
                 >
                   Failed
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
                   onClick={() => setBucketFocus("awaiting")}
-                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                    bucketFocus === "awaiting"
-                      ? "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
-                      : "border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300"
-                  }`}
+                  variant={bucketFocus === "awaiting" ? "warning" : "secondary"}
+                  size="xs"
                 >
                   Awaiting
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   type="button"
                   onClick={() => setBucketFocus("all")}
-                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                    bucketFocus === "all"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300"
-                  }`}
+                  variant={bucketFocus === "all" ? "primary" : "secondary"}
+                  size="xs"
                 >
                   All
-                </button>
+                </UiButton>
               </div>
             </div>
 
@@ -671,13 +671,14 @@ export default function ManagerMigrationDetailPage() {
                             Precheck: {reviewItem.errors} error(s), {reviewItem.warnings} warning(s)
                           </span>
                           {reviewItem.messages.length > 0 && (
-                            <button
+                            <UiButton
                               type="button"
                               onClick={() => togglePrecheckDetails(item.id)}
-                              className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
+                              variant="ghost"
+                              size="xs"
                             >
                               {precheckDetailsExpanded ? "Hide precheck details" : "Show precheck details"}
-                            </button>
+                            </UiButton>
                           )}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -730,22 +731,24 @@ export default function ManagerMigrationDetailPage() {
                     {item.error_message && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{item.error_message}</p>}
                     {item.status === "failed" && canManageFailedItems && (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <button
+                        <UiButton
                           type="button"
                           onClick={() => runItemAction(item.id, "retry")}
                           disabled={actionLoading != null}
-                          className="rounded-md border border-sky-300 px-2 py-1 text-[11px] font-semibold text-sky-700 disabled:opacity-50 dark:border-sky-700 dark:text-sky-200"
+                          variant="secondary"
+                          size="xs"
                         >
                           {actionLoading === `retry-item-${item.id}` ? "Retrying..." : "Retry bucket"}
-                        </button>
-                        <button
+                        </UiButton>
+                        <UiButton
                           type="button"
                           onClick={() => runItemAction(item.id, "rollback")}
                           disabled={actionLoading != null}
-                          className="rounded-md border border-amber-300 px-2 py-1 text-[11px] font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
+                          variant="warning"
+                          size="xs"
                         >
                           {actionLoading === `rollback-item-${item.id}` ? "Rolling back..." : "Rollback bucket"}
-                        </button>
+                        </UiButton>
                       </div>
                     )}
                   </div>
@@ -758,13 +761,14 @@ export default function ManagerMigrationDetailPage() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <button
+            <UiButton
               type="button"
               onClick={() => setShowEvents((current) => !current)}
-              className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
+              variant="ghost"
+              size="sm"
             >
               {showEvents ? "Hide events" : "Show events"}
-            </button>
+            </UiButton>
             {showEvents && (
               <div className="mt-3 max-h-56 space-y-2 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                 {migrationDetail.recent_events.map((event) => (
@@ -783,13 +787,14 @@ export default function ManagerMigrationDetailPage() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <button
+            <UiButton
               type="button"
               onClick={() => setShowTechnical((current) => !current)}
-              className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
+              variant="ghost"
+              size="sm"
             >
               {showTechnical ? "Hide technical details" : "Show technical details"}
-            </button>
+            </UiButton>
             {showTechnical && (
               <div className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
                 <p className="ui-caption text-slate-500 dark:text-slate-400">

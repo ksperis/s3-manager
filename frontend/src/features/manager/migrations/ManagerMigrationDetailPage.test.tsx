@@ -219,8 +219,14 @@ describe("ManagerMigrationDetailPage", () => {
 
     expect(screen.getByText("Copy progress: 25/100 (25%)")).toBeInTheDocument();
     expect(screen.queryByText(/Copy progress: 3\//)).not.toBeInTheDocument();
+    for (const pauseButton of screen.getAllByRole("button", { name: "Pause" })) {
+      expect(pauseButton).toHaveClass("ui-button-base");
+    }
+    expect(screen.getByRole("button", { name: "Focused" })).toHaveClass("ui-button-base");
 
-    await user.click(screen.getByRole("button", { name: "All" }));
+    const allFilter = screen.getByRole("button", { name: "All" });
+    expect(allFilter).toHaveClass("ui-button-base");
+    await user.click(allFilter);
     expect(screen.getByText(/bucket-completed/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Failed" }));
@@ -230,7 +236,9 @@ describe("ManagerMigrationDetailPage", () => {
     expect(screen.getByText("Precheck: 1 error(s), 0 warning(s)")).toBeInTheDocument();
     expect(screen.getByText("Precheck report v2")).toBeInTheDocument();
     expect(screen.getByText(/1 blocking error\(s\), 1 warning\(s\), 2 info/)).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Show precheck details" })[0]);
+    const precheckDetailsToggle = screen.getAllByRole("button", { name: "Show precheck details" })[0];
+    expect(precheckDetailsToggle).toHaveClass("ui-button-base");
+    await user.click(precheckDetailsToggle);
     expect(screen.getByText(/Source bucket read\/list check failed: access denied\./)).toBeInTheDocument();
     expect(screen.getByText(/strategy: current_only \(current objects only\)/)).toBeInTheDocument();
     expect(screen.queryByText("Precheck result:")).not.toBeInTheDocument();
@@ -259,6 +267,6 @@ describe("ManagerMigrationDetailPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("button", { name: "Run precheck" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run precheck" })).toHaveClass("ui-button-base");
   });
 });
