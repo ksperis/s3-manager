@@ -38,6 +38,8 @@ import {
   adminAssociationCheckboxClass,
   adminAssociationCompactSelectClass,
   adminAssociationOptionRowClass,
+  adminAssociationTableClass as tableClass,
+  adminAssociationTableContainerClass as tableContainerClass,
 } from "./AdminAssociationPicker";
 import AdminModalTabs from "./AdminModalTabs";
 import {
@@ -53,7 +55,6 @@ import DataTableShell, { type DataTableColumn } from "../../components/list/Data
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 
@@ -64,9 +65,6 @@ const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const secondaryButtonClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
-const tableContainerClass = uiTableContainerClass;
-const tableClass = cx(uiDataTableClass, "compact-table min-w-full");
-
 function accountDbId(account: S3AccountSummary): number {
   return Number(account.db_id ?? account.id);
 }

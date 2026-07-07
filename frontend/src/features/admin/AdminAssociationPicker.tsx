@@ -5,7 +5,14 @@
 import type { ReactNode } from "react";
 
 import UiButton from "../../components/ui/UiButton";
-import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiCardMutedClass,
+  uiDataTableClass,
+  uiMutedTextClass,
+  uiTableContainerClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 
@@ -13,6 +20,8 @@ export const adminAssociationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-
 export const adminAssociationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
 export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
 export const adminAssociationCheckboxClass = "h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary";
+export const adminAssociationTableContainerClass = uiTableContainerClass;
+export const adminAssociationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 export const adminAssociationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${

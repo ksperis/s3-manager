@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -53,6 +53,8 @@ import {
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
   adminAssociationCheckboxClass,
+  adminAssociationTableClass as associationTableClass,
+  adminAssociationTableContainerClass as associationTableContainerClass,
 } from "./AdminAssociationPicker";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
@@ -86,9 +88,6 @@ type PortalOverrideFormSnapshot = {
 
 const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
   Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
-
-const associationTableContainerClass = uiTableContainerClass;
-const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 const normalizeListInput = (value: string): string[] =>
   value

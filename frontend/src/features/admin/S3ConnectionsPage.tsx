@@ -18,10 +18,8 @@ import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
-  uiDataTableClass,
   uiMutedTextClass,
   uiPanelMutedClass,
-  uiTableContainerClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -52,6 +50,8 @@ import {
   AdminAssociationSectionHeader,
   adminAssociationCheckboxClass,
   adminAssociationOptionRowClass,
+  adminAssociationTableClass as associationTableClass,
+  adminAssociationTableContainerClass as associationTableContainerClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
@@ -66,9 +66,6 @@ const credentialOwnerTypeOptions = [
 type EditTab = "general" | "users" | "groups";
 
 const selectionCheckboxClass = "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary";
-const associationTableContainerClass = uiTableContainerClass;
-const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
-
 const createEmptyConnectionForm = () => ({
   name: "",
   tags: [] as UiTagDefinition[],

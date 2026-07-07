@@ -32,7 +32,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
-import { cx, uiDataTableClass, uiPanelMutedClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiPanelMutedClass } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -47,6 +47,8 @@ import {
   AdminAssociationSectionHeader,
   adminAssociationCheckboxClass,
   adminAssociationOptionRowClass,
+  adminAssociationTableClass as associationTableClass,
+  adminAssociationTableContainerClass as associationTableContainerClass,
 } from "./AdminAssociationPicker";
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
@@ -54,9 +56,6 @@ import { useAdminS3UserStats } from "./useAdminS3UserStats";
 type TextMatchMode = "contains" | "exact";
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
-
-const associationTableContainerClass = uiTableContainerClass;
-const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {

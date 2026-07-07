@@ -51,7 +51,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { cx, uiButtonBaseClass, uiButtonVariants, uiDataTableClass, uiInputClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
@@ -65,6 +65,8 @@ import {
   adminAssociationCompactInputClass,
   adminAssociationCompactSelectClass,
   adminAssociationOptionRowClass,
+  adminAssociationTableClass as associationTableClass,
+  adminAssociationTableContainerClass as associationTableContainerClass,
 } from "./AdminAssociationPicker";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
@@ -85,8 +87,6 @@ type Option = {
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
 const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
 const userModalCancelButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-4 py-2 ui-body");
-const associationTableContainerClass = uiTableContainerClass;
-const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 const associationAddPanelClass = adminAssociationAddPanelClass;
 const associationCompactInputClass = adminAssociationCompactInputClass;
 const associationCompactSelectClass = adminAssociationCompactSelectClass;
