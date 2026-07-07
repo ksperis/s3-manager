@@ -8,6 +8,7 @@ import {
   uiButtonVariants,
   uiIconButtonClass,
   uiInputClass,
+  uiPanelMutedClass,
 } from "../../components/ui/styles";
 
 export const iconButtonClasses =
@@ -39,6 +40,8 @@ export const viewToggleBaseClasses =
 export const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
 export const formInputClasses =
   cx(uiInputClass, "px-2 py-1.5 ui-caption");
+export const browserPanelCardClasses =
+  cx(uiPanelMutedClass, "px-3 py-3 ui-caption");
 export const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const contextMenuBaseClasses =

@@ -34,8 +34,11 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import { BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 import {
+  browserPanelCardClasses,
   bulkActionClasses,
+  formInputClasses,
   toolbarButtonClasses,
+  toolbarPrimaryClasses,
 } from "./browserConstants";
 import {
   buildVersionRows,
@@ -99,15 +102,6 @@ type TabButton = {
   id: ObjectDetailsTabId;
   label: string;
 };
-
-const inputClasses =
-  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
-const buttonPrimaryClasses =
-  "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60";
-const buttonGhostClasses =
-  "inline-flex items-center justify-center rounded-md px-2 py-1 ui-caption font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
-const panelCardClasses =
-  "rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40";
 
 export default function BrowserObjectDetailsModal({
   accountId,
@@ -1092,7 +1086,7 @@ export default function BrowserObjectDetailsModal({
       )}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-4">
-          <div className={panelCardClasses}>
+          <div className={browserPanelCardClasses}>
             <div className="flex items-center justify-between">
               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
                 Standard metadata
@@ -1110,7 +1104,7 @@ export default function BrowserObjectDetailsModal({
               <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Content type</span>
                 <input
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.contentType}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1124,7 +1118,7 @@ export default function BrowserObjectDetailsModal({
               <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Cache control</span>
                 <input
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.cacheControl}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1138,7 +1132,7 @@ export default function BrowserObjectDetailsModal({
               <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Content disposition</span>
                 <input
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.contentDisposition}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1152,7 +1146,7 @@ export default function BrowserObjectDetailsModal({
               <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Content encoding</span>
                 <input
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.contentEncoding}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1166,7 +1160,7 @@ export default function BrowserObjectDetailsModal({
               <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Content language</span>
                 <input
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.contentLanguage}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1181,7 +1175,7 @@ export default function BrowserObjectDetailsModal({
                 <span>Expires</span>
                 <input
                   type="datetime-local"
-                  className={inputClasses}
+                  className={formInputClasses}
                   value={metadataDraft.expires}
                   onChange={(event) =>
                     setMetadataDraft((prev) => ({
@@ -1195,7 +1189,7 @@ export default function BrowserObjectDetailsModal({
             <div className="mt-3 flex items-center justify-end">
               <button
                 type="button"
-                className={buttonPrimaryClasses}
+                className={toolbarPrimaryClasses}
                 onClick={() => void handleSaveMetadata()}
                 disabled={savingMetadata || metadataLoading || !metadataLoaded}
               >
@@ -1204,14 +1198,14 @@ export default function BrowserObjectDetailsModal({
             </div>
           </div>
 
-          <div className={panelCardClasses}>
+          <div className={browserPanelCardClasses}>
             <div className="flex items-center justify-between">
               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
                 Custom metadata
               </p>
               <button
                 type="button"
-                className={buttonGhostClasses}
+                className={toolbarButtonClasses}
                 onClick={() =>
                   setMetadataItems((prev) => [
                     ...prev,
@@ -1234,7 +1228,7 @@ export default function BrowserObjectDetailsModal({
                     className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
                   >
                     <input
-                      className={inputClasses}
+                      className={formInputClasses}
                       value={metadataItem.key}
                       onChange={(event) =>
                         setMetadataItems((prev) =>
@@ -1248,7 +1242,7 @@ export default function BrowserObjectDetailsModal({
                       placeholder="x-custom-key"
                     />
                     <input
-                      className={inputClasses}
+                      className={formInputClasses}
                       value={metadataItem.value}
                       onChange={(event) =>
                         setMetadataItems((prev) =>
@@ -1263,7 +1257,7 @@ export default function BrowserObjectDetailsModal({
                     />
                     <button
                       type="button"
-                      className={buttonGhostClasses}
+                      className={toolbarButtonClasses}
                       onClick={() =>
                         setMetadataItems((prev) =>
                           prev.filter((entry) => entry.id !== metadataItem.id),
@@ -1280,14 +1274,14 @@ export default function BrowserObjectDetailsModal({
         </div>
 
         <div className="space-y-4">
-          <div className={panelCardClasses}>
+          <div className={browserPanelCardClasses}>
             <div className="flex items-center justify-between">
               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
                 Tags
               </p>
               <button
                 type="button"
-                className={buttonGhostClasses}
+                className={toolbarButtonClasses}
                 onClick={() =>
                   setTagsDraft((prev) => [
                     ...prev,
@@ -1310,7 +1304,7 @@ export default function BrowserObjectDetailsModal({
                     className="grid gap-2 md:grid-cols-[1fr_1fr_auto]"
                   >
                     <input
-                      className={inputClasses}
+                      className={formInputClasses}
                       value={tag.key}
                       onChange={(event) =>
                         setTagsDraft((prev) =>
@@ -1324,7 +1318,7 @@ export default function BrowserObjectDetailsModal({
                       placeholder="Key"
                     />
                     <input
-                      className={inputClasses}
+                      className={formInputClasses}
                       value={tag.value}
                       onChange={(event) =>
                         setTagsDraft((prev) =>
@@ -1339,7 +1333,7 @@ export default function BrowserObjectDetailsModal({
                     />
                     <button
                       type="button"
-                      className={buttonGhostClasses}
+                      className={toolbarButtonClasses}
                       onClick={() =>
                         setTagsDraft((prev) =>
                           prev.filter((_, index) => index !== idx),
@@ -1355,7 +1349,7 @@ export default function BrowserObjectDetailsModal({
             <div className="mt-3 flex items-center justify-end">
               <button
                 type="button"
-                className={buttonPrimaryClasses}
+                className={toolbarPrimaryClasses}
                 onClick={() => void handleSaveTags()}
                 disabled={savingTags || metadataLoading}
               >
@@ -1364,14 +1358,14 @@ export default function BrowserObjectDetailsModal({
             </div>
           </div>
 
-          <div className={panelCardClasses}>
+          <div className={browserPanelCardClasses}>
             <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
               Storage class
             </p>
             <label className="mt-2 block space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Storage class</span>
               <select
-                className={inputClasses}
+                className={formInputClasses}
                 value={storageClass}
                 onChange={(event) => setStorageClass(event.target.value)}
               >
@@ -1390,7 +1384,7 @@ export default function BrowserObjectDetailsModal({
             <div className="mt-3 flex items-center justify-end">
               <button
                 type="button"
-                className={buttonPrimaryClasses}
+                className={toolbarPrimaryClasses}
                 onClick={() => void handleSaveStorageClass()}
                 disabled={savingStorage || !storageClass}
               >
@@ -1405,14 +1399,14 @@ export default function BrowserObjectDetailsModal({
 
   const renderProtectionContent = () => (
     <div className="grid gap-4 xl:grid-cols-2">
-      <div className={panelCardClasses}>
+      <div className={browserPanelCardClasses}>
         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
           Access
         </p>
         <label className="mt-3 block space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
           <span>Canned ACL</span>
           <select
-            className={inputClasses}
+            className={formInputClasses}
             value={aclValue}
             onChange={(event) => setAclValue(event.target.value)}
           >
@@ -1429,7 +1423,7 @@ export default function BrowserObjectDetailsModal({
         <div className="mt-3 flex items-center justify-end">
           <button
             type="button"
-            className={buttonPrimaryClasses}
+            className={toolbarPrimaryClasses}
             onClick={() => void handleSaveAcl()}
             disabled={savingAcl}
           >
@@ -1439,7 +1433,7 @@ export default function BrowserObjectDetailsModal({
       </div>
 
       <div
-        className={`${panelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
+        className={`${browserPanelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
       >
         <div className="flex items-center justify-between">
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
@@ -1463,7 +1457,7 @@ export default function BrowserObjectDetailsModal({
         )}
         <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
           <select
-            className={inputClasses}
+            className={formInputClasses}
             value={legalHoldStatus}
             onChange={(event) =>
               setLegalHoldStatus(event.target.value as "ON" | "OFF")
@@ -1475,7 +1469,7 @@ export default function BrowserObjectDetailsModal({
           </select>
           <button
             type="button"
-            className={buttonPrimaryClasses}
+            className={toolbarPrimaryClasses}
             onClick={() => void handleSaveLegalHold()}
             disabled={savingLegalHold || legalHoldLoading || objectLockUnavailable}
           >
@@ -1485,7 +1479,7 @@ export default function BrowserObjectDetailsModal({
       </div>
 
       <div
-        className={`${panelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
+        className={`${browserPanelCardClasses} ${objectLockUnavailable ? "opacity-60" : ""}`}
       >
         <div className="flex items-center justify-between">
           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
@@ -1511,7 +1505,7 @@ export default function BrowserObjectDetailsModal({
           <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Mode</span>
             <select
-              className={inputClasses}
+              className={formInputClasses}
               value={retentionMode}
               onChange={(event) =>
                 setRetentionMode(
@@ -1529,7 +1523,7 @@ export default function BrowserObjectDetailsModal({
             <span>Retain until</span>
             <input
               type="datetime-local"
-              className={inputClasses}
+              className={formInputClasses}
               value={retentionDate}
               onChange={(event) => setRetentionDate(event.target.value)}
               disabled={objectLockUnavailable}
@@ -1548,7 +1542,7 @@ export default function BrowserObjectDetailsModal({
         <div className="mt-3 flex items-center justify-end">
           <button
             type="button"
-            className={buttonPrimaryClasses}
+            className={toolbarPrimaryClasses}
             onClick={() => void handleSaveRetention()}
             disabled={
               savingRetention ||
@@ -1563,7 +1557,7 @@ export default function BrowserObjectDetailsModal({
         </div>
       </div>
 
-      <div className={panelCardClasses}>
+      <div className={browserPanelCardClasses}>
         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
           Signed URL
         </p>
@@ -1581,7 +1575,7 @@ export default function BrowserObjectDetailsModal({
           <span>Expires at</span>
           <input
             type="datetime-local"
-            className={inputClasses}
+            className={formInputClasses}
             value={presignExpires}
             onChange={(event) => setPresignExpires(event.target.value)}
           />
@@ -1594,7 +1588,7 @@ export default function BrowserObjectDetailsModal({
         <div className="mt-3 flex items-center justify-end">
           <button
             type="button"
-            className={buttonPrimaryClasses}
+            className={toolbarPrimaryClasses}
             onClick={() => void handleGeneratePresign()}
             disabled={savingPresign}
           >
@@ -1609,14 +1603,14 @@ export default function BrowserObjectDetailsModal({
               </span>
               <button
                 type="button"
-                className={buttonGhostClasses}
+                className={toolbarButtonClasses}
                 onClick={() => void handleCopyPresign()}
               >
                 Copy URL
               </button>
             </div>
             <textarea
-              className={`${inputClasses} h-24 font-mono`}
+              className={`${formInputClasses} h-24 font-mono`}
               readOnly
               value={presignUrl}
               spellCheck={false}
@@ -1649,7 +1643,7 @@ export default function BrowserObjectDetailsModal({
 
   const renderArchiveContent = () => (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-      <div className={panelCardClasses}>
+      <div className={browserPanelCardClasses}>
         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
           Archive restore
         </p>
@@ -1663,7 +1657,7 @@ export default function BrowserObjectDetailsModal({
             <input
               type="number"
               min={1}
-              className={inputClasses}
+              className={formInputClasses}
               value={restoreDays}
               onChange={(event) => setRestoreDays(event.target.value)}
             />
@@ -1671,7 +1665,7 @@ export default function BrowserObjectDetailsModal({
           <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Tier</span>
             <select
-              className={inputClasses}
+              className={formInputClasses}
               value={restoreTier}
               onChange={(event) =>
                 setRestoreTier(
@@ -1688,7 +1682,7 @@ export default function BrowserObjectDetailsModal({
         <div className="mt-3 flex items-center justify-end">
           <button
             type="button"
-            className={buttonPrimaryClasses}
+            className={toolbarPrimaryClasses}
             onClick={() => void handleRestoreArchive()}
             disabled={savingRestore}
           >
@@ -1697,7 +1691,7 @@ export default function BrowserObjectDetailsModal({
         </div>
       </div>
 
-      <div className={panelCardClasses}>
+      <div className={browserPanelCardClasses}>
         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">
           Current status
         </p>
