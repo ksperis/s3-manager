@@ -26,6 +26,7 @@ import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
+import UiButton from "../../components/ui/UiButton";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -9799,37 +9800,32 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               : "No advanced filter configured."}
                         </p>
                         <div className="flex flex-wrap items-center justify-end gap-2">
-                          <button
+                          <UiButton
                             type="button"
                             onClick={resetAdvancedFilter}
                             disabled={!hasAnyAdvancedToClear}
-                            className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                              hasAnyAdvancedToClear
-                                ? "border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                                : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                            }`}
+                            variant="secondary"
+                            size="sm"
                           >
                             Clear
-                          </button>
-                          <button
+                          </UiButton>
+                          <UiButton
                             type="button"
                             onClick={advancedFilterCloseGuard.requestClose}
-                            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                            variant="secondary"
+                            size="sm"
                           >
                             Close
-                          </button>
-                          <button
+                          </UiButton>
+                          <UiButton
                             type="button"
                             onClick={applyAdvancedFilter}
                             disabled={!hasPendingAdvancedChanges}
-                            className={`rounded-md px-2.5 py-1.5 ui-caption font-semibold ${
-                              hasPendingAdvancedChanges
-                                ? "bg-primary text-white shadow-sm hover:bg-primary-600"
-                                : "cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                            }`}
+                            variant="primary"
+                            size="sm"
                           >
                             Apply filters
-                          </button>
+                          </UiButton>
                         </div>
                       </div>
                     </div>

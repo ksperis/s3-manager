@@ -286,7 +286,13 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "Deselect filtered" })[0]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(screen.getByRole("button", { name: "Clear" })).toHaveClass("ui-button-base");
+    for (const closeButton of screen.getAllByRole("button", { name: "Close" })) {
+      expect(closeButton).toHaveClass("ui-button-base");
+    }
+    const applyButton = screen.getByRole("button", { name: "Apply filters" });
+    expect(applyButton).toHaveClass("ui-button-base");
+    fireEvent.click(applyButton);
 
     await waitFor(() => expect(mocks.streamStorageOpsBuckets).toHaveBeenCalled());
     const params = mocks.streamStorageOpsBuckets.mock.calls.at(-1)?.[1] as { advanced_filter?: string } | undefined;
