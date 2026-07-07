@@ -247,8 +247,15 @@ describe("AccountsPage modal tabs", () => {
     render(<AccountsPage />);
 
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByText("acc-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("RGW000000000000001").closest("td")).toHaveAttribute("data-label", "RGW ID");
+    expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     expect(screen.getByText("ui7@example.com")).toBeInTheDocument();
     expect(screen.getByText("Research Group")).toBeInTheDocument();
+    expect(within(table).getByText("Research Group").closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
+    expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(screen.getByText("Portal user")).toBeInTheDocument();
     expect(screen.getByText("Portal manager")).toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);

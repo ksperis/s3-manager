@@ -30,10 +30,9 @@ import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
-import PaginationControls from "../../components/PaginationControls";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
 import StorageUsageCard from "../../components/StorageUsageCard";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -303,6 +302,8 @@ export default function S3AccountsPage() {
     );
   };
 
+  const extractError = useCallback((err: unknown) => extractApiError(err, "Unexpected error"), []);
+
   const fetchS3Accounts = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -369,7 +370,7 @@ export default function S3AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, quickFilterMode, page, pageSize, sort.direction, sort.field]);
+  }, [extractError, filter, quickFilterMode, page, pageSize, sort.direction, sort.field]);
 
   const userOptions = useMemo(() => users.map((u) => ({ id: u.id, label: u.email })), [users]);
   const userLabelById = useMemo(() => {
@@ -608,8 +609,6 @@ export default function S3AccountsPage() {
     fetchS3Accounts();
   }, [fetchS3Accounts]);
 
-  const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
-
   const fetchEndpointAccountsWritePermission = useCallback(
     async (endpointId: number) => {
       if (!Number.isFinite(endpointId) || endpointId <= 0) return;
@@ -629,7 +628,7 @@ export default function S3AccountsPage() {
         setEndpointPermissionLoading((prev) => ({ ...prev, [endpointId]: false }));
       }
     },
-    [endpointPermissionLoading]
+    [endpointPermissionLoading, extractError]
   );
 
   useEffect(() => {
@@ -693,12 +692,95 @@ export default function S3AccountsPage() {
     [extractError]
   );
 
-  const columns: { label: string; field: SortField | null; align?: "left" | "right" }[] = [
-    { label: "Name", field: "name" },
-    { label: "RGW ID", field: "rgw_account_id" },
-    { label: "Endpoint", field: null },
-    { label: "UI Users / Groups", field: null },
-    { label: "Actions", field: null, align: "right" },
+  const accountTableColumns: Array<DataTableColumn<S3Account, SortField>> = [
+    {
+      id: "name",
+      label: "Name",
+      field: "name",
+      primary: true,
+      cellClassName: "min-w-[240px] max-w-[360px] align-top",
+      render: (account) => {
+        const tagItems = buildUiTagItems(account.tags);
+        return (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {isSuperAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => startEditS3Account(account)}
+                  className="min-w-0 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+                >
+                  {account.name}
+                </button>
+              ) : (
+                <span className="min-w-0 truncate">{account.name}</span>
+              )}
+              {renderS3AccountTypeBadge(account)}
+            </div>
+            {tagItems.length > 0 && (
+              <UiTagBadgeList
+                items={tagItems}
+                variant="listing-compact"
+                layout="inline-compact"
+                className="ml-auto max-w-full"
+                maxVisible={4}
+              />
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "rgw-id",
+      label: "RGW ID",
+      field: "rgw_account_id",
+      cellClassName: "min-w-[176px] align-top",
+      render: (account) => account.rgw_account_id ?? account.id,
+    },
+    {
+      id: "endpoint",
+      label: "Endpoint",
+      cellClassName: "min-w-[160px] align-top",
+      render: (account) => (
+        <span title={account.storage_endpoint_url || undefined}>
+          {account.storage_endpoint_name || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "associations",
+      label: "UI Users / Groups",
+      cellClassName: "min-w-[288px] max-w-[480px] align-top",
+      render: (account) => renderAccountAssociations(account),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      cellClassName: "min-w-[144px] align-top",
+      render: (account) => {
+        const summaryDbId = accountDbId(account);
+        const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
+        return isSuperAdmin ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => openDeleteS3AccountModal(account)}
+              className={tableDeleteActionClasses}
+              disabled={deleteBusy}
+            >
+              {deleteBusy ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        ) : (
+          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+        );
+      },
+    },
   ];
   const tableStatus = resolveListTableStatus({
     loading,
@@ -2475,117 +2557,26 @@ export default function S3AccountsPage() {
             ) : null
           }
         />
-        <div className="overflow-x-auto">
-          <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {columns.map((col, idx) => (
-                  <th
-                    key={col.label}
-                    onClick={col.field ? () => toggleSort(col.field as SortField) : undefined}
-                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                      idx === 0
-                        ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
-                        : idx === 1
-                          ? "w-56 min-w-[11rem]"
-                          : idx === 2
-                            ? "w-48 min-w-[10rem]"
-                            : idx === 3
-                              ? "w-[22rem] min-w-[18rem] max-w-[30rem]"
-                              : "w-44 min-w-[9rem]"
-                    } ${
-                      col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
-                    }`}
-                  >
-                    <div className={`flex items-center ${col.align === "right" ? "justify-end" : "gap-1"}`}>
-                      <span>{col.label}</span>
-                      {col.field && sort.field === col.field && (
-                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={columns.length} message="Loading accounts..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={columns.length} message="Unable to load accounts." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={columns.length} message="No accounts." />}
-              {accounts.map((account) => {
-                  const summaryDbId = accountDbId(account);
-                  const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
-                  const tagItems = buildUiTagItems(account.tags);
-                  return (
-                    <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="sticky left-0 z-10 min-w-[16rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {isSuperAdmin ? (
-                          <button
-                            type="button"
-                            onClick={() => startEditS3Account(account)}
-                            className="min-w-0 truncate text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-                          >
-                            {account.name}
-                          </button>
-                        ) : (
-                          <span className="min-w-0 truncate">{account.name}</span>
-                        )}
-                        {renderS3AccountTypeBadge(account)}
-                      </div>
-                      {tagItems.length > 0 && (
-                        <UiTagBadgeList
-                          items={tagItems}
-                          variant="listing-compact"
-                          layout="inline-compact"
-                          className="ml-auto max-w-full"
-                          maxVisible={4}
-                        />
-                      )}
-                    </div>
-                  </td>
-                  <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                    {account.rgw_account_id ?? account.id}
-                  </td>
-                  <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                    <span title={account.storage_endpoint_url || undefined}>
-                      {account.storage_endpoint_name || "—"}
-                    </span>
-                  </td>
-                  <td className="w-[22rem] min-w-[18rem] max-w-[30rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                    {renderAccountAssociations(account)}
-                  </td>
-                  <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
-                    {isSuperAdmin ? (
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => openDeleteS3AccountModal(account)}
-                          className={tableDeleteActionClasses}
-                          disabled={deleteBusy}
-                        >
-                          {deleteBusy ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          total={totalAccounts}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-          disabled={loading}
+        <DataTableShell
+          columns={accountTableColumns}
+          rows={accounts}
+          rowKey={(account) => account.id}
+          status={tableStatus}
+          loadingMessage="Loading accounts..."
+          errorMessage="Unable to load accounts."
+          emptyMessage="No accounts."
+          sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+          primaryColumnId="name"
+          responsiveCards
+          tableClassName="compact-table"
+          pagination={{
+            page,
+            pageSize,
+            total: totalAccounts,
+            onPageChange: handlePageChange,
+            onPageSizeChange: handlePageSizeChange,
+            disabled: loading,
+          }}
         />
       </div>
     </div>
