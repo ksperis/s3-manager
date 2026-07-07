@@ -107,6 +107,7 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(await screen.findByText("hello content")).toBeInTheDocument();
     expect(screen.getByText("Public links")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.queryByText("General information")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Details" }));

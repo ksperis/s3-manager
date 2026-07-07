@@ -15,6 +15,7 @@ import {
   type PortalStorageObjectDetail,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -334,6 +335,43 @@ export default function PortalObjectDetailPage() {
       setDeleteBusy(false);
     }
   };
+  const publicLinksTableStatus = publicLinks.length === 0 ? "empty" : "ready";
+  const publicLinkColumns: DataTableColumn<PortalPublicLink>[] = [
+    {
+      id: "file",
+      label: t({ en: "File", fr: "Fichier", de: "Datei" }),
+      primary: true,
+      render: (link) => link.object_name,
+    },
+    {
+      id: "status",
+      label: t({ en: "Status", fr: "Statut", de: "Status" }),
+      render: (link) => <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge>,
+    },
+    {
+      id: "expiration",
+      label: t({ en: "Expiration", fr: "Expiration", de: "Ablauf" }),
+      render: (link) => (link.expires_at ? portalDateTimeLabel(link.expires_at, locale) : "-"),
+    },
+    {
+      id: "link",
+      label: t({ en: "Link", fr: "Lien", de: "Link" }),
+      cellClassName: "max-w-[260px] truncate text-primary dark:text-primary-200",
+      render: (link) => link.url,
+    },
+    {
+      id: "action",
+      label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+      align: "right",
+      mobileRole: "actions",
+      render: (link) =>
+        link.status === "Active" ? (
+          <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
+            {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+          </button>
+        ) : null,
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -427,43 +465,16 @@ export default function PortalObjectDetailPage() {
                   {t({ en: `Create public link unavailable: ${publicLinkUnavailableReason}`, fr: `Création de lien public indisponible : ${publicLinkUnavailableReason}`, de: `Öffentlichen Link erstellen nicht verfügbar: ${publicLinkUnavailableReason}` })}
                 </div>
               ) : null}
-              <div className="overflow-x-auto">
-                <table className="ui-data-table min-w-[760px]">
-                  <thead>
-                    <tr>
-                      <th>{t({ en: "File", fr: "Fichier", de: "Datei" })}</th>
-                      <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
-                      <th>{t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}</th>
-                      <th>{t({ en: "Link", fr: "Lien", de: "Link" })}</th>
-                      <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {publicLinks.map((link) => (
-                      <tr key={link.id}>
-                        <td className={cx("font-bold", uiTitleTextClass)}>{link.object_name}</td>
-                        <td><UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge></td>
-                        <td>{link.expires_at ? portalDateTimeLabel(link.expires_at, locale) : "-"}</td>
-                        <td className="max-w-[260px] truncate text-primary dark:text-primary-200">{link.url}</td>
-                        <td className="text-right">
-                          {link.status === "Active" ? (
-                            <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
-                              {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                    {publicLinks.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
-                          {t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
+              <DataTableShell
+                columns={publicLinkColumns}
+                rows={publicLinks}
+                rowKey={(link) => link.id}
+                status={publicLinksTableStatus}
+                loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
+                errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
+                emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
+                responsiveCards
+              />
             </UiCard>
           ) : null}
         </div>
