@@ -151,6 +151,10 @@ const AWS_REGION_COORDINATES: Record<string, { latitude: string; longitude: stri
 
 const endpointInlineCodeClass =
   "rounded bg-[var(--ui-surface-muted)] px-2 py-1 ui-caption text-[var(--ui-text)]";
+const endpointToggleCardClass =
+  "flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+const endpointToggleCardDisabledClass = cx(endpointToggleCardClass, "opacity-70");
+const endpointToggleCheckboxClass = cx(uiCheckboxClass, "disabled:cursor-not-allowed disabled:opacity-50");
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -1514,7 +1518,7 @@ export default function StorageEndpointsPage() {
                   type="checkbox"
                   checked={form.force_path_style}
                   onChange={(e) => setForm((prev) => ({ ...prev, force_path_style: e.target.checked }))}
-                  className={uiCheckboxClass}
+                  className={endpointToggleCheckboxClass}
                 />
               </label>
             </div>
@@ -1526,7 +1530,7 @@ export default function StorageEndpointsPage() {
                   type="checkbox"
                   checked={!form.verify_tls}
                   onChange={(e) => setForm((prev) => ({ ...prev, verify_tls: !e.target.checked }))}
-                  className={uiCheckboxClass}
+                  className={endpointToggleCheckboxClass}
                 />
               </label>
               {!form.verify_tls && (
@@ -1714,57 +1718,57 @@ export default function StorageEndpointsPage() {
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label
                           title="This option is automatically detected from credentials and cannot be manually changed."
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={endpointToggleCardDisabledClass}
                         >
                           Admin enabled
                           <input
                             type="checkbox"
                             checked={form.features.admin.enabled}
                             readOnly
-                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={endpointToggleCheckboxClass}
                             disabled
                           />
                         </label>
                         <label
                           title="This option is automatically detected from credentials and cannot be manually changed."
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={endpointToggleCardDisabledClass}
                         >
                           Accounts enabled
                           <input
                             type="checkbox"
                             checked={form.features.account.enabled}
                             readOnly
-                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={endpointToggleCheckboxClass}
                             disabled
                           />
                         </label>
                         <label
                           title="This option is automatically detected from credentials and cannot be manually changed."
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={endpointToggleCardDisabledClass}
                         >
                           Usage Log enabled
                           <input
                             type="checkbox"
                             checked={form.features.usage.enabled}
                             readOnly
-                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={endpointToggleCheckboxClass}
                             disabled
                           />
                         </label>
                         <label
                           title="This option is automatically detected from credentials and cannot be manually changed."
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={endpointToggleCardDisabledClass}
                         >
                           Metrics enabled
                           <input
                             type="checkbox"
                             checked={form.features.metrics.enabled}
                             readOnly
-                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={endpointToggleCheckboxClass}
                             disabled
                           />
                         </label>
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label className={endpointToggleCardClass}>
                           SNS topics enabled
                           <input
                             type="checkbox"
@@ -1775,11 +1779,11 @@ export default function StorageEndpointsPage() {
                                 sns: { ...current.sns, enabled: e.target.checked },
                               }))
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                            className={endpointToggleCheckboxClass}
                             disabled={!cephMode}
                           />
                         </label>
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label className={endpointToggleCardClass}>
                           Bucket replication enabled
                           <input
                             type="checkbox"
@@ -1790,7 +1794,7 @@ export default function StorageEndpointsPage() {
                                 replication: { ...current.replication, enabled: e.target.checked },
                               }))
                             }
-                            className={uiCheckboxClass}
+                            className={endpointToggleCheckboxClass}
                             disabled={!cephMode}
                           />
                         </label>
@@ -1820,7 +1824,7 @@ export default function StorageEndpointsPage() {
                   <div className="space-y-2">
                     <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">S3</p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      <label className={endpointToggleCardClass}>
                         STS enabled
                         <input
                           type="checkbox"
@@ -1831,10 +1835,10 @@ export default function StorageEndpointsPage() {
                               sts: { ...current.sts, enabled: e.target.checked },
                             }))
                           }
-                          className={uiCheckboxClass}
+                          className={endpointToggleCheckboxClass}
                         />
                       </label>
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      <label className={endpointToggleCardClass}>
                         Static website enabled
                         <input
                           type="checkbox"
@@ -1845,10 +1849,10 @@ export default function StorageEndpointsPage() {
                               static_website: { ...current.static_website, enabled: e.target.checked },
                             }))
                           }
-                          className={uiCheckboxClass}
+                          className={endpointToggleCheckboxClass}
                         />
                       </label>
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      <label className={endpointToggleCardClass}>
                         IAM enabled
                         <input
                           type="checkbox"
@@ -1859,10 +1863,10 @@ export default function StorageEndpointsPage() {
                               iam: { ...current.iam, enabled: e.target.checked },
                             }))
                           }
-                          className={uiCheckboxClass}
+                          className={endpointToggleCheckboxClass}
                         />
                       </label>
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      <label className={endpointToggleCardClass}>
                         Server-Side Encryption (SSE) enabled
                         <input
                           type="checkbox"
@@ -1873,7 +1877,7 @@ export default function StorageEndpointsPage() {
                               sse: { ...current.sse, enabled: e.target.checked },
                             }))
                           }
-                          className={uiCheckboxClass}
+                          className={endpointToggleCheckboxClass}
                         />
                       </label>
                     </div>
