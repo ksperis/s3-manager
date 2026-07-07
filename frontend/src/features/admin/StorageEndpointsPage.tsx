@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -22,7 +22,8 @@ import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import ListToolbar from "../../components/ListToolbar";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
@@ -1051,14 +1052,9 @@ export default function StorageEndpointsPage() {
     }
   };
 
-  const renderEndpointRow = (endpoint: StorageEndpoint) => {
+  const renderEndpointIdentity = (endpoint: StorageEndpoint) => {
     const tagItems = buildUiTagItems(endpoint.tags);
-    const verifyTls = endpoint.verify_tls !== false;
-    const forcePathStyle = Boolean(endpoint.force_path_style);
     const features = resolveFeatureState(endpoint, endpoint.provider);
-    const healthcheckMode = features.healthcheck.mode === "s3" ? "s3" : "http";
-    const healthcheckUrl = features.healthcheck.endpoint.trim();
-    const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
     const iamEndpointOverride = features.iam.endpoint.trim();
@@ -1074,168 +1070,232 @@ export default function StorageEndpointsPage() {
       features.iam.enabled &&
       Boolean(iamEndpointOverride) &&
       iamEndpointOverride !== endpoint.endpoint_url;
-    const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
+
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="ui-body font-semibold text-slate-900 dark:text-white">{endpoint.name}</span>
+          {endpoint.is_default && <StatusBadge label="Default" />}
+          {envManaged && <LockBadge label="Env managed" />}
+          {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
+        </div>
+        <code className={cx(endpointInlineCodeClass, "block max-w-[340px] truncate")} title={endpoint.endpoint_url}>
+          {endpoint.endpoint_url}
+        </code>
+        {showAdminEndpoint && (
+          <DetailLine label="Admin endpoint">
+            <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={adminEndpointOverride}>
+              {adminEndpointOverride}
+            </code>
+          </DetailLine>
+        )}
+        {showStsEndpoint && (
+          <DetailLine label="STS endpoint">
+            <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={stsEndpointOverride}>
+              {stsEndpointOverride}
+            </code>
+          </DetailLine>
+        )}
+        {showIamEndpoint && (
+          <DetailLine label="IAM endpoint">
+            <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={iamEndpointOverride}>
+              {iamEndpointOverride}
+            </code>
+          </DetailLine>
+        )}
+        <UiTagBadgeList
+          items={tagItems}
+          variant="listing-compact"
+          layout="inline-compact"
+          maxVisible={5}
+          emptyLabel="No tags"
+        />
+      </div>
+    );
+  };
+
+  const renderEndpointProvider = (endpoint: StorageEndpoint) => (
+    <div className="space-y-2">
+      <ProviderBadge provider={endpoint.provider} />
+      <DetailLine label="Region">
+        <span className="font-semibold text-[var(--ui-text)]">{endpoint.region || "Default"}</span>
+      </DetailLine>
+    </div>
+  );
+
+  const renderEndpointConnectivity = (endpoint: StorageEndpoint) => {
+    const features = resolveFeatureState(endpoint, endpoint.provider);
+    const verifyTls = endpoint.verify_tls !== false;
+    const forcePathStyle = Boolean(endpoint.force_path_style);
+    const healthcheckMode = features.healthcheck.mode === "s3" ? "s3" : "http";
+    const healthcheckUrl = features.healthcheck.endpoint.trim();
     const hasCoordinates = endpoint.latitude != null && endpoint.longitude != null;
 
     return (
-      <tr key={endpoint.id}>
-        <td className="min-w-[300px] max-w-[380px] align-top">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="ui-body font-semibold text-slate-900 dark:text-white">{endpoint.name}</span>
-              {endpoint.is_default && <StatusBadge label="Default" />}
-              {envManaged && <LockBadge label="Env managed" />}
-              {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
-            </div>
-            <code className={cx(endpointInlineCodeClass, "block max-w-[340px] truncate")} title={endpoint.endpoint_url}>
-              {endpoint.endpoint_url}
+      <div className="space-y-1.5">
+        <DetailLine label="TLS">
+          <span className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+            {verifyTls ? "Enabled" : "Disabled (insecure)"}
+          </span>
+        </DetailLine>
+        <DetailLine label="Path style">
+          <span className="font-semibold text-[var(--ui-text)]">{forcePathStyle ? "Forced" : "Virtual-host style"}</span>
+        </DetailLine>
+        <DetailLine label="GPS">
+          <span className="font-semibold text-[var(--ui-text)]">
+            {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
+          </span>
+        </DetailLine>
+        <DetailLine label="Healthcheck">
+          <code className={endpointInlineCodeClass}>{healthcheckMode.toUpperCase()}</code>
+          {healthcheckUrl && (
+            <code className={cx(endpointInlineCodeClass, "max-w-[180px] truncate")} title={healthcheckUrl}>
+              {healthcheckUrl}
             </code>
-            {showAdminEndpoint && (
-              <DetailLine label="Admin endpoint">
-                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={adminEndpointOverride}>
-                  {adminEndpointOverride}
-                </code>
-              </DetailLine>
-            )}
-            {showStsEndpoint && (
-              <DetailLine label="STS endpoint">
-                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={stsEndpointOverride}>
-                  {stsEndpointOverride}
-                </code>
-              </DetailLine>
-            )}
-            {showIamEndpoint && (
-              <DetailLine label="IAM endpoint">
-                <code className={cx(endpointInlineCodeClass, "max-w-[260px] truncate")} title={iamEndpointOverride}>
-                  {iamEndpointOverride}
-                </code>
-              </DetailLine>
-            )}
-            <UiTagBadgeList
-              items={tagItems}
-              variant="listing-compact"
-              layout="inline-compact"
-              maxVisible={5}
-              emptyLabel="No tags"
-            />
-          </div>
-        </td>
-        <td className="min-w-[150px] align-top">
-          <div className="space-y-2">
-            <ProviderBadge provider={endpoint.provider} />
-            <DetailLine label="Region">
-              <span className="font-semibold text-[var(--ui-text)]">{endpoint.region || "Default"}</span>
-            </DetailLine>
-          </div>
-        </td>
-        <td className="min-w-[260px] align-top">
-          <div className="space-y-1.5">
-            <DetailLine label="TLS">
-              <span className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-                {verifyTls ? "Enabled" : "Disabled (insecure)"}
-              </span>
-            </DetailLine>
-            <DetailLine label="Path style">
-              <span className="font-semibold text-[var(--ui-text)]">{forcePathStyle ? "Forced" : "Virtual-host style"}</span>
-            </DetailLine>
-            <DetailLine label="GPS">
-              <span className="font-semibold text-[var(--ui-text)]">
-                {hasCoordinates ? `${endpoint.latitude}, ${endpoint.longitude}` : "Not set"}
-              </span>
-            </DetailLine>
-            <DetailLine label="Healthcheck">
-              <code className={endpointInlineCodeClass}>{healthcheckMode.toUpperCase()}</code>
-              {healthcheckUrl && (
-                <code className={cx(endpointInlineCodeClass, "max-w-[180px] truncate")} title={healthcheckUrl}>
-                  {healthcheckUrl}
-                </code>
-              )}
-            </DetailLine>
-          </div>
-        </td>
-        <td className="min-w-[360px] align-top">
-          <div className="flex flex-wrap gap-1.5">
-            {ENDPOINT_LIST_FEATURES.map((feature) => (
-              <FeatureBadge
-                key={feature.key}
-                label={feature.label}
-                enabled={features[feature.key].enabled}
-              />
-            ))}
-          </div>
-        </td>
-        <td className="min-w-[260px] align-top">
-          <div className="space-y-1.5">
-            <DetailLine label="Admin key">
-              {endpoint.provider === "ceph" ? (
-                <CredentialSummary accessKey={endpoint.admin_access_key} hasSecret={endpoint.has_admin_secret} emptyLabel="Not configured" />
-              ) : (
-                <span className="font-semibold text-slate-500 dark:text-slate-400">Not required</span>
-              )}
-            </DetailLine>
-            <DetailLine label="Supervision">
-              <CredentialSummary accessKey={endpoint.supervision_access_key} hasSecret={endpoint.has_supervision_secret} />
-            </DetailLine>
-            {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
-              <DetailLine label="Ceph Admin">
-                <CredentialSummary accessKey={endpoint.ceph_admin_access_key} hasSecret={endpoint.has_ceph_admin_secret} />
-              </DetailLine>
-            )}
-          </div>
-        </td>
-        <td className="min-w-[220px] align-top text-right">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!endpoint.is_default && (
-              <button
-                className={tableActionButtonClasses}
-                onClick={() => handleSetDefault(endpoint)}
-                type="button"
-                disabled={Boolean(defaultBusyId) || envManaged || !canEditEndpoints}
-              >
-                {settingDefault ? "Setting..." : "Set as default"}
-              </button>
-            )}
-            {!readOnly ? (
-              <>
-                <button
-                  className={tableActionButtonClasses}
-                  onClick={() => startEdit(endpoint)}
-                  type="button"
-                >
-                  Edit
-                </button>
-                <button
-                  className={tableDeleteActionClasses}
-                  onClick={() => {
-                    setDeleteTarget(endpoint);
-                    setDeleteError(null);
-                  }}
-                  type="button"
-                >
-                  Delete
-                </button>
-              </>
-            ) : (
-              <>
-                {canEditEndpoints && (
-                  <button
-                    className={tableActionButtonClasses}
-                    onClick={() => openTagsOnly(endpoint)}
-                    type="button"
-                  >
-                    Edit tags
-                  </button>
-                )}
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                  {canEditEndpoints ? "Config read-only" : "Read-only"}
-                </span>
-              </>
-            )}
-          </div>
-        </td>
-      </tr>
+          )}
+        </DetailLine>
+      </div>
     );
   };
+
+  const renderEndpointFeatures = (endpoint: StorageEndpoint) => {
+    const features = resolveFeatureState(endpoint, endpoint.provider);
+
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {ENDPOINT_LIST_FEATURES.map((feature) => (
+          <FeatureBadge
+            key={feature.key}
+            label={feature.label}
+            enabled={features[feature.key].enabled}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const renderEndpointCredentials = (endpoint: StorageEndpoint) => (
+    <div className="space-y-1.5">
+      <DetailLine label="Admin key">
+        {endpoint.provider === "ceph" ? (
+          <CredentialSummary accessKey={endpoint.admin_access_key} hasSecret={endpoint.has_admin_secret} emptyLabel="Not configured" />
+        ) : (
+          <span className="font-semibold text-slate-500 dark:text-slate-400">Not required</span>
+        )}
+      </DetailLine>
+      <DetailLine label="Supervision">
+        <CredentialSummary accessKey={endpoint.supervision_access_key} hasSecret={endpoint.has_supervision_secret} />
+      </DetailLine>
+      {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
+        <DetailLine label="Ceph Admin">
+          <CredentialSummary accessKey={endpoint.ceph_admin_access_key} hasSecret={endpoint.has_ceph_admin_secret} />
+        </DetailLine>
+      )}
+    </div>
+  );
+
+  const renderEndpointActions = (endpoint: StorageEndpoint) => {
+    const settingDefault = defaultBusyId === endpoint.id;
+    const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
+
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {!endpoint.is_default && (
+          <button
+            className={tableActionButtonClasses}
+            onClick={() => handleSetDefault(endpoint)}
+            type="button"
+            disabled={Boolean(defaultBusyId) || envManaged || !canEditEndpoints}
+          >
+            {settingDefault ? "Setting..." : "Set as default"}
+          </button>
+        )}
+        {!readOnly ? (
+          <>
+            <button
+              className={tableActionButtonClasses}
+              onClick={() => startEdit(endpoint)}
+              type="button"
+            >
+              Edit
+            </button>
+            <button
+              className={tableDeleteActionClasses}
+              onClick={() => {
+                setDeleteTarget(endpoint);
+                setDeleteError(null);
+              }}
+              type="button"
+            >
+              Delete
+            </button>
+          </>
+        ) : (
+          <>
+            {canEditEndpoints && (
+              <button
+                className={tableActionButtonClasses}
+                onClick={() => openTagsOnly(endpoint)}
+                type="button"
+              >
+                Edit tags
+              </button>
+            )}
+            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {canEditEndpoints ? "Config read-only" : "Read-only"}
+            </span>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const endpointTableStatus = resolveListTableStatus({
+    loading,
+    error: null,
+    rowCount: endpoints.length,
+  });
+  const endpointTableColumns: Array<DataTableColumn<StorageEndpoint>> = [
+    {
+      id: "endpoint",
+      label: "Endpoint",
+      primary: true,
+      cellClassName: "min-w-[300px] max-w-[380px] align-top",
+      render: renderEndpointIdentity,
+    },
+    {
+      id: "provider",
+      label: "Provider",
+      cellClassName: "min-w-[150px] align-top",
+      render: renderEndpointProvider,
+    },
+    {
+      id: "connectivity",
+      label: "Connectivity",
+      cellClassName: "min-w-[260px] align-top",
+      render: renderEndpointConnectivity,
+    },
+    {
+      id: "features",
+      label: "Features",
+      cellClassName: "min-w-[360px] align-top",
+      render: renderEndpointFeatures,
+    },
+    {
+      id: "credentials",
+      label: "Credentials",
+      cellClassName: "min-w-[260px] align-top",
+      render: renderEndpointCredentials,
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      cellClassName: "min-w-[220px] align-top",
+      render: renderEndpointActions,
+    },
+  ];
 
   const showUsageLogUnavailableWarning =
     cephMode &&
@@ -1302,27 +1362,19 @@ export default function StorageEndpointsPage() {
           showHeading={false}
           countLabel={`${endpoints.length} endpoint${endpoints.length === 1 ? "" : "s"}`}
         />
-        <div className={cx(uiTableContainerClass, "rounded-t-none border-x-0 border-b-0")}>
-          <table className={cx(uiDataTableClass, "compact-table min-w-[1420px]")}>
-            <thead>
-              <tr>
-                <th>Endpoint</th>
-                <th>Provider</th>
-                <th>Connectivity</th>
-                <th>Features</th>
-                <th>Credentials</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <TableEmptyState colSpan={6} message="Loading endpoints..." />}
-              {!loading && endpoints.length === 0 && (
-                <TableEmptyState colSpan={6} message="No endpoints configured yet." />
-              )}
-              {!loading && endpoints.map((endpoint) => renderEndpointRow(endpoint))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={endpointTableColumns}
+          rows={loading ? [] : endpoints}
+          rowKey={(endpoint) => endpoint.id}
+          status={endpointTableStatus}
+          loadingMessage="Loading endpoints..."
+          errorMessage="Unable to load endpoints."
+          emptyMessage="No endpoints configured yet."
+          primaryColumnId="endpoint"
+          responsiveCards
+          tableClassName="compact-table"
+          containerClassName="rounded-t-none border-x-0 border-b-0"
+        />
       </div>
 
       {showForm && (

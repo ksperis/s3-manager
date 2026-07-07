@@ -127,6 +127,7 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
     ["Endpoint", "Provider", "Connectivity", "Features", "Credentials", "Actions"].forEach((name) => {
       expect(within(table).getByRole("columnheader", { name })).toBeInTheDocument();
     });
@@ -135,22 +136,28 @@ describe("StorageEndpointsPage tags", () => {
     expect(row).not.toBeNull();
     const endpointRow = within(row as HTMLElement);
 
+    expect(endpointRow.getByText("Ceph Endpoint").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(endpointRow.getByText("https://ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getByText("https://admin.ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getAllByText("Default")).toHaveLength(2);
     expect(endpointRow.getByText("prod")).toBeInTheDocument();
     expect(endpointRow.getByText("Ceph")).toBeInTheDocument();
+    expect(endpointRow.getByText("Ceph").closest("td")).toHaveAttribute("data-label", "Provider");
     expect(endpointRow.getByText("Forced")).toBeInTheDocument();
+    expect(endpointRow.getByText("Forced").closest("td")).toHaveAttribute("data-label", "Connectivity");
     expect(endpointRow.getByText("43.6047, 1.4442")).toBeInTheDocument();
     expect(endpointRow.getByText("S3")).toBeInTheDocument();
     expect(endpointRow.getByText("https://health.ceph.example.test")).toBeInTheDocument();
     expect(endpointRow.getByText("Admin on")).toBeInTheDocument();
     expect(endpointRow.getByText("SNS off")).toBeInTheDocument();
+    expect(endpointRow.getByText("SNS off").closest("td")).toHaveAttribute("data-label", "Features");
     expect(endpointRow.getByText("admin-key")).toBeInTheDocument();
+    expect(endpointRow.getByText("admin-key").closest("td")).toHaveAttribute("data-label", "Credentials");
     expect(endpointRow.getByText("supervision-key")).toBeInTheDocument();
     expect(endpointRow.getByText("ceph-admin-key")).toBeInTheDocument();
     expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
     expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(endpointRow.getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
