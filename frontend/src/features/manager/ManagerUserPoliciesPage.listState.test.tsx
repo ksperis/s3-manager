@@ -69,6 +69,19 @@ describe("ManagerUserPoliciesPage list states", () => {
     renderPage();
 
     expect(await screen.findByText("ReadOnlyPolicy", { selector: "td" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("ReadOnlyPolicy", { selector: "td" }).closest("td")).toHaveAttribute(
+      "data-mobile-primary",
+      "true"
+    );
+    expect(screen.getByText("arn:aws:iam::123:policy/ReadOnlyPolicy", { selector: "td" }).closest("td")).toHaveAttribute(
+      "data-label",
+      "ARN"
+    );
+    expect(screen.getByRole("button", { name: "Detach" }).closest("td")).toHaveAttribute(
+      "data-mobile-actions",
+      "true"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 

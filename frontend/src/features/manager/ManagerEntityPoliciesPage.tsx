@@ -8,7 +8,7 @@ import type { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -233,6 +233,36 @@ export default function ManagerEntityPoliciesPage({
 
   const options = available.map((policy) => ({ value: policy.arn, label: policy.name }));
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: attached.length });
+  const attachedPolicyColumns: Array<DataTableColumn<IamPolicy>> = [
+    {
+      id: "policy",
+      label: "Policy",
+      primary: true,
+      render: (policy) => policy.name,
+    },
+    {
+      id: "arn",
+      label: "ARN",
+      cellClassName: "break-all font-mono text-[11px]",
+      render: (policy) => policy.arn,
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (policy) => (
+        <button
+          type="button"
+          onClick={() => handleDetach(policy.arn)}
+          className="ui-caption font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+          disabled={busy === policy.arn}
+        >
+          {busy === policy.arn ? "Detaching..." : "Detach"}
+        </button>
+      ),
+    },
+  ];
 
   const detailLine =
     entityType === "role"
@@ -312,37 +342,17 @@ export default function ManagerEntityPoliciesPage({
             </form>
             <p className="ui-caption text-slate-500 dark:text-slate-400">Policies must be created first in the Policies tab.</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr>
-                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policy</th>
-                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                  <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading policies..." />}
-                {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load policies." tone="error" />}
-                {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No attached policies." />}
-                {attached.map((policy) => (
-                  <tr key={policy.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{policy.name}</td>
-                    <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{policy.arn}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => handleDetach(policy.arn)}
-                        className="ui-caption font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
-                        disabled={busy === policy.arn}
-                      >
-                        {busy === policy.arn ? "Detaching..." : "Detach"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTableShell
+            columns={attachedPolicyColumns}
+            rows={attached}
+            rowKey={(policy) => policy.arn}
+            status={tableStatus}
+            loadingMessage="Loading policies..."
+            errorMessage="Unable to load policies."
+            emptyMessage="No attached policies."
+            tableClassName="compact-table"
+            responsiveCards
+          />
         </div>
       </div>
     </div>
