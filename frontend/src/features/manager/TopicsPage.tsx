@@ -112,32 +112,11 @@ const buildAttributesSignature = (
     attributeItems,
   });
 
-const topicNotificationIds = (topic: Topic): string[] =>
-  (topic.subscriptions ?? [])
-    .map((subscription) => subscription.name.trim())
-    .filter(Boolean);
-
 function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
 }
 
 function renderTopicSubscriptions(topic: Topic) {
-  const notificationIds = topicNotificationIds(topic);
-  if (topic.is_ceph) {
-    return (
-      <>
-        <div>Notifications: {notificationIds.length}</div>
-        {notificationIds.length > 0 && (
-          <ul className="mt-1 space-y-0.5">
-            {notificationIds.map((notificationId, index) => (
-              <li key={`${notificationId}-${index}`}>Notification: {notificationId}</li>
-            ))}
-          </ul>
-        )}
-      </>
-    );
-  }
-
   return (
     <>
       <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
@@ -499,8 +478,7 @@ export default function TopicsPage() {
     return topics.filter(
       (topic) =>
         topic.name.toLowerCase().includes(needle) ||
-        topic.arn.toLowerCase().includes(needle) ||
-        topicNotificationIds(topic).some((notificationId) => notificationId.toLowerCase().includes(needle))
+        topic.arn.toLowerCase().includes(needle)
     );
   }, [topicFilter, topics]);
   const createCurrentSignature = useMemo(() => stableSignature({ newTopicName }), [newTopicName]);
@@ -640,7 +618,7 @@ export default function TopicsPage() {
                 type="text"
                 value={topicFilter}
                 onChange={(e) => setTopicFilter(e.target.value)}
-                placeholder="Search by topic, ARN, or notification ID"
+                placeholder="Search by topic or ARN"
                 className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             }

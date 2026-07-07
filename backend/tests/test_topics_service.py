@@ -182,7 +182,7 @@ def test_set_topic_configuration_only_sends_changes(monkeypatch):
     assert result == {"push-endpoint": "https://new.example.com", "verify-ssl": False}
 
 
-def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
+def test_list_topics_deduplicates_ceph_entries_and_uses_sns_subscription_counts(monkeypatch):
     service = TopicsService()
     arn = "arn:aws:sns:default:tenant:topic-generic_test_unistra_preprod2"
     monkeypatch.setattr(
@@ -207,7 +207,12 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
 
     def fake_get_topic_attributes(topic_arn, *_, **__):
         attributes_calls.append(topic_arn)
-        return {"TopicArn": topic_arn, "Owner": "tenant", "SubscriptionsConfirmed": "2"}
+        return {
+            "TopicArn": topic_arn,
+            "Owner": "tenant",
+            "SubscriptionsConfirmed": "2",
+            "SubscriptionsPending": "1",
+        }
 
     monkeypatch.setattr(sns_client, "get_topic_attributes", fake_get_topic_attributes)
 
@@ -219,19 +224,12 @@ def test_list_topics_reconstructs_ceph_topics_and_subscriptions(monkeypatch):
     assert topic.arn == arn
     assert topic.is_ceph is True
     assert topic.subscriptions_confirmed == 2
+    assert topic.subscriptions_pending == 1
+    assert topic.subscriptions == []
     assert attributes_calls == [arn]
-    assert len(topic.subscriptions) == 1
-    subscription = topic.subscriptions[0]
-    assert subscription.name == "projet-test-s3ls-unistra-preprod"
-    assert subscription.bucket is None
-    assert subscription.endpoint_address == "https://notify.example.test/hooks/topic"
-    assert subscription.endpoint_topic == "endpoint-topic"
-    assert subscription.endpoint_args == {"persistent": True, "verify-ssl": False, "time_to_live": 60}
-    assert subscription.persistent is True
-    assert subscription.metadata == {"OpaqueData": "trace=lab"}
 
 
-def test_list_topics_treats_ceph_notification_entries_as_bindings_without_prefix(monkeypatch):
+def test_list_topics_ignores_ceph_notification_entries_as_topic_names_without_prefix(monkeypatch):
     service = TopicsService()
     arn = "arn:aws:sns:default:tenant:topic-from-arn"
     monkeypatch.setattr(
@@ -251,17 +249,24 @@ def test_list_topics_treats_ceph_notification_entries_as_bindings_without_prefix
             },
         ],
     )
-    monkeypatch.setattr(sns_client, "get_topic_attributes", lambda topic_arn, *_, **__: {"TopicArn": topic_arn})
+    monkeypatch.setattr(
+        sns_client,
+        "get_topic_attributes",
+        lambda topic_arn, *_, **__: {
+            "TopicArn": topic_arn,
+            "SubscriptionsConfirmed": "4",
+            "SubscriptionsPending": "0",
+        },
+    )
 
     topics = service.list_topics(_ceph_account())
 
     assert len(topics) == 1
     assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
-    assert topics[0].subscriptions[0].name == "projet-test-s3ls-unistra-preprod"
-    assert topics[0].subscriptions[0].bucket is None
-    assert topics[0].subscriptions[0].endpoint_address == "https://notify.example.test/hooks/current"
-    assert topics[0].subscriptions[0].endpoint_args == {"persistent": False, "verify-ssl": True}
+    assert topics[0].subscriptions == []
+    assert topics[0].subscriptions_confirmed == 4
+    assert topics[0].subscriptions_pending == 0
 
 
 def test_list_topics_keeps_standard_sns_behavior(monkeypatch):

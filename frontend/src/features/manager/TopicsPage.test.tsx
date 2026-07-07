@@ -130,7 +130,7 @@ describe("TopicsPage", () => {
     });
   });
 
-  it("renders Ceph notification bindings under a single topic row", async () => {
+  it("renders Ceph topics with standard SNS subscription counters", async () => {
     const user = userEvent.setup();
     const topicArn = "arn:aws:sns:default:tenant:ceph-topic-main";
     useS3AccountContextMock.mockReturnValue({
@@ -204,10 +204,11 @@ describe("TopicsPage", () => {
     expect(await screen.findByText("ceph-topic-main")).toBeInTheDocument();
     expect(screen.getAllByText("ceph-topic-main")).toHaveLength(1);
     expect(screen.getByText("secondary-topic")).toBeInTheDocument();
-    expect(screen.getByText("Notifications: 3")).toBeInTheDocument();
+    expect(screen.getByText("Confirmed: 2")).toBeInTheDocument();
+    expect(screen.getAllByText("Pending: 0")).toHaveLength(2);
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("ceph-topic-main").closest("td")).toHaveAttribute("data-mobile-primary", "true");
-    expect(screen.getByText("Notifications: 3").closest("td")).toHaveAttribute(
+    expect(screen.getByText("Confirmed: 2").closest("td")).toHaveAttribute(
       "data-label",
       "Subscriptions"
     );
@@ -215,17 +216,10 @@ describe("TopicsPage", () => {
       "data-mobile-actions",
       "true"
     );
-    expect(screen.queryByText("Confirmed: 2")).not.toBeInTheDocument();
-    expect(screen.queryByText("Pending: 0")).not.toBeInTheDocument();
-    const primaryNotification = screen.getByText("Notification: projet-test-s3ls-unistra-preprod");
-    const archiveNotification = screen.getByText("Notification: archive-daily-created");
-    const legacyNotification = screen.getByText("Notification: notif.legacy-name");
-    expect(primaryNotification.tagName).toBe("LI");
-    expect(archiveNotification.tagName).toBe("LI");
-    expect(legacyNotification.tagName).toBe("LI");
-    expect(primaryNotification).not.toHaveClass("rounded-md");
-    expect(primaryNotification).not.toHaveClass("border");
-    expect(primaryNotification).not.toHaveClass("bg-slate-50");
+    expect(screen.queryByText("Notifications: 3")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notification: projet-test-s3ls-unistra-preprod")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notification: archive-daily-created")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notification: notif.legacy-name")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket: bucket-alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket: projet-test-s3ls-unistra-preprod")).not.toBeInTheDocument();
     expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/a")).not.toBeInTheDocument();
@@ -236,9 +230,10 @@ describe("TopicsPage", () => {
     expect(screen.queryByText("Endpoint: https://notify.example.test/hooks/hidden")).not.toBeInTheDocument();
     expect(screen.queryByText("Version: 2012-10-17")).not.toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText("Search by topic, ARN, or notification ID"), "projet-test-s3ls");
+    await user.type(screen.getByPlaceholderText("Search by topic or ARN"), "projet-test-s3ls");
 
-    expect(screen.getByText("ceph-topic-main")).toBeInTheDocument();
+    expect(screen.queryByText("ceph-topic-main")).not.toBeInTheDocument();
     expect(screen.queryByText("secondary-topic")).not.toBeInTheDocument();
+    expect(screen.getByText("No topics.")).toBeInTheDocument();
   });
 });

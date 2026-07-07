@@ -8,7 +8,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qsl
 
 from app.db import S3Account, StorageProvider
-from app.models.topic import Topic, TopicSubscription
+from app.models.topic import Topic
 from app.services import sns_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 
@@ -35,24 +35,6 @@ class TopicsService:
         "SubscriptionsDeleted",
         "EffectiveDeliveryPolicy",
         "HasStoredSecret",
-    }
-    _SUBSCRIPTION_DIRECT_KEYS = {
-        "TopicArn",
-        "Arn",
-        "topic_arn",
-        "Name",
-        "TopicName",
-        "EndPoint",
-        "EndpointAddress",
-        "endpoint_address",
-        "EndpointArgs",
-        "endpoint_args",
-        "EndpointTopic",
-        "endpoint_topic",
-        "push-endpoint",
-        "push_endpoint",
-        "Persistent",
-        "persistent",
     }
     _CEPH_NOTIFICATION_BINDING_KEYS = {
         "EndPoint",
@@ -176,27 +158,12 @@ class TopicsService:
         except (TypeError, ValueError):
             return None
 
-    def _to_bool(self, value: Any) -> Optional[bool]:
-        parsed = self._coerce_attribute_value(value)
-        if isinstance(parsed, bool):
-            return parsed
-        if isinstance(parsed, (int, float)):
-            return bool(parsed)
-        if isinstance(parsed, str):
-            normalized = parsed.strip().lower()
-            if normalized in {"true", "1", "yes", "on"}:
-                return True
-            if normalized in {"false", "0", "no", "off"}:
-                return False
-        return None
-
     def _topic_from_attributes(
         self,
         arn: str,
         attributes: dict,
         *,
         name: Optional[str] = None,
-        subscriptions: Optional[list[TopicSubscription]] = None,
         is_ceph: bool = False,
     ) -> Topic:
         return Topic(
@@ -206,7 +173,6 @@ class TopicsService:
             is_ceph=is_ceph,
             subscriptions_confirmed=self._to_int(attributes.get("SubscriptionsConfirmed")),
             subscriptions_pending=self._to_int(attributes.get("SubscriptionsPending")),
-            subscriptions=subscriptions or [],
             configuration=self._parse_configurable_attributes(attributes),
         )
 
@@ -242,70 +208,6 @@ class TopicsService:
             if key != "EndPoint"
         )
 
-    def _is_sensitive_metadata_key(self, key: str) -> bool:
-        normalized = key.replace("-", "_").lower()
-        if normalized == "hasstoredsecret":
-            return True
-        return any(token in normalized for token in ("password", "secret", "token", "access_key"))
-
-    def _clean_subscription_dict(self, values: dict[str, Any]) -> dict[str, Any]:
-        cleaned: dict[str, Any] = {}
-        for key, value in values.items():
-            if not isinstance(key, str) or not key:
-                continue
-            if self._is_sensitive_metadata_key(key):
-                continue
-            parsed = self._coerce_attribute_value(value)
-            if parsed is None or parsed == "":
-                continue
-            cleaned[key] = parsed
-        return cleaned
-
-    def _string_or_none(self, value: Any) -> Optional[str]:
-        parsed = self._coerce_attribute_value(value)
-        if parsed is None or parsed == "":
-            return None
-        return str(parsed)
-
-    def _subscription_from_ceph_entry(self, entry: dict[str, Any], arn: str) -> TopicSubscription:
-        name = self._entry_name(entry, arn)
-        endpoint = self._coerce_attribute_value(entry.get("EndPoint"))
-        endpoint_map = endpoint if isinstance(endpoint, dict) else {}
-        endpoint_args = self._clean_subscription_dict(
-            self._parse_endpoint_args(entry.get("EndpointArgs") or endpoint_map.get("EndpointArgs"))
-        )
-        endpoint_address = self._string_or_none(entry.get("EndpointAddress") or endpoint_map.get("EndpointAddress"))
-        endpoint_topic = self._string_or_none(entry.get("EndpointTopic") or endpoint_map.get("EndpointTopic"))
-        persistent = self._to_bool(
-            entry.get("Persistent")
-            if entry.get("Persistent") is not None
-            else entry.get("persistent", endpoint_args.get("persistent"))
-        )
-        metadata = self._clean_subscription_dict(
-            {
-                key: value
-                for key, value in entry.items()
-                if isinstance(key, str) and key not in self._SUBSCRIPTION_DIRECT_KEYS
-            }
-        )
-        metadata.update(
-            self._clean_subscription_dict(
-                {
-                    key: value
-                    for key, value in endpoint_map.items()
-                    if isinstance(key, str) and key not in {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
-                }
-            )
-        )
-        return TopicSubscription(
-            name=name,
-            endpoint_address=endpoint_address,
-            endpoint_topic=endpoint_topic,
-            endpoint_args=endpoint_args,
-            persistent=persistent,
-            metadata=metadata,
-        )
-
     def _list_standard_topics(self, access_key: str, secret_key: str, client_kwargs: dict) -> list[Topic]:
         raw_topics = sns_client.list_topics(access_key=access_key, secret_key=secret_key, **client_kwargs)
         items: list[Topic] = []
@@ -324,7 +226,6 @@ class TopicsService:
         raw_topics = sns_client.list_topics_raw(access_key=access_key, secret_key=secret_key, **client_kwargs)
         ordered_arns: list[str] = []
         topic_names: dict[str, str] = {}
-        subscriptions_by_arn: dict[str, list[TopicSubscription]] = {}
         for entry in raw_topics:
             arn = self._entry_arn(entry)
             if not arn:
@@ -333,7 +234,6 @@ class TopicsService:
             if arn not in ordered_arns:
                 ordered_arns.append(arn)
             if self._is_ceph_notification_entry(entry, arn):
-                subscriptions_by_arn.setdefault(arn, []).append(self._subscription_from_ceph_entry(entry, arn))
                 continue
             topic_names.setdefault(arn, self._entry_name(entry, arn))
 
@@ -347,7 +247,6 @@ class TopicsService:
                     arn,
                     attrs,
                     name=topic_names.get(arn),
-                    subscriptions=subscriptions_by_arn.get(arn, []),
                     is_ceph=True,
                 )
             )

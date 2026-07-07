@@ -17,7 +17,7 @@ Confirm that the selected endpoint supports SNS. Topics and bucket notification 
 
 1. Open **Manager > SNS Topics**.
 2. Create a topic.
-3. Review topic subscriptions and Ceph RGW notification destinations.
+3. Review topic subscription counters.
 4. Inspect topic attributes.
 5. Edit or review topic policy.
 6. Delete unused topics.
@@ -25,13 +25,13 @@ Confirm that the selected endpoint supports SNS. Topics and bucket notification 
 ## Expected result
 
 SNS topics are managed within the selected manager context.
-For Ceph RGW endpoints, notification bindings returned by the topic API are
-shown as **Notification** entries under their parent topic instead of separate
-topics.
+The **Subscriptions** column uses the SNS `Confirmed` and `Pending` counters
+for every compatible endpoint. For Ceph RGW endpoints, duplicate raw topic
+entries that share the same topic ARN are folded into one topic row.
 
 ## You are done when
 
-The topic list, attributes, policy, and notification bindings match the intended event workflow.
+The topic list, subscription counters, attributes, and policy match the intended event workflow.
 
 ## If you do not see this action
 
