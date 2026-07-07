@@ -281,7 +281,7 @@ describe("PortalSharesPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Shared by me" }));
     expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("viewer@example.com")[0].closest("tr")).toHaveClass("max-md:block");
+    expect(screen.getAllByText("viewer@example.com")[0].closest("table")).toHaveClass("responsive-data-table");
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     const shareDialog = screen.getByRole("dialog", { name: "Revoke access" });
     expect(within(shareDialog).getByText("viewer@example.com")).toBeInTheDocument();

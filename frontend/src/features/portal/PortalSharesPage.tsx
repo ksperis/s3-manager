@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
@@ -17,6 +17,7 @@ import {
   type PortalStorageSpaceShare,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -24,7 +25,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import { cx, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, uiDividerClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -57,6 +58,7 @@ type ShareRow = {
   access: PortalWorkspaceRole;
   activityLabel: string;
 };
+type PublicLinkRow = PortalPublicLink & { rowKey: string };
 
 function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
   return {
@@ -84,79 +86,82 @@ function SharesTable({
   onRevoke: (share: ShareRow) => void;
 }) {
   const { t } = useI18n();
-  return (
-    <div className="overflow-x-auto max-md:overflow-visible">
-      <table className="ui-data-table min-w-[760px] max-md:block max-md:min-w-0">
-        <thead className="max-md:hidden">
-          <tr>
-            <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
-            <th>{editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" })}</th>
-            <th>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</th>
-            <th>{t({ en: "Activity", fr: "Activité", de: "Aktivität" })}</th>
-            {editable ? <th className="w-28 text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th> : null}
-          </tr>
-        </thead>
-        <tbody className="max-md:block max-md:space-y-3">
-          {shares.map((share) => (
-            <tr key={share.id} className="max-md:block max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
-              <td className={cx("font-bold max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
-                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
-                {share.spaceName}
-              </td>
-              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>
-                  {editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" })}
-                </span>
-                {share.person}
-              </td>
-              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
-                {editable && share.userId ? (
-                  <select
-                    className="ui-control h-8 py-1.5 text-xs"
-                    value={share.access}
+  const tableStatus = shares.length === 0 ? "empty" : "ready";
+  const columns = useMemo<DataTableColumn<ShareRow>[]>(
+    () => [
+      {
+        id: "name",
+        label: t({ en: "Name", fr: "Nom", de: "Name" }),
+        mobileLabel: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        primary: true,
+        render: (share) => share.spaceName,
+      },
+      {
+        id: "person",
+        label: editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
+        render: (share) => share.person,
+      },
+      {
+        id: "access",
+        label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
+        render: (share) =>
+          editable && share.userId ? (
+            <select
+              className="ui-control h-8 py-1.5 text-xs"
+              value={share.access}
+              disabled={busyShareId === share.id}
+              onChange={(event) => onRoleChange(share, event.target.value as PortalStorageSpaceRole)}
+              aria-label={t({ en: `Access for ${share.person}`, fr: `Accès pour ${share.person}`, de: `Zugriff für ${share.person}` })}
+            >
+              {roles.map((role) => (
+                <option key={role} value={role}>{portalRoleLabel(role, t)}</option>
+              ))}
+            </select>
+          ) : (
+            <UiBadge tone={portalRoleTone(share.access)}>{portalRoleLabel(share.access, t)}</UiBadge>
+          ),
+      },
+      {
+        id: "activity",
+        label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }),
+        render: (share) => (share.activityLabel === "Active" ? t({ en: "Active", fr: "Actif", de: "Aktiv" }) : share.activityLabel),
+      },
+      ...(editable
+        ? [
+            {
+              id: "action",
+              label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+              align: "right" as const,
+              mobileRole: "actions" as const,
+              render: (share: ShareRow) =>
+                share.userId ? (
+                  <button
+                    type="button"
                     disabled={busyShareId === share.id}
-                    onChange={(event) => onRoleChange(share, event.target.value as PortalStorageSpaceRole)}
-                    aria-label={t({ en: `Access for ${share.person}`, fr: `Accès pour ${share.person}`, de: `Zugriff für ${share.person}` })}
+                    onClick={() => onRevoke(share)}
+                    className={tableDeleteActionClasses}
                   >
-                    {roles.map((role) => (
-                      <option key={role} value={role}>{portalRoleLabel(role, t)}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <UiBadge tone={portalRoleTone(share.access)}>{portalRoleLabel(share.access, t)}</UiBadge>
-                )}
-              </td>
-              <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Activity", fr: "Activité", de: "Aktivität" })}</span>
-                {share.activityLabel === "Active" ? t({ en: "Active", fr: "Actif", de: "Aktiv" }) : share.activityLabel}
-              </td>
-              {editable ? (
-                <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
-                  {share.userId ? (
-                    <button
-                      type="button"
-                      disabled={busyShareId === share.id}
-                      onClick={() => onRevoke(share)}
-                      className={tableDeleteActionClasses}
-                    >
-                      {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-                    </button>
-                  ) : null}
-                </td>
-              ) : null}
-            </tr>
-          ))}
-          {shares.length === 0 ? (
-            <tr className="max-md:block">
-              <td colSpan={editable ? 5 : 4} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
-                {t({ en: "No shares to display.", fr: "Aucun partage à afficher.", de: "Keine Freigaben zum Anzeigen." })}
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </div>
+                    {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+                  </button>
+                ) : null,
+            },
+          ]
+        : []),
+    ],
+    [busyShareId, editable, onRevoke, onRoleChange, t]
+  );
+
+  return (
+    <DataTableShell
+      columns={columns}
+      rows={shares}
+      rowKey={(share) => share.id}
+      status={tableStatus}
+      loadingMessage={t({ en: "Loading shares...", fr: "Chargement des partages...", de: "Freigaben werden geladen..." })}
+      errorMessage={t({ en: "Unable to load shares.", fr: "Impossible de charger les partages.", de: "Freigaben können nicht geladen werden." })}
+      emptyMessage={t({ en: "No shares to display.", fr: "Aucun partage à afficher.", de: "Keine Freigaben zum Anzeigen." })}
+      responsiveCards
+    />
   );
 }
 
@@ -406,12 +411,12 @@ export default function PortalSharesPage() {
     }
   };
 
-  const handleRevokePublicLink = async (link: PortalPublicLink) => {
+  const handleRevokePublicLink = useCallback((link: PortalPublicLink) => {
     if (!accountIdForApi) return;
     setPendingAction({ type: "revoke-public-link", link });
-  };
+  }, [accountIdForApi]);
 
-  const copyPublicLink = async (link: PortalPublicLink) => {
+  const copyPublicLink = useCallback(async (link: PortalPublicLink) => {
     setSharesMessage(null);
     setSharesError(null);
     try {
@@ -420,7 +425,7 @@ export default function PortalSharesPage() {
     } catch {
       setSharesMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
     }
-  };
+  }, [t]);
 
   const confirmRevokePublicLink = async (link: PortalPublicLink) => {
     if (!accountIdForApi) return;
@@ -444,6 +449,66 @@ export default function PortalSharesPage() {
 
   const shares = rows[activeTab];
   const displayedCount = activeTab === "links" ? publicLinks.length : shares.length;
+  const publicLinkRows = useMemo<PublicLinkRow[]>(
+    () => publicLinks.map((link) => ({ ...link, rowKey: String(link.id) })),
+    [publicLinks]
+  );
+  const publicLinksTableStatus = publicLinkRows.length === 0 ? "empty" : "ready";
+  const publicLinkColumns = useMemo<DataTableColumn<PublicLinkRow>[]>(
+    () => [
+      {
+        id: "space",
+        label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        primary: true,
+        render: (link) => link.storage_space_name,
+      },
+      {
+        id: "file",
+        label: t({ en: "File", fr: "Fichier", de: "Datei" }),
+        render: (link) => link.object_name,
+      },
+      {
+        id: "status",
+        label: t({ en: "Status", fr: "Statut", de: "Status" }),
+        render: (link) => <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge>,
+      },
+      {
+        id: "expires",
+        label: t({ en: "Expires", fr: "Expire", de: "Läuft ab" }),
+        render: (link) => (link.expires_at ? portalDateLabel(link.expires_at, locale) : "-"),
+      },
+      {
+        id: "url",
+        label: t({ en: "URL", fr: "URL", de: "URL" }),
+        cellClassName: "max-w-[260px] truncate text-primary dark:text-primary-200",
+        render: (link) => link.url,
+      },
+      {
+        id: "action",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+        align: "right",
+        mobileRole: "actions",
+        render: (link) => (
+          <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
+            <button type="button" onClick={() => copyPublicLink(link)} className={tableActionButtonClasses}>
+              {t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
+            </button>
+            {link.status === "Active" ? (
+              <button
+                type="button"
+                disabled={busyShareId === `public-link-${link.id}`}
+                onClick={() => handleRevokePublicLink(link)}
+                className={tableDeleteActionClasses}
+              >
+                {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+              </button>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [busyShareId, copyPublicLink, handleRevokePublicLink, locale, t]
+  );
 
   const sharesInitialLoading = Boolean(
     accountIdForApi && activeSharedSpaces.length > 0 && !sharesError && sharesLoadedKey !== sharesRequestKey
@@ -482,70 +547,16 @@ export default function PortalSharesPage() {
           />
         </div>
         {activeTab === "links" ? (
-          <div className="overflow-x-auto max-md:overflow-visible">
-            <table className="ui-data-table min-w-[860px] max-md:block max-md:min-w-0">
-              <thead className="max-md:hidden">
-                <tr>
-                  <th>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</th>
-                  <th>{t({ en: "File", fr: "Fichier", de: "Datei" })}</th>
-                  <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
-                  <th>{t({ en: "Expires", fr: "Expire", de: "Läuft ab" })}</th>
-                  <th>{t({ en: "URL", fr: "URL", de: "URL" })}</th>
-                  <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
-                </tr>
-              </thead>
-              <tbody className="max-md:block max-md:space-y-3">
-                {publicLinks.map((link) => (
-                  <tr key={link.id} className="max-md:block max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
-                    <td className={cx("font-bold max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
-                      {link.storage_space_name}
-                    </td>
-                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</span>
-                      {link.object_name}
-                    </td>
-                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Status", fr: "Statut", de: "Status" })}</span>
-                      <UiBadge tone={link.status === "Active" ? "success" : "neutral"}>{portalPublicLinkStatusLabel(link.status, t)}</UiBadge>
-                    </td>
-                    <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Expires", fr: "Expire", de: "Läuft ab" })}</span>
-                      {link.expires_at ? portalDateLabel(link.expires_at, locale) : "-"}
-                    </td>
-                    <td className="max-w-[260px] truncate text-primary dark:text-primary-200 max-md:mt-2 max-md:block max-md:max-w-full max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "URL", fr: "URL", de: "URL" })}</span>
-                      {link.url}
-                    </td>
-                    <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
-                      <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
-                        <button type="button" onClick={() => copyPublicLink(link)} className={tableActionButtonClasses}>
-                          {t({ en: "Copy", fr: "Copier", de: "Kopieren" })}
-                        </button>
-                        {link.status === "Active" ? (
-                          <button
-                            type="button"
-                            disabled={busyShareId === `public-link-${link.id}`}
-                            onClick={() => handleRevokePublicLink(link)}
-                            className={tableDeleteActionClasses}
-                          >
-                            {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {publicLinks.length === 0 ? (
-                  <tr className="max-md:block">
-                    <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
-                      {t({ en: "No public links to display.", fr: "Aucun lien public à afficher.", de: "Keine öffentlichen Links zum Anzeigen." })}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+          <DataTableShell
+            columns={publicLinkColumns}
+            rows={publicLinkRows}
+            rowKey={(link) => link.rowKey}
+            status={publicLinksTableStatus}
+            loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
+            errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
+            emptyMessage={t({ en: "No public links to display.", fr: "Aucun lien public à afficher.", de: "Keine öffentlichen Links zum Anzeigen." })}
+            responsiveCards
+          />
         ) : (
           <SharesTable
             shares={shares}
