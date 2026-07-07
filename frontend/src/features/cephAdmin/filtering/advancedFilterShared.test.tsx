@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 
 import {
   advancedFilterMatchModeButtonClass,
+  advancedFilterToolbarButtonClass,
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
   quickFilterMatchModeButtonClass,
@@ -13,6 +14,11 @@ describe("advancedFilterShared", () => {
   it("returns stable classes for active and locked match-mode buttons", () => {
     expect(advancedFilterMatchModeButtonClass(true)).toContain("bg-primary-100");
     expect(advancedFilterMatchModeButtonClass(false, true)).toContain("cursor-not-allowed");
+  });
+
+  it("returns stable advanced-filter toolbar button classes", () => {
+    expect(advancedFilterToolbarButtonClass(false)).toContain("ui-caption");
+    expect(advancedFilterToolbarButtonClass(true)).toContain("bg-primary-50");
   });
 
   it("returns stable quick-filter match-mode labels and classes", () => {

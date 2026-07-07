@@ -13,6 +13,8 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
+import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
@@ -30,6 +32,7 @@ import {
   advancedFilterRootClass,
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
+  advancedFilterToolbarButtonClass,
   buildTextFieldRules,
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
@@ -1126,11 +1129,7 @@ export default function CephAdminUsersPage() {
               <button
                 type="button"
                 onClick={() => setShowAdvancedFilter(true)}
-                className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                  showAdvancedFilter || advancedFilterActive
-                    ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
-                    : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                }`}
+                className={advancedFilterToolbarButtonClass(showAdvancedFilter || advancedFilterActive)}
               >
                 Advanced filter{advancedFilterActive ? " · Active" : ""}
               </button>
@@ -1141,7 +1140,7 @@ export default function CephAdminUsersPage() {
                   <button
                     type="button"
                     onClick={() => setShowColumnPicker((prev) => !prev)}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                    className={toolbarCompactButtonClasses}
                   >
                     Columns
                   </button>
@@ -1168,11 +1167,7 @@ export default function CephAdminUsersPage() {
                   type="button"
                   onClick={resetColumns}
                   disabled={!columnsCustomized}
-                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                    columnsCustomized
-                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                  }`}
+                  className={cx(uiButtonBaseClass, uiButtonVariants.danger, "px-2.5 py-1.5 ui-caption")}
                 >
                   Reset Columns
                 </button>

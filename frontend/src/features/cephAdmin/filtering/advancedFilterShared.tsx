@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import UiProgressBar from "../../../components/ui/UiProgressBar";
+import { toolbarCompactButtonClasses } from "../../../components/toolbarControlClasses";
 
 export type TextMatchMode = "contains" | "exact";
 export type FilterCostLevel = "none" | "low" | "medium" | "high";
@@ -67,6 +68,13 @@ export const advancedFilterMatchModeButtonClass = (active: boolean, locked: bool
     return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
   }
   return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+};
+
+export const advancedFilterToolbarButtonClass = (active: boolean = false) => {
+  if (active) {
+    return `${toolbarCompactButtonClasses} border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100`;
+  }
+  return toolbarCompactButtonClasses;
 };
 
 const quickFilterMatchModeBaseClass =
