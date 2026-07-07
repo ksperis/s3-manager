@@ -13,6 +13,10 @@ Use this guide for tenant IAM administration (users, groups, roles, policies).
 
 Select the account or connection that owns the IAM resources. IAM changes should map to native IAM concepts and should not be used to compensate for missing UI access.
 
+Ceph RGW S3 User keys are not IAM user keys. When you are working in a managed
+S3 User context, use [Feature: Ceph access keys in Manager](feature-manager-ceph-keys.md)
+instead.
+
 ## Steps
 
 1. Open `/manager/users`, `/manager/groups`, `/manager/roles`, or `/manager/iam/policies`.
@@ -42,6 +46,7 @@ Check endpoint IAM capability, Manager access, and the selected execution contex
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Buckets](feature-buckets.md)
+- [Feature: Ceph access keys in Manager](feature-manager-ceph-keys.md)
 
 ## Visual example
 

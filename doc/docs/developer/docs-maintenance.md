@@ -7,6 +7,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | Route / Feature | Target doc page | Status |
 |---|---|---|
 | First-run user orientation and workspace selection | `user/start-here.md` | Covered |
+| `/profile` | `user/profile.md` | Covered |
 | User/admin task journeys | `user/common-tasks-storage-user.md` + `user/common-tasks-storage-admin.md` | Covered |
 | Storage admin rollout and handover journey | `user/admin-runbook-storage-admin.md` | Covered |
 | Feature visibility and missing actions | `user/feature-availability.md` + `user/troubleshooting.md` | Covered |
@@ -34,6 +35,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/buckets/:bucket` configuration flow | `user/howto-manager-bucket-configuration.md` | Covered |
 | `/manager/browser` | `user/feature-objects-browser.md` | Covered |
 | `/manager/users|groups|roles|iam/policies` | `user/feature-iam.md` | Covered |
+| `/manager/ceph/keys` | `user/feature-manager-ceph-keys.md` | Covered |
 | `/manager/topics` | `user/feature-topics.md` | Covered |
 | `/manager/feature-rules` | `user/feature-buckets.md` + `developer/listings-feature-matrix.md` | Covered |
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |

@@ -93,6 +93,7 @@ nav:
           - "Feature: Buckets": user/feature-buckets.md
           - "How-to: Configure a bucket from Manager": user/howto-manager-bucket-configuration.md
           - "Feature: IAM": user/feature-iam.md
+          - "Feature: Ceph access keys in Manager": user/feature-manager-ceph-keys.md
           - "Feature: Object operations in Browser": user/feature-objects-browser.md
           - "Feature: Object versions in Browser": user/feature-object-versions-browser.md
           - "Feature: SNS topics": user/feature-topics.md

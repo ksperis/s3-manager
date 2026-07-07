@@ -23,7 +23,8 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
    - Bucket Integrity (if enabled)
    - Bucket Purge (if enabled and authorized)
    - Bucket Migration (if enabled and authorized)
-   - Ceph S3 User keys (if enabled and authorized)
+7. Use **Ceph > Access keys** for delegated RGW S3 User key lifecycle when the
+   selected context is a managed S3 User and the feature is enabled.
 
 ## Expected result
 
@@ -40,6 +41,7 @@ Tenant resources are managed in the right scope with explicit context control.
 - [User profile](profile.md)
 - [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
 - [Feature: IAM](feature-iam.md)
+- [Feature: Ceph access keys in Manager](feature-manager-ceph-keys.md)
 - [Feature: SNS topics](feature-topics.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)

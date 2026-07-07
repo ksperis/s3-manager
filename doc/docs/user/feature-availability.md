@@ -22,6 +22,7 @@ s3-manager shows an action only when all required conditions are true:
 | Ceph Admin | Workspace selector | `ceph_admin_enabled`, Ceph-compatible endpoint, and `can_access_ceph_admin`. |
 | Storage Ops | Workspace selector | `storage_ops_enabled` and `can_access_storage_ops`. |
 | IAM | Manager | Endpoint IAM capability and effective Manager access. |
+| Ceph S3 User access keys | Manager > Ceph | S3 User context, `manager_ceph_s3_user_keys_enabled`, Manager tool access, S3 User allow flag, Ceph endpoint, and Admin Ops credentials. |
 | SNS topics and bucket notifications | Manager, Ceph Admin, Storage Ops | Endpoint SNS capability and feature-specific action rights. |
 | Bucket compare, integrity, purge, migration | Manager tools | Global Manager setting plus per-user or inherited Manager tool access. |
 | Feature rule inventory | Manager tools | Per-user or inherited Manager tool access and selected context capability. |

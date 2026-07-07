@@ -19,9 +19,11 @@ Use this runbook for day-one onboarding, lab validation, or handover to storage 
 3. Create or import the first RGW account, S3 user, or shared S3 connection.
 4. Grant the UI user or group only the workspaces needed for the rollout.
 5. In **Manager**, select the execution context and create or inspect a bucket.
-6. If users need self-service, configure Portal access on the account and decide whether they may create Storage Spaces or access keys.
-7. In **Browser** or **Portal**, perform a small upload and download test with the intended user profile.
-8. Check usage, quota, billing, and audit visibility before announcing the workspace.
+6. If the rollout uses managed S3 User contexts, decide explicitly whether
+   Manager operators may manage Ceph RGW S3 User keys.
+7. If users need self-service, configure Portal access on the account and decide whether they may create Storage Spaces or access keys.
+8. In **Browser** or **Portal**, perform a small upload and download test with the intended user profile.
+9. Check usage, quota, billing, and audit visibility before announcing the workspace.
 
 ## Expected result
 

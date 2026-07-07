@@ -12,6 +12,7 @@ Use this page when you manage storage access, bucket configuration, or operation
 | Create or inspect account buckets | [Workspace: Manager](workspace-manager.md) | The correct account context is selected. |
 | Configure bucket features | [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md) | The backend supports the feature. |
 | Manage IAM users, groups, roles, and policies | [Feature: IAM](feature-iam.md) | IAM capability is available for the endpoint. |
+| Manage delegated Ceph RGW S3 User keys | [Feature: Ceph access keys in Manager](feature-manager-ceph-keys.md) | The selected context is a managed S3 User and the feature was intentionally enabled. |
 | Review platform usage, quota, traffic, and billing | [Feature: Admin Usage and Metrics](feature-admin-metrics.md), [Feature: Usage History in Admin](feature-usage-history-admin.md), and [Feature: Billing in Admin](feature-billing-admin.md) | Collection jobs and feature flags are enabled. |
 | Rotate managed storage keys | [Feature: Key Rotation in Admin](feature-key-rotation-admin.md) | You are a superadmin and have a maintenance plan. |
 | Compare, verify, migrate, purge, or bulk-edit buckets | [Safe destructive and bulk operations](safe-destructive-operations.md) | You have the required Manager tool access and understand the confirmation flow. |

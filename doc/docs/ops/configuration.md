@@ -97,7 +97,8 @@ Managed from Admin UI:
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
 - Portal settings (`portal`): IAM key policy, portal user Storage Space creation, portal user access-key creation, max portal user keys, IAM group policies, bucket access policy, bucket defaults, and super-admin account overrides.
-- Migration/compare flags and manager behavior.
+- Manager tool flags and behavior: bucket migration, compare, integrity check,
+  purge, usage stats, Ceph S3 User key management, and migration parallelism.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
 
 On a fresh deployment with no persisted app settings, `Endpoint Status` and
