@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type {
@@ -128,7 +128,10 @@ describe("EndpointStatusDetailPage latency chart", () => {
     expect(screen.getByText(/Page 1 of 1.*0 results/)).toBeInTheDocument();
     expect(screen.getAllByRole("table").every((table) => table.classList.contains("responsive-data-table"))).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "30d" }));
+    const windowControl = screen.getByRole("group", { name: "Endpoint detail window" });
+    expect(within(windowControl).getByRole("button", { name: "7d" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(windowControl).getByRole("button", { name: "30d" }));
     await waitFor(() => {
       expect(fetchHealthSeriesMock).toHaveBeenCalledWith(42, "month");
     });

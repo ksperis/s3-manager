@@ -27,6 +27,7 @@ import {
 } from "../../api/healthchecks";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListSectionCard from "../../components/list/ListSectionCard";
@@ -521,26 +522,15 @@ export default function EndpointStatusDetailPage() {
               {series?.check_target_url ? ` · Target ${series.check_target_url}` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {WINDOW_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  setWindowValue(option.value);
-                  setRawChecksPage(1);
-                }}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  windowValue === option.value
-                    ? "bg-primary text-white"
-                    : "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                }`}
-                title={option.helper}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <UiSegmentedControl
+            ariaLabel="Endpoint detail window"
+            options={WINDOW_OPTIONS}
+            value={windowValue}
+            onChange={(nextWindow) => {
+              setWindowValue(nextWindow);
+              setRawChecksPage(1);
+            }}
+          />
         </div>
 
         <div className="space-y-6 px-6 py-6">

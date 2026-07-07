@@ -129,6 +129,12 @@ describe("EndpointStatusPage incidents table", () => {
       expect(fetchHealthGlobalIncidentsMock).toHaveBeenCalledWith("half_year", 300);
     });
 
+    expect(screen.getByRole("group", { name: "Endpoint timeline window" })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Incident history window" })).getByRole("button", { name: "6m" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
     expect(within(table).getByText("Ceph Paris").closest("td")).toHaveAttribute("data-mobile-primary", "true");
@@ -141,5 +147,11 @@ describe("EndpointStatusPage incidents table", () => {
     expect(within(table).getByText("Ceph Paris")).toBeInTheDocument();
     expect(within(table).queryByText("Ceph Lyon")).not.toBeInTheDocument();
     expect(screen.getByText("1 of 2 loaded incidents matching down")).toBeInTheDocument();
+
+    await user.click(within(screen.getByRole("group", { name: "Incident history window" })).getByRole("button", { name: "30d" }));
+
+    await waitFor(() => {
+      expect(fetchHealthGlobalIncidentsMock).toHaveBeenCalledWith("month", 300);
+    });
   });
 });

@@ -7,6 +7,8 @@ import { cx, uiCardMutedClass } from "./styles";
 type UiSegmentedControlOption<T extends string> = {
   label: string;
   value: T;
+  helper?: string;
+  title?: string;
   disabled?: boolean;
 };
 
@@ -47,6 +49,7 @@ export default function UiSegmentedControl<T extends string>({
             )}
             disabled={option.disabled}
             aria-pressed={isActive}
+            title={option.title ?? option.helper}
             onClick={() => onChange(option.value)}
           >
             {option.label}

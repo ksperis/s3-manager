@@ -52,4 +52,16 @@ describe("UiSegmentedControl", () => {
 
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("uses helper text as an option title", () => {
+    render(
+      <UiSegmentedControl
+        options={[{ label: "7d", value: "week", helper: "Last 7 days" }]}
+        value="week"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "7d" })).toHaveAttribute("title", "Last 7 days");
+  });
 });

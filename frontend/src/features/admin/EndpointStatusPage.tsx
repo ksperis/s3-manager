@@ -18,6 +18,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
+import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -432,23 +433,12 @@ export default function EndpointStatusPage() {
               Availability timelines (green up, amber degraded, red down). Default view is 7 days.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {TIMELINE_WINDOW_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setTimelineWindow(option.value)}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  timelineWindow === option.value
-                    ? "bg-primary text-white"
-                    : "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                }`}
-                title={option.helper}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <UiSegmentedControl
+            ariaLabel="Endpoint timeline window"
+            options={TIMELINE_WINDOW_OPTIONS}
+            value={timelineWindow}
+            onChange={setTimelineWindow}
+          />
         </div>
         <div className="space-y-3 px-6 py-4">
           {timelineLoading && <p className="ui-body text-slate-500 dark:text-slate-400">Loading timelines...</p>}
@@ -483,23 +473,12 @@ export default function EndpointStatusPage() {
           description="All incidents across endpoints. Default view is 6 months."
           countLabel={incidentsCountLabel}
           filters={
-            <div className="flex flex-wrap gap-2">
-              {INCIDENT_WINDOW_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setIncidentWindow(option.value)}
-                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                    incidentWindow === option.value
-                      ? "bg-primary text-white"
-                      : "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                  }`}
-                  title={option.helper}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <UiSegmentedControl
+              ariaLabel="Incident history window"
+              options={INCIDENT_WINDOW_OPTIONS}
+              value={incidentWindow}
+              onChange={setIncidentWindow}
+            />
           }
         />
         <DataTableShell
