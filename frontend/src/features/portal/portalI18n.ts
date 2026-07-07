@@ -64,13 +64,13 @@ export function portalAccessSourceLabel(source: string | null | undefined, t: TF
 
 export function portalTransferDirectionLabel(direction: PortalWorkspaceTransfer["direction"], t: TFunction): string {
   return direction === "Upload"
-    ? t({ en: "Upload", fr: "Envoi", de: "Upload" })
-    : t({ en: "Download", fr: "Téléchargement", de: "Download" });
+    ? t({ en: "Upload", fr: "Envoi", de: "Hochladen" })
+    : t({ en: "Download", fr: "Téléchargement", de: "Herunterladen" });
 }
 
 export function portalTransferStatusLabel(status: PortalWorkspaceTransfer["status"], t: TFunction): string {
   if (status === "Completed") return t({ en: "Completed", fr: "Terminé", de: "Abgeschlossen" });
-  if (status === "Uploading") return t({ en: "Uploading", fr: "Envoi en cours", de: "Upload läuft" });
+  if (status === "Uploading") return t({ en: "Uploading", fr: "Envoi en cours", de: "Hochladen läuft" });
   if (status === "Queued") return t({ en: "Queued", fr: "En attente", de: "In Warteschlange" });
   return t({ en: "Failed", fr: "Échec", de: "Fehlgeschlagen" });
 }

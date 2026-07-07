@@ -283,7 +283,7 @@ export default function PortalUsagePage() {
     <div className="space-y-4">
       <PageHeader
         title={t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" })}
-        description={t({ en: "Track storage, traffic, requests and billing for this portal workspace.", fr: "Suivez le stockage, le trafic, les requêtes et la facturation de ce workspace Portal.", de: "Verfolgen Sie Speicher, Traffic, Anfragen und Abrechnung für diesen Portal-Arbeitsbereich." })}
+        description={t({ en: "Track storage, traffic, requests and billing for this portal workspace.", fr: "Suivez le stockage, le trafic, les requêtes et la facturation de cet espace de travail Portal.", de: "Verfolgen Sie Speicher, Traffic, Anfragen und Abrechnung für diesen Portal-Arbeitsbereich." })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }) })}
       />
 
@@ -302,7 +302,7 @@ export default function PortalUsagePage() {
           description={t({ en: "Current storage, file and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des fichiers et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Datei- und Quotennutzung für dieses Portal-Konto." })}
         >
           {usageError ? (
-            <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles du workspace restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
+            <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles de l'espace de travail restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricsSnapshotCard
@@ -320,7 +320,7 @@ export default function PortalUsagePage() {
             <MetricsSnapshotCard
               label={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
               value={formatCompactNumber(storageSpaceCount)}
-              hint={t({ en: "Visible in this workspace", fr: "Visibles dans ce workspace", de: "In diesem Arbeitsbereich sichtbar" })}
+              hint={t({ en: "Visible in this workspace", fr: "Visibles dans cet espace de travail", de: "In diesem Arbeitsbereich sichtbar" })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
@@ -394,7 +394,7 @@ export default function PortalUsagePage() {
           loading={trafficLoading}
           error={trafficError}
           showEmpty={trafficMissing}
-          description={t({ en: "Uploads, downloads and requests for this portal account.", fr: "Envois, téléchargements et requêtes de ce compte Portal.", de: "Uploads, Downloads und Anfragen für dieses Portal-Konto." })}
+          description={t({ en: "Uploads, downloads and requests for this portal account.", fr: "Envois, téléchargements et requêtes de ce compte Portal.", de: "Hochladen, Herunterladen und Anfragen für dieses Portal-Konto." })}
           bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
           userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
         />

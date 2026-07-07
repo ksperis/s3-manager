@@ -67,7 +67,7 @@ function transferFromApi(item: PortalTransfer, locale: ReturnType<typeof useI18n
     status: item.status,
     progress: item.progress,
     sizeBytes: item.size_bytes,
-    spaceName: item.storage_space_name ?? t({ en: "Workspace", fr: "Workspace", de: "Workspace" }),
+    spaceName: item.storage_space_name ?? t({ en: "Workspace", fr: "Espace de travail", de: "Arbeitsbereich" }),
     startedLabel: portalTimeAgoLabel(item.started_at, locale, t),
     etaLabel: portalTransferEtaLabel(item.eta_label, t),
     speedLabel: item.speed_label,
@@ -158,8 +158,8 @@ export function usePortalWorkspaceData({
               err,
               t({
                 en: "Unable to load portal workspace.",
-                fr: "Impossible de charger le workspace portail.",
-                de: "Portal-Workspace kann nicht geladen werden.",
+                fr: "Impossible de charger l'espace de travail portail.",
+                de: "Portal-Arbeitsbereich kann nicht geladen werden.",
               })
             )
           );
@@ -515,8 +515,8 @@ export function usePortalWorkspaceData({
           title: t({ en: "Storage service availability issue", fr: "Problème de disponibilité du service de stockage", de: "Verfügbarkeitsproblem des Speicherdienstes" }),
           description:
             ongoingIncident.status === "down"
-              ? t({ en: "One storage service is currently unavailable. Transfers may fail until it recovers.", fr: "Un service de stockage est actuellement indisponible. Les transferts peuvent échouer jusqu'à son rétablissement.", de: "Ein Speicherdienst ist derzeit nicht verfügbar. Transfers können fehlschlagen, bis er wiederhergestellt ist." })
-              : t({ en: "One storage service is degraded. Transfers may be slower than usual.", fr: "Un service de stockage est dégradé. Les transferts peuvent être plus lents que d'habitude.", de: "Ein Speicherdienst ist beeinträchtigt. Transfers können langsamer als üblich sein." }),
+              ? t({ en: "One storage service is currently unavailable. Transfers may fail until it recovers.", fr: "Un service de stockage est actuellement indisponible. Les transferts peuvent échouer jusqu'à son rétablissement.", de: "Ein Speicherdienst ist derzeit nicht verfügbar. Übertragungen können fehlschlagen, bis er wiederhergestellt ist." })
+              : t({ en: "One storage service is degraded. Transfers may be slower than usual.", fr: "Un service de stockage est dégradé. Les transferts peuvent être plus lents que d'habitude.", de: "Ein Speicherdienst ist beeinträchtigt. Übertragungen können langsamer als üblich sein." }),
           severityLabel: ongoingIncident.status === "down"
             ? t({ en: "Critical", fr: "Critique", de: "Kritisch" })
             : t({ en: "Warning", fr: "Avertissement", de: "Warnung" }),

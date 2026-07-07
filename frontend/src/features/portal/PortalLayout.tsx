@@ -29,7 +29,7 @@ function usePortalNavSections(): SidebarSection[] {
           { to: "/portal/shares", label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), icon: <ShareIcon /> },
           { to: "/portal/access-keys", label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }), icon: <KeyIcon /> },
           { to: "/portal/activity", label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }), icon: <ActivityIcon /> },
-          { to: "/portal/transfers", label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }), icon: <TransferIcon /> },
+          { to: "/portal/transfers", label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }), icon: <TransferIcon /> },
           { to: "/portal/usage", label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }), icon: <ChartIcon /> },
           { to: "/portal/settings", label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }), icon: <SettingsIcon /> },
         ],

@@ -37,25 +37,25 @@ export default function PortalTransfersPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Transfers werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view transfers.", fr: "Sélectionnez un compte pour voir les transferts.", de: "Wählen Sie ein Konto aus, um Transfers anzuzeigen." }),
+    loadingMessage: t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Übertragungen werden geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view transfers.", fr: "Sélectionnez un compte pour voir les transferts.", de: "Wählen Sie ein Konto aus, um Übertragungen anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Transfers", fr: "Transferts", de: "Transfers" })}
-        description={t({ en: "Monitor ongoing and completed transfers.", fr: "Suivez les transferts en cours et terminés.", de: "Überwachen Sie laufende und abgeschlossene Transfers." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }) })}
+        title={t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" })}
+        description={t({ en: "Monitor ongoing and completed transfers.", fr: "Suivez les transferts en cours et terminés.", de: "Überwachen Sie laufende und abgeschlossene Übertragungen." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }) })}
       />
       <UiCard>
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
             tabs={[
               { id: "all", label: t({ en: "All", fr: "Tous", de: "Alle" }) },
-              { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Uploads" }) },
-              { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Downloads" }) },
+              { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Hochladen" }) },
+              { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Herunterladen" }) },
             ]}
             activeTab={activeTab}
             onChange={(tab) => setActiveTab(tab as TransferTab)}
@@ -99,7 +99,7 @@ export default function PortalTransfersPage() {
               {transfers.length === 0 ? (
                 <tr>
                   <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                    {t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Transfers zum Anzeigen." })}
+                    {t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Übertragungen zum Anzeigen." })}
                   </td>
                 </tr>
               ) : null}

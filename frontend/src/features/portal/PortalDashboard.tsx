@@ -375,11 +375,11 @@ function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
   const { t } = useI18n();
   return (
     <WorkspaceDashboardCard
-      title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" })}
+      title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Übertragungen" })}
       action={<Link to="/portal/transfers" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
     >
       {rows.length === 0 ? (
-        <WorkspaceDashboardEmptyState>{t({ en: "No recent transfers.", fr: "Aucun transfert récent.", de: "Keine letzten Transfers." })}</WorkspaceDashboardEmptyState>
+        <WorkspaceDashboardEmptyState>{t({ en: "No recent transfers.", fr: "Aucun transfert récent.", de: "Keine letzten Übertragungen." })}</WorkspaceDashboardEmptyState>
       ) : (
         <div className="space-y-2">
           {rows.map((transfer) => (
@@ -600,7 +600,7 @@ export default function PortalDashboard() {
       to: "/portal/usage",
     },
     transfer: {
-      label: t({ en: "Transfer", fr: "Transfert", de: "Transfer" }),
+      label: t({ en: "Transfer", fr: "Transfert", de: "Übertragung" }),
       bytes: transferBytes,
       loading: trafficLoading,
       trendSelection: trafficError ? null : trafficTrend,
@@ -614,7 +614,7 @@ export default function PortalDashboard() {
   const quickLinks: QuickLink[] = [
     {
       label: t({ en: "Storage spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }),
-      detail: t({ en: "Open workspace storage", fr: "Ouvrir le stockage du workspace", de: "Arbeitsbereichspeicher öffnen" }),
+      detail: t({ en: "Open workspace storage", fr: "Ouvrir le stockage de l'espace de travail", de: "Arbeitsbereichspeicher öffnen" }),
       to: "/portal/storage-spaces",
       tone: "emerald",
       icon: <BucketCollectionIcon className="h-4 w-4" />,
@@ -627,8 +627,8 @@ export default function PortalDashboard() {
       icon: <LinkIcon className="h-4 w-4" />,
     },
     {
-      label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }),
-      detail: t({ en: "Track uploads and downloads", fr: "Suivre les envois et téléchargements", de: "Uploads und Downloads verfolgen" }),
+      label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }),
+      detail: t({ en: "Track uploads and downloads", fr: "Suivre les envois et téléchargements", de: "Hochladen und Herunterladen verfolgen" }),
       to: "/portal/transfers",
       tone: "amber",
       icon: <TransferIcon className="h-4 w-4" />,
@@ -657,7 +657,7 @@ export default function PortalDashboard() {
     <div className="space-y-3" data-testid="portal-dashboard">
       <PageHeader
         title={t({ en: "Portal dashboard", fr: "Tableau de bord Portal", de: "Portal-Dashboard" })}
-        description={t({ en: `Workspace overview for ${workspace.accountName}.`, fr: `Vue du workspace ${workspace.accountName}.`, de: `Arbeitsbereichsübersicht für ${workspace.accountName}.` })}
+        description={t({ en: `Workspace overview for ${workspace.accountName}.`, fr: `Vue de l'espace de travail ${workspace.accountName}.`, de: `Arbeitsbereichsübersicht für ${workspace.accountName}.` })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }) })}
         rightContent={
           <div className="flex h-8 items-center gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 text-xs font-semibold text-[var(--ui-text-muted)]">

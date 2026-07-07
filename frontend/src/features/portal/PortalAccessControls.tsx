@@ -25,8 +25,8 @@ export function portalAccessModeDescription(mode: PortalAccessMode, t: ReturnTyp
   if (mode === "account") {
     return t({
       en: "Current and future Portal members of this account receive this access automatically.",
-      fr: "Les membres Portal actuels et futurs de cet account reçoivent automatiquement cet accès.",
-      de: "Aktuelle und zukünftige Portal-Mitglieder dieses Accounts erhalten diesen Zugriff automatisch.",
+      fr: "Les membres Portal actuels et futurs de ce compte reçoivent automatiquement cet accès.",
+      de: "Aktuelle und zukünftige Portal-Mitglieder dieses Kontos erhalten diesen Zugriff automatisch.",
     });
   }
   if (mode === "restricted") {
@@ -53,11 +53,11 @@ export function portalAccessModeSummary(
     if (memberCount != null) {
       return t({
         en: `All: ${memberCount} account member${memberCount > 1 ? "s" : ""}`,
-        fr: `Tous : ${memberCount} membre${memberCount > 1 ? "s" : ""} de l'account`,
-        de: `Alle: ${memberCount} Account-Mitglied${memberCount > 1 ? "er" : ""}`,
+        fr: `Tous : ${memberCount} membre${memberCount > 1 ? "s" : ""} du compte`,
+        de: `Alle: ${memberCount} Kontomitglied${memberCount > 1 ? "er" : ""}`,
       });
     }
-    return t({ en: "All: all account members", fr: "Tous : tous les membres de l'account", de: "Alle: alle Account-Mitglieder" });
+    return t({ en: "All: all account members", fr: "Tous : tous les membres du compte", de: "Alle: alle Kontomitglieder" });
   }
   if (mode === "restricted") {
     return t({
@@ -210,13 +210,13 @@ export function PortalShareCandidatePicker({
           {term
             ? t({
                 en: "No eligible Portal member matches this search. To add someone else, request account access from an admin.",
-                fr: "Aucun membre Portal éligible ne correspond à cette recherche. Pour ajouter une autre personne, demandez un accès account à un admin.",
-                de: "Kein berechtigtes Portal-Mitglied passt zu dieser Suche. Fordern Sie für andere Personen Account-Zugriff bei einem Admin an.",
+                fr: "Aucun membre Portal éligible ne correspond à cette recherche. Pour ajouter une autre personne, demandez un accès au compte à un administrateur.",
+                de: "Kein berechtigtes Portal-Mitglied passt zu dieser Suche. Fordern Sie für andere Personen Kontozugriff bei einem Admin an.",
               })
             : t({
                 en: "Only Portal members of this account can be selected. To add someone else, request account access from an admin.",
-                fr: "Seuls les membres Portal de cet account peuvent être sélectionnés. Pour ajouter une autre personne, demandez un accès account à un admin.",
-                de: "Nur Portal-Mitglieder dieses Accounts können ausgewählt werden. Fordern Sie für andere Personen Account-Zugriff bei einem Admin an.",
+                fr: "Seuls les membres Portal de ce compte peuvent être sélectionnés. Pour ajouter une autre personne, demandez un accès au compte à un administrateur.",
+                de: "Nur Portal-Mitglieder dieses Kontos können ausgewählt werden. Fordern Sie für andere Personen Kontozugriff bei einem Admin an.",
               })}
         </div>
       )}

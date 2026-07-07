@@ -556,7 +556,13 @@ export default function PortalSharesPage() {
           />
         )}
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
-          <span>{displayedCount} of {displayedCount}</span>
+          <span>
+            {t({
+              en: `${displayedCount} of ${displayedCount}`,
+              fr: `${displayedCount} sur ${displayedCount}`,
+              de: `${displayedCount} von ${displayedCount}`,
+            })}
+          </span>
         </div>
       </UiCard>
 
@@ -577,8 +583,8 @@ export default function PortalSharesPage() {
               <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
                 {t({
                   en: "Select existing Portal members of this account, then assign their role.",
-                  fr: "Sélectionnez les membres Portal existants de cet account, puis attribuez leur rôle.",
-                  de: "Wählen Sie vorhandene Portal-Mitglieder dieses Accounts aus und weisen Sie eine Rolle zu.",
+                  fr: "Sélectionnez les membres Portal existants de ce compte, puis attribuez leur rôle.",
+                  de: "Wählen Sie vorhandene Portal-Mitglieder dieses Kontos aus und weisen Sie eine Rolle zu.",
                 })}
               </div>
               <UiButton

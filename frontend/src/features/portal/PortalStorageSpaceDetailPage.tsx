@@ -600,7 +600,7 @@ export default function PortalStorageSpaceDetailPage() {
                   onAccountMemberRoleChange={setAccessAccountMemberRole}
                   disabled={accessBusy || isArchived}
                   modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                  roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+                  roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <UiButton
@@ -769,7 +769,7 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
       ) : (
         <PageBanner tone="warning">
-          {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour ce workspace.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
+          {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour cet espace de travail.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
         </PageBanner>
       )}
 
@@ -865,13 +865,13 @@ export default function PortalStorageSpaceDetailPage() {
               ]
             : pendingAccessChange.mode === "account"
             ? [
-                t({ en: "Current and future Portal members of this account receive access automatically.", fr: "Les membres Portal actuels et futurs de cet account recevront automatiquement l'accès.", de: "Aktuelle und zukünftige Portal-Mitglieder dieses Accounts erhalten automatisch Zugriff." }),
+                t({ en: "Current and future Portal members of this account receive access automatically.", fr: "Les membres Portal actuels et futurs de ce compte recevront automatiquement l'accès.", de: "Aktuelle und zukünftige Portal-Mitglieder dieses Kontos erhalten automatisch Zugriff." }),
                 t({ en: "Direct collaborator grants remain available for explicit role overrides.", fr: "Les droits directs restent disponibles pour les rôles explicites.", de: "Direkte Berechtigungen bleiben für explizite Rollen erhalten." }),
                 t({ en: "Public links remain managed separately.", fr: "Les liens publics restent gérés séparément.", de: "Öffentliche Links werden weiterhin separat verwaltet." }),
               ]
             : [
                 t({ en: "Only the owner and direct collaborators keep user access.", fr: "Seuls le propriétaire et les collaborateurs directs conservent un accès utilisateur.", de: "Nur der Eigentümer und direkte Mitwirkende behalten Benutzerzugriff." }),
-                t({ en: "Account-wide automatic access stops.", fr: "L'accès automatique à tout l'account s'arrête.", de: "Der automatische accountweite Zugriff endet." }),
+                t({ en: "Account-wide automatic access stops.", fr: "L'accès automatique à tout le compte s'arrête.", de: "Der automatische accountweite Zugriff endet." }),
                 t({ en: "Public links remain managed separately.", fr: "Les liens publics restent gérés séparément.", de: "Öffentliche Links werden weiterhin separat verwaltet." }),
               ]}
           onCancel={() => setPendingAccessChange(null)}

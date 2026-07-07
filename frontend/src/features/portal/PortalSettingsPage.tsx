@@ -373,7 +373,7 @@ export default function PortalSettingsPage() {
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
               </div>
               <div>
-                <dt className={labelClasses}>{t({ en: "Workspace access", fr: "Accès au workspace", de: "Arbeitsbereichszugriff" })}</dt>
+                <dt className={labelClasses}>{t({ en: "Workspace access", fr: "Accès à l'espace de travail", de: "Arbeitsbereichszugriff" })}</dt>
                 <dd className="mt-1">
                   <UiBadge tone="primary">
                     {selectedWorkspaceAccess === "manager"

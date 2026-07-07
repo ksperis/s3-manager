@@ -273,7 +273,7 @@ export default function PortalStorageSpacesPage() {
                 accountMemberRole={newAccountMemberRole}
                 onAccountMemberRoleChange={setNewAccountMemberRole}
                 modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+                roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
               />
             ) : (
               <div className={cx("text-xs font-medium", uiMutedTextClass)}>
@@ -325,7 +325,7 @@ export default function PortalStorageSpacesPage() {
               accountMemberRole={importAccountMemberRole}
               onAccountMemberRoleChange={setImportAccountMemberRole}
               modeLabel={t({ en: "Imported Storage Space access", fr: "Accès à l'espace importé", de: "Zugriff auf den importierten Speicherbereich" })}
-              roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres de l'account", de: "Standardzugriff für Account-Mitglieder" })}
+              roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
             />
             <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
               {portalAccessModeSummary(importAccessMode, selectedImportRestrictedEntries.length, portalMemberCount, t)}

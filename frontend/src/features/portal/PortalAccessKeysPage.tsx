@@ -177,7 +177,7 @@ export default function PortalAccessKeysPage() {
     <div className="space-y-4">
       <PageHeader
         title={t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" })}
-        description={t({ en: "Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des clés d'accès S3 pour les outils externes. Utilisez l'endpoint indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Verwenden Sie den hier angezeigten Endpoint; jedes Secret wird nur einmal angezeigt." })}
+        description={t({ en: "Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des clés d'accès S3 pour les outils externes. Utilisez le point de terminaison indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Verwenden Sie den hier angezeigten Endpunkt; jedes Secret wird nur einmal angezeigt." })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }) })}
         actions={[
           {
@@ -197,7 +197,11 @@ export default function PortalAccessKeysPage() {
       )}
       {state && canManageAccessKeys && (
         <PageBanner tone="info">
-          {t({ en: `Use endpoint ${state.s3_endpoint || "the configured storage service"} with these keys. Disabling pauses a key for external tools; deleting removes it permanently.`, fr: `Utilisez l'endpoint ${state.s3_endpoint || "du service de stockage configuré"} avec ces clés. La désactivation suspend une clé pour les outils externes; la suppression la retire définitivement.`, de: `Verwenden Sie den Endpoint ${state.s3_endpoint || "des konfigurierten Speicherdienstes"} mit diesen Schlüsseln. Deaktivieren pausiert einen Schlüssel für externe Werkzeuge; Löschen entfernt ihn dauerhaft.` })}
+          {t({
+            en: `Use endpoint ${state.s3_endpoint || "the configured storage service"} with these keys. Disabling pauses a key for external tools; deleting removes it permanently.`,
+            fr: `Utilisez ${state.s3_endpoint ? `le point de terminaison ${state.s3_endpoint}` : "le service de stockage configuré"} avec ces clés. La désactivation suspend une clé pour les outils externes; la suppression la retire définitivement.`,
+            de: `Verwenden Sie ${state.s3_endpoint ? `den Endpunkt ${state.s3_endpoint}` : "den konfigurierten Speicherdienst"} mit diesen Schlüsseln. Deaktivieren pausiert einen Schlüssel für externe Werkzeuge; Löschen entfernt ihn dauerhaft.`,
+          })}
         </PageBanner>
       )}
       {state && canManageAccessKeys && maxReached && (
@@ -252,7 +256,7 @@ export default function PortalAccessKeysPage() {
             title={t({ en: "Keys", fr: "Clés", de: "Schlüssel" })}
             description={
               state?.s3_endpoint
-                ? t({ en: `Use these keys with endpoint ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.`, fr: `Utilisez ces clés avec l'endpoint ${state.s3_endpoint}. Enregistrez les secrets à la création; ils ne pourront plus être affichés. La clé Portal est masquée dans cette liste.`, de: `Verwenden Sie diese Schlüssel mit dem Endpoint ${state.s3_endpoint}. Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Schlüssel ist in dieser Liste ausgeblendet.` })
+                ? t({ en: `Use these keys with endpoint ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.`, fr: `Utilisez ces clés avec le point de terminaison ${state.s3_endpoint}. Enregistrez les secrets à la création; ils ne pourront plus être affichés. La clé Portal est masquée dans cette liste.`, de: `Verwenden Sie diese Schlüssel mit dem Endpunkt ${state.s3_endpoint}. Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Schlüssel ist in dieser Liste ausgeblendet.` })
                 : t({ en: "Store secrets when they are created; they cannot be shown again. The portal key is hidden from this list.", fr: "Enregistrez les secrets à la création; ils ne pourront plus être affichés. La clé Portal est masquée dans cette liste.", de: "Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Schlüssel ist in dieser Liste ausgeblendet." })
             }
             showHeading={false}
@@ -336,7 +340,7 @@ export default function PortalAccessKeysPage() {
           loading={busy === `toggle:${pendingAction.key.access_key_id}`}
           details={[
             { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
-            { label: t({ en: "Endpoint", fr: "Endpoint", de: "Endpoint" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
+            { label: t({ en: "Endpoint", fr: "Point de terminaison", de: "Endpunkt" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[
             t({ en: "External tools using this key stop authenticating until it is re-enabled.", fr: "Les outils externes utilisant cette clé ne pourront plus s'authentifier jusqu'à sa réactivation.", de: "Externe Werkzeuge mit diesem Schlüssel können sich nicht authentifizieren, bis er wieder aktiviert wird." }),
@@ -356,7 +360,7 @@ export default function PortalAccessKeysPage() {
           loading={busy === `delete:${pendingAction.key.access_key_id}`}
           details={[
             { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
-            { label: t({ en: "Endpoint", fr: "Endpoint", de: "Endpoint" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
+            { label: t({ en: "Endpoint", fr: "Point de terminaison", de: "Endpunkt" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[
             t({ en: "External tools using this key stop working immediately.", fr: "Les outils externes utilisant cette clé cessent immédiatement de fonctionner.", de: "Externe Werkzeuge mit diesem Schlüssel funktionieren sofort nicht mehr." }),

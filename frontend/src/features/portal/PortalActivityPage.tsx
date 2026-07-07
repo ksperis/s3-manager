@@ -138,7 +138,13 @@ export default function PortalActivityPage() {
           </table>
         </div>
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
-          <span>{rows.length} of {workspace.activity.length}</span>
+          <span>
+            {t({
+              en: `${rows.length} of ${workspace.activity.length}`,
+              fr: `${rows.length} sur ${workspace.activity.length}`,
+              de: `${rows.length} von ${workspace.activity.length}`,
+            })}
+          </span>
         </div>
       </UiCard>
     </div>
