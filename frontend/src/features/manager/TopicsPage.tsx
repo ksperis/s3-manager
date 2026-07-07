@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   createTopic,
@@ -19,7 +19,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -117,6 +117,35 @@ const topicNotificationIds = (topic: Topic): string[] =>
     .map((subscription) => subscription.name.trim())
     .filter(Boolean);
 
+function extractError(err: unknown): string {
+  return extractApiError(err, "Unexpected error");
+}
+
+function renderTopicSubscriptions(topic: Topic) {
+  const notificationIds = topicNotificationIds(topic);
+  if (topic.is_ceph) {
+    return (
+      <>
+        <div>Notifications: {notificationIds.length}</div>
+        {notificationIds.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {notificationIds.map((notificationId, index) => (
+              <li key={`${notificationId}-${index}`}>Notification: {notificationId}</li>
+            ))}
+          </ul>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
+      <div>Pending: {topic.subscriptions_pending ?? 0}</div>
+    </>
+  );
+}
+
 export default function TopicsPage() {
   const {
     accounts,
@@ -171,10 +200,6 @@ export default function TopicsPage() {
   const [attributesError, setAttributesError] = useState<string | null>(null);
   const [attributesStatus, setAttributesStatus] = useState<string | null>(null);
 
-  const extractError = (err: unknown): string => {
-    return extractApiError(err, "Unexpected error");
-  };
-
   const applyAttributesConfiguration = (configuration: Record<string, unknown> | null | undefined) => {
     const config = configuration ?? {};
     const pushEndpoint = readPushEndpointValue(config);
@@ -185,7 +210,7 @@ export default function TopicsPage() {
     setAttributeItems(buildAttributeDrafts(config));
   };
 
-  const fetchTopics = async (accountId: number | string | null) => {
+  const fetchTopics = useCallback(async (accountId: number | string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -197,7 +222,7 @@ export default function TopicsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (needsS3AccountSelection) {
@@ -206,7 +231,7 @@ export default function TopicsPage() {
       return;
     }
     fetchTopics(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode, fetchTopics]);
 
   const openCreateModal = () => {
     setNewTopicName("");
@@ -504,6 +529,57 @@ export default function TopicsPage() {
     error,
     rowCount: filteredTopics.length,
   });
+  const topicColumns: Array<DataTableColumn<Topic>> = [
+    {
+      id: "topic",
+      label: "Topic",
+      primary: true,
+      cellClassName: "manager-table-cell-wide",
+      render: (topic) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="ui-body font-semibold text-slate-900 dark:text-slate-100">{topic.name}</span>
+          <span className="break-all font-mono ui-caption text-slate-500 dark:text-slate-400">{topic.arn}</span>
+        </div>
+      ),
+    },
+    {
+      id: "subscriptions",
+      label: "Subscriptions",
+      cellClassName: "ui-caption",
+      render: renderTopicSubscriptions,
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (topic) => (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className={tableActionButtonClasses}
+            onClick={() => openAttributesModal(topic)}
+          >
+            Attributes
+          </button>
+          <button
+            type="button"
+            className={tableActionButtonClasses}
+            onClick={() => openPolicyModal(topic.arn, topic.name)}
+          >
+            Policy
+          </button>
+          <button
+            type="button"
+            className={tableDeleteActionClasses}
+            onClick={() => handleDeleteTopic(topic.arn, topic.name)}
+          >
+            Delete
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -569,81 +645,17 @@ export default function TopicsPage() {
               />
             }
           />
-          <div className="overflow-x-auto">
-            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr>
-                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Topic</th>
-                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Subscriptions</th>
-                  <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {filteredTableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
-                {filteredTableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
-                {filteredTableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
-                {filteredTopics.map((topic) => {
-                  const notificationIds = topicNotificationIds(topic);
-                  return (
-                    <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="manager-table-cell-wide px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="ui-body font-semibold text-slate-900 dark:text-slate-100">{topic.name}</span>
-                          <span className="ui-caption font-mono text-slate-500 dark:text-slate-400">{topic.arn}</span>
-                        </div>
-                      </td>
-                      <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
-                        {topic.is_ceph ? (
-                          <>
-                            <div>Notifications: {notificationIds.length}</div>
-                            {notificationIds.length > 0 && (
-                              <ul className="mt-1 space-y-0.5">
-                                {notificationIds.map((notificationId, index) => (
-                                  <li key={`${notificationId}-${index}`}>
-                                    Notification: {notificationId}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
-                            <div>Pending: {topic.subscriptions_pending ?? 0}</div>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            className={tableActionButtonClasses}
-                            onClick={() => openAttributesModal(topic)}
-                          >
-                            Attributes
-                          </button>
-                          <button
-                            type="button"
-                            className={tableActionButtonClasses}
-                            onClick={() => openPolicyModal(topic.arn, topic.name)}
-                          >
-                            Policy
-                          </button>
-                          <button
-                            type="button"
-                            className={tableDeleteActionClasses}
-                            onClick={() => handleDeleteTopic(topic.arn, topic.name)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTableShell
+            columns={topicColumns}
+            rows={filteredTopics}
+            rowKey={(topic) => topic.arn}
+            status={filteredTableStatus}
+            loadingMessage="Loading topics..."
+            errorMessage="Unable to load topics."
+            emptyMessage="No topics."
+            tableClassName="compact-table"
+            responsiveCards
+          />
         </div>
       )}
 

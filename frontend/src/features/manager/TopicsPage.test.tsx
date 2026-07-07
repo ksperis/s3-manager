@@ -205,6 +205,16 @@ describe("TopicsPage", () => {
     expect(screen.getAllByText("ceph-topic-main")).toHaveLength(1);
     expect(screen.getByText("secondary-topic")).toBeInTheDocument();
     expect(screen.getByText("Notifications: 3")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("ceph-topic-main").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("Notifications: 3").closest("td")).toHaveAttribute(
+      "data-label",
+      "Subscriptions"
+    );
+    expect(screen.getAllByRole("button", { name: "Attributes" })[0].closest("td")).toHaveAttribute(
+      "data-mobile-actions",
+      "true"
+    );
     expect(screen.queryByText("Confirmed: 2")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending: 0")).not.toBeInTheDocument();
     const primaryNotification = screen.getByText("Notification: projet-test-s3ls-unistra-preprod");
