@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,5 +50,10 @@ describe("AuditLogsPage", () => {
       expect(screen.getByText("1 entry")).toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: "Audit trail" })).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByText("users.update").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("admin@example.com").closest("td")).toHaveAttribute("data-label", "Actor");
+    expect(within(table).getByText("Success").closest("td")).toHaveAttribute("data-label", "Status");
   });
 });

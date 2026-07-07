@@ -9,8 +9,9 @@ import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import UiBadge from "../../components/ui/UiBadge";
 import { extractApiError } from "../../utils/apiError";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
@@ -71,12 +72,23 @@ function ScopeBadge({ scope }: { scope: string }) {
   return <span className={`${base} ${styles}`}>{label}</span>;
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const tone = status === "success" ? "success" : status === "failure" || status === "failed" ? "danger" : "neutral";
+  return <UiBadge tone={tone}>{status.charAt(0).toUpperCase() + status.slice(1)}</UiBadge>;
+}
+
+function formatAuditDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
 function MetadataPreview({ metadata }: { metadata?: Record<string, unknown> | null }) {
   if (!metadata || Object.keys(metadata).length === 0) {
     return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
   }
   return (
-    <pre className="max-h-36 overflow-auto rounded-lg bg-slate-50 px-3 py-2 ui-caption leading-relaxed text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+    <pre className="max-h-36 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-2 ui-caption leading-relaxed text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
       {JSON.stringify(metadata, null, 2)}
     </pre>
   );
@@ -254,6 +266,77 @@ export default function AuditLogsPage() {
     ),
     [actionFilter, actionOptions, roleFilter, scopeFilter, searchTerm, statusFilter, statusOptions]
   );
+  const auditTableColumns = useMemo<Array<DataTableColumn<AuditLogEntry>>>(
+    () => [
+      {
+        id: "time",
+        label: "Time",
+        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        render: (log) => formatAuditDate(log.created_at),
+      },
+      {
+        id: "actor",
+        label: "Actor",
+        cellClassName: "align-top min-w-[12rem]",
+        render: (log) => (
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-slate-900 dark:text-slate-100">{log.user_email}</span>
+            <RoleBadge role={log.user_role} />
+          </div>
+        ),
+      },
+      {
+        id: "scope",
+        label: "Scope",
+        cellClassName: "align-top",
+        render: (log) => <ScopeBadge scope={log.scope} />,
+      },
+      {
+        id: "action",
+        label: "Action",
+        primary: true,
+        cellClassName: "align-top font-mono ui-caption",
+        render: (log) => log.action,
+      },
+      {
+        id: "status",
+        label: "Status",
+        cellClassName: "align-top",
+        render: (log) => <StatusBadge status={log.status} />,
+      },
+      {
+        id: "target",
+        label: "Target",
+        cellClassName: "align-top min-w-[8rem]",
+        render: (log) => (
+          <>
+            <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
+            <div className="ui-body font-medium text-slate-900 dark:text-white">{log.entity_id || "-"}</div>
+          </>
+        ),
+      },
+      {
+        id: "account",
+        label: "S3 Account/User",
+        cellClassName: "align-top min-w-[10rem]",
+        render: (log) =>
+          log.account_name ? (
+            <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
+          ) : log.account_id ? (
+            <div className="text-slate-600 dark:text-slate-300">S3Account #{log.account_id}</div>
+          ) : (
+            <span className="text-slate-500 dark:text-slate-400">-</span>
+          ),
+      },
+      {
+        id: "details",
+        label: "Details",
+        cellClassName: "align-top min-w-[18rem] max-w-[28rem]",
+        render: (log) => <MetadataPreview metadata={log.metadata as Record<string, unknown> | undefined} />,
+      },
+    ],
+    []
+  );
 
   return (
     <div className="space-y-4">
@@ -292,68 +375,21 @@ export default function AuditLogsPage() {
           countLabel={`${filteredLogs.length} entr${filteredLogs.length === 1 ? "y" : "ies"}${isFiltered ? ` of ${logs.length}` : ""}`}
         />
 
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 text-left ui-body text-slate-700 dark:divide-slate-800 dark:text-slate-200">
-            <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Time</th>
-                <th className="px-4 py-3 font-semibold">Actor</th>
-                <th className="px-4 py-3 font-semibold">Scope</th>
-                <th className="px-4 py-3 font-semibold">Action</th>
-                <th className="px-4 py-3 font-semibold">Target</th>
-                <th className="px-4 py-3 font-semibold">S3Account/User</th>
-                <th className="px-4 py-3 font-semibold">Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-              {tableStatus === "loading" && <TableEmptyState colSpan={7} message="Loading audit data..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={7} message="Unable to load audit logs." tone="error" />}
-              {tableStatus === "empty" && (
-                <TableEmptyState
-                  colSpan={7}
-                  message={
-                    logs.length === 0 && !hasActiveFilters
-                      ? "No audit entries."
-                      : "No audit entries match the current filters."
-                  }
-                />
-              )}
-              {filteredLogs.map((log) => (
-                <tr key={log.id} className="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50">
-                  <td className="px-4 py-3 align-top ui-caption text-slate-500 dark:text-slate-400">
-                    {new Date(log.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-semibold">{log.user_email}</span>
-                      <RoleBadge role={log.user_role} />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <ScopeBadge scope={log.scope} />
-                  </td>
-                  <td className="px-4 py-3 align-top font-mono ui-caption">{log.action}</td>
-                  <td className="px-4 py-3 align-top">
-                    <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
-                    <div className="ui-body font-medium text-slate-900 dark:text-white">{log.entity_id || "—"}</div>
-                  </td>
-                  <td className="px-4 py-3 align-top ui-body">
-                    {log.account_name ? (
-                      <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
-                    ) : log.account_id ? (
-                      <div className="text-slate-600 dark:text-slate-300">S3Account #{log.account_id}</div>
-                    ) : (
-                      <span className="text-slate-500 dark:text-slate-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <MetadataPreview metadata={log.metadata as Record<string, unknown> | undefined} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={auditTableColumns}
+          rows={filteredLogs}
+          rowKey={(log) => log.id}
+          status={tableStatus}
+          loadingMessage="Loading audit data..."
+          errorMessage="Unable to load audit logs."
+          emptyMessage={
+            logs.length === 0 && !hasActiveFilters ? "No audit entries." : "No audit entries match the current filters."
+          }
+          primaryColumnId="action"
+          responsiveCards
+          tableClassName="compact-table"
+          rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
+        />
 
         <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 ui-body dark:border-slate-800">
           <span className="text-slate-500 dark:text-slate-400">
