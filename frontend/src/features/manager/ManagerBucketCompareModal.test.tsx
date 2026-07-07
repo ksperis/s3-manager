@@ -237,6 +237,14 @@ describe("ManagerBucketCompareModal remediation actions", () => {
     await runInitialComparison();
 
     const resultLabel = await screen.findByText(/bucket-a\s*->\s*bucket-a/i);
+    expect(screen.getByRole("progressbar", { name: "Bucket comparison progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "100"
+    );
+    expect(screen.getByRole("progressbar", { name: "Comparison progress for bucket-a to bucket-a" })).toHaveAttribute(
+      "aria-valuenow",
+      "100"
+    );
     expect(screen.getAllByText("Different").length).toBeGreaterThan(0);
     expect(screen.queryByText("success")).not.toBeInTheDocument();
     expect(closestDetails(resultLabel)).not.toHaveAttribute("open");

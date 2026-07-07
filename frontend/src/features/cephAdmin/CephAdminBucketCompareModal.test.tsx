@@ -109,6 +109,14 @@ describe("CephAdminBucketCompareModal", () => {
     await waitFor(() => {
       expect(compareCephAdminBucketPairMock).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByRole("progressbar", { name: "Bucket comparison progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "100"
+    );
+    expect(screen.getByRole("progressbar", { name: "Comparison progress for bucket-a to bucket-a" })).toHaveAttribute(
+      "aria-valuenow",
+      "100"
+    );
     expect(compareCephAdminBucketPairMock).toHaveBeenCalledWith(
       1,
       {

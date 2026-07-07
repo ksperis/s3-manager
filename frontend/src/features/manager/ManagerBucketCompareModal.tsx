@@ -8,6 +8,7 @@ import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { UiTone, uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
 import { proxyDownload } from "../../api/browser";
 import {
@@ -1198,9 +1199,12 @@ export default function ManagerBucketCompareModal({
               </span>
               <span>{progressPercent}%</span>
             </div>
-            <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-              <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${progressPercent}%` }} />
-            </div>
+            <UiProgressBar
+              value={progressPercent}
+              label="Bucket comparison progress"
+              className="h-2.5 overflow-hidden bg-slate-200 dark:bg-slate-800"
+              barClassName="bg-primary-500 transition-[width] duration-200"
+            />
             {progress.failed > 0 && (
               <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">Failures so far: {progress.failed}</p>
             )}
@@ -1404,9 +1408,12 @@ export default function ManagerBucketCompareModal({
                         </span>
                       )}
                     </div>
-                    <div className="mt-2 relative h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                      <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${progressValue}%` }} />
-                    </div>
+                    <UiProgressBar
+                      value={progressValue}
+                      label={`Comparison progress for ${item.sourceBucket} to ${item.targetBucket}`}
+                      className="mt-2 h-1.5 overflow-hidden bg-slate-200 dark:bg-slate-800"
+                      barClassName="bg-primary-500 transition-[width] duration-200"
+                    />
                   </summary>
                   <div className="space-y-3 px-3 pb-3">
                     {item.error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{item.error}</p>}
