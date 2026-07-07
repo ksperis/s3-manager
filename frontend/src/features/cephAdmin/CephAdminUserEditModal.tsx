@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccessKey,
@@ -774,8 +774,8 @@ export default function CephAdminUserEditModal({
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+      <div className={uiTableContainerClass}>
+        <table className={cx(uiDataTableClass, "compact-table min-w-full")}>
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -875,7 +875,7 @@ export default function CephAdminUserEditModal({
               <p className="ui-caption text-slate-500 dark:text-slate-400">{metrics.bucket_count} bucket(s)</p>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <table className={cx(uiDataTableClass, "compact-table min-w-full")}>
                 <thead className="bg-slate-100/80 dark:bg-slate-900/60">
                   <tr>
                     <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
