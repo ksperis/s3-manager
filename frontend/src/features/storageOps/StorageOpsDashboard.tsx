@@ -15,7 +15,6 @@ const cards = [
     title: "Buckets",
     description: "Cross-account, S3 user and cross-connection bucket listing, filtering and bulk operations.",
     to: "/storage-ops/buckets",
-    eyebrow: "Next step",
   },
 ];
 

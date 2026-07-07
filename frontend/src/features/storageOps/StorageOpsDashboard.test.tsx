@@ -45,7 +45,9 @@ describe("StorageOpsDashboard", () => {
         "Accounts: 1 | S3 users: 1 | Connections: 2 | Shared: 1 | Private: 1 | Endpoints: 2"
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Buckets/i })).toHaveAttribute("href", "/storage-ops/buckets");
+    const bucketLink = screen.getByRole("link", { name: /Buckets/i });
+    expect(bucketLink).toHaveAttribute("href", "/storage-ops/buckets");
+    expect(within(bucketLink).getByText("Navigation")).toBeInTheDocument();
   });
 
   it("keeps navigation visible when the summary fails", async () => {
