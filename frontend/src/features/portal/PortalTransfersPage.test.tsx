@@ -36,5 +36,9 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByText("report.csv")).toBeInTheDocument();
     expect(screen.getByText("Upload")).toBeInTheDocument();
     expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("report.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("100%").closest("td")).toHaveAttribute("data-label", "Progress");
+    expect(screen.getByText("2m ago").closest("td")).toHaveAttribute("data-label", "Started");
   });
 });

@@ -5,6 +5,11 @@
 import { useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
+import ManagerTable, {
+  managerTableCellClass,
+  managerTablePrimaryCellClass,
+  managerTableWideCellClass,
+} from "../../components/list/ManagerTable";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
@@ -62,50 +67,48 @@ export default function PortalTransfersPage() {
             variant="bar"
           />
         </div>
-        <div className="overflow-x-auto">
-          <table className="ui-data-table min-w-[850px]">
-            <thead>
-              <tr>
-                <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
-                <th>{t({ en: "Type", fr: "Type", de: "Typ" })}</th>
-                <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
-                <th>{t({ en: "Progress", fr: "Progression", de: "Fortschritt" })}</th>
-                <th>{t({ en: "Speed", fr: "Débit", de: "Geschwindigkeit" })}</th>
-                <th>{t({ en: "Started", fr: "Démarré", de: "Gestartet" })}</th>
-                <th>{t({ en: "ETA", fr: "ETA", de: "ETA" })}</th>
-                <th>{t({ en: "Details", fr: "Détails", de: "Details" })}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transfers.map((transfer) => (
-                <tr key={transfer.id}>
-                  <td className={cx("font-bold", uiTitleTextClass)}>{transfer.name}</td>
-                  <td>{portalTransferDirectionLabel(transfer.direction, t)}</td>
-                  <td><UiBadge tone={portalTransferStatusTone(transfer.status)}>{portalTransferStatusLabel(transfer.status, t)}</UiBadge></td>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <div className="w-28"><UiProgressBar value={transfer.progress} /></div>
-                      <span>{transfer.progress}%</span>
-                    </div>
-                  </td>
-                  <td>{transfer.speedLabel}</td>
-                  <td>{transfer.startedLabel}</td>
-                  <td>{transfer.etaLabel}</td>
-                  <td className={cx("max-w-[240px] truncate text-xs", uiMutedTextClass)}>
-                    {transfer.errorMessage ?? (transfer.status === "Failed" ? t({ en: "Failure details unavailable.", fr: "Détails de l'échec indisponibles.", de: "Fehlerdetails nicht verfügbar." }) : "-")}
-                  </td>
-                </tr>
-              ))}
-              {transfers.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                    {t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Übertragungen zum Anzeigen." })}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <ManagerTable
+          responsiveCards
+          columns={[
+            { key: "name", label: t({ en: "Name", fr: "Nom", de: "Name" }), mobileRole: "primary" },
+            { key: "type", label: t({ en: "Type", fr: "Type", de: "Typ" }) },
+            { key: "status", label: t({ en: "Status", fr: "Statut", de: "Status" }) },
+            { key: "progress", label: t({ en: "Progress", fr: "Progression", de: "Fortschritt" }) },
+            { key: "speed", label: t({ en: "Speed", fr: "Débit", de: "Geschwindigkeit" }) },
+            { key: "started", label: t({ en: "Started", fr: "Démarré", de: "Gestartet" }) },
+            { key: "eta", label: t({ en: "ETA", fr: "ETA", de: "ETA" }) },
+            { key: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
+          ]}
+        >
+          {transfers.map((transfer) => (
+            <tr key={transfer.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <td className={cx(managerTablePrimaryCellClass, "break-words", uiTitleTextClass)}>{transfer.name}</td>
+              <td className={managerTableCellClass}>{portalTransferDirectionLabel(transfer.direction, t)}</td>
+              <td className={managerTableCellClass}>
+                <UiBadge tone={portalTransferStatusTone(transfer.status)}>{portalTransferStatusLabel(transfer.status, t)}</UiBadge>
+              </td>
+              <td className={managerTableCellClass}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="w-28 max-w-full"><UiProgressBar value={transfer.progress} /></div>
+                  <span className="shrink-0">{transfer.progress}%</span>
+                </div>
+              </td>
+              <td className={managerTableCellClass}>{transfer.speedLabel}</td>
+              <td className={managerTableCellClass}>{transfer.startedLabel}</td>
+              <td className={managerTableCellClass}>{transfer.etaLabel}</td>
+              <td className={cx(managerTableWideCellClass, "break-words text-xs", uiMutedTextClass)}>
+                {transfer.errorMessage ?? (transfer.status === "Failed" ? t({ en: "Failure details unavailable.", fr: "Détails de l'échec indisponibles.", de: "Fehlerdetails nicht verfügbar." }) : "-")}
+              </td>
+            </tr>
+          ))}
+          {transfers.length === 0 ? (
+            <tr>
+              <td colSpan={8} className={cx("py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
+                {t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Übertragungen zum Anzeigen." })}
+              </td>
+            </tr>
+          ) : null}
+        </ManagerTable>
         <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
           {t({ en: `Total visible size: ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}`, fr: `Taille visible totale : ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}`, de: `Gesamte sichtbare Größe: ${formatBytes(transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0))}` })}
         </div>
