@@ -8895,7 +8895,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                               onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
                                               placeholder="min"
                                               disabled={section.disabled}
-                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 ${minState.fieldClass}`}
+                                              className={advancedFilterControlClass(`w-full px-2 py-1.5 font-normal ${minState.fieldClass}`, section.disabled)}
                                             />
                                             <input
                                               type="number"
@@ -8905,7 +8905,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                               onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
                                               placeholder="max"
                                               disabled={section.disabled}
-                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 ${maxState.fieldClass}`}
+                                              className={advancedFilterControlClass(`w-full px-2 py-1.5 font-normal ${maxState.fieldClass}`, section.disabled)}
                                             />
                                           </div>
                                         </div>
@@ -8949,7 +8949,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       <select
                                         value={advancedDraft.features[feature.id]}
                                         onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                                        className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
+                                        className={advancedFilterControlClass(`mt-1 w-full px-2 py-1.5 font-normal ${state.fieldClass}`, disabled)}
                                         disabled={disabled}
                                       >
                                         {feature.id === "versioning" ? (
@@ -9717,7 +9717,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     onChange={(e) => updateFeatureDetailFilter("sseAlgorithm", e.target.value)}
                                     placeholder="AES256"
                                     disabled={!sseFeatureEnabled}
-                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                    className={advancedFilterControlClass("mt-1 w-full px-2 py-1.5", !sseFeatureEnabled)}
                                   />
                                 </div>
                                 <div>
@@ -9728,7 +9728,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     onChange={(e) => updateFeatureDetailFilter("sseKmsKeyId", e.target.value)}
                                     placeholder="key-id or ARN"
                                     disabled={!sseFeatureEnabled}
-                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                                    className={advancedFilterControlClass("mt-1 w-full px-2 py-1.5", !sseFeatureEnabled)}
                                   />
                                 </div>
                               </div>
