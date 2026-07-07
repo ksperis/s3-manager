@@ -67,21 +67,31 @@ describe("ManagerMigrationWizardPage", () => {
     );
 
     await screen.findByText("New migration");
+    expect(screen.getByRole("button", { name: "Back" })).toHaveClass("ui-button-base");
+    expect(screen.getByRole("button", { name: "Next" })).toHaveClass("ui-button-base");
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByText("Target is required.")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
+    const targetSelect = screen.getByLabelText("Target");
+    expect(targetSelect).toHaveClass("ui-control");
+    await user.selectOptions(targetSelect, "tgt-ctx");
     await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByText("Target prefix/suffix mapping")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prefix")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Suffix")).toHaveClass("ui-control");
     await user.type(screen.getByLabelText("Prefix"), "mig-");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByText("Strategy")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "One-shot migration" })).toHaveClass("text-primary");
+    expect(screen.getByRole("radio", { name: "Pre-sync + cutover" })).toHaveClass("text-primary");
     expect(screen.queryByRole("checkbox", { name: "Strong integrity check before source deletion" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(screen.getByRole("button", { name: "Hide" })).toHaveClass("ui-button-base");
+    expect(screen.getByLabelText("Webhook URL")).toHaveClass("ui-control");
     expect(screen.getByRole("checkbox", { name: "Strong integrity check before source deletion" })).toBeInTheDocument();
     const sameEndpointCopyOption = screen.getByRole("checkbox", { name: "Use x-amz-copy-source (same endpoint only)" });
     const autoGrantOption = screen.getByRole("checkbox", {

@@ -37,6 +37,9 @@ export const uiInputClass = "ui-control";
 export const uiCheckboxClass =
   "h-4 w-4 rounded border-[color:var(--ui-border)] text-primary focus:ring-primary";
 
+export const uiRadioClass =
+  "h-4 w-4 border-[color:var(--ui-border)] text-primary focus:ring-primary";
+
 export const uiLabelClass =
   "ui-caption font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]";
 
