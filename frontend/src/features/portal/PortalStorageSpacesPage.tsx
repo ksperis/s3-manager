@@ -18,7 +18,7 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import UiField from "../../components/ui/UiField";
+import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
@@ -316,25 +316,37 @@ export default function PortalStorageSpacesPage() {
             ? "lg:grid-cols-[180px_1fr_1.5fr_auto]"
             : "lg:grid-cols-[1fr_1.5fr_auto]")}>
             {canUseNamedBucket ? (
-              <select
-                className="ui-control h-9 py-1.5 text-xs"
+              <UiSelect
+                label={t({ en: "Storage Space naming mode", fr: "Mode de nommage de l'espace de stockage", de: "Benennungsmodus des Speicherbereichs" })}
+                size="compact"
+                className="h-9"
                 value={newNamingMode}
                 onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
-                aria-label={t({ en: "Storage Space naming mode", fr: "Mode de nommage de l'espace de stockage", de: "Benennungsmodus des Speicherbereichs" })}
               >
                 <option value="generic_uuid">{t({ en: "Automatic storage", fr: "Stockage automatique", de: "Automatischer Speicher" })}</option>
                 <option value="named_bucket">{t({ en: "Named storage", fr: "Stockage nommé", de: "Benannter Speicher" })}</option>
-              </select>
+              </UiSelect>
             ) : null}
-            <input
-              className="ui-control h-9 text-xs"
+            <UiInput
+              label={effectiveNamingMode === "named_bucket"
+                ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
+                : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+              size="compact"
+              className="h-9"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               placeholder={effectiveNamingMode === "named_bucket"
                 ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
                 : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
             />
-            <input className="ui-control h-9 text-xs" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })} />
+            <UiInput
+              label={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+              size="compact"
+              className="h-9"
+              value={newDescription}
+              onChange={(event) => setNewDescription(event.target.value)}
+              placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+            />
             <UiButton disabled={!newName.trim() || createBusy} onClick={handleCreate} className="h-9 px-3 py-1.5">
               {createBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create", fr: "Créer", de: "Erstellen" })}
             </UiButton>
@@ -376,14 +388,18 @@ export default function PortalStorageSpacesPage() {
       {showImport ? (
         <UiCard title={t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" })}>
           <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
-            <input
-              className="ui-control h-9 text-xs"
+            <UiInput
+              label={t({ en: "Existing storage name", fr: "Nom du stockage existant", de: "Name des vorhandenen Speichers" })}
+              size="compact"
+              className="h-9"
               value={importBucketName}
               onChange={(event) => setImportBucketName(event.target.value)}
               placeholder={t({ en: "Existing storage name", fr: "Nom du stockage existant", de: "Name des vorhandenen Speichers" })}
             />
-            <input
-              className="ui-control h-9 text-xs"
+            <UiInput
+              label={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+              size="compact"
+              className="h-9"
               value={importDescription}
               onChange={(event) => setImportDescription(event.target.value)}
               placeholder={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
@@ -422,19 +438,15 @@ export default function PortalStorageSpacesPage() {
 
       <UiCard>
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]">
-          <UiField label={t({ en: "Search", fr: "Recherche", de: "Suche" })}>
-            {({ id, describedBy }) => (
-              <input
-                id={id}
-                aria-describedby={describedBy}
-                type="search"
-                className="ui-control h-9 text-xs"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t({ en: "Search storage spaces...", fr: "Rechercher des espaces de stockage...", de: "Speicherbereiche suchen..." })}
-              />
-            )}
-          </UiField>
+          <UiInput
+            label={t({ en: "Search", fr: "Recherche", de: "Suche" })}
+            type="search"
+            size="compact"
+            className="h-9"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t({ en: "Search storage spaces...", fr: "Rechercher des espaces de stockage...", de: "Speicherbereiche suchen..." })}
+          />
           <UiSelect
             label={t({ en: "Role", fr: "Rôle", de: "Rolle" })}
             size="compact"

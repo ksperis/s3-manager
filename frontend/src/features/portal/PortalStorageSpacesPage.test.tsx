@@ -224,6 +224,7 @@ describe("PortalStorageSpacesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
 
     const namingMode = screen.getByLabelText("Storage Space naming mode");
+    expect(namingMode).toHaveClass("ui-control");
     expect(within(namingMode).getByRole("option", { name: "Automatic storage" })).toBeInTheDocument();
     expect(within(namingMode).getByRole("option", { name: "Named storage" })).toBeInTheDocument();
   });
@@ -276,7 +277,9 @@ describe("PortalStorageSpacesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create storage space" }));
 
     expect(screen.queryByLabelText("Storage Space visibility")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+    expect(screen.getByLabelText("Storage Space name")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Description")).toHaveClass("ui-control");
+    fireEvent.change(screen.getByLabelText("Storage Space name"), {
       target: { value: "Private Research" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -320,7 +323,7 @@ describe("PortalStorageSpacesPage", () => {
     fireEvent.change(screen.getByLabelText("Storage Space access"), {
       target: { value: "account" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+    fireEvent.change(screen.getByLabelText("Storage Space name"), {
       target: { value: "Team Research" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -349,7 +352,7 @@ describe("PortalStorageSpacesPage", () => {
     fireEvent.change(screen.getByLabelText("Storage Space access"), {
       target: { value: "restricted" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Storage Space name"), {
+    fireEvent.change(screen.getByLabelText("Storage Space name"), {
       target: { value: "Restricted Research" },
     });
 
@@ -381,7 +384,8 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add existing storage" }));
-    fireEvent.change(screen.getByPlaceholderText("Existing storage name"), {
+    expect(screen.getByLabelText("Existing storage name")).toHaveClass("ui-control");
+    fireEvent.change(screen.getByLabelText("Existing storage name"), {
       target: { value: "existing-research" },
     });
     fireEvent.change(screen.getByLabelText("Imported Storage Space access"), {
@@ -409,7 +413,7 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add existing storage" }));
-    fireEvent.change(screen.getByPlaceholderText("Existing storage name"), {
+    fireEvent.change(screen.getByLabelText("Existing storage name"), {
       target: { value: "existing-restricted" },
     });
     fireEvent.change(screen.getByLabelText("Imported Storage Space access"), {
