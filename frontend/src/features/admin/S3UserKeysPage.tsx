@@ -19,7 +19,6 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
-import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import ManagerTable, {
   managerTableActionCellClass,
@@ -242,10 +241,13 @@ export default function S3UserKeysPage() {
             { key: "usage", label: "Usage" },
             { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
           ]}
+          listState={{
+            status: tableStatus,
+            loadingMessage: "Loading keys...",
+            errorMessage: "Unable to load keys.",
+            emptyMessage: "No keys for this user.",
+          }}
         >
-          {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading keys..." />}
-          {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load keys." tone="error" />}
-          {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No keys for this user." />}
           {keys.map((k) => {
             const active = isKeyActive(k);
             return (

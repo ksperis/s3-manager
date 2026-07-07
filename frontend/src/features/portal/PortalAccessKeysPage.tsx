@@ -18,7 +18,6 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -248,10 +247,13 @@ export default function PortalAccessKeysPage() {
               { key: "created", label: t({ en: "Created on", fr: "Créée le", de: "Erstellt am" }) },
               { key: "actions", label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }), align: "right", mobileRole: "actions" },
             ]}
+            listState={{
+              status: tableStatus,
+              loadingMessage: t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." }),
+              errorMessage: t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." }),
+              emptyMessage: t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." }),
+            }}
           >
-            {tableStatus === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
-            {tableStatus === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })} />}
             {visibleKeys.map((key) => {
               const active = isKeyActive(key);
               const disabled = Boolean(busy) || !canManageAccessKeys;
