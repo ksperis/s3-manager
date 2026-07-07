@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import PaginationControls from "../PaginationControls";
 import SortableHeader from "../SortableHeader";
@@ -38,6 +38,7 @@ type DataTablePagination = {
   total: number;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
   disabled?: boolean;
 };
 
@@ -56,6 +57,7 @@ type DataTableShellProps<Row, SortField extends string = string> = {
   containerClassName?: string;
   tbodyClassName?: string;
   rowClassName?: string | ((row: Row) => string | undefined);
+  rowAttributes?: (row: Row) => Omit<HTMLAttributes<HTMLTableRowElement>, "children" | "className">;
   overflowXHidden?: boolean;
   responsiveCards?: boolean;
 };
@@ -75,6 +77,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
   containerClassName,
   tbodyClassName,
   rowClassName = "hover:bg-slate-50 dark:hover:bg-slate-800/40",
+  rowAttributes,
   overflowXHidden = false,
   responsiveCards = false,
 }: DataTableShellProps<Row, SortField>) {
@@ -120,7 +123,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
             {rows.map((row) => {
               const key = rowKey(row);
               return (
-                <tr key={key} className={resolveRowClassName(row)}>
+                <tr key={key} className={resolveRowClassName(row)} {...rowAttributes?.(row)}>
                   {columns.map((column) => {
                     const align = column.align ?? "left";
                     const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
@@ -156,6 +159,7 @@ export default function DataTableShell<Row, SortField extends string = string>({
           total={pagination.total}
           onPageChange={pagination.onPageChange}
           onPageSizeChange={pagination.onPageSizeChange}
+          pageSizeOptions={pagination.pageSizeOptions}
           disabled={pagination.disabled}
         />
       ) : null}

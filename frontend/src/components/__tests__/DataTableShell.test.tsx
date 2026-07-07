@@ -47,6 +47,56 @@ describe("DataTableShell", () => {
     expect(onPageChange).toHaveBeenCalledWith(2);
   });
 
+  it("passes custom page-size options to the shared pagination controls", async () => {
+    const user = userEvent.setup();
+    const onPageSizeChange = vi.fn();
+
+    render(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        pagination={{
+          page: 1,
+          pageSize: 200,
+          total: 250,
+          onPageChange: vi.fn(),
+          onPageSizeChange,
+          pageSizeOptions: [25, 100, 200],
+        }}
+      />
+    );
+
+    const pageSizeSelect = screen.getByLabelText("Page size");
+    expect(screen.getByRole("option", { name: "200" })).toBeInTheDocument();
+    await user.selectOptions(pageSizeSelect, "100");
+
+    expect(onPageSizeChange).toHaveBeenCalledWith(100);
+  });
+
+  it("applies row attributes while keeping shared row styling", () => {
+    render(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        rowClassName="selected-row"
+        rowAttributes={(row) => ({ "aria-current": row.id === "a" ? "true" : undefined })}
+      />
+    );
+
+    expect(screen.getByText("Archive").closest("tr")).toHaveClass("selected-row");
+    expect(screen.getByText("Archive").closest("tr")).toHaveAttribute("aria-current", "true");
+  });
+
   it("renders empty state messages in the table body", () => {
     render(
       <DataTableShell

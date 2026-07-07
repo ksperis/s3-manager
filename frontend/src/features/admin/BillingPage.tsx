@@ -14,24 +14,21 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListToolbar from "../../components/ListToolbar";
-import PaginationControls from "../../components/PaginationControls";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import StatCards from "../../components/StatCards";
-import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import UiButton from "../../components/ui/UiButton";
 import {
   cx,
   uiCardMutedClass,
-  uiDataTableClass,
   uiMutedTextClass,
-  uiTableContainerClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
@@ -67,6 +64,7 @@ const SORT_OPTIONS = [
   { value: "storage", label: "Storage" },
   { value: "requests", label: "Requests" },
 ] as const;
+type BillingSortBy = (typeof SORT_OPTIONS)[number]["value"];
 
 function currentMonth(): string {
   const now = new Date();
@@ -136,7 +134,7 @@ export default function BillingPage() {
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [selectedEndpointId, setSelectedEndpointId] = useState<number | null>(null);
   const [subjectType, setSubjectType] = useState<"account" | "s3_user">("account");
-  const [sortBy, setSortBy] = useState<string>("name");
+  const [sortBy, setSortBy] = useState<BillingSortBy>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
@@ -272,12 +270,16 @@ export default function BillingPage() {
     }
   }, [subjects]);
 
+  const detailSubjectId = detail?.subject_id ?? null;
+  const detailSubjectType = detail?.subject_type ?? null;
+
   useEffect(() => {
-    if (!detail || !selectedEndpointId) {
+    if (detailSubjectId == null || !detailSubjectType || !selectedEndpointId) {
       return;
     }
     const endpointId = selectedEndpointId;
-    const currentDetail = detail;
+    const subjectType = detailSubjectType as "account" | "s3_user";
+    const subjectId = detailSubjectId;
     let cancelled = false;
     async function reloadDetail() {
       setDetailLoading(true);
@@ -286,8 +288,8 @@ export default function BillingPage() {
         const data = await getBillingSubjectDetail(
           month,
           endpointId,
-          currentDetail.subject_type as "account" | "s3_user",
-          currentDetail.subject_id
+          subjectType,
+          subjectId
         );
         if (!cancelled) {
           setDetail(data);
@@ -306,7 +308,7 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [detail?.subject_id, detail?.subject_type, month, selectedEndpointId, reloadToken]);
+  }, [detailSubjectId, detailSubjectType, month, selectedEndpointId, reloadToken]);
 
   const stats = useMemo(() => {
     const storageAvg = summary?.storage?.avg_bytes ?? null;
@@ -375,6 +377,15 @@ export default function BillingPage() {
     }
   }
 
+  function handleTableSort(field: BillingSortBy) {
+    if (field === sortBy) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(field);
+    setSortDir(field === "name" ? "asc" : "desc");
+  }
+
   async function handleExport() {
     if (!selectedEndpointId || !canExport) return;
     setPageError(null);
@@ -423,6 +434,54 @@ export default function BillingPage() {
     error: subjectsError,
     rowCount: subjects.length,
   });
+  const subjectTableColumns: Array<DataTableColumn<BillingSubjectSummary, BillingSortBy>> = [
+    {
+      id: "name",
+      label: "Name",
+      field: "name",
+      primary: true,
+      render: (subject) => (
+        <button
+          type="button"
+          className="text-left"
+          onClick={() => void handleRowClick(subject)}
+          aria-label={`View billing detail for ${subject.name}`}
+        >
+          <span className={cx("block font-medium", uiTitleTextClass)}>{subject.name}</span>
+          <span className={cx("block ui-caption", uiMutedTextClass)}>{subject.rgw_identifier ?? "No RGW identifier"}</span>
+        </button>
+      ),
+    },
+    {
+      id: "storage",
+      label: "Storage avg",
+      field: "storage",
+      render: (subject) => formatBytes(subject.storage.avg_bytes),
+    },
+    {
+      id: "egress",
+      label: "Egress",
+      field: "egress",
+      render: (subject) => formatBytes(subject.usage.bytes_out),
+    },
+    {
+      id: "ingress",
+      label: "Ingress",
+      render: (subject) => formatBytes(subject.usage.bytes_in),
+    },
+    {
+      id: "requests",
+      label: "Requests",
+      field: "requests",
+      render: (subject) => formatCompactNumber(subject.usage.ops_total),
+    },
+    {
+      id: "cost",
+      label: "Cost",
+      field: "cost",
+      render: (subject) => (subject.cost?.total_cost != null ? formatCurrency(subject.cost.total_cost, subject.cost.currency) : "-"),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -491,7 +550,7 @@ export default function BillingPage() {
               Sort by
               <select
                 value={sortBy}
-                onChange={(event) => setSortBy(event.target.value)}
+                onChange={(event) => setSortBy(event.target.value as BillingSortBy)}
                 className={toolbarCompactSelectClasses}
               >
                 {SORT_OPTIONS.map((option) => (
@@ -609,63 +668,41 @@ export default function BillingPage() {
               countLabel={`${subjectsTotal} subject${subjectsTotal === 1 ? "" : "s"}`}
             />
             {subjectsError ? <PageBanner tone="error" className="mx-4 mb-4">{subjectsError}</PageBanner> : null}
-            <div className={uiTableContainerClass}>
-              <table className={cx(uiDataTableClass, "min-w-[920px]")}>
-                <thead>
-                  <tr>
-                    <th className="text-left">Name</th>
-                    <th className="text-left">Storage avg</th>
-                    <th className="text-left">Egress</th>
-                    <th className="text-left">Ingress</th>
-                    <th className="text-left">Requests</th>
-                    <th className="text-left">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subjectsTableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading subjects..." />}
-                  {subjectsTableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load subjects." tone="error" />}
-                  {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects for this scope." />}
-                  {subjects.map((subject) => {
-                    const selected = detail?.subject_type === subject.subject_type && detail.subject_id === subject.subject_id;
-                    return (
-                      <tr
-                        key={`${subject.subject_type}-${subject.subject_id}`}
-                        className={cx(selected && "bg-[var(--ui-selected-bg)]")}
-                        aria-current={selected ? "true" : undefined}
-                      >
-                        <td>
-                          <button
-                            type="button"
-                            className="text-left"
-                            onClick={() => void handleRowClick(subject)}
-                            aria-label={`View billing detail for ${subject.name}`}
-                          >
-                            <span className={cx("block font-medium", uiTitleTextClass)}>{subject.name}</span>
-                            <span className={cx("block ui-caption", uiMutedTextClass)}>{subject.rgw_identifier ?? "No RGW identifier"}</span>
-                          </button>
-                        </td>
-                        <td>{formatBytes(subject.storage.avg_bytes)}</td>
-                        <td>{formatBytes(subject.usage.bytes_out)}</td>
-                        <td>{formatBytes(subject.usage.bytes_in)}</td>
-                        <td>{formatCompactNumber(subject.usage.ops_total)}</td>
-                        <td>{subject.cost?.total_cost != null ? formatCurrency(subject.cost.total_cost, subject.cost.currency) : "-"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <PaginationControls
-              page={page}
-              pageSize={pageSize}
-              total={subjectsTotal}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setPage(1);
+            <DataTableShell
+              columns={subjectTableColumns}
+              rows={subjects}
+              rowKey={(subject) => `${subject.subject_type}-${subject.subject_id}`}
+              status={subjectsTableStatus}
+              loadingMessage="Loading subjects..."
+              errorMessage="Unable to load subjects."
+              emptyMessage="No subjects for this scope."
+              primaryColumnId="name"
+              sort={{ field: sortBy, direction: sortDir, onSort: handleTableSort }}
+              pagination={{
+                page,
+                pageSize,
+                total: subjectsTotal,
+                onPageChange: setPage,
+                onPageSizeChange: (size) => {
+                  setPageSize(size);
+                  setPage(1);
+                },
+                pageSizeOptions: [10, 25, 50, 100, 200],
+                disabled: subjectsLoading,
               }}
-              pageSizeOptions={[10, 25, 50, 100, 200]}
-              disabled={subjectsLoading}
+              responsiveCards
+              tableClassName="compact-table"
+              rowClassName={(subject) =>
+                cx(
+                  "bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50",
+                  detail?.subject_type === subject.subject_type &&
+                    detail.subject_id === subject.subject_id &&
+                    "bg-[var(--ui-selected-bg)] dark:bg-[var(--ui-selected-bg)]"
+                )
+              }
+              rowAttributes={(subject) => ({
+                "aria-current": detail?.subject_type === subject.subject_type && detail.subject_id === subject.subject_id ? "true" : undefined,
+              })}
             />
           </section>
 

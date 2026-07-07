@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -146,6 +146,15 @@ describe("BillingPage", () => {
     expect(screen.getByText("12.50 EUR")).toBeInTheDocument();
     expect(mocks.getBillingSubjects).toHaveBeenCalledWith("2026-07", 7, "account", 1, 25, "name", "asc");
 
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByRole("button", { name: "View billing detail for Tenant A" }).closest("td")).toHaveAttribute(
+      "data-mobile-primary",
+      "true"
+    );
+    expect(within(table).getByText("2.0 KB").closest("td")).toHaveAttribute("data-label", "Storage avg");
+    expect(within(table).getByText("250").closest("td")).toHaveAttribute("data-label", "Requests");
+
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByText("Tenant B")).toBeInTheDocument();
     await waitFor(() => expect(mocks.getBillingSubjects).toHaveBeenLastCalledWith("2026-07", 7, "account", 2, 25, "name", "asc"));
@@ -158,6 +167,19 @@ describe("BillingPage", () => {
     expect(exportButton).toBeEnabled();
     fireEvent.click(exportButton);
     await waitFor(() => expect(mocks.downloadBillingCsv).toHaveBeenCalledWith("2026-07", 7));
+  });
+
+  it("sorts subjects from the shared table headers", async () => {
+    renderPage();
+
+    await screen.findByText("Tenant A");
+    fireEvent.click(screen.getByRole("button", { name: /^Cost$/ }));
+
+    await waitFor(() => expect(mocks.getBillingSubjects).toHaveBeenLastCalledWith("2026-07", 7, "account", 1, 25, "cost", "desc"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Cost/ }));
+
+    await waitFor(() => expect(mocks.getBillingSubjects).toHaveBeenLastCalledWith("2026-07", 7, "account", 1, 25, "cost", "asc"));
   });
 
   it("selects a subject with keyboard activation", async () => {
