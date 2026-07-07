@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   UiGroup,
   UiGroupPayload,
@@ -32,6 +32,13 @@ import {
   ManagerToolAccessSection,
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
+import {
+  AdminAssociationSelectionPanel,
+  adminAssociationAccountOptionRowClass,
+  adminAssociationCheckboxClass,
+  adminAssociationCompactSelectClass,
+  adminAssociationOptionRowClass,
+} from "./AdminAssociationPicker";
 import AdminModalTabs from "./AdminModalTabs";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
@@ -46,7 +53,7 @@ import DataTableShell, { type DataTableColumn } from "../../components/list/Data
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { cx, uiCardMutedClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 
@@ -55,13 +62,10 @@ type AssociationTab = "accounts" | "s3_users" | "connections";
 const labelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
-const compactInputClass =
-  "w-full rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-2 py-1 ui-caption text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const secondaryButtonClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
 const tableContainerClass = uiTableContainerClass;
 const tableClass = cx(uiDataTableClass, "compact-table min-w-full");
-const addPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
 
 function accountDbId(account: S3AccountSummary): number {
   return Number(account.db_id ?? account.id);
@@ -69,39 +73,6 @@ function accountDbId(account: S3AccountSummary): number {
 
 function includesQuery(label: string, query: string): boolean {
   return !query || label.toLowerCase().includes(query.trim().toLowerCase());
-}
-
-function SelectionPanel({
-  title,
-  countLabel,
-  search,
-  onSearch,
-  children,
-}: {
-  title: string;
-  countLabel: string;
-  search: string;
-  onSearch: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className={addPanelClass}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <span className="ui-body font-medium text-slate-700 dark:text-slate-200">{title}</span>
-          <span className="ml-2 ui-caption text-slate-500 dark:text-slate-400">{countLabel}</span>
-        </div>
-        <input
-          type="text"
-          value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          placeholder="Search..."
-          className={`${compactInputClass} sm:w-56`}
-        />
-      </div>
-      <div className="max-h-56 space-y-1 overflow-y-auto pr-1">{children}</div>
-    </div>
-  );
 }
 
 export default function GroupsPage() {
@@ -424,29 +395,32 @@ export default function GroupsPage() {
   const visibleConnections = connections.filter((connection) => includesQuery(connection.name, connectionSearch));
 
   const renderMembersTab = () => (
-    <SelectionPanel
+    <AdminAssociationSelectionPanel
       title="Members"
       countLabel={`${selectedUserIds.size} selected`}
       search={memberSearch}
-      onSearch={setMemberSearch}
+      onSearchChange={setMemberSearch}
+      loading={auxLoading}
+      loadingLabel="Loading users..."
+      availableCount={visibleUsers.length}
+      emptyLabel="No users."
+      searchAriaLabel="Search group members"
     >
-      {auxLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading users...</p>}
-      {!auxLoading && visibleUsers.length === 0 && <p className="ui-caption text-slate-500 dark:text-slate-400">No users.</p>}
       {visibleUsers.map((user) => (
         <label
           key={user.id}
-          className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]"
+          className={adminAssociationOptionRowClass(selectedUserIds.has(user.id))}
         >
           <span className="ui-body text-slate-700 dark:text-slate-200">{user.email}</span>
           <input
             type="checkbox"
             checked={selectedUserIds.has(user.id)}
             onChange={(event) => setSelectedMembers(user.id, event.target.checked)}
-            className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+            className={adminAssociationCheckboxClass}
           />
         </label>
       ))}
-    </SelectionPanel>
+    </AdminAssociationSelectionPanel>
   );
 
   const renderAssociationsTab = () => (
@@ -456,11 +430,16 @@ export default function GroupsPage() {
           id: "accounts",
           label: `Accounts (${selectedAccountIds.size})`,
           content: (
-            <SelectionPanel
+            <AdminAssociationSelectionPanel
               title="Accounts"
               countLabel={`${selectedAccountIds.size} selected`}
               search={accountSearch}
-              onSearch={setAccountSearch}
+              onSearchChange={setAccountSearch}
+              loading={auxLoading}
+              loadingLabel="Loading accounts..."
+              availableCount={visibleAccounts.length}
+              emptyLabel="No accounts."
+              searchAriaLabel="Search group accounts"
             >
               {visibleAccounts.map((account) => {
                 const accountId = accountDbId(account);
@@ -469,14 +448,14 @@ export default function GroupsPage() {
                 return (
                   <div
                     key={accountId}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]"
+                    className={adminAssociationAccountOptionRowClass(selected)}
                   >
                     <label className="flex min-w-48 items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                       <input
                         type="checkbox"
                         checked={selected}
                         onChange={(event) => setSelectedAccount(accountId, event.target.checked)}
-                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                        className={adminAssociationCheckboxClass}
                       />
                       <span>{account.name}</span>
                     </label>
@@ -487,7 +466,7 @@ export default function GroupsPage() {
                             type="checkbox"
                             checked={Boolean(link?.account_admin)}
                             onChange={(event) => updateAccountSelection(accountId, { account_admin: event.target.checked })}
-                            className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                            className={adminAssociationCheckboxClass}
                           />
                           Admin
                         </label>
@@ -495,7 +474,7 @@ export default function GroupsPage() {
                           <select
                             value={normalizePortalRole(link?.account_role)}
                             onChange={(event) => updateAccountSelection(accountId, { account_role: normalizePortalRole(event.target.value) })}
-                            className={`${compactInputClass} w-44`}
+                            className={adminAssociationCompactSelectClass}
                           >
                             {PORTAL_ROLE_OPTIONS.map((option) => (
                               <option key={option.value} value={option.value}>
@@ -509,61 +488,71 @@ export default function GroupsPage() {
                   </div>
                 );
               })}
-            </SelectionPanel>
+            </AdminAssociationSelectionPanel>
           ),
         },
         {
           id: "s3_users",
           label: `S3 Users (${selectedS3UserIds.size})`,
           content: (
-            <SelectionPanel
+            <AdminAssociationSelectionPanel
               title="S3 Users"
               countLabel={`${selectedS3UserIds.size} selected`}
               search={s3UserSearch}
-              onSearch={setS3UserSearch}
+              onSearchChange={setS3UserSearch}
+              loading={auxLoading}
+              loadingLabel="Loading S3 users..."
+              availableCount={visibleS3Users.length}
+              emptyLabel="No S3 users."
+              searchAriaLabel="Search group S3 users"
             >
               {visibleS3Users.map((s3User) => (
                 <label
                   key={s3User.id}
-                  className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]"
+                  className={adminAssociationOptionRowClass(selectedS3UserIds.has(s3User.id))}
                 >
                   <span className="ui-body text-slate-700 dark:text-slate-200">{s3User.name}</span>
                   <input
                     type="checkbox"
                     checked={selectedS3UserIds.has(s3User.id)}
                     onChange={(event) => setSelectedS3User(s3User.id, event.target.checked)}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                    className={adminAssociationCheckboxClass}
                   />
                 </label>
               ))}
-            </SelectionPanel>
+            </AdminAssociationSelectionPanel>
           ),
         },
         {
           id: "connections",
           label: `Connections (${selectedConnectionIds.size})`,
           content: (
-            <SelectionPanel
+            <AdminAssociationSelectionPanel
               title="Shared S3 connections"
               countLabel={`${selectedConnectionIds.size} selected`}
               search={connectionSearch}
-              onSearch={setConnectionSearch}
+              onSearchChange={setConnectionSearch}
+              loading={auxLoading}
+              loadingLabel="Loading shared S3 connections..."
+              availableCount={visibleConnections.length}
+              emptyLabel="No shared S3 connections."
+              searchAriaLabel="Search group shared S3 connections"
             >
               {visibleConnections.map((connection) => (
                 <label
                   key={connection.id}
-                  className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-[var(--ui-hover)]"
+                  className={adminAssociationOptionRowClass(selectedConnectionIds.has(connection.id))}
                 >
                   <span className="ui-body text-slate-700 dark:text-slate-200">{connection.name}</span>
                   <input
                     type="checkbox"
                     checked={selectedConnectionIds.has(connection.id)}
                     onChange={(event) => setSelectedConnection(connection.id, event.target.checked)}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                    className={adminAssociationCheckboxClass}
                   />
                 </label>
               ))}
-            </SelectionPanel>
+            </AdminAssociationSelectionPanel>
           ),
         },
       ]}

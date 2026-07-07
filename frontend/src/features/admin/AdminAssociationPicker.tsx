@@ -12,6 +12,7 @@ import { tableActionButtonClasses } from "../../components/tableActionClasses";
 export const adminAssociationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
 export const adminAssociationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
 export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
+export const adminAssociationCheckboxClass = "h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary";
 
 export const adminAssociationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${
@@ -122,6 +123,56 @@ export function AdminAssociationPickerPanel({
             {addLabel}
           </UiButton>
         </div>
+      </div>
+    </div>
+  );
+}
+
+type AdminAssociationSelectionPanelProps = {
+  title: ReactNode;
+  countLabel: ReactNode;
+  search: string;
+  onSearchChange: (value: string) => void;
+  loading?: boolean;
+  loadingLabel?: ReactNode;
+  availableCount: number;
+  emptyLabel?: ReactNode;
+  searchAriaLabel?: string;
+  children: ReactNode;
+};
+
+export function AdminAssociationSelectionPanel({
+  title,
+  countLabel,
+  search,
+  onSearchChange,
+  loading = false,
+  loadingLabel = "Loading...",
+  availableCount,
+  emptyLabel = "No results.",
+  searchAriaLabel,
+  children,
+}: AdminAssociationSelectionPanelProps) {
+  return (
+    <div className={adminAssociationAddPanelClass}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={cx("ui-body font-medium", uiTitleTextClass)}>{title}</span>
+          <span className={cx("ui-caption", uiMutedTextClass)}>{countLabel}</span>
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search..."
+          aria-label={searchAriaLabel}
+          className={adminAssociationCompactInputClass}
+        />
+      </div>
+      <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+        {loading ? <p className={cx("ui-caption", uiMutedTextClass)}>{loadingLabel}</p> : null}
+        {!loading && availableCount === 0 ? <p className={cx("ui-caption", uiMutedTextClass)}>{emptyLabel}</p> : null}
+        {!loading ? children : null}
       </div>
     </div>
   );
