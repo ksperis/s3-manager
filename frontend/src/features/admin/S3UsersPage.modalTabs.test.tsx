@@ -429,6 +429,13 @@ describe("S3UsersPage modal tabs", () => {
     if (!nameInput) {
       throw new Error("User name input not found");
     }
+    expect(nameInput).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("UID (optional)")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Ceph endpoint *")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Email")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Quota max size")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Quota max size unit")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Quota max objects")).toHaveClass("ui-control");
     fireEvent.change(nameInput, { target: { value: "tagged-user" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this RGW user" });
     fireEvent.change(tagInput, {
