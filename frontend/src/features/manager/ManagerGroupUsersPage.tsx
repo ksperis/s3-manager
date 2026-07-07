@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMUser, listIamUsers } from "../../api/managerIamUsers";
@@ -10,28 +10,21 @@ import { addIamGroupUser, listIamGroupUsers, removeIamGroupUser } from "../../ap
 import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
+
+function extractError(err: unknown): string {
+  return extractApiError(err, "Unexpected error");
+}
 
 export default function ManagerGroupUsersPage() {
   const { groupName } = useParams<{ groupName: string }>();
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="Group members"
-          description="Manage IAM group membership."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }, { label: "Users" }]}
-        />
-        <PageBanner tone="info">IAM features are disabled for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
-    );
-  }
+
   const [users, setUsers] = useState<IAMUser[]>([]);
   const [allUsers, setAllUsers] = useState<IAMUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,11 +42,7 @@ export default function ManagerGroupUsersPage() {
     }
   }, [groupName]);
 
-  const extractError = (err: unknown): string => {
-    return extractApiError(err, "Unexpected error");
-  };
-
-  const load = async (accountId: S3AccountSelector, targetGroup: string) => {
+  const load = useCallback(async (accountId: S3AccountSelector, targetGroup: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -68,10 +57,10 @@ export default function ManagerGroupUsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (needsS3AccountSelection) {
+    if (isS3User || needsS3AccountSelection) {
       setUsers([]);
       setAllUsers([]);
       setLoading(false);
@@ -80,7 +69,7 @@ export default function ManagerGroupUsersPage() {
     if (groupName) {
       load(accountIdForApi, groupName);
     }
-  }, [accountIdForApi, needsS3AccountSelection, groupName, accessMode]);
+  }, [accountIdForApi, isS3User, needsS3AccountSelection, groupName, accessMode, load]);
 
   const availableUsers = useMemo(
     () => allUsers.filter((u) => !users.some((member) => member.name === u.name)),
@@ -129,6 +118,19 @@ export default function ManagerGroupUsersPage() {
     }
   };
 
+  if (isS3User) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title="Group members"
+          description="Manage IAM group membership."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }, { label: "Users" }]}
+        />
+        <PageBanner tone="info">IAM features are disabled for standalone S3 users. Select an S3 Account to continue.</PageBanner>
+      </div>
+    );
+  }
+
   if (!groupName) {
     return <div className="ui-body text-slate-600">Group not specified.</div>;
   }
@@ -149,6 +151,36 @@ export default function ManagerGroupUsersPage() {
     error,
     rowCount: users.length,
   });
+  const userColumns: Array<DataTableColumn<IAMUser>> = [
+    {
+      id: "user",
+      label: "User",
+      primary: true,
+      render: (user) => user.name,
+    },
+    {
+      id: "arn",
+      label: "ARN",
+      cellClassName: "break-all font-mono text-[11px]",
+      render: (user) => user.arn ?? "-",
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (user) => (
+        <button
+          type="button"
+          onClick={() => handleRemove(user.name)}
+          className="ui-caption font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+          disabled={busy === user.name}
+        >
+          {busy === user.name ? "Removing..." : "Remove"}
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -213,35 +245,17 @@ export default function ManagerGroupUsersPage() {
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Users</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">Members of this group.</p>
         </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">User</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading members..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load users." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No members in this group." />}
-            {users.map((u) => (
-                <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{u.name}</td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{u.arn ?? "-"}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleRemove(u.name)}
-                      className="ui-caption font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
-                      disabled={busy === u.name}
-                    >
-                      {busy === u.name ? "Removing..." : "Remove"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <DataTableShell
+          columns={userColumns}
+          rows={users}
+          rowKey={(user) => user.name}
+          status={tableStatus}
+          loadingMessage="Loading members..."
+          errorMessage="Unable to load users."
+          emptyMessage="No members in this group."
+          tableClassName="compact-table"
+          responsiveCards
+        />
       </div>
     </div>
   );
