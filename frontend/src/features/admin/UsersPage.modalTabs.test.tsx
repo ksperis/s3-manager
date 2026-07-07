@@ -173,6 +173,35 @@ describe("UsersPage modal tabs", () => {
     expect(screen.getByText("storage-operators")).toBeInTheDocument();
   });
 
+  it("uses the responsive shared table for the user list", async () => {
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "responsive.user@example.com",
+          role: "ui_superadmin",
+          accounts: [],
+          s3_users: [],
+          s3_connections: [],
+          group_ids: [],
+          last_login_at: "2026-07-07T08:45:56Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    const table = await screen.findByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(screen.getByText("responsive.user@example.com").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("Superadmin").closest("td")).toHaveAttribute("data-label", "Role");
+    expect(screen.getAllByRole("button", { name: "Edit" })[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
+
   it("hides portal role labels when the portal feature is disabled", async () => {
     listUsersMock.mockResolvedValue({
       items: [

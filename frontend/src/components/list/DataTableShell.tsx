@@ -20,6 +20,9 @@ export type DataTableColumn<Row, SortField extends string = string> = {
   headerClassName?: string;
   cellClassName?: string;
   primary?: boolean;
+  mobileLabel?: string;
+  mobileRole?: "primary" | "actions";
+  mobileHidden?: boolean;
   render: (row: Row) => ReactNode;
 };
 
@@ -54,6 +57,7 @@ type DataTableShellProps<Row, SortField extends string = string> = {
   tbodyClassName?: string;
   rowClassName?: string | ((row: Row) => string | undefined);
   overflowXHidden?: boolean;
+  responsiveCards?: boolean;
 };
 
 export default function DataTableShell<Row, SortField extends string = string>({
@@ -72,13 +76,25 @@ export default function DataTableShell<Row, SortField extends string = string>({
   tbodyClassName,
   rowClassName = "hover:bg-slate-50 dark:hover:bg-slate-800/40",
   overflowXHidden = false,
+  responsiveCards = false,
 }: DataTableShellProps<Row, SortField>) {
   const resolveRowClassName = (row: Row) => (typeof rowClassName === "function" ? rowClassName(row) : rowClassName);
+  const containerOverflowClass = responsiveCards
+    ? "overflow-x-hidden md:overflow-x-auto"
+    : overflowXHidden
+      ? "overflow-x-hidden"
+      : "overflow-x-auto";
 
   return (
     <>
-      <div className={cx(overflowXHidden ? "overflow-x-hidden" : "overflow-x-auto", containerClassName)}>
-        <table className={cx("manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800", tableClassName)}>
+      <div className={cx(containerOverflowClass, containerClassName)}>
+        <table
+          className={cx(
+            "manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800",
+            responsiveCards && "responsive-data-table",
+            tableClassName
+          )}
+        >
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               {columns.map((column) => (
@@ -107,11 +123,20 @@ export default function DataTableShell<Row, SortField extends string = string>({
                     const align = column.align ?? "left";
                     const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
                     const isPrimary = column.primary || column.id === primaryColumnId;
+                    const mobileRole = column.mobileRole ?? (isPrimary ? "primary" : undefined);
+                    const mobileLabel = column.mobileLabel ?? column.label;
                     const textClass = isPrimary
                       ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
                       : "ui-body text-slate-600 dark:text-slate-300";
                     return (
-                      <td key={`${key}:${column.id}`} className={cx(cellBase, textClass, column.cellClassName)}>
+                      <td
+                        key={`${key}:${column.id}`}
+                        className={cx(cellBase, textClass, column.cellClassName)}
+                        data-label={responsiveCards && !mobileRole && !column.mobileHidden ? mobileLabel : undefined}
+                        data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
+                        data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
+                        data-mobile-hidden={responsiveCards && column.mobileHidden ? "true" : undefined}
+                      >
                         {column.render(row)}
                       </td>
                     );

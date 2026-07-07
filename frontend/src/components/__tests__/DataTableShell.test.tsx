@@ -62,4 +62,29 @@ describe("DataTableShell", () => {
 
     expect(screen.getByText("No rows.")).toBeInTheDocument();
   });
+
+  it("adds mobile card labels only when responsive cards are enabled", () => {
+    render(
+      <DataTableShell
+        columns={[
+          { ...columns[0], primary: true },
+          columns[1],
+          { id: "actions", label: "Actions", align: "right", mobileRole: "actions", render: () => <button type="button">Open</button> },
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+      />
+    );
+
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(screen.getByText("Archive").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("3").closest("td")).toHaveAttribute("data-label", "Count");
+    expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
 });

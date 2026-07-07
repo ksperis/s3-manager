@@ -45,9 +45,8 @@ import {
 } from "./adminAccessConfig";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
-import PaginationControls from "../../components/PaginationControls";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -85,8 +84,6 @@ const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 const associationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
 const associationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
 const associationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
-const associationSecondaryButtonClass =
-  cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 ui-caption");
 const associationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${
     selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
@@ -641,10 +638,8 @@ export default function UsersPage() {
   const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);
   const [s3AccountsLoading, setS3AccountsLoading] = useState(false);
   const [s3Users, setS3Users] = useState<S3UserSummary[]>([]);
-  const [s3UsersLoaded, setS3UsersLoaded] = useState(false);
   const [s3UsersLoading, setS3UsersLoading] = useState(false);
   const [s3Connections, setS3Connections] = useState<S3ConnectionSummary[]>([]);
-  const [s3ConnectionsLoaded, setS3ConnectionsLoaded] = useState(false);
   const [s3ConnectionsLoading, setS3ConnectionsLoading] = useState(false);
   const [groups, setGroups] = useState<UiGroupSummary[]>([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
@@ -867,13 +862,7 @@ export default function UsersPage() {
   const editCanGrantStorageOps = currentIsAdminLike && editTargetSupportsStorageOps;
   const managerToolDefinitions = useMemo(
     () => buildManagerToolDefinitions(generalSettings),
-    [
-      generalSettings.bucket_compare_enabled,
-      generalSettings.bucket_integrity_check_enabled,
-      generalSettings.bucket_migration_enabled,
-      generalSettings.bucket_purge_enabled,
-      generalSettings.manager_ceph_s3_user_keys_enabled,
-    ]
+    [generalSettings]
   );
 
   const formatLastLogin = (value?: string | null) => {
@@ -1096,7 +1085,6 @@ export default function UsersPage() {
     try {
       const data = await listMinimalS3Users();
       setS3Users(data);
-      setS3UsersLoaded(true);
       s3UsersLoadStateRef.current = "loaded";
     } catch (err) {
       s3UsersLoadStateRef.current = "error";
@@ -1113,7 +1101,6 @@ export default function UsersPage() {
     try {
       const data = await listMinimalS3Connections();
       setS3Connections(data);
-      setS3ConnectionsLoaded(true);
       s3ConnectionsLoadStateRef.current = "loaded";
     } catch (err) {
       s3ConnectionsLoadStateRef.current = "error";
@@ -1675,6 +1662,80 @@ export default function UsersPage() {
     error,
     rowCount: users.length,
   });
+  const userTableColumns: Array<DataTableColumn<User, SortField>> = [
+    {
+      id: "email",
+      label: "Email",
+      field: "email",
+      primary: true,
+      render: (user) => (
+        <button
+          type="button"
+          onClick={() => startEdit(user)}
+          className="max-w-full break-all text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+        >
+          {user.email}
+        </button>
+      ),
+    },
+    {
+      id: "role",
+      label: "Role",
+      field: "role",
+      render: (user) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{displayUiRole(user.role)}</span>
+          {cephAdminFeatureEnabled &&
+            (normalizeUiRoleValue(user.role) === "ui_admin" ||
+              normalizeUiRoleValue(user.role) === "ui_superadmin") &&
+            user.can_access_ceph_admin && (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                Ceph Admin
+              </span>
+            )}
+        </div>
+      ),
+    },
+    {
+      id: "last_login_at",
+      label: "Last login",
+      field: "last_login_at",
+      render: (user) => formatLastLogin(user.last_login_at),
+    },
+    {
+      id: "associations",
+      label: associationLabel,
+      field: "accounts",
+      mobileLabel: "Links",
+      render: (user) => renderAssociationSummary(user),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      field: null,
+      mobileRole: "actions",
+      render: (user) => {
+        const isCurrentUser = currentUserId !== null && user.id === currentUserId;
+        return (
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => startEdit(user)} className={tableActionButtonClasses}>
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteRequest(user)}
+              className={tableDeleteActionClasses}
+              disabled={busyId === user.id || isCurrentUser}
+              title={isCurrentUser ? "You cannot delete your own user." : undefined}
+            >
+              {busyId === user.id ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -1928,7 +1989,7 @@ export default function UsersPage() {
           showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 max-sm:w-full">
               <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Search
               </span>
@@ -1937,105 +1998,31 @@ export default function UsersPage() {
                 value={filter}
                 onChange={(e) => handleFilterChange(e.target.value)}
                 placeholder={filterPlaceholder}
-                className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
+                className={`${toolbarCompactInputClasses} min-w-0 flex-1 sm:w-64 md:w-72`}
               />
             </div>
           }
         />
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {[
-                  { label: "Email", field: "email" as SortField },
-                  { label: "Role", field: "role" as SortField },
-                  { label: "Last login", field: "last_login_at" as SortField },
-                  { label: associationLabel, field: "accounts" as SortField },
-                  { label: "Actions", field: null as SortField | null },
-                ].map((col) => (
-                  <th
-                    key={col.label}
-                    onClick={col.field ? () => toggleSort(col.field as SortField) : undefined}
-                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                      col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : "text-right"
-                    }`}
-                  >
-                    <div className={`flex items-center ${col.label === "Actions" ? "justify-end" : "gap-1"}`}>
-                      <span>{col.label}</span>
-                      {col.field && sort.field === col.field && (
-                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading users..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load users." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No users." />}
-              {users.map((user) => {
-                const isCurrentUser = currentUserId !== null && user.id === currentUserId;
-                return (
-                  <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(user)}
-                          className="w-full text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-                        >
-                          {user.email}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>{displayUiRole(user.role)}</span>
-                        {cephAdminFeatureEnabled &&
-                          (normalizeUiRoleValue(user.role) === "ui_admin" ||
-                            normalizeUiRoleValue(user.role) === "ui_superadmin") &&
-                          user.can_access_ceph_admin && (
-                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                              Ceph Admin
-                            </span>
-                          )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {formatLastLogin(user.last_login_at)}
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {renderAssociationSummary(user)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => startEdit(user)} className={tableActionButtonClasses}>
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteRequest(user)}
-                          className={tableDeleteActionClasses}
-                          disabled={busyId === user.id || isCurrentUser}
-                          title={isCurrentUser ? "You cannot delete your own user." : undefined}
-                        >
-                          {busyId === user.id ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          total={totalUsers}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-          disabled={loading}
+        <DataTableShell
+          columns={userTableColumns}
+          rows={users}
+          rowKey={(user) => user.id}
+          status={tableStatus}
+          loadingMessage="Loading users..."
+          errorMessage="Unable to load users."
+          emptyMessage="No users."
+          primaryColumnId="email"
+          responsiveCards
+          tableClassName="compact-table"
+          sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+          pagination={{
+            page,
+            pageSize,
+            total: totalUsers,
+            onPageChange: handlePageChange,
+            onPageSizeChange: handlePageSizeChange,
+            disabled: loading,
+          }}
         />
       </div>
 

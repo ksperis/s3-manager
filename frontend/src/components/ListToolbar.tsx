@@ -28,7 +28,7 @@ function ToolbarControlGroup({ children }: { children: ReactNode }) {
   if (!children) {
     return null;
   }
-  return <div className="flex flex-wrap items-center gap-2">{children}</div>;
+  return <div className="flex min-w-0 flex-wrap items-center gap-2 max-sm:w-full">{children}</div>;
 }
 
 export default function ListToolbar({
@@ -71,7 +71,7 @@ export default function ListToolbar({
             )}
           >
             {countLabel ? <span className={cx("shrink-0 ui-caption", uiMutedTextClass)}>{countLabel}</span> : null}
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-end">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-sm:w-full lg:justify-end">
               <ToolbarControlGroup>{search}</ToolbarControlGroup>
               <ToolbarControlGroup>{filters}</ToolbarControlGroup>
               <ToolbarControlGroup>{columns}</ToolbarControlGroup>
