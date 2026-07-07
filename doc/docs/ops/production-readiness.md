@@ -6,6 +6,19 @@ Use this checklist before exposing s3-manager to real users.
 
 This page turns deployment, security, observability, and user-handover pages into one operator checklist.
 
+## Publish gates
+
+Do not publish the URL broadly until these gates are explicit:
+
+| Gate | Minimum answer |
+|---|---|
+| Runtime | Which image tag, database, secret store, ingress/TLS, and trusted UI origin are used? |
+| Data safety | Which database backup and credential encryption key restore path has been tested? |
+| Jobs | Which healthcheck, billing, quota-monitor, and usage-history jobs are enabled or intentionally disabled? |
+| Access | Which roles, UI groups, account links, and workspaces are allowed for the first users? |
+| Storage backend | Which endpoint is the first supported backend and which capabilities are expected? |
+| Support | Where should users report workspace, permission, upload/download, billing, or quota problems? |
+
 ## Readiness checklist
 
 | Area | Required decision | Evidence to keep |
@@ -30,6 +43,18 @@ This page turns deployment, security, observability, and user-handover pages int
 6. Run the [Storage Admin Runbook](../user/admin-runbook-storage-admin.md).
 7. Verify scheduled jobs and observability pages.
 8. Communicate the user start page and support-report format.
+
+## Evidence folder
+
+Keep these notes near the deployment runbook or ticket:
+
+- image tag and deployment values
+- secret manager paths and rotation owner
+- database backup schedule and latest restore-test result
+- enabled workspaces, feature flags, and initial role mapping
+- scheduler/CronJob schedules and latest successful run
+- first endpoint healthcheck evidence and known capability limitations
+- support links: [Sysadmin onboarding](sysadmin-onboarding.md), [Storage Admin Runbook](../user/admin-runbook-storage-admin.md), and [User troubleshooting](../user/troubleshooting.md)
 
 ## Before every upgrade
 

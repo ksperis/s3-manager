@@ -118,6 +118,7 @@ nav:
   - Ops / Sysadmin Guide:
       - Deployment:
           - Overview: ops/index.md
+          - Sysadmin onboarding: ops/sysadmin-onboarding.md
           - Deploy with Docker Compose: ops/deploy-docker-compose.md
           - Deploy with Helm: ops/deploy-helm.md
           - Configuration: ops/configuration.md

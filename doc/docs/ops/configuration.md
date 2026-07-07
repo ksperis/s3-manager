@@ -14,6 +14,31 @@ Configuration is split between backend environment variables and UI settings.
 | Recommended | SMTP settings when quota alerts are enabled | Quota alerts need a deliverable notification path. |
 | Optional | Branding color and login logo | Useful for tenant or lab identity, but not required for safe operation. |
 
+## Find the right configuration area
+
+| You need to control... | Primary place | Also check |
+|---|---|---|
+| Login sessions, stored credentials, trusted origins | Backend environment and secret manager | `CORS_ORIGINS`, JWT/refresh secrets, credential encryption key, secure cookie settings. |
+| Which workspaces users can see | Admin app settings and feature force-locks | `FEATURE_*` env locks, user roles, UI groups, account links, Manager tool access. |
+| Schedulers and internal automation | Runtime env, Compose scheduler, or Helm CronJobs | `INTERNAL_CRON_TOKEN`, `healthcheckCronJob`, `billingCronJob`, `quotaMonitorCronJob`, `usageHistoryCronJob`. |
+| Health, metrics, billing, quota, and usage history freshness | App settings plus job schedules | Endpoint capability, retention env vars, latest collection logs. |
+| Enterprise authentication | Admin **Settings > Authentication** or env-managed OIDC/LDAP providers | TLS verification, provider priority, write-only secrets, startup warnings. |
+| Portal self-service behavior | Admin Portal settings | Portal account links, Storage Space defaults, access-key policy, IAM group projections. |
+| Browser exposure | Browser app settings and sub-flags | Root Browser, Manager Browser, Portal Browser, Ceph Admin Browser, endpoint capability. |
+| Notifications | Quota notification app settings plus runtime SMTP secret | `SMTP_PASSWORD`, user opt-in, global watch policy, test email action. |
+
+## Minimum day-one settings
+
+Before onboarding real users, an operator should be able to name:
+
+- where the application database lives and how it is backed up
+- where the credential encryption key and scheduler token are stored
+- which trusted UI origins are allowed
+- which workspaces are enabled by feature flags and app settings
+- which scheduler jobs or CronJobs are enabled or intentionally disabled
+- which endpoint is the first production-like storage backend
+- which support page users should open when reporting failures
+
 ## Backend runtime settings
 
 Primary source of truth: `backend/app/core/config.py`.

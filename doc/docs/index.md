@@ -13,7 +13,7 @@
 | Manage buckets, IAM, topics, and account-level tools | [Manager overview](user/workspace-manager.md) | Manager keeps S3 and IAM operations account-scoped and explicit. |
 | Operate the platform, users, endpoints, settings, audit, or billing | [Storage admin runbook](user/admin-runbook-storage-admin.md) | It connects Admin, Manager, Browser, Portal, and Ops checks into one handover path. |
 | Administer Ceph RGW cluster resources | [Ceph Admin overview](user/workspace-ceph-admin.md) | Ceph Admin is separate from Manager because it acts at cluster scope. |
-| Deploy, secure, or troubleshoot the application | [Production readiness](ops/production-readiness.md) | Ops pages cover runtime configuration, security, automation, backups, and production checks. |
+| Deploy, secure, or troubleshoot the application | [Ops / Sysadmin onboarding](ops/sysadmin-onboarding.md) | It routes operators to deployment, configuration, security, scheduler, backup, and troubleshooting pages. |
 | Make a first contribution | [Developer / First Contribution](developer/first-contribution.md) | It points to architecture, local setup, validation, and documentation rules. |
 
 ## Documentation by audience
@@ -37,6 +37,7 @@
 - Choose an admin workflow: [Common tasks for storage administrators](user/common-tasks-storage-admin.md)
 - Prepare a team handover: [Storage admin runbook](user/admin-runbook-storage-admin.md)
 - Understand terms and search better: [Glossary and Search Tips](user/glossary.md)
+- Start as an operator: [Ops / Sysadmin onboarding](ops/sysadmin-onboarding.md)
 - Deploy quickly with containers: [Ops / Deploy with Docker Compose](ops/deploy-docker-compose.md)
-- Prepare production-like rollout: [Ops / Production Readiness](ops/production-readiness.md)
+- Prepare production-like rollout: [Ops / Production readiness](ops/production-readiness.md)
 - Understand architecture: [Developer / Architecture Overview](developer/architecture-overview.md)
