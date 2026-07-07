@@ -54,6 +54,11 @@ describe("BrowserMultipartUploadsModal", () => {
     expect(screen.getByText("upload-a")).toBeInTheDocument();
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("reports/2026/summary.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("upload-a").closest("td")).toHaveAttribute("data-label", "Upload ID");
+    expect(screen.getByText("alice").closest("td")).toHaveAttribute("data-label", "Owner");
+    expect(screen.getByRole("button", { name: "Abort" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
 
     await user.click(screen.getByRole("button", { name: "Abort" }));
 

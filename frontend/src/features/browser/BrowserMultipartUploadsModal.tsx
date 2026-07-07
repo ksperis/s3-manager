@@ -3,6 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { MultipartUploadItem } from "../../api/browser";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
@@ -36,6 +38,66 @@ export default function BrowserMultipartUploadsModal({
   onAbort,
   onClose,
 }: BrowserMultipartUploadsModalProps) {
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: uploads.length,
+  });
+  const uploadColumns: Array<DataTableColumn<MultipartUploadItem>> = [
+    {
+      id: "key",
+      label: "Key",
+      primary: true,
+      cellClassName: "max-w-[280px] break-all",
+      render: (upload) => upload.key,
+    },
+    {
+      id: "upload-id",
+      label: "Upload ID",
+      cellClassName: "max-w-[260px] break-all font-mono text-[11px]",
+      render: (upload) => upload.upload_id,
+    },
+    {
+      id: "initiated",
+      label: "Initiated",
+      render: (upload) => formatDateTime(upload.initiated),
+    },
+    {
+      id: "storage-class",
+      label: "Storage class",
+      render: (upload) => upload.storage_class || "-",
+    },
+    {
+      id: "owner",
+      label: "Owner",
+      render: (upload) => (
+        <span className="block max-w-[200px] truncate" title={upload.owner || ""}>
+          {upload.owner || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (upload) => {
+        const rowId = getUploadRowId(upload);
+        const aborting = abortingUploadIds.has(rowId);
+        return (
+          <button
+            type="button"
+            className={bulkDangerClasses}
+            onClick={() => onAbort(upload)}
+            disabled={aborting}
+          >
+            {aborting ? "Aborting..." : "Abort"}
+          </button>
+        );
+      },
+    },
+  ];
+
   return (
     <Modal title={`Multipart uploads · ${bucketName}`} onClose={onClose} maxWidthClass="max-w-5xl" maxBodyHeightClass="max-h-[75vh]">
       <div className="space-y-3">
@@ -59,57 +121,18 @@ export default function BrowserMultipartUploadsModal({
 
         {error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{error}</p>}
 
-        {loading && uploads.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-300">
-            Loading multipart uploads...
-          </div>
-        ) : uploads.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 px-3 py-4 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-300">
-            No multipart uploads in progress.
-          </div>
-        ) : (
-          <div className="max-h-[56vh] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <th className="px-3 py-2 text-left">Key</th>
-                  <th className="px-3 py-2 text-left">Upload ID</th>
-                  <th className="px-3 py-2 text-left">Initiated</th>
-                  <th className="px-3 py-2 text-left">Storage class</th>
-                  <th className="px-3 py-2 text-left">Owner</th>
-                  <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 ui-caption text-slate-700 dark:divide-slate-800 dark:text-slate-200">
-                {uploads.map((upload) => {
-                  const rowId = getUploadRowId(upload);
-                  const aborting = abortingUploadIds.has(rowId);
-                  return (
-                    <tr key={rowId}>
-                      <td className="max-w-[280px] break-all px-3 py-2 font-semibold">{upload.key}</td>
-                      <td className="max-w-[260px] break-all px-3 py-2 font-mono text-[11px]">{upload.upload_id}</td>
-                      <td className="px-3 py-2">{formatDateTime(upload.initiated)}</td>
-                      <td className="px-3 py-2">{upload.storage_class || "-"}</td>
-                      <td className="max-w-[200px] truncate px-3 py-2" title={upload.owner || ""}>
-                        {upload.owner || "-"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          className={bulkDangerClasses}
-                          onClick={() => onAbort(upload)}
-                          disabled={aborting}
-                        >
-                          {aborting ? "Aborting..." : "Abort"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTableShell
+          columns={uploadColumns}
+          rows={uploads}
+          rowKey={getUploadRowId}
+          status={tableStatus}
+          loadingMessage="Loading multipart uploads..."
+          errorMessage="Unable to load multipart uploads."
+          emptyMessage="No multipart uploads in progress."
+          containerClassName="max-h-[56vh] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800"
+          tableClassName="compact-table"
+          responsiveCards
+        />
 
         {canLoadMore && (
           <div className="text-right">
