@@ -250,6 +250,11 @@ const publicAccessOptions: { key: keyof BucketPublicAccessBlock; label: string; 
 
 const publicAccessKeys = publicAccessOptions.map((option) => option.key);
 const bucketFeaturePrimaryActionClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1");
+const bucketFeatureSecondaryActionClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1");
+const bucketFeatureDangerActionClass = cx(
+  uiButtonBaseClass,
+  "border border-rose-200 px-3 py-1 text-rose-700 hover:border-rose-400 hover:text-rose-800 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800",
+);
 
 const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
@@ -3234,7 +3239,7 @@ export default function BucketDetailPage({
                           type="button"
                           onClick={clearEncryption}
                           disabled={!sseFeatureEnabled || encryptionNotImplemented || deletingEncryption}
-                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                          className={bucketFeatureDangerActionClass}
                         >
                           {deletingEncryption ? "Disabling..." : "Disable"}
                         </button>
@@ -3294,7 +3299,7 @@ export default function BucketDetailPage({
                         <button
                           type="button"
                           onClick={() => applyObjectLockState(objectLockConfig)}
-                          className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className={bucketFeatureSecondaryActionClass}
                           disabled={objectLockLoading || Boolean(objectLockLoadError) || savingObjectLock}
                         >
                           Reset
@@ -3424,7 +3429,7 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={() => setShowLifecycleEditor((prev) => !prev)}
-                            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            className={bucketFeatureSecondaryActionClass}
                             disabled={lifecycleNotImplemented}
                           >
                             {showLifecycleEditor ? "Hide editor" : "Show editor"}
@@ -3737,7 +3742,7 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={clearBucketTags}
-                            className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            className={bucketFeatureDangerActionClass}
                             disabled={tagsNotImplemented || bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
                           >
                             {deletingBucketTags ? "Clearing..." : "Clear"}
@@ -3790,7 +3795,7 @@ export default function BucketDetailPage({
                               <button
                                 type="button"
                                 onClick={() => removeBucketTagAt(index)}
-                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                                className={bucketFeatureSecondaryActionClass}
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               >
                                 Remove
@@ -3801,7 +3806,7 @@ export default function BucketDetailPage({
                             <button
                               type="button"
                               onClick={addBucketTag}
-                              className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                              className={bucketFeatureSecondaryActionClass}
                               disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                             >
                               Add tag
@@ -3988,7 +3993,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={removePolicy}
                         disabled={policyNotImplemented || deletingPolicy}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className={bucketFeatureDangerActionClass}
                       >
                         {deletingPolicy ? "Deleting..." : "Delete"}
                       </button>
@@ -4058,7 +4063,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={removeCors}
                         disabled={corsNotImplemented || deletingCors}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className={bucketFeatureDangerActionClass}
                       >
                         {deletingCors ? "Deleting..." : "Delete"}
                       </button>
@@ -4114,7 +4119,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={clearWebsite}
                         disabled={websiteNotImplemented || clearingWebsite || staticWebsiteBlocked}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className={bucketFeatureDangerActionClass}
                       >
                         {clearingWebsite ? "Deleting..." : "Delete"}
                       </button>
@@ -4289,7 +4294,7 @@ export default function BucketDetailPage({
                           type="button"
                           onClick={clearReplication}
                           disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
-                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                          className={bucketFeatureDangerActionClass}
                         >
                           {clearingReplication ? "Clearing..." : "Clear"}
                         </button>
@@ -4498,7 +4503,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={clearAccessLogging}
                         disabled={accessLoggingNotImplemented || clearingAccessLogging}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className={bucketFeatureDangerActionClass}
                       >
                         {clearingAccessLogging ? "Disabling..." : "Disable"}
                       </button>
@@ -4585,7 +4590,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={clearNotifications}
                         disabled={notificationsNotImplemented || clearingNotifications}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className={bucketFeatureDangerActionClass}
                       >
                         {clearingNotifications ? "Clearing..." : "Clear"}
                       </button>
