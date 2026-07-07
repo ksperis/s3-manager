@@ -59,7 +59,9 @@ import {
   adminAssociationTableActionCellClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
   adminAssociationTableEmptyCellClass,
+  adminAssociationTableBodyClass,
   adminAssociationTableHeaderClass,
+  adminAssociationTableHeadClass,
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
@@ -1695,7 +1697,7 @@ export default function S3AccountsPage() {
                   />
                   <div className={associationTableContainerClass}>
                     <table className={associationTableClass}>
-                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <thead className={adminAssociationTableHeadClass}>
                         <tr>
                           <th className={adminAssociationTableHeaderClass}>
                             User
@@ -1713,7 +1715,7 @@ export default function S3AccountsPage() {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      <tbody className={adminAssociationTableBodyClass}>
                         {assignedUsers.length === 0 ? (
                           <tr>
                             <td colSpan={portalEnabled ? 4 : 3} className={adminAssociationTableEmptyCellClass}>
@@ -1876,7 +1878,7 @@ export default function S3AccountsPage() {
                   />
                   <div className={associationTableContainerClass}>
                     <table className={associationTableClass}>
-                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <thead className={adminAssociationTableHeadClass}>
                         <tr>
                           <th className={adminAssociationTableHeaderClass}>
                             Group
@@ -1894,7 +1896,7 @@ export default function S3AccountsPage() {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      <tbody className={adminAssociationTableBodyClass}>
                         {assignedGroups.length === 0 ? (
                           <tr>
                             <td colSpan={portalEnabled ? 4 : 3} className={adminAssociationTableEmptyCellClass}>

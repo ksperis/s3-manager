@@ -50,9 +50,11 @@ import {
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableActionCellClass,
+  adminAssociationTableBodyClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
   adminAssociationTableEmptyCellClass,
   adminAssociationTableHeaderClass,
+  adminAssociationTableHeadClass,
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
@@ -1260,7 +1262,7 @@ export default function S3UsersPage() {
                 />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <thead className={adminAssociationTableHeadClass}>
                       <tr>
                         <th className={adminAssociationTableHeaderClass}>
                           User
@@ -1270,7 +1272,7 @@ export default function S3UsersPage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody className={adminAssociationTableBodyClass}>
                       {editForm.user_ids.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
@@ -1371,7 +1373,7 @@ export default function S3UsersPage() {
                 />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <thead className={adminAssociationTableHeadClass}>
                       <tr>
                         <th className={adminAssociationTableHeaderClass}>
                           Group
@@ -1381,7 +1383,7 @@ export default function S3UsersPage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody className={adminAssociationTableBodyClass}>
                       {editForm.group_ids.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>

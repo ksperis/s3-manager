@@ -69,9 +69,11 @@ import {
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableActionCellClass,
+  adminAssociationTableBodyClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
   adminAssociationTableEmptyCellClass,
   adminAssociationTableHeaderClass,
+  adminAssociationTableHeadClass,
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
@@ -251,7 +253,7 @@ const AssociationsTabs = ({
                 />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
-                    <thead>
+                    <thead className={adminAssociationTableHeadClass}>
                       <tr>
                         <th className={adminAssociationTableHeaderClass}>
                           Account
@@ -269,7 +271,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className={adminAssociationTableBodyClass}>
                       {accounts.selected.length === 0 ? (
                         <tr>
                           <td colSpan={showPortalRole ? 4 : 3} className={adminAssociationTableEmptyCellClass}>
@@ -425,7 +427,7 @@ const AssociationsTabs = ({
                 />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
-                    <thead>
+                    <thead className={adminAssociationTableHeadClass}>
                       <tr>
                         <th className={adminAssociationTableHeaderClass}>
                           User
@@ -435,7 +437,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className={adminAssociationTableBodyClass}>
                       {s3Users.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
@@ -529,7 +531,7 @@ const AssociationsTabs = ({
                 />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
-                    <thead>
+                    <thead className={adminAssociationTableHeadClass}>
                       <tr>
                         <th className={adminAssociationTableHeaderClass}>
                           Connection
@@ -539,7 +541,7 @@ const AssociationsTabs = ({
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className={adminAssociationTableBodyClass}>
                       {connections.selected.length === 0 ? (
                         <tr>
                           <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
