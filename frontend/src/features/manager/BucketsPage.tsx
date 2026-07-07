@@ -34,6 +34,7 @@ import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
@@ -44,6 +45,7 @@ import {
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { extractApiError } from "../../utils/apiError";
+import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
@@ -91,9 +93,12 @@ function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaB
   const quotaDisplay = formatBytes(quotaBytes);
   return (
     <div className="flex items-center gap-2" title={`${usedDisplay} / ${quotaDisplay}`}>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
-      </div>
+      <UiProgressBar
+        value={ratio}
+        label="Storage quota usage"
+        className="h-2.5 flex-1 overflow-hidden bg-slate-200 dark:bg-slate-800"
+        barClassName="bg-primary-500"
+      />
       <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
     </div>
   );
@@ -106,37 +111,21 @@ function QuotaObjectsBar({ usedObjects, quotaObjects }: { usedObjects?: number |
   const used = usedObjects ?? 0;
   const ratio = Math.min(100, Math.round((used / quotaObjects) * 100));
   return (
-    <div className="flex items-center gap-2" title={`${used.toLocaleString()} / ${quotaObjects.toLocaleString()} objects`}>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
-      </div>
+    <div className="flex items-center gap-2" title={`${formatNumber(used)} / ${formatNumber(quotaObjects)} objects`}>
+      <UiProgressBar
+        value={ratio}
+        label="Object quota usage"
+        className="h-2.5 flex-1 overflow-hidden bg-slate-200 dark:bg-slate-800"
+        barClassName="bg-primary-500"
+      />
       <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
     </div>
   );
 }
 
-const formatBytes = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let size = value;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const decimals = size >= 10 || idx === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[idx]}`;
-};
-
-const formatNumber = (value?: number | null) => {
-  if (value === undefined || value === null) return "-";
-  return value.toLocaleString();
-};
-
 const formatObjectCountLabel = (value: number) => {
   const suffix = value === 1 ? "object" : "objects";
-  return `${value.toLocaleString()} ${suffix}`;
+  return `${formatNumber(value)} ${suffix}`;
 };
 
 type BucketListRow = Bucket & {

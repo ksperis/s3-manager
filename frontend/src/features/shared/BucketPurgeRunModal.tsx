@@ -21,7 +21,7 @@ import PageBanner from "../../components/PageBanner";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
-import { formatCompactNumber } from "../../utils/format";
+import { formatCompactNumber, formatNumber } from "../../utils/format";
 
 export type BucketPurgeUiTarget = {
   bucketName: string;
@@ -54,11 +54,6 @@ type BucketPurgeRunModalProps =
   | (CommonProps & {
       mode: "storage-ops";
     });
-
-function formatNumber(value?: number | null): string {
-  if (value === undefined || value === null) return "-";
-  return value.toLocaleString();
-}
 
 function statusLabel(status: BucketPurgeResult["status"]): string {
   if (status === "completed") return "Completed";
