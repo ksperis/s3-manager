@@ -6,16 +6,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { type Bucket, listBuckets } from "../../api/buckets";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
-import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
+import UiButton from "../../components/ui/UiButton";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
+import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "./S3AccountContext";
 
 function extractError(error: unknown): string {
@@ -172,81 +171,31 @@ export default function ManagerBucketComparePage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
-            title="Buckets"
-            description={`${sourceContext ? sourceContext.display_name : "Source context"} · Select source buckets to compare across manager contexts.`}
-            showHeading={false}
-            countLabel={`${filteredBuckets.length} result(s)`}
-            search={
-              <input
-                type="text"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Filter source buckets"
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            }
-            filters={
-              <>
-                <button
-                  type="button"
-                  onClick={selectAllFiltered}
-                  disabled={filteredBuckets.length === 0}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
-                >
-                  Select filtered
-                </button>
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  disabled={selectedBuckets.size === 0}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
-                >
-                  Clear
-                </button>
-              </>
-            }
-            actions={
-              <button
-                type="button"
-                onClick={openCompareModal}
-                disabled={selectedBuckets.size === 0 || bucketsLoading || contextsLoading}
-                className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-md px-3 py-1.5 ui-caption")}
-              >
-                Compare selected ({selectedBuckets.size})
-              </button>
-            }
-          />
-          <ManagerTable
-            responsiveCards
-            columns={[
-              { key: "select", label: "Select", className: "w-12", hideLabel: true, mobileLabel: "Select" },
-              { key: "bucket", label: "Bucket", mobileRole: "primary" },
-            ]}
-            listState={{
-              status: tableStatus,
-              loadingMessage: "Loading source buckets...",
-              errorMessage: "Unable to load buckets.",
-              emptyMessage: "No buckets.",
-            }}
-          >
-            {filteredBuckets.map((bucket) => (
-              <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <td className={managerTableCheckboxCellClass}>
-                  <input
-                    aria-label={`Select ${bucket.name}`}
-                    type="checkbox"
-                    checked={selectedBuckets.has(bucket.name)}
-                    onChange={() => toggleBucket(bucket.name)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
-                  />
-                </td>
-                <td className={managerTablePrimaryCellClass}>{bucket.name}</td>
-              </tr>
-            ))}
-          </ManagerTable>
-        </div>
+        <ManagerBucketSelectionPanel
+          description={`${sourceContext ? sourceContext.display_name : "Source context"} · Select source buckets to compare across manager contexts.`}
+          filter={filter}
+          filterPlaceholder="Filter source buckets"
+          onFilterChange={setFilter}
+          buckets={filteredBuckets}
+          selectedBuckets={selectedBuckets}
+          onToggleBucket={toggleBucket}
+          onSelectFiltered={selectAllFiltered}
+          onClearSelection={clearSelection}
+          tableStatus={tableStatus}
+          loadingMessage="Loading source buckets..."
+          errorMessage="Unable to load buckets."
+          emptyMessage="No buckets."
+          action={
+            <UiButton
+              type="button"
+              onClick={openCompareModal}
+              disabled={selectedBuckets.size === 0 || bucketsLoading || contextsLoading}
+              size="sm"
+            >
+              Compare selected ({selectedBuckets.size})
+            </UiButton>
+          }
+        />
       )}
 
       {showCompareModal && sourceContextId && selectedBucketList.length > 0 && (
