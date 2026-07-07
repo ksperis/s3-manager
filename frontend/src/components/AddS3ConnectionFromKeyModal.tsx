@@ -8,10 +8,13 @@ import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
 import { extractApiError } from "../utils/apiError";
 import { stableSignature } from "../utils/stableSignature";
+import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../features/shared/S3ConnectionEndpointFields";
 import Modal from "./Modal";
+import UiButton from "./ui/UiButton";
+import UiCheckboxField from "./ui/UiCheckboxField";
+import UiInput from "./ui/UiInput";
+import { cx, uiMutedTextClass, uiPanelMutedClass, uiTitleTextClass } from "./ui/styles";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
-
-type EndpointMode = "preset" | "custom";
 
 type Props = {
   isOpen: boolean;
@@ -32,15 +35,6 @@ type Props = {
   onClose: () => void;
   onCreated?: () => void;
 };
-
-const providerHintOptions = [
-  { value: "", label: "(auto)" },
-  { value: "aws", label: "AWS" },
-  { value: "ceph", label: "Ceph RGW" },
-  { value: "scality", label: "Scality" },
-  { value: "minio", label: "MinIO" },
-  { value: "other", label: "Other" },
-];
 
 const normalizeProviderHint = (value?: string | null): string => {
   const normalized = (value || "").trim().toLowerCase();
@@ -80,7 +74,7 @@ export default function AddS3ConnectionFromKeyModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [endpointMode, setEndpointMode] = useState<EndpointMode>("custom");
+  const [endpointMode, setEndpointMode] = useState<S3ConnectionEndpointMode>("custom");
   const [selectedEndpointId, setSelectedEndpointId] = useState("");
 
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
@@ -104,7 +98,7 @@ export default function AddS3ConnectionFromKeyModal({
     setError(null);
     setEndpointLoadError(null);
     setSaving(false);
-    const nextEndpointMode: EndpointMode = defaultEndpointId != null ? "preset" : "custom";
+    const nextEndpointMode: S3ConnectionEndpointMode = defaultEndpointId != null ? "preset" : "custom";
     const nextSelectedEndpointId = defaultEndpointId != null ? String(defaultEndpointId) : "";
     const nextForm = {
       name: defaultName,
@@ -287,180 +281,81 @@ export default function AddS3ConnectionFromKeyModal({
             {error}
           </div>
         )}
-        <section className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+        <section className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
           <div>
-            <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Connection</div>
-            <div className="ui-caption text-slate-500 dark:text-slate-300">This creates a private S3 connection (owner only).</div>
+            <div className={cx("ui-body font-semibold", uiTitleTextClass)}>Connection</div>
+            <div className={cx("ui-caption", uiMutedTextClass)}>This creates a private S3 connection (owner only).</div>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1 sm:col-span-2">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
-              <input
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.name}
-                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                required
-              />
-            </div>
+            <UiInput
+              label="Name *"
+              fieldClassName="sm:col-span-2"
+              value={form.name}
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              required
+            />
           </div>
         </section>
 
         {showEndpointSection && (
-          <section className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-            <div>
-              <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Endpoint</div>
-              <div className="ui-caption text-slate-500 dark:text-slate-300">
-                Choose an endpoint configured in UI, or switch to a custom endpoint.
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                <input
-                  type="radio"
-                  name="endpoint-mode"
-                  checked={endpointMode === "preset"}
-                  onChange={() => setEndpointMode("preset")}
-                  disabled={endpoints.length === 0}
-                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50"
-                />
-                Configured endpoint
-              </label>
-              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                <input
-                  type="radio"
-                  name="endpoint-mode"
-                  checked={endpointMode === "custom"}
-                  onChange={() => setEndpointMode("custom")}
-                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                Custom endpoint
-              </label>
-            </div>
-
-            {endpointMode === "preset" ? (
-              <div className="space-y-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Configured endpoints</label>
-                  <select
-                    value={selectedEndpointId}
-                    onChange={(event) => setSelectedEndpointId(event.target.value)}
-                    disabled={loadingEndpoints || endpoints.length === 0}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="">
-                      {loadingEndpoints ? "Loading endpoints..." : endpoints.length === 0 ? "No endpoint available" : "Select endpoint"}
-                    </option>
-                    {endpoints.map((endpoint) => (
-                      <option key={endpoint.id} value={endpoint.id}>
-                        {endpoint.name} ({endpoint.endpoint_url})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {endpointLoadError && (
-                  <p className="ui-caption text-amber-700 dark:text-amber-300">
-                    Endpoint list unavailable ({endpointLoadError}). Use custom endpoint mode.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Endpoint URL *</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder="https://s3.amazonaws.com"
-                    value={form.endpoint_url}
-                    onChange={(event) => setForm((prev) => ({ ...prev, endpoint_url: event.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Region (optional)</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.region}
-                    onChange={(event) => setForm((prev) => ({ ...prev, region: event.target.value }))}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                  <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.provider_hint}
-                    onChange={(event) => setForm((prev) => ({ ...prev, provider_hint: event.target.value }))}
-                  >
-                    {providerHintOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-4 sm:col-span-2">
-                  <label className="ui-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.force_path_style}
-                      onChange={(event) => setForm((prev) => ({ ...prev, force_path_style: event.target.checked }))}
-                    />
-                    <span>Force path-style</span>
-                  </label>
-                  <label className="ui-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={form.verify_tls}
-                      onChange={(event) => setForm((prev) => ({ ...prev, verify_tls: event.target.checked }))}
-                    />
-                    <span>Verify TLS</span>
-                  </label>
-                </div>
-              </div>
-            )}
-          </section>
+          <S3ConnectionEndpointFields
+            mode={endpointMode}
+            onModeChange={setEndpointMode}
+            modeInputName="add-s3-connection-endpoint-mode"
+            endpointId={selectedEndpointId}
+            onEndpointIdChange={setSelectedEndpointId}
+            endpoints={endpoints}
+            loadingEndpoints={loadingEndpoints}
+            form={form}
+            onFormChange={(field, value) =>
+              setForm((prev) => ({
+                ...prev,
+                [field]: value,
+              }))
+            }
+            errorMessage={
+              endpointLoadError
+                ? `Endpoint list unavailable (${endpointLoadError}). Use custom endpoint mode.`
+                : null
+            }
+          />
         )}
 
-        <section className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-          <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access</div>
-          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={form.access_manager}
-              onChange={(event) => setForm((prev) => ({ ...prev, access_manager: event.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            />
+        <section className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
+          <div className={cx("ui-body font-semibold", uiTitleTextClass)}>Access</div>
+          <UiCheckboxField
+            checked={form.access_manager}
+            onChange={(event) => setForm((prev) => ({ ...prev, access_manager: event.target.checked }))}
+            className={cx("ui-body font-medium", uiTitleTextClass)}
+          >
             Access manager
-          </label>
-          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={form.access_browser}
-              onChange={(event) => setForm((prev) => ({ ...prev, access_browser: event.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            />
+          </UiCheckboxField>
+          <UiCheckboxField
+            checked={form.access_browser}
+            onChange={(event) => setForm((prev) => ({ ...prev, access_browser: event.target.checked }))}
+            className={cx("ui-body font-medium", uiTitleTextClass)}
+          >
             Access browser
-          </label>
-          <p className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</p>
-          {ownerSummary && <p className="ui-caption text-slate-500 dark:text-slate-300">Owner metadata: {ownerSummary}</p>}
+          </UiCheckboxField>
+          <p className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</p>
+          {ownerSummary ? <p className={cx("ui-caption", uiMutedTextClass)}>Owner metadata: {ownerSummary}</p> : null}
         </section>
 
         <div className="flex items-center justify-end gap-3">
-          <button
+          <UiButton
             type="button"
             onClick={closeGuard.requestClose}
             disabled={saving}
-            className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+            variant="secondary"
           >
             Cancel
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="submit"
             disabled={saving}
-            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
             {saving ? "Creating..." : "Create private connection"}
-          </button>
+          </UiButton>
         </div>
       </form>
       {closeGuard.confirmationDialog}

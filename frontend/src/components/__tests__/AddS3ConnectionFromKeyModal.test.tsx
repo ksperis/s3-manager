@@ -49,6 +49,7 @@ describe("AddS3ConnectionFromKeyModal", () => {
       />
     );
 
+    expect(screen.getByDisplayValue("private-connection")).toHaveClass("ui-control");
     await user.click(screen.getByRole("button", { name: "Create private connection" }));
 
     await waitFor(() => expect(createConnectionMock).toHaveBeenCalledTimes(1));
@@ -99,5 +100,45 @@ describe("AddS3ConnectionFromKeyModal", () => {
 
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a custom endpoint connection through shared endpoint fields", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    createConnectionMock.mockResolvedValue({ id: 8 });
+    listStorageEndpointsMock.mockResolvedValue([]);
+
+    render(
+      <AddS3ConnectionFromKeyModal
+        isOpen
+        accessKeyId="AKIA-CUSTOM"
+        secretAccessKey="SECRET-CUSTOM"
+        defaultName="custom-connection"
+        defaultAccessBrowser
+        onClose={onClose}
+      />
+    );
+
+    const endpointUrlInput = await screen.findByLabelText("Endpoint URL");
+    expect(endpointUrlInput).toHaveClass("ui-control");
+    expect(screen.getByRole("combobox", { name: "Provider" })).toHaveClass("ui-control");
+
+    await user.type(endpointUrlInput, "https://minio.example.test");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Provider" }), "minio");
+    await user.click(screen.getByLabelText("Force path style"));
+    await user.click(screen.getByRole("button", { name: "Create private connection" }));
+
+    await waitFor(() => expect(createConnectionMock).toHaveBeenCalledTimes(1));
+    expect(createConnectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "custom-connection",
+        endpoint_url: "https://minio.example.test",
+        provider_hint: "minio",
+        force_path_style: true,
+        verify_tls: true,
+        access_key_id: "AKIA-CUSTOM",
+        secret_access_key: "SECRET-CUSTOM",
+      })
+    );
   });
 });
