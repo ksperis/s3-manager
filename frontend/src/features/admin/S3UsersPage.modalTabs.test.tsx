@@ -184,8 +184,15 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByText("rgw-user-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("rgw-uid-1").closest("td")).toHaveAttribute("data-label", "UID");
+    expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     expect(await screen.findByText("ui33@example.com")).toBeInTheDocument();
     expect(screen.getByText("Storage Group")).toBeInTheDocument();
+    expect(within(table).getByText("Storage Group").closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
+    expect(within(table).getByRole("link", { name: "Keys" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
   it("requests default sorting and toggles RGW user table headers", async () => {
@@ -241,7 +248,7 @@ describe("S3UsersPage modal tabs", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("columnheader", { name: /Name/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Name/ }));
 
     await waitFor(() => {
       expect(listS3UsersMock).toHaveBeenLastCalledWith(
@@ -253,7 +260,7 @@ describe("S3UsersPage modal tabs", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("columnheader", { name: /UID/ }));
+    fireEvent.click(screen.getByRole("button", { name: /UID/ }));
 
     await waitFor(() => {
       expect(listS3UsersMock).toHaveBeenLastCalledWith(
