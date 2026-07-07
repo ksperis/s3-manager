@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 
 import ManagerTable from "../list/ManagerTable";
 
@@ -54,6 +55,32 @@ describe("ManagerTable", () => {
     expect(screen.getByRole("checkbox", { name: "Select logs-prod" }).closest("td")).toHaveAttribute("data-label", "Select");
     expect(screen.getByText("logs-prod").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
+
+  it("renders sortable column labels through the shared header", () => {
+    const onSort = vi.fn();
+
+    render(
+      <ManagerTable
+        columns={[
+          { key: "name", label: "Name", sortField: "name" },
+          { key: "created", label: "Created", sortField: "created" },
+        ]}
+        sort={{ field: "name", direction: "asc", onSort }}
+      >
+        <tr>
+          <td>logs-prod</td>
+          <td>2026-01-01</td>
+        </tr>
+      </ManagerTable>
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByRole("columnheader", { name: "Created" })).toHaveAttribute("aria-sort", "none");
+
+    fireEvent.click(screen.getByRole("button", { name: "Created" }));
+
+    expect(onSort).toHaveBeenCalledWith("created");
   });
 
   it("leaves spanning table states unlabelled in responsive-card mode", () => {

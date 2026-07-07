@@ -20,7 +20,13 @@ import ListToolbar from "../../components/ListToolbar";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import SortableHeader from "../../components/SortableHeader";
+import ManagerTable, {
+  managerTableActionCellClass,
+  managerTableCellClass,
+  managerTablePrimaryCellClass,
+  managerTableWideCellClass,
+  type ManagerTableColumn,
+} from "../../components/list/ManagerTable";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -85,12 +91,12 @@ export default function ManagerUsersPage() {
     direction: "asc",
   });
 
-  const userTableColumns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
-    { label: "Name", field: "name" },
-    { label: "ARN", field: "arn" },
-    { label: "Groups", field: null },
-    { label: "Policies", field: null },
-    { label: "Actions", field: null, align: "right" },
+  const userTableColumns: Array<ManagerTableColumn<SortField>> = [
+    { key: "name", label: "Name", sortField: "name", mobileRole: "primary" },
+    { key: "arn", label: "ARN", sortField: "arn" },
+    { key: "groups", label: "Groups" },
+    { key: "policies", label: "Policies" },
+    { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
   ];
 
   const load = useCallback(async (accountId: S3AccountSelector) => {
@@ -506,138 +512,119 @@ export default function ManagerUsersPage() {
               />
             }
           />
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {userTableColumns.map((col) => (
-                  <SortableHeader
-                    key={col.label}
-                    label={col.label}
-                    field={col.field}
-                    activeField={sort.field}
-                    direction={sort.direction}
-                    align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                    onSort={col.field ? (field) => toggleSort(field) : undefined}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-              {tableStatus === "error" && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
-              )}
-              {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
-              {filteredUsers.map((u) => {
-                  const hasGroups = (u.groups?.length ?? 0) > 0;
-                  const hasPolicies = (u.policies?.length ?? 0) > 0;
-                  const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;
-                  const lacksGroupOrPolicy = !hasGroups && !hasPolicies && !hasInlinePolicies;
-                  const lacksKeys = u.has_keys === false;
-                  const showWarning = lacksGroupOrPolicy || lacksKeys;
-                  const warningTitle = (() => {
-                    if (lacksGroupOrPolicy && lacksKeys) {
-                      return "No groups/policies or access keys assigned";
-                    }
-                    if (lacksGroupOrPolicy) {
-                      return "No groups or policies assigned";
-                    }
-                    return "No access keys registered";
-                  })();
+          <ManagerTable
+            columns={userTableColumns}
+            responsiveCards
+            sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+          >
+            {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
+            {tableStatus === "error" && (
+              <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
+            )}
+            {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
+            {filteredUsers.map((u) => {
+              const hasGroups = (u.groups?.length ?? 0) > 0;
+              const hasPolicies = (u.policies?.length ?? 0) > 0;
+              const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;
+              const lacksGroupOrPolicy = !hasGroups && !hasPolicies && !hasInlinePolicies;
+              const lacksKeys = u.has_keys === false;
+              const showWarning = lacksGroupOrPolicy || lacksKeys;
+              const warningTitle = (() => {
+                if (lacksGroupOrPolicy && lacksKeys) {
+                  return "No groups/policies or access keys assigned";
+                }
+                if (lacksGroupOrPolicy) {
+                  return "No groups or policies assigned";
+                }
+                return "No access keys registered";
+              })();
 
-                  return (
-                    <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                        <div className="flex items-center gap-2">
-                          <span>{u.name}</span>
-                          {showWarning && (
-                            <span
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
-                              title={warningTitle}
-                              role="img"
-                              aria-label="Warning: user might lack necessary permissions"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={1.6}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                                focusable="false"
-                              >
-                                <path d="M12 4 3 20h18L12 4z" />
-                                <path d="M12 9v5" />
-                                <path d="M12 17h.01" strokeWidth={2.4} />
-                              </svg>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{u.arn ?? "-"}</td>
-                      <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {hasGroups ? (
-                          <div className="flex flex-wrap gap-2">
-                            {u.groups?.map((g) => (
-                              <span
-                                key={g}
-                                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                              >
-                                {g}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="manager-table-cell-wide px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {hasPolicies ? (
-                          <div className="flex flex-wrap gap-2">
-                            {u.policies?.map((p) => (
-                              <span
-                                key={p}
-                                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                                title={p}
-                              >
-                                {p.split("/").pop()}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Link
-                            to={`/manager/users/${encodeURIComponent(u.name)}/keys`}
-                            className={tableActionButtonClasses}
+              return (
+                <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className={managerTablePrimaryCellClass}>
+                    <div className="flex items-center gap-2">
+                      <span>{u.name}</span>
+                      {showWarning && (
+                        <span
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
+                          title={warningTitle}
+                          role="img"
+                          aria-label="Warning: user might lack necessary permissions"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.6}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            focusable="false"
                           >
-                            Keys
-                          </Link>
-                          <Link
-                            to={`/manager/users/${encodeURIComponent(u.name)}/policies`}
-                            className={tableActionButtonClasses}
+                            <path d="M12 4 3 20h18L12 4z" />
+                            <path d="M12 9v5" />
+                            <path d="M12 17h.01" strokeWidth={2.4} />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={managerTableCellClass}>{u.arn ?? "-"}</td>
+                  <td className={managerTableWideCellClass}>
+                    {hasGroups ? (
+                      <div className="flex flex-wrap gap-2">
+                        {u.groups?.map((g) => (
+                          <span
+                            key={g}
+                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                           >
-                            Policies
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(u.name)}
-                            className={tableDeleteActionClasses}
-                            disabled={busy === u.name}
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className={managerTableWideCellClass}>
+                    {hasPolicies ? (
+                      <div className="flex flex-wrap gap-2">
+                        {u.policies?.map((p) => (
+                          <span
+                            key={p}
+                            className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            title={p}
                           >
-                            {busy === u.name ? "Deleting..." : "Delete"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+                            {p.split("/").pop()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className={managerTableActionCellClass}>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Link to={`/manager/users/${encodeURIComponent(u.name)}/keys`} className={tableActionButtonClasses}>
+                        Keys
+                      </Link>
+                      <Link to={`/manager/users/${encodeURIComponent(u.name)}/policies`} className={tableActionButtonClasses}>
+                        Policies
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(u.name)}
+                        className={tableDeleteActionClasses}
+                        disabled={busy === u.name}
+                      >
+                        {busy === u.name ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </ManagerTable>
         </div>
       )}
 

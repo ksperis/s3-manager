@@ -84,6 +84,51 @@ describe("ManagerUsersPage", () => {
     });
   });
 
+  it("renders IAM users with the shared responsive inventory table", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "acc-1",
+          kind: "account",
+          display_name: "Tenant account",
+          endpoint_name: "Default",
+        },
+      ],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+    });
+    listIamUsersMock.mockResolvedValue([
+      {
+        name: "alice",
+        arn: "arn:aws:iam::acc-1:user/alice",
+        groups: ["operators"],
+        policies: ["arn:aws:iam::aws:policy/ReadOnlyAccess"],
+        inline_policies: [],
+        has_keys: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("alice")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByText("alice").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("arn:aws:iam::acc-1:user/alice").closest("td")).toHaveAttribute("data-label", "ARN");
+    expect(screen.getByText("operators").closest("td")).toHaveAttribute("data-label", "Groups");
+    expect(screen.getByText("ReadOnlyAccess").closest("td")).toHaveAttribute("data-label", "Policies");
+    expect(screen.getByRole("link", { name: "Keys" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
+
   it("keeps saved inline policy drafts visible in the create user modal", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [

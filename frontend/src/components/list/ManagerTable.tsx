@@ -6,22 +6,30 @@ import { Children, cloneElement, isValidElement, type ReactElement, type ReactNo
 
 import { cx } from "../ui/styles";
 
-export type ManagerTableColumn = {
+type SortDirection = "asc" | "desc";
+
+export type ManagerTableColumn<TSortField extends string = string> = {
   key: string;
   label: ReactNode;
   align?: "left" | "right";
   className?: string;
   hideLabel?: boolean;
+  sortField?: TSortField | null;
   mobileLabel?: string;
   mobileRole?: "primary" | "actions";
   mobileHidden?: boolean;
 };
 
-type ManagerTableProps = {
-  columns: ManagerTableColumn[];
+type ManagerTableProps<TSortField extends string = string> = {
+  columns: ManagerTableColumn<TSortField>[];
   children: ReactNode;
   className?: string;
   responsiveCards?: boolean;
+  sort?: {
+    field: TSortField;
+    direction: SortDirection;
+    onSort: (field: TSortField) => void;
+  };
   tbodyClassName?: string;
 };
 
@@ -82,7 +90,44 @@ function decorateResponsiveRows(children: ReactNode, columns: ManagerTableColumn
   });
 }
 
-export default function ManagerTable({ columns, children, className, responsiveCards = false, tbodyClassName }: ManagerTableProps) {
+function renderColumnLabel<TSortField extends string>(
+  column: ManagerTableColumn<TSortField>,
+  sort?: ManagerTableProps<TSortField>["sort"]
+) {
+  const isSortable = Boolean(column.sortField && sort);
+  const isActive = isSortable && column.sortField === sort?.field;
+
+  if (!isSortable) {
+    return column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => column.sortField && sort?.onSort(column.sortField)}
+      className={cx(
+        "flex w-full items-center text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100",
+        column.align === "right" ? "justify-end" : "gap-1"
+      )}
+    >
+      <span>{column.label}</span>
+      {isActive && (
+        <span className="ui-caption" aria-hidden="true">
+          {sort?.direction === "asc" ? "▲" : "▼"}
+        </span>
+      )}
+    </button>
+  );
+}
+
+export default function ManagerTable<TSortField extends string = string>({
+  columns,
+  children,
+  className,
+  responsiveCards = false,
+  sort,
+  tbodyClassName,
+}: ManagerTableProps<TSortField>) {
   const bodyChildren = responsiveCards ? decorateResponsiveRows(children, columns) : children;
 
   return (
@@ -90,18 +135,25 @@ export default function ManagerTable({ columns, children, className, responsiveC
       <table className={cx("manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800", responsiveCards && "responsive-data-table", className)}>
         <thead className="bg-slate-50 dark:bg-slate-900/50">
           <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                className={cx(
-                  "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
-                  column.align === "right" ? "text-right" : "text-left",
-                  column.className
-                )}
-              >
-                {column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label}
-              </th>
-            ))}
+            {columns.map((column) => {
+              const isSortable = Boolean(column.sortField && sort);
+              const isActive = isSortable && column.sortField === sort?.field;
+              return (
+                <th
+                  key={column.key}
+                  className={cx(
+                    "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+                    column.align === "right" ? "text-right" : "text-left",
+                    column.className
+                  )}
+                  aria-sort={
+                    isSortable ? (isActive ? (sort?.direction === "asc" ? "ascending" : "descending") : "none") : undefined
+                  }
+                >
+                  {renderColumnLabel(column, sort)}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className={cx("divide-y divide-slate-200 dark:divide-slate-800", tbodyClassName)}>{bodyChildren}</tbody>
