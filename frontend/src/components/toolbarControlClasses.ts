@@ -11,3 +11,6 @@ export const toolbarCompactSelectClasses =
 
 export const toolbarCompactButtonClasses =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60";
+
+export const toolbarCompactToggleClasses =
+  "inline-flex items-center gap-2 rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]";

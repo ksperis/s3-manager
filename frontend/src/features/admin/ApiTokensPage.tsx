@@ -15,10 +15,12 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactToggleClasses } from "../../components/toolbarControlClasses";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
@@ -31,6 +33,10 @@ type RevealedToken = {
 };
 
 const DEFAULT_EXPIRY_DAYS = 90;
+const secondaryCompactButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-3 py-1.5 ui-caption");
+const primaryCompactButtonClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1.5 ui-caption");
+const toolbarActionButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 px-3 py-1.5 ui-caption");
+const toolbarPrimaryActionButtonClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "h-8 px-3 py-1.5 ui-caption");
 
 function extractError(error: unknown): string {
   return extractApiError(error, "Unable to complete request.");
@@ -261,6 +267,56 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
       onClick: openCreateModal,
     },
   ];
+  const tokenTableColumns: Array<DataTableColumn<ApiTokenInfo>> = [
+    {
+      id: "name",
+      label: "Name",
+      primary: true,
+      render: (token) => token.name,
+    },
+    {
+      id: "created",
+      label: "Created",
+      render: (token) => formatDate(token.created_at),
+    },
+    {
+      id: "expires",
+      label: "Expires",
+      render: (token) => formatDate(token.expires_at),
+    },
+    {
+      id: "last-used",
+      label: "Last used",
+      render: (token) => formatDate(token.last_used_at),
+    },
+    {
+      id: "status",
+      label: "Status",
+      render: (token) => <StatusBadge status={resolveTokenStatus(token)} />,
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      render: (token) => {
+        const status = resolveTokenStatus(token);
+        const isBusy = busyTokenId === token.id;
+        return status === "active" ? (
+          <button
+            type="button"
+            onClick={() => handleRevoke(token)}
+            disabled={isBusy}
+            className={tableDeleteActionClasses}
+          >
+            {isBusy ? "Revoking..." : "Revoke"}
+          </button>
+        ) : (
+          <span className="ui-caption text-slate-400 dark:text-slate-500">-</span>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -296,28 +352,28 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              className={tableActionButtonClasses}
+              className={secondaryCompactButtonClass}
               onClick={() => copyAndNotify(revealedToken.value, "Token copied to clipboard.")}
             >
               Copy token
             </button>
             <button
               type="button"
-              className={tableActionButtonClasses}
+              className={secondaryCompactButtonClass}
               onClick={() => copyAndNotify(authHeaderSnippet, "Authorization header copied.")}
             >
               Copy auth header
             </button>
             <button
               type="button"
-              className={tableActionButtonClasses}
+              className={secondaryCompactButtonClass}
               onClick={() => copyAndNotify(curlSnippet, "cURL example copied.")}
             >
               Copy cURL
             </button>
             <button
               type="button"
-              className={tableActionButtonClasses}
+              className={secondaryCompactButtonClass}
               onClick={() => copyAndNotify(ansibleSnippet, "Ansible header snippet copied.")}
             >
               Copy Ansible
@@ -333,12 +389,12 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
           showHeading={showPageHeader === false}
           countLabel={`${sortedTokens.length} token${sortedTokens.length === 1 ? "" : "s"}${includeRevoked ? " (including revoked/expired)" : ""}`}
           filters={
-            <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <label className={toolbarCompactToggleClasses}>
               <input
                 type="checkbox"
                 checked={includeRevoked}
                 onChange={(event) => setIncludeRevoked(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                className={uiCheckboxClass}
               />
               Show revoked/expired
             </label>
@@ -351,63 +407,24 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
                     key={action.label}
                     type="button"
                     onClick={action.onClick}
-                    className={
-                      action.variant === "ghost"
-                        ? "inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                        : "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
-                    }
+                    className={action.variant === "ghost" ? toolbarActionButtonClass : toolbarPrimaryActionButtonClass}
                   >
                     {action.label}
                   </button>
                 ))
           }
         />
-        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Created</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Expires</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Last used</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
-              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading API tokens..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load API tokens." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={6} message="No API tokens." />}
-            {sortedTokens.map((token) => {
-              const status = resolveTokenStatus(token);
-              const isBusy = busyTokenId === token.id;
-              return (
-                <tr key={token.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="px-6 py-4 ui-body font-semibold text-slate-800 dark:text-slate-100">{token.name}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.created_at)}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.expires_at)}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.last_used_at)}</td>
-                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                    <StatusBadge status={status} />
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {status === "active" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleRevoke(token)}
-                        disabled={isBusy}
-                        className={tableDeleteActionClasses}
-                      >
-                        {isBusy ? "Revoking..." : "Revoke"}
-                      </button>
-                    ) : (
-                      <span className="ui-caption text-slate-400 dark:text-slate-500">-</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <DataTableShell
+          columns={tokenTableColumns}
+          rows={sortedTokens}
+          rowKey={(token) => token.id}
+          status={tableStatus}
+          loadingMessage="Loading API tokens..."
+          errorMessage="Unable to load API tokens."
+          emptyMessage="No API tokens."
+          tableClassName="compact-table"
+          responsiveCards
+        />
       </div>
 
       {showCreateModal && (
@@ -424,7 +441,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
                 onChange={(event) => setTokenName(event.target.value)}
                 placeholder="ansible-production"
                 maxLength={128}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={uiInputClass}
                 required
               />
             </div>
@@ -436,7 +453,7 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
                 step={1}
                 value={expiresInDays}
                 onChange={(event) => setExpiresInDays(event.target.value)}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={uiInputClass}
               />
               <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Leave the default value unless you need a shorter or longer validity.
@@ -447,14 +464,14 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
               <button
                 type="button"
                 onClick={createCloseGuard.requestClose}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                className={secondaryCompactButtonClass}
                 disabled={creating}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
+                className={primaryCompactButtonClass}
                 disabled={creating}
               >
                 {creating ? "Creating..." : "Create token"}

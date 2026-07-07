@@ -31,7 +31,7 @@ describe("ApiTokensPage list states", () => {
           id: "tok-1",
           name: "token-alpha",
           created_at: "2026-03-01T00:00:00.000Z",
-          expires_at: "2026-06-01T00:00:00.000Z",
+          expires_at: "2099-06-01T00:00:00.000Z",
           last_used_at: null,
           revoked_at: null,
         },
@@ -41,6 +41,10 @@ describe("ApiTokensPage list states", () => {
     render(<ApiTokensPage />);
 
     expect(await screen.findByText("token-alpha")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("token-alpha").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("active").closest("td")).toHaveAttribute("data-label", "Status");
+    expect(screen.getByRole("button", { name: "Revoke" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 
