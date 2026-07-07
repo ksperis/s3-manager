@@ -180,6 +180,7 @@ import {
   advancedFilterFooterClass,
   advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
+  advancedFilterMatchModeButtonClass,
   buildTextFieldRules,
   FILTER_COST_LABEL,
   formatAdvancedFilterSyncLabel,
@@ -6274,18 +6275,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
   };
-  const matchModeButtonClass = (active: boolean, locked: boolean = false) => {
-    if (locked) {
-      if (active) {
-        return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-      }
-      return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
-    }
-    if (active) {
-      return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
-    }
-    return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
-  };
   const toggleAdvancedFilterSecondarySection = (sectionId: AdvancedFilterSecondarySectionId) => {
     setAdvancedFilterSecondarySections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
@@ -8602,7 +8591,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={tenantDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("tenantMatchMode", "contains")}
-                                    className={matchModeButtonClass(tenantDraftEffectiveMatchMode === "contains", tenantDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(tenantDraftEffectiveMatchMode === "contains", tenantDraftForcesExact)}
                                   >
                                     Contains
                                   </button>
@@ -8610,7 +8599,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={tenantDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("tenantMatchMode", "exact")}
-                                    className={matchModeButtonClass(tenantDraftEffectiveMatchMode === "exact", tenantDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(tenantDraftEffectiveMatchMode === "exact", tenantDraftForcesExact)}
                                   >
                                     Exact
                                   </button>
@@ -8643,7 +8632,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={ownerDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("ownerMatchMode", "contains")}
-                                    className={matchModeButtonClass(ownerDraftEffectiveMatchMode === "contains", ownerDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(ownerDraftEffectiveMatchMode === "contains", ownerDraftForcesExact)}
                                   >
                                     Contains
                                   </button>
@@ -8651,7 +8640,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={ownerDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("ownerMatchMode", "exact")}
-                                    className={matchModeButtonClass(ownerDraftEffectiveMatchMode === "exact", ownerDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(ownerDraftEffectiveMatchMode === "exact", ownerDraftForcesExact)}
                                   >
                                     Exact
                                   </button>
@@ -8684,7 +8673,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={ownerNameDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "contains")}
-                                    className={matchModeButtonClass(ownerNameDraftEffectiveMatchMode === "contains", ownerNameDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(ownerNameDraftEffectiveMatchMode === "contains", ownerNameDraftForcesExact)}
                                   >
                                     Contains
                                   </button>
@@ -8692,7 +8681,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={ownerNameDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "exact")}
-                                    className={matchModeButtonClass(ownerNameDraftEffectiveMatchMode === "exact", ownerNameDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(ownerNameDraftEffectiveMatchMode === "exact", ownerNameDraftForcesExact)}
                                   >
                                     Exact
                                   </button>
@@ -8768,7 +8757,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={s3TagsDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "contains")}
-                                    className={matchModeButtonClass(s3TagsDraftEffectiveMatchMode === "contains", s3TagsDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(s3TagsDraftEffectiveMatchMode === "contains", s3TagsDraftForcesExact)}
                                   >
                                     Contains
                                   </button>
@@ -8776,7 +8765,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     type="button"
                                     disabled={s3TagsDraftForcesExact}
                                     onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "exact")}
-                                    className={matchModeButtonClass(s3TagsDraftEffectiveMatchMode === "exact", s3TagsDraftForcesExact)}
+                                    className={advancedFilterMatchModeButtonClass(s3TagsDraftEffectiveMatchMode === "exact", s3TagsDraftForcesExact)}
                                   >
                                     Exact
                                   </button>
