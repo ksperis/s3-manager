@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { formatPercentage } from "../utils/format";
+import UiMeterBar from "./ui/UiMeterBar";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
 export type UsageTileProps = {
@@ -59,13 +60,12 @@ export default function UsageTile({
           )}
         </div>
       </div>
-      <div className="h-1 rounded-full bg-[var(--ui-hover)]">
-        <div
-          className={`h-full rounded-full ${getBarColor(ratio ?? 0)}`}
-          style={{ width: `${ratio ?? 0}%` }}
-          aria-hidden
-        />
-      </div>
+      <UiMeterBar
+        value={ratio ?? 0}
+        label={`${label} quota usage`}
+        className="h-1 bg-[var(--ui-hover)]"
+        barClassName={getBarColor(ratio ?? 0)}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   toolbarCompactButtonClasses,
   toolbarCompactInputClasses,
 } from "../../components/toolbarControlClasses";
+import UiMeterBar from "../../components/ui/UiMeterBar";
 import { cx } from "../../components/ui/styles";
 import type { BrowserBucket, BrowserUsageSummary } from "../../api/browser";
 import { formatBytes } from "../../utils/format";
@@ -308,19 +309,12 @@ export default function BrowserWorkspaceSidebar({
         {!compact && hasUsageGauge && usageSummary && (
           <div className="space-y-2" aria-label="Usage summary">
             {usagePercent != null && (
-              <div
-                className="h-2 overflow-hidden rounded-full bg-slate-200 shadow-inner dark:bg-slate-800"
-                role="meter"
-                aria-label="Storage usage"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(usagePercent)}
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </div>
+              <UiMeterBar
+                value={usagePercent}
+                label="Storage usage"
+                className="h-2 bg-slate-200 shadow-inner dark:bg-slate-800"
+                barClassName="bg-primary transition-[width]"
+              />
             )}
             <p className="truncate text-[13px] font-medium text-[var(--shell-text)]">
               <span className="text-[var(--shell-muted-text)]">Usage: </span>

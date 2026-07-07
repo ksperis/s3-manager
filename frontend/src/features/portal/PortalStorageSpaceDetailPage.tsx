@@ -27,7 +27,7 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
-import UiProgressBar from "../../components/ui/UiProgressBar";
+import UiMeterBar from "../../components/ui/UiMeterBar";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -100,7 +100,7 @@ function ObjectMetricCard({
       <div className={cx("mt-1 text-[11px] font-medium", uiMutedTextClass)}>{detail}</div>
       {progress != null ? (
         <div className="mt-3">
-          <UiProgressBar value={progress} />
+          <UiMeterBar value={progress} label={`${label} quota usage`} />
         </div>
       ) : null}
     </UiCard>

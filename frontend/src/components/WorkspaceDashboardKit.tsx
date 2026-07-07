@@ -8,6 +8,7 @@ import type { HealthCheckStatus } from "../api/healthchecks";
 import type { ManagerUsageTrendBaseline } from "../api/stats";
 import { formatBytes } from "../utils/format";
 import UiBadge from "./ui/UiBadge";
+import UiMeterBar from "./ui/UiMeterBar";
 import { cx, uiCardClass, uiMutedTextClass } from "./ui/styles";
 
 export type WorkspaceDashboardFeature = {
@@ -274,22 +275,13 @@ export function WorkspaceDashboardProgressBar({
   ariaLabel?: string;
 }) {
   const boundedValue = Math.max(0, Math.min(100, value ?? 0));
-  const width = `${boundedValue}%`;
   return (
-    <div
-      className={cx("h-2 overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60", className)}
-      {...(ariaLabel
-        ? {
-            role: "meter",
-            "aria-label": ariaLabel,
-            "aria-valuemin": 0,
-            "aria-valuemax": 100,
-            "aria-valuenow": Math.round(boundedValue),
-          }
-        : {})}
-    >
-      <div className={cx("h-full rounded-full", workspaceDashboardToneClasses(tone).bar)} style={{ width }} />
-    </div>
+    <UiMeterBar
+      value={boundedValue}
+      label={ariaLabel ?? "Quota usage"}
+      className={cx("h-2 bg-slate-200/70 dark:bg-slate-700/60", className)}
+      barClassName={workspaceDashboardToneClasses(tone).bar}
+    />
   );
 }
 

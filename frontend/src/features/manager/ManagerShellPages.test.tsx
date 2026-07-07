@@ -1213,11 +1213,17 @@ describe("manager shell pages", () => {
   });
 
   it("renders manager buckets through the shared responsive table contract", async () => {
+    window.sessionStorage.setItem(
+      MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY,
+      JSON.stringify(["used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects"])
+    );
     listBucketsMock.mockResolvedValue([
       {
         name: "bucket-responsive",
         used_bytes: 1024,
         object_count: 7,
+        quota_max_size_bytes: 2048,
+        quota_max_objects: 14,
       },
     ]);
     setSelectedManagerAccountContext();
@@ -1233,6 +1239,8 @@ describe("manager shell pages", () => {
     expect(screen.getByText("bucket-responsive").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("1.0 KB").closest("td")).toHaveAttribute("data-label", "Used");
     expect(screen.getByText("7").closest("td")).toHaveAttribute("data-label", "Objects");
+    expect(screen.getByRole("meter", { name: "Storage quota usage" })).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByRole("meter", { name: "Object quota usage" })).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByRole("link", { name: "Configure" }).closest("td")).toHaveAttribute(
       "data-mobile-actions",
       "true"

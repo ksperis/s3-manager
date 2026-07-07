@@ -34,7 +34,7 @@ import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import UiProgressBar from "../../components/ui/UiProgressBar";
+import UiMeterBar from "../../components/ui/UiMeterBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
@@ -93,7 +93,7 @@ function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaB
   const quotaDisplay = formatBytes(quotaBytes);
   return (
     <div className="flex items-center gap-2" title={`${usedDisplay} / ${quotaDisplay}`}>
-      <UiProgressBar
+      <UiMeterBar
         value={ratio}
         label="Storage quota usage"
         className="h-2.5 flex-1 overflow-hidden bg-slate-200 dark:bg-slate-800"
@@ -112,7 +112,7 @@ function QuotaObjectsBar({ usedObjects, quotaObjects }: { usedObjects?: number |
   const ratio = Math.min(100, Math.round((used / quotaObjects) * 100));
   return (
     <div className="flex items-center gap-2" title={`${formatNumber(used)} / ${formatNumber(quotaObjects)} objects`}>
-      <UiProgressBar
+      <UiMeterBar
         value={ratio}
         label="Object quota usage"
         className="h-2.5 flex-1 overflow-hidden bg-slate-200 dark:bg-slate-800"
