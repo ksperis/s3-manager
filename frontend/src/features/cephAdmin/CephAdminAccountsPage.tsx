@@ -33,6 +33,7 @@ import {
   advancedFilterBodyClass,
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
+  advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
   advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
@@ -1136,7 +1137,7 @@ export default function CephAdminAccountsPage() {
                               Identity
                             </p>
                             <div className="grid gap-3 md:grid-cols-2">
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className={advancedFilterFieldCardClass()}>
                                 <div className="flex items-center justify-between gap-2">
                                   <label
                                     className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${accountNameFieldState.labelClass}`}
@@ -1178,7 +1179,7 @@ export default function CephAdminAccountsPage() {
                                 />
                               </div>
 
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className={advancedFilterFieldCardClass()}>
                                 <div className="flex items-center justify-between gap-2">
                                   <label
                                     className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${emailFieldState.labelClass}`}

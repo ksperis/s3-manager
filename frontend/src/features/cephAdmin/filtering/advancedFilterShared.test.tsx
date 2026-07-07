@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import {
+  advancedFilterFieldCardClass,
   advancedFilterMatchModeButtonClass,
   advancedFilterSummaryChipClass,
   advancedFilterSyncBadgeClass,
@@ -25,6 +26,13 @@ describe("advancedFilterShared", () => {
   it("returns stable advanced-filter toolbar button classes", () => {
     expect(advancedFilterToolbarButtonClass(false)).toContain("ui-caption");
     expect(advancedFilterToolbarButtonClass(true)).toContain("bg-primary-50");
+  });
+
+  it("returns stable advanced-filter field card classes", () => {
+    expect(advancedFilterFieldCardClass()).toBe("rounded-lg border border-slate-200 p-3 dark:border-slate-700");
+    expect(advancedFilterFieldCardClass("md:col-span-2")).toBe(
+      "rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2"
+    );
   });
 
   it("returns stable advanced-filter status badges and summary chip classes", () => {

@@ -28,6 +28,7 @@ import {
   advancedFilterBodyClass,
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
+  advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
   advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
@@ -1294,7 +1295,7 @@ export default function CephAdminUsersPage() {
                                   costTooltip: "Medium cost: email filters require per-user profile lookups.",
                                 },
                               ].map((field) => (
-                                <div key={field.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                <div key={field.id} className={advancedFilterFieldCardClass()}>
                                   <div className="flex items-center justify-between gap-2">
                                     <label
                                       className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${field.fieldState.labelClass}`}
@@ -1334,7 +1335,7 @@ export default function CephAdminUsersPage() {
                                 </div>
                               ))}
 
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className={advancedFilterFieldCardClass()}>
                                 <label
                                   className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${suspendedFieldState.labelClass}`}
                                 >

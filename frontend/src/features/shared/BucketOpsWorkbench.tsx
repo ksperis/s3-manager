@@ -178,6 +178,7 @@ import {
   advancedFilterBodyClass,
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
+  advancedFilterFieldCardClass,
   advancedFilterHeaderClass,
   buildTextFieldRules,
   FILTER_COST_LABEL,
@@ -8391,7 +8392,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           </div>
                           <div className="grid gap-3 md:grid-cols-2">
                             {isStorageOps && (
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                              <div className={advancedFilterFieldCardClass("md:col-span-2")}>
                                 <div className="flex items-center justify-between gap-2">
                                   <label
                                     className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${contextFieldState.labelClass}`}
@@ -8489,7 +8490,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             )}
 
                             {isStorageOps && (
-                              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                              <div className={advancedFilterFieldCardClass("md:col-span-2")}>
                                 <div className="flex items-center justify-between gap-2">
                                   <label
                                     className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${endpointFieldState.labelClass}`}
@@ -8586,7 +8587,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             )}
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <div className="flex items-center justify-between gap-2">
                                 <label
                                   className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${tenantFieldState.labelClass}`}
@@ -8627,7 +8628,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               />
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <div className="flex items-center justify-between gap-2">
                                 <label
                                   className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerFieldState.labelClass}`}
@@ -8668,7 +8669,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               />
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                            <div className={advancedFilterFieldCardClass("md:col-span-2")}>
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <label
                                   className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerNameFieldState.labelClass}`}
@@ -8723,7 +8724,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <label
                                 className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerSuspendedFieldState.labelClass}`}
                               >
@@ -8752,7 +8753,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </select>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                            <div className={advancedFilterFieldCardClass("md:col-span-2")}>
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <label
                                   className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${s3TagsFieldState.labelClass}`}
@@ -8886,7 +8887,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               ].map((section) => (
                                 <div
                                   key={section.title}
-                                  className={`rounded-lg border border-slate-200 p-3 dark:border-slate-700 ${section.disabled ? "opacity-75" : ""}`}
+                                  className={advancedFilterFieldCardClass(section.disabled ? "opacity-75" : "")}
                                 >
                                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     {section.title}
@@ -9014,7 +9015,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           activeCount: advancedDraftFeatureDetailCount,
                           children: (
                             <div className="grid gap-3 lg:grid-cols-2">
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Lifecycle
                               </p>
@@ -9223,7 +9224,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Notifications
                               </p>
@@ -9357,7 +9358,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Object Lock and BPA
                               </p>
@@ -9468,7 +9469,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 CORS and Logging
                               </p>
@@ -9567,7 +9568,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className={advancedFilterFieldCardClass()}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Website and Policy
                               </p>
@@ -9724,7 +9725,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                               </div>
                             </div>
 
-                            <div className={`rounded-lg border border-slate-200 p-3 dark:border-slate-700 ${sseFeatureEnabled ? "" : "opacity-60"}`}>
+                            <div className={advancedFilterFieldCardClass(sseFeatureEnabled ? "" : "opacity-60")}>
                               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Server-side encryption
                               </p>

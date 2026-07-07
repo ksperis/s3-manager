@@ -58,6 +58,9 @@ export const advancedFilterSectionClass =
 export const advancedFilterAccordionClass =
   "rounded-lg border border-[color:var(--ui-border)] bg-white text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/70";
 
+export const advancedFilterFieldCardClass = (className: string = "") =>
+  `rounded-lg border border-slate-200 p-3 dark:border-slate-700${className ? ` ${className}` : ""}`;
+
 export const advancedFilterMatchModeButtonClass = (active: boolean, locked: boolean = false) => {
   if (locked) {
     if (active) {
