@@ -34,6 +34,7 @@ import {
 } from "../../components/toolbarControlClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
 import {
   cx,
   uiCardClass,
@@ -15139,13 +15140,15 @@ export default function BrowserPage({
                   spellCheck={false}
                   autoFocus
                 />
-                <button
+                <UiButton
                   type="button"
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                  variant="secondary"
+                  size="md"
+                  className="px-3 py-2 ui-caption"
                   onClick={() => setSseCustomerKeyVisible((prev) => !prev)}
                 >
-                  {sseCustomerKeyVisible ? "Masquer" : "Afficher"}
-                </button>
+                  {sseCustomerKeyVisible ? "Hide" : "Show"}
+                </UiButton>
               </div>
             </label>
             {sseCustomerKeyError && (
@@ -15164,35 +15167,38 @@ export default function BrowserPage({
               </p>
             )}
             <div className="flex items-center justify-end gap-2">
-              <button
+              <UiButton
                 type="button"
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                variant="secondary"
+                size="sm"
                 onClick={sseCustomerCloseGuard.requestClose}
               >
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="button"
-                className="rounded-md border border-emerald-200 px-3 py-1.5 ui-caption font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:border-emerald-400 dark:hover:text-emerald-100"
+                variant="secondary"
+                size="sm"
                 onClick={() => void handleGenerateSseCustomerKey()}
                 disabled={!sseCustomerScopeKey}
               >
                 Generate
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="button"
-                className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/40 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:text-rose-100"
+                variant="danger"
+                size="sm"
                 onClick={handleClearSseCustomerKey}
                 disabled={!sseActive}
               >
                 Clear
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                size="sm"
               >
                 Enable
-              </button>
+              </UiButton>
             </div>
           </form>
           {sseCustomerCloseGuard.confirmationDialog}

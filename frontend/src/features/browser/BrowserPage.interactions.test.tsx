@@ -272,6 +272,7 @@ type RenderPageOptions = {
   actionProfile?: ComponentProps<typeof BrowserPage>["actionProfile"];
   lockedBucketName?: string;
   lockedBucketLabel?: string;
+  storageEndpointCapabilities?: ComponentProps<typeof BrowserPage>["storageEndpointCapabilities"];
   onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
   onCreatePublicLinkForObject?: ComponentProps<typeof BrowserPage>["onCreatePublicLinkForObject"];
 };
@@ -287,6 +288,7 @@ function renderPageElement({
   actionProfile,
   lockedBucketName,
   lockedBucketLabel,
+  storageEndpointCapabilities,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
 }: RenderPageOptions = {}) {
@@ -303,6 +305,7 @@ function renderPageElement({
           actionProfile={actionProfile}
           lockedBucketName={lockedBucketName}
           lockedBucketLabel={lockedBucketLabel}
+          storageEndpointCapabilities={storageEndpointCapabilities}
           onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
           onCreatePublicLinkForObject={onCreatePublicLinkForObject}
         />
@@ -2957,6 +2960,40 @@ describe("BrowserPage interactions", () => {
     expect(
       within(actionsToolbar).getByRole("button", { name: "Preview" }),
     ).toBeDisabled();
+  });
+
+  it("uses shared controls and English labels in the SSE-C key modal", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      accountIdForApi: "acc-1",
+      initialEntry: "/browser?bucket=bucket-1",
+      storageEndpointCapabilities: { sse: true },
+    });
+    await findRowByLabel("a.txt");
+
+    const moreMenu = await openContextMoreMenu(user);
+    await user.click(within(moreMenu).getByRole("menuitem", { name: /SSE-C/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: "SSE-C key" });
+    const showButton = within(dialog).getByRole("button", { name: "Show" });
+    const cancelButton = within(dialog).getByRole("button", { name: "Cancel" });
+    const generateButton = within(dialog).getByRole("button", { name: "Generate" });
+    const clearButton = within(dialog).getByRole("button", { name: "Clear" });
+    const enableButton = within(dialog).getByRole("button", { name: "Enable" });
+
+    for (const button of [
+      showButton,
+      cancelButton,
+      generateButton,
+      clearButton,
+      enableButton,
+    ]) {
+      expect(button).toHaveClass("ui-button-base");
+    }
+
+    expect(within(dialog).queryByRole("button", { name: "Afficher" })).not.toBeInTheDocument();
+    await user.click(showButton);
+    expect(within(dialog).getByRole("button", { name: "Hide" })).toHaveClass("ui-button-base");
   });
 
   it("keeps Paste in the action bar and avoids duplicating it in More", async () => {
