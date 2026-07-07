@@ -4,6 +4,9 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import {
   AccountGroupLink,
   AccountUserLink,
@@ -1253,78 +1256,68 @@ export default function S3AccountsPage() {
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email contact</label>
-                  <input
-                    type="email"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.email}
-                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                    placeholder="contact@example.com"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
-                  <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.storage_endpoint_id}
-                    onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
-                    required
-                    disabled={loadingEndpoints || accountCephEndpoints.length === 0}
-                  >
-                    <option value="" disabled>
-                      {loadingEndpoints ? "Loading..." : "No Ceph endpoint with account API enabled"}
+                <UiInput
+                  label="S3Account name *"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  required
+                />
+                <UiInput
+                  label="Email contact"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="contact@example.com"
+                />
+                <UiSelect
+                  label="Storage endpoint (Ceph) *"
+                  value={form.storage_endpoint_id}
+                  onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
+                  required
+                  disabled={loadingEndpoints || accountCephEndpoints.length === 0}
+                >
+                  <option value="" disabled>
+                    {loadingEndpoints ? "Loading..." : "No Ceph endpoint with account API enabled"}
+                  </option>
+                  {accountCephEndpoints.map((ep) => (
+                    <option key={ep.id} value={ep.id}>
+                      {ep.name} {ep.is_default ? "(default)" : ""}
                     </option>
-                    {accountCephEndpoints.map((ep) => (
-                      <option key={ep.id} value={ep.id}>
-                        {ep.name} {ep.is_default ? "(default)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  ))}
+                </UiSelect>
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota</label>
                   <div className="flex gap-2">
-                    <input
+                    <UiInput
+                      aria-label="Capacity quota"
                       type="number"
                       min="0"
                       step="any"
-                      className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      fieldClassName="flex-1"
                       value={form.quota_max_size_gb}
                       onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
                       placeholder="e.g. 500"
                     />
-                    <select
-                      className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    <UiSelect
+                      aria-label="Capacity quota unit"
+                      fieldClassName="w-24"
                       value={form.quota_max_size_unit}
                       onChange={(e) => setForm((f) => ({ ...f, quota_max_size_unit: e.target.value }))}
                     >
                       <option value="MiB">MiB</option>
                       <option value="GiB">GiB</option>
                       <option value="TiB">TiB</option>
-                    </select>
+                    </UiSelect>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={form.quota_max_objects}
-                    onChange={(e) => setForm((f) => ({ ...f, quota_max_objects: e.target.value }))}
-                    placeholder="e.g. 1000000"
-                  />
-                </div>
+                <UiInput
+                  label="Object quota (count)"
+                  type="number"
+                  min="0"
+                  value={form.quota_max_objects}
+                  onChange={(e) => setForm((f) => ({ ...f, quota_max_objects: e.target.value }))}
+                  placeholder="e.g. 1000000"
+                />
                 {form.storage_endpoint_id && (
                   <div className="md:col-span-2">
                     {createPermissionLoading ? (
@@ -1353,20 +1346,15 @@ export default function S3AccountsPage() {
                 </div>
               </div>
             <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={createCloseGuard.requestClose}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-              >
+              <UiButton variant="secondary" onClick={createCloseGuard.requestClose}>
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
                 disabled={creating || createPermissionLoading || !createEndpointCanWrite}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create account"}
-              </button>
+              </UiButton>
             </div>
             {createCloseGuard.confirmationDialog}
           </form>
@@ -1477,31 +1465,29 @@ export default function S3AccountsPage() {
           )}
           <>
             <textarea
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="ui-control min-h-32"
               rows={6}
               placeholder="RGW00000000000000001"
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
             />
-            <label className="mt-3 flex flex-col gap-1 ui-body font-medium text-slate-700 dark:text-slate-200">
-              Ceph endpoint
-              <select
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={importTenantEndpointId}
-                onChange={(e) => setImportTenantEndpointId(e.target.value)}
-                disabled={accountCephEndpoints.length === 0}
-                required
-              >
-                <option value="" disabled>
-                  {accountCephEndpoints.length === 0 ? "No Ceph endpoint with account API enabled" : "Select"}
+            <UiSelect
+              label="Ceph endpoint"
+              fieldClassName="mt-3"
+              value={importTenantEndpointId}
+              onChange={(e) => setImportTenantEndpointId(e.target.value)}
+              disabled={accountCephEndpoints.length === 0}
+              required
+            >
+              <option value="" disabled>
+                {accountCephEndpoints.length === 0 ? "No Ceph endpoint with account API enabled" : "Select"}
+              </option>
+              {accountCephEndpoints.map((ep) => (
+                <option key={ep.id} value={ep.id}>
+                  {ep.name} {ep.is_default ? "(default)" : ""}
                 </option>
-                {accountCephEndpoints.map((ep) => (
-                  <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(default)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+              ))}
+            </UiSelect>
             {importTenantEndpointId && (
               <>
                 {importPermissionLoading ? (
@@ -1521,15 +1507,10 @@ export default function S3AccountsPage() {
             )}
           </>
           <div className="mt-4 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={importCloseGuard.requestClose}
-              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
+            <UiButton variant="secondary" onClick={importCloseGuard.requestClose}>
               Cancel
-            </button>
-            <button
-              type="button"
+            </UiButton>
+            <UiButton
               disabled={importDisabled}
               onClick={async () => {
                 try {
@@ -1570,10 +1551,9 @@ export default function S3AccountsPage() {
                   setImportBusy(false);
                 }
               }}
-              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
             >
               {importBusy ? "Importing..." : "Import"}
-            </button>
+            </UiButton>
           </div>
           {importCloseGuard.confirmationDialog}
         </Modal>
@@ -1699,18 +1679,20 @@ export default function S3AccountsPage() {
                     <div className="flex flex-col gap-1">
                       <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
                       <div className="flex gap-2">
-                        <input
+                        <UiInput
+                          aria-label="Max quota"
                           type="number"
                           min={0}
                           step="any"
-                          className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                          fieldClassName="flex-1"
                           value={editForm.quota_max_size_gb}
                           disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
                           placeholder="Leave empty to disable"
                         />
-                        <select
-                          className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                        <UiSelect
+                          aria-label="Max quota unit"
+                          fieldClassName="w-24"
                           value={editForm.quota_max_size_unit}
                           disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
@@ -1718,21 +1700,18 @@ export default function S3AccountsPage() {
                           <option value="MiB">MiB</option>
                           <option value="GiB">GiB</option>
                           <option value="TiB">TiB</option>
-                        </select>
+                        </UiSelect>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota</label>
-                      <input
-                        type="number"
-                        min={0}
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
-                        value={editForm.quota_max_objects}
-                        disabled={!allowQuotaUpdates}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                        placeholder="Leave empty to disable"
-                      />
-                    </div>
+                    <UiInput
+                      label="Object quota"
+                      type="number"
+                      min={0}
+                      value={editForm.quota_max_objects}
+                      disabled={!allowQuotaUpdates}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
+                      placeholder="Leave empty to disable"
+                    />
                   </div>
                 </>
               )}
@@ -1809,7 +1788,10 @@ export default function S3AccountsPage() {
                               </td>
                               {portalEnabled && (
                                 <td className="px-3 py-2">
-                                  <select
+                                  <UiSelect
+                                    aria-label={`Portal role for ${u.label}`}
+                                    size="compact"
+                                    fieldClassName="w-44"
                                     value={u.account_role}
                                     onChange={(e) =>
                                       setEditForm((prev) => ({
@@ -1821,14 +1803,13 @@ export default function S3AccountsPage() {
                                         ),
                                       }))
                                     }
-                                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   >
                                     {PORTAL_ROLE_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>
                                         {option.label}
                                       </option>
                                     ))}
-                                  </select>
+                                  </UiSelect>
                                 </td>
                               )}
                               <td className="px-3 py-2 text-right">
@@ -1858,12 +1839,14 @@ export default function S3AccountsPage() {
                           <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
                           <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
                         </div>
-                        <input
+                        <UiInput
+                          aria-label="Search UI users"
+                          size="compact"
+                          fieldClassName="w-44"
                           type="text"
                           value={userSearch}
                           onChange={(e) => setUserSearch(e.target.value)}
                           placeholder="Search..."
-                          className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         />
                       </div>
                       <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -1919,19 +1902,19 @@ export default function S3AccountsPage() {
                           {userSelections.length} selected
                         </span>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <UiButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => {
                               setShowUserPanel(false);
                               setUserSelections([]);
                               setUserSearch("");
                             }}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                           >
                             Cancel
-                          </button>
-                          <button
-                            type="button"
+                          </UiButton>
+                          <UiButton
+                            size="sm"
                             disabled={userSelections.length === 0}
                             onClick={() => {
                               if (userSelections.length === 0) return;
@@ -1949,10 +1932,9 @@ export default function S3AccountsPage() {
                               setUserSelections([]);
                               setUserSearch("");
                             }}
-                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
                             Add selected
-                          </button>
+                          </UiButton>
                         </div>
                       </div>
                     </div>
@@ -2032,7 +2014,10 @@ export default function S3AccountsPage() {
                               </td>
                               {portalEnabled && (
                                 <td className="px-3 py-2">
-                                  <select
+                                  <UiSelect
+                                    aria-label={`Portal role for ${group.label}`}
+                                    size="compact"
+                                    fieldClassName="w-44"
                                     value={group.account_role}
                                     onChange={(e) =>
                                       setEditForm((prev) => ({
@@ -2044,14 +2029,13 @@ export default function S3AccountsPage() {
                                         ),
                                       }))
                                     }
-                                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   >
                                     {PORTAL_ROLE_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>
                                         {option.label}
                                       </option>
                                     ))}
-                                  </select>
+                                  </UiSelect>
                                 </td>
                               )}
                               <td className="px-3 py-2 text-right">
@@ -2081,12 +2065,14 @@ export default function S3AccountsPage() {
                           <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
                           <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
                         </div>
-                        <input
+                        <UiInput
+                          aria-label="Search UI groups"
+                          size="compact"
+                          fieldClassName="w-44"
                           type="text"
                           value={groupSearch}
                           onChange={(e) => setGroupSearch(e.target.value)}
                           placeholder="Search..."
-                          className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         />
                       </div>
                       <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -2142,19 +2128,19 @@ export default function S3AccountsPage() {
                           {groupSelections.length} selected
                         </span>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <UiButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => {
                               setShowGroupPanel(false);
                               setGroupSelections([]);
                               setGroupSearch("");
                             }}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                           >
                             Cancel
-                          </button>
-                          <button
-                            type="button"
+                          </UiButton>
+                          <UiButton
+                            size="sm"
                             disabled={groupSelections.length === 0}
                             onClick={() => {
                               if (groupSelections.length === 0) return;
@@ -2172,10 +2158,9 @@ export default function S3AccountsPage() {
                               setGroupSelections([]);
                               setGroupSearch("");
                             }}
-                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
                             Add selected
-                          </button>
+                          </UiButton>
                         </div>
                       </div>
                     </div>
@@ -2487,19 +2472,12 @@ export default function S3AccountsPage() {
                 </div>
               )}
               <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={editCloseGuard.requestClose}
-                  className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                >
+                <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
                   Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                >
+                </UiButton>
+                <UiButton type="submit">
                   Save
-                </button>
+                </UiButton>
               </div>
               {editCloseGuard.confirmationDialog}
             </form>

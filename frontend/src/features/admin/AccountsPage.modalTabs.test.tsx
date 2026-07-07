@@ -283,6 +283,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
+    expect(screen.getByLabelText("Search UI users")).toHaveClass("ui-control");
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -317,6 +318,7 @@ describe("AccountsPage modal tabs", () => {
 
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    expect(screen.getByLabelText("Search UI groups")).toHaveClass("ui-control");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Research Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -614,6 +616,12 @@ describe("AccountsPage modal tabs", () => {
     if (!nameInput) {
       throw new Error("Account name input not found");
     }
+    expect(nameInput).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Email contact")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Storage endpoint (Ceph) *")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Capacity quota")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Capacity quota unit")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Object quota (count)")).toHaveClass("ui-control");
 
     fireEvent.change(nameInput, { target: { value: "account-with-tags" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this account" });
