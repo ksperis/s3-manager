@@ -1,0 +1,292 @@
+:root {
+  --s3-docs-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --s3-docs-text: #152033;
+  --s3-docs-muted: #667085;
+  --s3-docs-panel: #ffffff;
+  --s3-docs-panel-soft: #f8fafc;
+  --s3-docs-border: rgba(15, 23, 42, 0.1);
+  --s3-docs-border-strong: rgba(15, 23, 42, 0.16);
+  --s3-docs-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1d4ed8;
+  --md-primary-fg-color--light: #3b82f6;
+  --md-primary-fg-color--dark: #1e3a8a;
+  --md-accent-fg-color: #0f766e;
+  --md-default-bg-color: #f8fafc;
+  --md-default-fg-color: var(--s3-docs-text);
+  --md-typeset-a-color: #1d4ed8;
+  --md-code-bg-color: #eef2f7;
+  --md-code-fg-color: #253244;
+}
+
+[data-md-color-scheme="slate"] {
+  --s3-docs-text: #e5edf7;
+  --s3-docs-muted: #a8b3c7;
+  --s3-docs-panel: #111827;
+  --s3-docs-panel-soft: #0f172a;
+  --s3-docs-border: rgba(148, 163, 184, 0.18);
+  --s3-docs-border-strong: rgba(148, 163, 184, 0.28);
+  --s3-docs-shadow: 0 22px 58px rgba(0, 0, 0, 0.32);
+  --md-primary-fg-color: #2563eb;
+  --md-primary-fg-color--light: #60a5fa;
+  --md-primary-fg-color--dark: #1d4ed8;
+  --md-accent-fg-color: #2dd4bf;
+  --md-default-bg-color: #0b1120;
+  --md-default-fg-color: var(--s3-docs-text);
+  --md-typeset-a-color: #60a5fa;
+  --md-code-bg-color: rgba(148, 163, 184, 0.12);
+  --md-code-fg-color: #dbeafe;
+}
+
+body {
+  font-family: var(--s3-docs-font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+.md-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+}
+
+.md-header__title {
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.md-main {
+  background: var(--md-default-bg-color);
+}
+
+.md-main__inner {
+  margin-top: 1.25rem;
+}
+
+.md-content__inner {
+  padding-bottom: 3.5rem;
+}
+
+.md-typeset {
+  color: var(--s3-docs-text);
+  font-size: 0.82rem;
+  line-height: 1.72;
+  overflow-x: auto;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--s3-docs-text);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.md-typeset h1 {
+  margin: 0 0 1.55rem;
+  font-size: 2.25rem;
+  line-height: 1.12;
+}
+
+.md-typeset h2 {
+  margin: 2.4rem 0 0.8rem;
+  padding-top: 0.25rem;
+  font-size: 1.45rem;
+  line-height: 1.22;
+}
+
+.md-typeset h3 {
+  margin-top: 1.75rem;
+  font-size: 1.02rem;
+}
+
+.md-typeset p,
+.md-typeset li {
+  max-width: 78ch;
+}
+
+.md-typeset a {
+  font-weight: 640;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.17em;
+}
+
+.md-typeset blockquote {
+  margin: 1.35rem 0 1.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--s3-docs-border);
+  border-left: 0.24rem solid var(--md-accent-fg-color);
+  border-radius: 0.5rem;
+  background: var(--s3-docs-panel);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+  color: var(--s3-docs-muted);
+}
+
+.md-typeset blockquote p {
+  margin: 0;
+}
+
+.md-typeset code {
+  border: 1px solid var(--s3-docs-border);
+  border-radius: 0.3rem;
+  font-size: 0.86em;
+}
+
+.md-typeset pre > code {
+  border: 0;
+  border-radius: 0;
+}
+
+.md-typeset .highlight {
+  border: 1px solid var(--s3-docs-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) {
+  width: 100%;
+  min-width: 42rem;
+  overflow: hidden;
+  border: 1px solid var(--s3-docs-border-strong);
+  border-radius: 0.5rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--s3-docs-panel);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  font-size: 0.72rem;
+  line-height: 1.58;
+}
+
+.md-typeset table:not([class]) th {
+  border-bottom: 1px solid var(--s3-docs-border-strong);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--s3-docs-text);
+  font-weight: 760;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.82rem 0.9rem;
+  border-color: var(--s3-docs-border);
+  vertical-align: top;
+}
+
+.md-typeset table:not([class]) tr:nth-child(even) td {
+  background: rgba(148, 163, 184, 0.055);
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--s3-docs-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  font-weight: 760;
+}
+
+.md-nav__title {
+  color: var(--s3-docs-muted);
+  font-weight: 760;
+}
+
+.md-nav__item .md-nav__link--active {
+  color: var(--md-accent-fg-color);
+  font-weight: 760;
+}
+
+.md-nav__link:focus,
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+}
+
+.md-nav--secondary .md-nav__link {
+  border-left: 2px solid transparent;
+  padding-left: 0.5rem;
+}
+
+.md-nav--secondary .md-nav__link--active {
+  border-left-color: var(--md-accent-fg-color);
+}
+
+.md-typeset .docs-themed-shot,
+.docs-screenshot-carousel figure {
+  border-radius: 0.5rem;
+  box-shadow: var(--s3-docs-shadow);
+}
+
+.md-typeset .docs-themed-shot__image {
+  border: 1px solid var(--s3-docs-border);
+  border-radius: 0.5rem;
+}
+
+[data-md-color-scheme="slate"] .md-typeset blockquote,
+[data-md-color-scheme="slate"] .md-typeset table:not([class]),
+[data-md-color-scheme="slate"] .md-typeset .highlight,
+[data-md-color-scheme="slate"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset details {
+  box-shadow: none;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background: rgba(37, 99, 235, 0.2);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:nth-child(even) td {
+  background: rgba(148, 163, 184, 0.07);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover td {
+  background: rgba(45, 212, 191, 0.08);
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-grid {
+    max-width: 75rem;
+  }
+
+  .md-sidebar--primary {
+    width: 12.8rem;
+  }
+}
+
+@media screen and (max-width: 44rem) {
+  .md-main__inner {
+    margin-top: 0.85rem;
+  }
+
+  .md-content__inner {
+    padding-top: 0.7rem;
+  }
+
+  .md-typeset {
+    font-size: 0.82rem;
+  }
+
+  .md-typeset h1 {
+    font-size: 1.75rem;
+  }
+
+  .md-typeset h2 {
+    margin-top: 2rem;
+    font-size: 1.25rem;
+  }
+
+  .md-typeset table:not([class]) {
+    width: 100%;
+    min-width: 100%;
+    font-size: 0.68rem;
+  }
+
+  .md-typeset table:not([class]) th,
+  .md-typeset table:not([class]) td {
+    padding: 0.68rem 0.55rem;
+  }
+}
