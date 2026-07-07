@@ -31,9 +31,9 @@ import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
-import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -907,6 +907,15 @@ export default function BucketsPage() {
 
     return cols;
   })();
+  const managerBucketTableColumns: Array<ManagerTableColumn<SortField>> = bucketTableColumns.map((col) => ({
+    key: col.id,
+    label: col.label,
+    align: col.align ?? (col.id === "actions" ? "right" : "left"),
+    sortField: col.field ?? null,
+    mobileRole: col.id === "name" ? "primary" : col.id === "actions" ? "actions" : undefined,
+    mobileLabel: col.label,
+    className: col.id === "actions" ? "min-w-[13rem]" : undefined,
+  }));
 
   const stepTitles = ["General", "Protection"];
   const isBucketNameValid = !bucketForm.name || isValidS3BucketName(bucketForm.name);
@@ -1053,54 +1062,40 @@ export default function BucketsPage() {
               </>
             }
           />
-          <div className="overflow-x-auto">
-            <table className="manager-table w-full min-w-[760px] divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                <tr>
-                  {bucketTableColumns.map((col) => (
-                    <SortableHeader
-                      key={col.id}
-                      label={col.label}
-                      field={col.field}
-                      activeField={sort.field}
-                      direction={sort.direction}
-                      align={col.align ?? (col.label === "Actions" ? "right" : "left")}
-                      onSort={col.field ? (field) => toggleSort(field) : undefined}
-                    />
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
-                {tableStatus === "error" && (
-                  <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
-                )}
-                {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
-                {filteredBuckets.map((bucket) => (
-                    <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      {bucketTableColumns.map((col) => {
-                        const align = col.align ?? (col.id === "actions" ? "right" : "left");
-                        const cellBase =
-                          col.id === "actions"
-                            ? "min-w-[13rem] px-6 py-4 text-right align-top"
-                            : align === "right"
-                              ? "px-6 py-4 text-right"
-                              : "px-6 py-4";
-                        const textClass =
-                          col.id === "name"
-                            ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                            : "ui-body text-slate-600 dark:text-slate-300";
-                        return (
-                          <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
-                            {col.render(bucket)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+          <ManagerTable
+            columns={managerBucketTableColumns}
+            responsiveCards
+            className="w-full min-w-[760px]"
+            sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+          >
+            {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
+            {tableStatus === "error" && (
+              <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
+            )}
+            {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
+            {filteredBuckets.map((bucket) => (
+              <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                {bucketTableColumns.map((col) => {
+                  const align = col.align ?? (col.id === "actions" ? "right" : "left");
+                  const cellBase =
+                    col.id === "actions"
+                      ? "min-w-[13rem] px-6 py-4 text-right align-top"
+                      : align === "right"
+                        ? "px-6 py-4 text-right"
+                        : "px-6 py-4";
+                  const textClass =
+                    col.id === "name"
+                      ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
+                      : "ui-body text-slate-600 dark:text-slate-300";
+                  return (
+                    <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                      {col.render(bucket)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </ManagerTable>
         </div>
       )}
 

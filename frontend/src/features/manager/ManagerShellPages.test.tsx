@@ -1213,6 +1213,33 @@ describe("manager shell pages", () => {
     );
   });
 
+  it("renders manager buckets through the shared responsive table contract", async () => {
+    listBucketsMock.mockResolvedValue([
+      {
+        name: "bucket-responsive",
+        used_bytes: 1024,
+        object_count: 7,
+      },
+    ]);
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-responsive")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("bucket-responsive").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByText("1.0 KB").closest("td")).toHaveAttribute("data-label", "Used");
+    expect(screen.getByText("7").closest("td")).toHaveAttribute("data-label", "Objects");
+    expect(screen.getByRole("link", { name: "Configure" }).closest("td")).toHaveAttribute(
+      "data-mobile-actions",
+      "true"
+    );
+  });
+
   it("opens the delete-with-purge modal for a non-empty bucket when purge access is enabled", async () => {
     bucketPurgeEnabled = true;
     window.localStorage.setItem(
