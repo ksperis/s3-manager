@@ -214,8 +214,8 @@ describe("CephAdminAccountsPage", () => {
     );
 
     expect(await screen.findByText("No accounts.")).toBeInTheDocument();
-    expect(getTableOverflowContainer()).toHaveClass("overflow-x-auto");
-    expect(screen.getByRole("table")).toHaveClass("!table-auto", "!w-max", "min-w-full");
+    expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden", "md:overflow-x-auto");
+    expect(screen.getByRole("table")).toHaveClass("!table-auto", "!w-max", "min-w-full", "responsive-data-table");
 
     fireEvent.click(screen.getByRole("button", { name: /advanced filter/i }));
 
@@ -224,7 +224,7 @@ describe("CephAdminAccountsPage", () => {
     expect(backdrop).not.toHaveClass("bg-slate-950/45");
     expect(screen.getByText("RGW Accounts listing").closest(".fixed")).toHaveClass("z-[46]");
     expect(getTableOverflowContainer()).toHaveClass("overflow-x-hidden");
-    expect(getTableOverflowContainer()).not.toHaveClass("overflow-x-auto");
+    expect(getTableOverflowContainer()).not.toHaveClass("md:overflow-x-auto");
   });
 
   it("hides quota usage percent filters when metrics are unavailable", async () => {

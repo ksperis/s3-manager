@@ -920,6 +920,7 @@ export default function CephAdminUsersPage() {
         id: "uid",
         label: "UID",
         field: "uid",
+        primary: true,
         headerClassName: "min-w-[12rem] max-w-[20rem]",
         cellClassName: "min-w-[12rem] max-w-[20rem]",
         render: (user) => user.uid,
@@ -1016,6 +1017,7 @@ export default function CephAdminUsersPage() {
       label: "Act.",
       field: null,
       align: "right",
+      mobileRole: "actions",
       headerClassName: "w-16",
       cellClassName: "!py-1.5",
       render: (user) => (
@@ -1498,6 +1500,7 @@ export default function CephAdminUsersPage() {
             emptyMessage="No users."
             primaryColumnId="uid"
             overflowXHidden={showAdvancedFilter}
+            responsiveCards
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
             pagination={{
               page,

@@ -87,4 +87,39 @@ describe("DataTableShell", () => {
     expect(screen.getByText("3").closest("td")).toHaveAttribute("data-label", "Count");
     expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
+
+  it("keeps responsive tables fully clipped when horizontal overflow is disabled", () => {
+    const { rerender } = render(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+      />
+    );
+
+    const getOverflowContainer = () => screen.getByRole("table").parentElement;
+    expect(getOverflowContainer()).toHaveClass("overflow-x-hidden", "md:overflow-x-auto");
+
+    rerender(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        responsiveCards
+        overflowXHidden
+      />
+    );
+
+    expect(getOverflowContainer()).toHaveClass("overflow-x-hidden");
+    expect(getOverflowContainer()).not.toHaveClass("md:overflow-x-auto");
+  });
 });

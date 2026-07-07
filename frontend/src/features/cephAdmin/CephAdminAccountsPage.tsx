@@ -821,6 +821,7 @@ export default function CephAdminAccountsPage() {
         id: "account_id",
         label: "Account ID",
         field: "account_id",
+        primary: true,
         headerClassName: "min-w-[12rem] max-w-[20rem]",
         cellClassName: "min-w-[12rem] max-w-[20rem]",
         render: (account) => account.account_id,
@@ -921,6 +922,7 @@ export default function CephAdminAccountsPage() {
       label: "Act.",
       field: null,
       align: "right",
+      mobileRole: "actions",
       headerClassName: "w-16",
       cellClassName: "!py-1.5",
       render: (account) => (
@@ -1364,6 +1366,7 @@ export default function CephAdminAccountsPage() {
             emptyMessage="No accounts."
             primaryColumnId="account_id"
             overflowXHidden={showAdvancedFilter}
+            responsiveCards
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
             pagination={{
               page,

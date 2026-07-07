@@ -80,7 +80,9 @@ export default function DataTableShell<Row, SortField extends string = string>({
 }: DataTableShellProps<Row, SortField>) {
   const resolveRowClassName = (row: Row) => (typeof rowClassName === "function" ? rowClassName(row) : rowClassName);
   const containerOverflowClass = responsiveCards
-    ? "overflow-x-hidden md:overflow-x-auto"
+    ? overflowXHidden
+      ? "overflow-x-hidden"
+      : "overflow-x-hidden md:overflow-x-auto"
     : overflowXHidden
       ? "overflow-x-hidden"
       : "overflow-x-auto";

@@ -24,5 +24,15 @@ export default function PageBanner({ tone = "info", children, className }: PageB
   if (!children) {
     return null;
   }
-  return <div className={cx("rounded-md border px-3 py-2 ui-caption", uiToneBannerClasses[toneMap[tone]], className)}>{children}</div>;
+  return (
+    <div
+      className={cx(
+        "min-w-0 max-w-full break-words rounded-md border px-3 py-2 ui-caption [overflow-wrap:anywhere]",
+        uiToneBannerClasses[toneMap[tone]],
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
 }
