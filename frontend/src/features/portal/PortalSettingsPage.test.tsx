@@ -87,6 +87,13 @@ describe("PortalSettingsPage", () => {
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Portal User")).toBeInTheDocument();
     expect(screen.getByDisplayValue("portal@example.com")).toBeInTheDocument();
+    expect(screen.getByLabelText("Display name")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Email")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Language")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Theme")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Default portal account")).toHaveClass("ui-control");
+    expect(screen.getByRole("checkbox", { name: "Receive quota alert emails" })).toHaveClass("text-primary");
+    expect(screen.getByLabelText("Current password")).toHaveClass("ui-control");
     expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Portal account" })).toBeInTheDocument();
     expect(screen.getByText("Workspace access")).toBeInTheDocument();

@@ -11,6 +11,9 @@ import { useTheme } from "../../components/theme";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -23,7 +26,6 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type SaveTarget = "profile" | "preferences" | "password" | null;
 
-const inputClasses = "ui-control h-9 text-sm";
 const labelClasses = "ui-caption font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]";
 
 function persistStoredUser(user: User) {
@@ -229,20 +231,20 @@ export default function PortalSettingsPage() {
           <form onSubmit={saveProfile}>
             <UiCard title={t({ en: "Profile", fr: "Profil", de: "Profil" })}>
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className={labelClasses}>{t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}</span>
-                  <input
-                    className={inputClasses}
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                    disabled={loading}
-                    autoComplete="name"
-                  />
-                </label>
-                <label className="block">
-                  <span className={labelClasses}>{t({ en: "Email", fr: "Email", de: "E-Mail" })}</span>
-                  <input className={inputClasses} value={user?.email ?? storedUser?.email ?? ""} readOnly />
-                </label>
+                <UiInput
+                  label={t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}
+                  className="h-9"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  disabled={loading}
+                  autoComplete="name"
+                />
+                <UiInput
+                  label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
+                  className="h-9"
+                  value={user?.email ?? storedUser?.email ?? ""}
+                  readOnly
+                />
               </div>
               <div className="mt-4">
                 <UiButton type="submit" disabled={saving === "profile" || loading} className="h-9 px-3 py-1.5">
@@ -255,55 +257,49 @@ export default function PortalSettingsPage() {
           <form onSubmit={savePreferences}>
             <UiCard title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <label className="block">
-                  <span className={labelClasses}>{t({ en: "Language", fr: "Langue", de: "Sprache" })}</span>
-                  <select
-                    className={inputClasses}
-                    value={languageDraft}
-                    onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
-                  >
-                    <option value="en">English</option>
-                    <option value="fr">Français</option>
-                    <option value="de">Deutsch</option>
-                    <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className={labelClasses}>{t({ en: "Theme", fr: "Thème", de: "Design" })}</span>
-                  <select
-                    className={inputClasses}
-                    value={themeDraft}
-                    onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
-                  >
-                    <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
-                    <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
-                  </select>
-                </label>
-                <label className="block md:col-span-2">
-                  <span className={labelClasses}>{t({ en: "Default portal account", fr: "Compte Portal par défaut", de: "Standard-Portal-Konto" })}</span>
-                  <select
-                    className={inputClasses}
-                    value={defaultPortalAccountId}
-                    onChange={(event) => setDefaultPortalAccountId(event.target.value)}
-                    disabled={accounts.length === 0}
-                  >
-                    {accounts.length === 0 ? <option value="">{t({ en: "No portal account", fr: "Aucun compte Portal", de: "Kein Portal-Konto" })}</option> : null}
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <UiSelect
+                  label={t({ en: "Language", fr: "Langue", de: "Sprache" })}
+                  className="h-9"
+                  value={languageDraft}
+                  onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
+                >
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
+                </UiSelect>
+                <UiSelect
+                  label={t({ en: "Theme", fr: "Thème", de: "Design" })}
+                  className="h-9"
+                  value={themeDraft}
+                  onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
+                >
+                  <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
+                  <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
+                </UiSelect>
+                <UiSelect
+                  label={t({ en: "Default portal account", fr: "Compte Portal par défaut", de: "Standard-Portal-Konto" })}
+                  fieldClassName="md:col-span-2"
+                  className="h-9"
+                  value={defaultPortalAccountId}
+                  onChange={(event) => setDefaultPortalAccountId(event.target.value)}
+                  disabled={accounts.length === 0}
+                >
+                  {accounts.length === 0 ? <option value="">{t({ en: "No portal account", fr: "Aucun compte Portal", de: "Kein Portal-Konto" })}</option> : null}
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </UiSelect>
               </div>
-              <label className="mt-4 flex items-center gap-2 rounded-md border border-[color:var(--ui-border)] px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={quotaAlertsEnabled}
-                  onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
-                />
+              <UiCheckboxField
+                className="mt-4 flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
+                checked={quotaAlertsEnabled}
+                onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
+              >
                 <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
-              </label>
+              </UiCheckboxField>
               <div className="mt-4">
                 <UiButton type="submit" disabled={saving === "preferences" || loading} className="h-9 px-3 py-1.5">
                   {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
@@ -320,36 +316,30 @@ export default function PortalSettingsPage() {
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-3">
-                  <label className="block">
-                    <span className={labelClasses}>{t({ en: "Current password", fr: "Mot de passe actuel", de: "Aktuelles Passwort" })}</span>
-                    <input
-                      className={inputClasses}
-                      type="password"
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                      autoComplete="current-password"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={labelClasses}>{t({ en: "New password", fr: "Nouveau mot de passe", de: "Neues Passwort" })}</span>
-                    <input
-                      className={inputClasses}
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                      autoComplete="new-password"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={labelClasses}>{t({ en: "Confirm password", fr: "Confirmer le mot de passe", de: "Passwort bestätigen" })}</span>
-                    <input
-                      className={inputClasses}
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(event) => setConfirmPassword(event.target.value)}
-                      autoComplete="new-password"
-                    />
-                  </label>
+                  <UiInput
+                    label={t({ en: "Current password", fr: "Mot de passe actuel", de: "Aktuelles Passwort" })}
+                    className="h-9"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                  />
+                  <UiInput
+                    label={t({ en: "New password", fr: "Nouveau mot de passe", de: "Neues Passwort" })}
+                    className="h-9"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
+                  <UiInput
+                    label={t({ en: "Confirm password", fr: "Confirmer le mot de passe", de: "Passwort bestätigen" })}
+                    className="h-9"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
                 </div>
               )}
               <div className="mt-4">
