@@ -3,16 +3,20 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { KeyRotationResponse, KeyRotationType, rotateS3Keys } from "../../api/keyRotation";
+import {
+  KeyRotationResponse,
+  KeyRotationResultItem,
+  KeyRotationType,
+  rotateS3Keys,
+} from "../../api/keyRotation";
 import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoints";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
-import TableEmptyState from "../../components/TableEmptyState";
 import UiButton from "../../components/ui/UiButton";
 import { SettingsCard, SettingsChoiceRow } from "../../components/settings/SettingsLayout";
-import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 
@@ -20,6 +24,10 @@ type RotationTypeOption = {
   value: KeyRotationType;
   label: string;
   description: string;
+};
+
+type KeyRotationResultRow = KeyRotationResultItem & {
+  rowKey: string;
 };
 
 const ROTATION_TYPE_OPTIONS: RotationTypeOption[] = [
@@ -68,6 +76,54 @@ function extractError(err: unknown): string {
   return extractApiError(err, "Unable to run key rotation.");
 }
 
+function statusBadgeClassName(status: KeyRotationResultItem["status"]): string {
+  if (status === "rotated") {
+    return "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100";
+  }
+  if (status === "failed") {
+    return "inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-100";
+  }
+  return "inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200";
+}
+
+const resultTableColumns: Array<DataTableColumn<KeyRotationResultRow>> = [
+  {
+    id: "endpoint",
+    label: "Endpoint",
+    primary: true,
+    render: (item) => item.endpoint_name,
+  },
+  {
+    id: "type",
+    label: "Type",
+    render: (item) => KEY_TYPE_LABEL[item.key_type],
+  },
+  {
+    id: "target",
+    label: "Target",
+    render: (item) => item.target_label || item.target_type,
+  },
+  {
+    id: "status",
+    label: "Status",
+    render: (item) => <span className={statusBadgeClassName(item.status)}>{item.status}</span>,
+  },
+  {
+    id: "details",
+    label: "Details",
+    render: (item) => (
+      <>
+        {item.message}
+        {item.old_access_key && item.new_access_key ? (
+          <span className="ml-1 text-slate-500 dark:text-slate-400">
+            ({item.old_access_key} -&gt; {item.new_access_key})
+          </span>
+        ) : null}
+      </>
+    ),
+  },
+];
+
 export default function KeyRotationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,10 +169,18 @@ export default function KeyRotationPage() {
     () => endpoints.filter((endpoint) => isEndpointEligible(endpoint)),
     [endpoints]
   );
+  const resultRows = useMemo<KeyRotationResultRow[]>(
+    () =>
+      (result?.results ?? []).map((item, index) => ({
+        ...item,
+        rowKey: `${item.endpoint_id}-${item.key_type}-${item.target_id ?? "none"}-${index}`,
+      })),
+    [result?.results]
+  );
   const resultTableStatus = resolveListTableStatus({
     loading: false,
     error: null,
-    rowCount: result?.results.length ?? 0,
+    rowCount: resultRows.length,
   });
 
   const runDisabled = running || selectedEndpointIds.length === 0 || selectedTypes.length === 0;
@@ -300,79 +364,35 @@ export default function KeyRotationPage() {
             countLabel={`${result.results.length} detailed result${result.results.length === 1 ? "" : "s"}`}
           />
           <div className="space-y-3 px-5 pb-5 pt-3">
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Total: {result.summary.total}</div>
-            <div className="rounded-lg bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100">
-              Rotated: {result.summary.rotated}
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Total: {result.summary.total}</div>
+              <div className="rounded-lg bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100">
+                Rotated: {result.summary.rotated}
+              </div>
+              <div className="rounded-lg bg-rose-50 px-3 py-2 ui-caption text-rose-700 dark:bg-rose-900/30 dark:text-rose-100">
+                Failed: {result.summary.failed}
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Skipped: {result.summary.skipped}</div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">
+                Old keys deleted: {result.summary.deleted_old_keys}
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">
+                Old keys disabled: {result.summary.disabled_old_keys}
+              </div>
             </div>
-            <div className="rounded-lg bg-rose-50 px-3 py-2 ui-caption text-rose-700 dark:bg-rose-900/30 dark:text-rose-100">
-              Failed: {result.summary.failed}
-            </div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Skipped: {result.summary.skipped}</div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">
-              Old keys deleted: {result.summary.deleted_old_keys}
-            </div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">
-              Old keys disabled: {result.summary.disabled_old_keys}
-            </div>
-          </div>
 
-          <div className={uiTableContainerClass}>
-            <table className={cx(uiDataTableClass, "compact-table min-w-full")}>
-              <thead>
-                <tr>
-                  <th>
-                    Endpoint
-                  </th>
-                  <th>
-                    Type
-                  </th>
-                  <th>
-                    Target
-                  </th>
-                  <th>
-                    Status
-                  </th>
-                  <th>
-                    Details
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.results.map((item, index) => (
-                  <tr key={`${item.endpoint_id}-${item.key_type}-${item.target_id ?? "none"}-${index}`}>
-                    <td>{item.endpoint_name}</td>
-                    <td>{KEY_TYPE_LABEL[item.key_type]}</td>
-                    <td>{item.target_label || item.target_type}</td>
-                    <td>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${
-                          item.status === "rotated"
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100"
-                            : item.status === "failed"
-                              ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100"
-                              : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td>
-                      {item.message}
-                      {item.old_access_key && item.new_access_key && (
-                        <span className="ml-1 text-slate-500 dark:text-slate-400">
-                          ({item.old_access_key} → {item.new_access_key})
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {resultTableStatus === "empty" && (
-                  <TableEmptyState colSpan={5} message="No details returned by the backend." />
-                )}
-              </tbody>
-            </table>
-          </div>
+            <DataTableShell
+              columns={resultTableColumns}
+              rows={resultRows}
+              rowKey={(item) => item.rowKey}
+              status={resultTableStatus}
+              loadingMessage="Loading rotation results..."
+              errorMessage="Unable to load rotation results."
+              emptyMessage="No details returned by the backend."
+              primaryColumnId="endpoint"
+              responsiveCards
+              tableClassName="compact-table"
+            />
           </div>
         </SettingsCard>
       )}
