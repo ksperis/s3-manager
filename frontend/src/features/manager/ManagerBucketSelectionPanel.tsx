@@ -13,6 +13,8 @@ import UiInput from "../../components/ui/UiInput";
 import { uiCheckboxClass } from "../../components/ui/styles";
 
 type ManagerBucketSelectionPanelProps = {
+  className?: string;
+  countLabel?: ReactNode;
   description: string;
   filter: string;
   filterPlaceholder: string;
@@ -22,7 +24,7 @@ type ManagerBucketSelectionPanelProps = {
   onToggleBucket: (bucketName: string) => void;
   onSelectFiltered: () => void;
   onClearSelection: () => void;
-  action: ReactNode;
+  action?: ReactNode;
   tableStatus: ListTableStatus;
   loadingMessage: string;
   errorMessage: string;
@@ -30,6 +32,8 @@ type ManagerBucketSelectionPanelProps = {
 };
 
 export default function ManagerBucketSelectionPanel({
+  className = "ui-surface-card",
+  countLabel,
   description,
   filter,
   filterPlaceholder,
@@ -46,12 +50,12 @@ export default function ManagerBucketSelectionPanel({
   emptyMessage,
 }: ManagerBucketSelectionPanelProps) {
   return (
-    <div className="ui-surface-card">
+    <div className={className}>
       <ListToolbar
         title="Buckets"
         description={description}
         showHeading={false}
-        countLabel={`${buckets.length} result(s)`}
+        countLabel={countLabel ?? `${buckets.length} result(s)`}
         search={
           <UiInput
             type="text"

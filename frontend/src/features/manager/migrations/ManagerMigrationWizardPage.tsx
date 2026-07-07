@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import PageHeader from "../../../components/PageHeader";
+import { resolveListTableStatus } from "../../../components/list/listTableStatus";
 import {
   createManagerMigration,
   getManagerMigration,
@@ -13,6 +14,7 @@ import {
   startManagerMigration,
   updateManagerMigration,
 } from "../../../api/managerMigrations";
+import ManagerBucketSelectionPanel from "../ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "../S3AccountContext";
 import { useCrossEndpointSelection, useManagerContexts, useManagerSourceBuckets } from "./hooks";
 import { buildPlannedSteps, extractError, isMigrationPrecheckPassed } from "./shared";
@@ -76,6 +78,11 @@ export default function ManagerMigrationWizardPage() {
     if (!needle) return sourceBuckets;
     return sourceBuckets.filter((bucket) => bucket.name.toLowerCase().includes(needle));
   }, [bucketFilter, sourceBuckets]);
+  const bucketTableStatus = resolveListTableStatus({
+    loading: bucketsLoading,
+    error: bucketsError,
+    rowCount: filteredBuckets.length,
+  });
   const summaryBucketMappings = useMemo(
     () =>
       selectedBuckets.map((sourceBucket) => ({
@@ -230,6 +237,10 @@ export default function ManagerMigrationWizardPage() {
       filteredBuckets.forEach((bucket) => next.add(bucket.name));
       return [...next];
     });
+  };
+
+  const clearSelectedBuckets = () => {
+    setSelectedBuckets([]);
   };
 
   const validateStep = (currentStep: WizardStep): boolean => {
@@ -445,52 +456,23 @@ export default function ManagerMigrationWizardPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Source buckets</h3>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {selectedBuckets.length} selected / {sourceBuckets.length}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={bucketFilter}
-                  onChange={(event) => setBucketFilter(event.target.value)}
-                  placeholder="Filter source buckets"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <button
-                  type="button"
-                  onClick={selectFilteredBuckets}
-                  disabled={filteredBuckets.length === 0}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
-                >
-                  Select filtered
-                </button>
-              </div>
-
-              {bucketsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading buckets...</p>}
-
-              <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                {filteredBuckets.map((bucket) => {
-                  const checked = selectedBucketSet.has(bucket.name);
-                  return (
-                    <div key={`wizard-${bucket.name}`} className="rounded-md border border-slate-200 p-2 dark:border-slate-700">
-                      <label className="flex items-center gap-2 ui-caption font-medium text-slate-800 dark:text-slate-100">
-                        <input type="checkbox" checked={checked} onChange={() => toggleBucket(bucket.name)} className="h-4 w-4" />
-                        <span>{bucket.name}</span>
-                      </label>
-                    </div>
-                  );
-                })}
-                {!bucketsLoading && filteredBuckets.length === 0 && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    {sourceBuckets.length === 0 ? "No bucket found for selected source." : "No buckets match current filter."}
-                  </p>
-                )}
-              </div>
-            </div>
+            <ManagerBucketSelectionPanel
+              className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700"
+              description="Select the source buckets to migrate."
+              countLabel={`${selectedBuckets.length} selected / ${sourceBuckets.length}`}
+              filter={bucketFilter}
+              filterPlaceholder="Filter source buckets"
+              onFilterChange={setBucketFilter}
+              buckets={filteredBuckets}
+              selectedBuckets={selectedBucketSet}
+              onToggleBucket={toggleBucket}
+              onSelectFiltered={selectFilteredBuckets}
+              onClearSelection={clearSelectedBuckets}
+              tableStatus={bucketTableStatus}
+              loadingMessage="Loading buckets..."
+              errorMessage="Unable to load buckets."
+              emptyMessage={sourceBuckets.length === 0 ? "No bucket found for selected source." : "No buckets match current filter."}
+            />
           </div>
         )}
 

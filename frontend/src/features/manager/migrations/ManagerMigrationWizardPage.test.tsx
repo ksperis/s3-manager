@@ -72,7 +72,7 @@ describe("ManagerMigrationWizardPage", () => {
     expect(screen.getByText("Target is required.")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
-    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByText("Target prefix/suffix mapping")).toBeInTheDocument();
@@ -147,13 +147,17 @@ describe("ManagerMigrationWizardPage", () => {
     );
 
     await screen.findByText("New migration");
+    expect(screen.getByLabelText("Filter source buckets")).toHaveClass("ui-control");
     await user.type(screen.getByPlaceholderText("Filter source buckets"), "prod");
-    expect(screen.getByRole("checkbox", { name: "logs-prod" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "archive-prod" })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "bucket-a" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select logs-prod" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select archive-prod" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Select bucket-a" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Select filtered" }));
     expect(screen.getByText("2 selected / 3")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("0 selected / 3")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Select filtered" }));
 
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -182,7 +186,7 @@ describe("ManagerMigrationWizardPage", () => {
 
     await screen.findByText("New migration");
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
-    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
@@ -245,7 +249,7 @@ describe("ManagerMigrationWizardPage", () => {
 
     await screen.findByText("New migration");
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
-    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -277,7 +281,7 @@ describe("ManagerMigrationWizardPage", () => {
 
     await screen.findByText("New migration");
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
-    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -332,7 +336,7 @@ describe("ManagerMigrationWizardPage", () => {
 
     await screen.findByText("New migration");
     await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
-    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select bucket-a" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(
