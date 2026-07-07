@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { cx, uiCardMutedClass, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
@@ -13,7 +12,6 @@ import {
   BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
-  BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
   BucketPolicy,
   BucketReplicationConfiguration,
@@ -157,23 +155,10 @@ import {
   type BucketDetailMode,
 } from "./bucketDetail/bucketDetailSurface";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
+import { formatBytes } from "../../utils/format";
 
 function getUserRole(): string | null {
   return readStoredUser()?.role ?? null;
-}
-
-function formatBytes(value?: number | null) {
-  if (value === undefined || value === null) return "-";
-  if (value === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let size = value;
-  let idx = 0;
-  while (size >= 1024 && idx < units.length - 1) {
-    size /= 1024;
-    idx += 1;
-  }
-  const decimals = size >= 10 || idx === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[idx]}`;
 }
 
 function inferBucketAclPreset(acl: BucketAcl | null): string {
@@ -479,7 +464,6 @@ export default function BucketDetailPage({
   const [lifecycleStatus, setLifecycleStatus] = useState<string | null>(null);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
-  const [deletingLifecycle, setDeletingLifecycle] = useState(false);
   const [lifecycleMode, setLifecycleMode] = useState<"simple" | "json">("json");
   const [simpleLifecycleRules, setSimpleLifecycleRules] = useState<SimpleLifecycleRule[]>([
     {
@@ -1462,10 +1446,6 @@ export default function BucketDetailPage({
     return hasContext;
   }, [activeTab, canViewBucketMetrics, hasAccountContext, hasContext, isCephAdmin]);
 
-  const updateSimpleLifecycleRule = (index: number, patch: Partial<SimpleLifecycleRule>) => {
-    setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
-  };
-
   const describeLifecycleActions = (rule: LifecycleRuleRecord): string => {
     const actions: string[] = [];
     const expiration = rule.Expiration as Record<string, unknown> | undefined;
@@ -1547,12 +1527,6 @@ export default function BucketDetailPage({
     const next = updater(current);
     await persistLifecycleRules(next);
     await loadLifecycle();
-  };
-
-  const disableRuleAt = async (index: number) => {
-    await updateLifecycleRules((rules) =>
-      rules.map((rule, idx) => (idx === index ? { ...rule, Status: "Disabled" } : rule))
-    );
   };
 
   const deleteRuleAt = async (index: number) => {
@@ -2185,7 +2159,7 @@ export default function BucketDetailPage({
         : await putBucketPolicy(accountId, bucketName, parsed);
       setPolicy(saved);
       setPolicyText(JSON.stringify(saved.policy ?? parsed, null, 2));
-    } catch (err) {
+    } catch {
       setPolicyError("Invalid or unsaved policy (JSON required).");
     } finally {
       setSavingPolicy(false);
@@ -2208,7 +2182,7 @@ export default function BucketDetailPage({
         : await putBucketCors(accountId, bucketName, parsed as Record<string, unknown>[]);
       setCors(saved);
       setCorsText(JSON.stringify(saved.rules ?? parsed, null, 2));
-    } catch (err) {
+    } catch {
       setCorsError("Invalid or unsaved CORS (JSON array required).");
     } finally {
       setSavingCors(false);
@@ -2256,7 +2230,7 @@ export default function BucketDetailPage({
       setEncryption({ rules: rules as Record<string, unknown>[] });
       setEncryptionText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
       setEncryptionStatus(rules.length > 0 ? "Bucket encryption updated." : "Bucket encryption disabled.");
-    } catch (err) {
+    } catch {
       setEncryptionError("Invalid or unsaved bucket encryption configuration (JSON array required).");
     } finally {
       setSavingEncryption(false);
@@ -2437,7 +2411,7 @@ export default function BucketDetailPage({
     setNotificationsStatus(null);
     try {
       parsed = notificationText.trim() ? JSON.parse(notificationText) : {};
-    } catch (err) {
+    } catch {
       setNotificationsError("Notifications must be valid JSON.");
       return;
     }
@@ -2652,7 +2626,7 @@ export default function BucketDetailPage({
             return;
           }
           routingRules = parsed as Record<string, unknown>[];
-        } catch (err) {
+        } catch {
           setWebsiteError("Routing rules must be valid JSON.");
           return;
         }
