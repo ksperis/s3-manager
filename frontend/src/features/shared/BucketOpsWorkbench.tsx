@@ -176,6 +176,7 @@ import {
   advancedFilterAccordionClass,
   advancedFilterBackdropClass,
   advancedFilterBodyClass,
+  advancedFilterControlClass,
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
   advancedFilterFieldCardClass,
@@ -8402,9 +8403,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     onKeyDown={(event) => event.stopPropagation()}
                                     aria-label="Filter contexts"
                                     placeholder="Filter contexts"
-                                    className={`min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                      contextFieldState.fieldClass
-                                    }`}
+                                    className={advancedFilterControlClass(`min-w-0 flex-1 px-2 py-1 font-normal ${contextFieldState.fieldClass}`)}
                                   />
                                   <UiButton
                                     type="button"
@@ -8500,9 +8499,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     onKeyDown={(event) => event.stopPropagation()}
                                     aria-label="Filter endpoints"
                                     placeholder="Filter endpoints"
-                                    className={`min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                      endpointFieldState.fieldClass
-                                    }`}
+                                    className={advancedFilterControlClass(`min-w-0 flex-1 px-2 py-1 font-normal ${endpointFieldState.fieldClass}`)}
                                   />
                                   <UiButton
                                     type="button"
@@ -8611,9 +8608,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 onKeyDown={(event) => event.stopPropagation()}
                                 placeholder="tenant-a, tenant-b"
                                 rows={2}
-                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                  tenantFieldState.fieldClass
-                                }`}
+                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${tenantFieldState.fieldClass}`)}
                               />
                             </div>
 
@@ -8652,9 +8647,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 onKeyDown={(event) => event.stopPropagation()}
                                 placeholder="owner uid(s)"
                                 rows={2}
-                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                  ownerFieldState.fieldClass
-                                }`}
+                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${ownerFieldState.fieldClass}`)}
                               />
                             </div>
 
@@ -8694,16 +8687,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                   onKeyDown={(event) => event.stopPropagation()}
                                   placeholder="display name(s)"
                                   rows={2}
-                                  className={`w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                    ownerNameFieldState.fieldClass
-                                  }`}
+                                  className={advancedFilterControlClass(`w-full resize-y px-2 py-1.5 font-normal ${ownerNameFieldState.fieldClass}`)}
                                 />
                                 <select
                                   value={advancedDraft.ownerNameScope}
                                   onChange={(e) => setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: e.target.value as OwnerNameScope }))}
-                                  className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                    ownerNameFieldState.fieldClass
-                                  }`}
+                                  className={advancedFilterControlClass(`px-2 py-1.5 font-normal ${ownerNameFieldState.fieldClass}`)}
                                   title="Owner entity scope"
                                 >
                                   <option value="any">Accounts + Users</option>
@@ -8730,9 +8719,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                     ownerSuspended: e.target.value as BooleanFilterState,
                                   }))
                                 }
-                                className={`mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                  ownerSuspendedFieldState.fieldClass
-                                }`}
+                                className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 font-normal ${ownerSuspendedFieldState.fieldClass}`)}
                               >
                                 {BOOLEAN_FILTER_OPTIONS.map((option) => (
                                   <option key={option.value} value={option.value}>
@@ -8777,9 +8764,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                 onKeyDown={(event) => event.stopPropagation()}
                                 placeholder="env=prod, team=storage"
                                 rows={2}
-                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                  s3TagsFieldState.fieldClass
-                                }`}
+                                className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${s3TagsFieldState.fieldClass}`)}
                               />
                               <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                                 Comma or newline separated expressions. Format examples: <code>key=value</code>, <code>env</code>.

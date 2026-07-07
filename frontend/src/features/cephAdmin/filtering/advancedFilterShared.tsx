@@ -61,6 +61,16 @@ export const advancedFilterAccordionClass =
 export const advancedFilterFieldCardClass = (className: string = "") =>
   `rounded-lg border border-slate-200 p-3 dark:border-slate-700${className ? ` ${className}` : ""}`;
 
+const advancedFilterControlBaseClass =
+  "rounded-md border border-slate-200 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+
+export const advancedFilterControlClass = (className: string = "", disabled: boolean = false) => {
+  const disabledClass = disabled
+    ? " disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+    : "";
+  return `${advancedFilterControlBaseClass}${disabledClass}${className ? ` ${className}` : ""}`;
+};
+
 export const advancedFilterMatchModeButtonClass = (active: boolean, locked: boolean = false) => {
   if (locked) {
     if (active) {

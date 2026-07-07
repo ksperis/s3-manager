@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import {
+  advancedFilterControlClass,
   advancedFilterFieldCardClass,
   advancedFilterMatchModeButtonClass,
   advancedFilterSummaryChipClass,
@@ -33,6 +34,12 @@ describe("advancedFilterShared", () => {
     expect(advancedFilterFieldCardClass("md:col-span-2")).toBe(
       "rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2"
     );
+  });
+
+  it("returns stable advanced-filter control classes", () => {
+    expect(advancedFilterControlClass()).toContain("focus:ring-primary/30");
+    expect(advancedFilterControlClass("mt-2 w-full")).toContain("mt-2 w-full");
+    expect(advancedFilterControlClass("", true)).toContain("disabled:cursor-not-allowed");
   });
 
   it("returns stable advanced-filter status badges and summary chip classes", () => {

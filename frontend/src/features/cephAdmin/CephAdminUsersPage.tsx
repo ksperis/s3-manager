@@ -26,6 +26,7 @@ import {
   INACTIVE_ADVANCED_PROGRESS,
   advancedFilterBackdropClass,
   advancedFilterBodyClass,
+  advancedFilterControlClass,
   advancedFilterDrawerClass,
   advancedFilterFooterClass,
   advancedFilterFieldCardClass,
@@ -1330,7 +1331,7 @@ export default function CephAdminUsersPage() {
                                     onKeyDown={(event) => event.stopPropagation()}
                                     placeholder={field.placeholder}
                                     rows={2}
-                                    className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${field.fieldState.fieldClass}`}
+                                    className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${field.fieldState.fieldClass}`)}
                                   />
                                 </div>
                               ))}
@@ -1347,7 +1348,7 @@ export default function CephAdminUsersPage() {
                                 <select
                                   value={advancedDraft.suspended}
                                   onChange={(e) => updateAdvancedField("suspended", e.target.value as AdvancedStatusFilter)}
-                                  className={`mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${suspendedFieldState.fieldClass}`}
+                                  className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 ${suspendedFieldState.fieldClass}`)}
                                 >
                                   <option value="any">Any</option>
                                   <option value="active">Active</option>
@@ -1375,7 +1376,7 @@ export default function CephAdminUsersPage() {
                                     type="number"
                                     value={advancedDraft[field.key]}
                                     onChange={(e) => updateAdvancedField(field.key, e.target.value)}
-                                    className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
+                                    className={advancedFilterControlClass(`px-2 py-1.5 ${numericFieldStates[field.key].fieldClass}`)}
                                   />
                                 </label>
                               ))}
@@ -1400,7 +1401,7 @@ export default function CephAdminUsersPage() {
                                         min="0"
                                         value={advancedDraft[field.key]}
                                         onChange={(e) => updateAdvancedField(field.key, e.target.value)}
-                                        className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
+                                        className={advancedFilterControlClass(`px-2 py-1.5 ${numericFieldStates[field.key].fieldClass}`)}
                                       />
                                     </label>
                                   ))}
