@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BucketIntegrityCheckPayload, BucketIntegrityResult } from "../../api/bucketIntegrity";
+import type { BucketIntegrityCheckPayload, BucketIntegrityProgress, BucketIntegrityResult } from "../../api/bucketIntegrity";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 
 const streamManagerBucketIntegrityCheckMock = vi.fn();
@@ -163,6 +163,48 @@ describe("BucketIntegrityCheckModal results", () => {
     payload = streamManagerBucketIntegrityCheckMock.mock.calls[0][1] as BucketIntegrityCheckPayload;
     expect(payload.check_mode).toBe("get");
     expect(payload.max_mb_per_object).toBe(1.5);
+  });
+
+  it("renders streamed progress with an accessible progressbar", async () => {
+    const progressEvent: BucketIntegrityProgress = {
+      request_id: "progress-1",
+      stage: "verify",
+      bucket_name: "bucket-a",
+      context_id: "ctx-1",
+      context_name: "Context 1",
+      total_buckets: 2,
+      completed_buckets: 1,
+      listed_count: 10,
+      checked_count: 5,
+      failed_count: 1,
+      bytes_read: 2048,
+    };
+    streamManagerBucketIntegrityCheckMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const options = args[2] as { onProgress?: (event: BucketIntegrityProgress) => void };
+      options.onProgress?.(progressEvent);
+      return buildIntegrityResult();
+    });
+
+    const user = userEvent.setup();
+    render(
+      <BucketIntegrityCheckModal
+        mode="manager"
+        contextId="ctx-1"
+        contextName="Context 1"
+        targets={[{ bucketName: "bucket-a" }, { bucketName: "bucket-b" }]}
+        onClose={() => undefined}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Run check" }));
+
+    expect(await screen.findByText("bucket-a - verify")).toBeInTheDocument();
+    expect(screen.getByText("5 / 10 objects - 2.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2 buckets completed - 1 errors")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Bucket integrity progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "50"
+    );
   });
 
   it("filters bucket results by object text, status, and error state", async () => {

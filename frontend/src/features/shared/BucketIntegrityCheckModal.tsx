@@ -17,6 +17,7 @@ import {
 } from "../../api/bucketIntegrity";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 
 export type BucketIntegrityUiTarget = {
@@ -374,12 +375,12 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
                 {formatNumber(progress.checked_count)} / {formatNumber(progress.listed_count)} objects - {formatBytes(progress.bytes_read)}
               </p>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-                style={{ width: `${progressPercent ?? 100}%` }}
-              />
-            </div>
+            <UiProgressBar
+              value={progressPercent ?? 100}
+              label="Bucket integrity progress"
+              className="mt-2 h-2 overflow-hidden bg-slate-200 dark:bg-slate-800"
+              barClassName="bg-primary transition-[width] duration-150 ease-out"
+            />
             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
               {formatNumber(progress.completed_buckets)} / {formatNumber(progress.total_buckets)} buckets completed
               {progress.failed_count > 0 ? ` - ${formatNumber(progress.failed_count)} errors` : ""}
