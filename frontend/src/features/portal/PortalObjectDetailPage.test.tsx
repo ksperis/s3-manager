@@ -90,7 +90,7 @@ describe("PortalObjectDetailPage", () => {
     mocks.listPublicLinksMock.mockResolvedValue([]);
   });
 
-  it("renders object detail tabs, simple actions, and unavailable advanced states", async () => {
+  it("renders file detail tabs, simple actions, and unavailable advanced states", async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/portal/storage-spaces/research-data/objects/raw-data/2024/03/sample_001.fastq.gz"]}>
@@ -117,7 +117,7 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByText("AES256")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Events" }));
-    expect(screen.getByText("No object events available.")).toBeInTheDocument();
+    expect(screen.getByText("No file events available.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
@@ -140,14 +140,14 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Create public link" })).toBeDisabled();
     expect(screen.getByText("Only Owners can create public links.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete object" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete file" })).toBeDisabled();
     expect(screen.getByText("Viewers cannot delete files.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Delete object" }));
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
     expect(mocks.deleteObjectMock).not.toHaveBeenCalled();
   });
 
-  it("opens structured dialogs for object delete and public link revoke", async () => {
+  it("opens structured dialogs for file delete and public link revoke", async () => {
     mocks.listPublicLinksMock.mockResolvedValue([
       {
         id: 42,
@@ -173,8 +173,8 @@ describe("PortalObjectDetailPage", () => {
     );
 
     expect(await screen.findByText("hello content")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Delete object" }));
-    const deleteDialog = screen.getByRole("dialog", { name: "Delete object" });
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete file" });
     expect(within(deleteDialog).getByText("raw-data/2024/03/sample_001.fastq.gz")).toBeInTheDocument();
     expect(within(deleteDialog).getByText("This action cannot be undone from the Portal.")).toBeInTheDocument();
     await user.click(within(deleteDialog).getByRole("button", { name: "Cancel" }));

@@ -278,7 +278,7 @@ describe("PortalUsagePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
 
     expect(screen.getByText("Storage Spaces (volume)")).toBeInTheDocument();
-    expect(screen.getByText("Storage Spaces (objects)")).toBeInTheDocument();
+    expect(screen.getByText("Storage Spaces (files)")).toBeInTheDocument();
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
@@ -355,7 +355,7 @@ describe("PortalUsagePage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
     expect(screen.getByText("No Storage Space volume metrics available.")).toBeInTheDocument();
-    expect(screen.getByText("No Storage Space object metrics available.")).toBeInTheDocument();
+    expect(screen.getByText("No Storage Space file metrics available.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
     expect(await screen.findByText("usage stats disabled")).toBeInTheDocument();

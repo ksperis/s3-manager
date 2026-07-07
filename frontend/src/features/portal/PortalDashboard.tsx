@@ -327,7 +327,7 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
           <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(92px,0.8fr)_minmax(72px,0.5fr)] gap-3 text-[11px] font-semibold leading-4 text-[var(--ui-text-muted)]">
             <span>{t({ en: "Storage space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
             <span>{t({ en: "Storage", fr: "Stockage", de: "Speicher" })}</span>
-            <span className="text-right">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</span>
+            <span className="text-right">{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</span>
           </div>
           {rows.map((row) => (
             <div
@@ -585,12 +585,12 @@ export default function PortalDashboard() {
       to: "/portal/storage-spaces",
     },
     objects: {
-      label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
+      label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }),
       value: workspace.usedObjects,
       quota: workspace.quotaObjects,
-      unitLabel: t({ en: "objects", fr: "objets", de: "Objekte" }),
-      knownDetail: t({ en: "Tracked objects", fr: "Objets suivis", de: "Erfasste Objekte" }),
-      progressLabel: t({ en: "Portal object quota usage", fr: "Utilisation du quota d'objets Portal", de: "Portal-Objektquotennutzung" }),
+      unitLabel: t({ en: "files", fr: "fichiers", de: "Dateien" }),
+      knownDetail: t({ en: "Tracked files", fr: "Fichiers suivis", de: "Erfasste Dateien" }),
+      progressLabel: t({ en: "Portal file quota usage", fr: "Utilisation du quota de fichiers Portal", de: "Portal-Dateiquotennutzung" }),
       trendBaseline: objectsTrendBaseline,
       trendBaselineValue: objectsTrendBaseline?.used_objects,
       quotaOfLabel,

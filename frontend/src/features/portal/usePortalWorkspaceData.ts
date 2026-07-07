@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ManagerTrafficStats, ManagerUsageTrendsResponse, TrafficWindow } from "../../api/stats";
 import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import {
@@ -128,6 +128,10 @@ export function usePortalWorkspaceData({
   const [usageError, setUsageError] = useState<string | null>(null);
   const [usageTrendsError, setUsageTrendsError] = useState<string | null>(null);
   const [trafficError, setTrafficError] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refreshWorkspaceData = useCallback(() => {
+    setRefreshToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,7 +171,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, t]);
+  }, [accountIdForApi, hasAccountContext, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,7 +211,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeArchived, t]);
+  }, [accountIdForApi, hasAccountContext, includeArchived, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,7 +251,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, t]);
+  }, [accountIdForApi, hasAccountContext, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -287,7 +291,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeUsageTrends, t]);
+  }, [accountIdForApi, hasAccountContext, includeUsageTrends, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,7 +359,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeTraffic, includeTrafficTrend, t, trafficWindow]);
+  }, [accountIdForApi, hasAccountContext, includeTraffic, includeTrafficTrend, refreshToken, t, trafficWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -381,7 +385,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, includeHealth]);
+  }, [accountIdForApi, hasAccountContext, includeHealth, refreshToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -407,7 +411,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext]);
+  }, [accountIdForApi, hasAccountContext, refreshToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,7 +437,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext]);
+  }, [accountIdForApi, hasAccountContext, refreshToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,7 +463,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext]);
+  }, [accountIdForApi, hasAccountContext, refreshToken]);
 
   useEffect(() => {
     if (!accountIdForApi) {
@@ -564,5 +568,6 @@ export function usePortalWorkspaceData({
     usageError,
     usageTrendsError,
     trafficError,
+    refreshWorkspaceData,
   };
 }

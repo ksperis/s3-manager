@@ -161,7 +161,7 @@ export default function PortalSettingsPage() {
     event?.preventDefault();
     if (!settings) return;
     if (!Number.isInteger(settings.portal.max_portal_user_access_keys) || settings.portal.max_portal_user_access_keys < 1) {
-      setError("Max IAM user keys per portal user must be a positive integer.");
+      setError("Max S3 access keys per portal user must be a positive integer.");
       return;
     }
     setSaving(true);
@@ -243,7 +243,7 @@ export default function PortalSettingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Portal settings"
-        description="Configure portal behavior."
+        description="Configure Portal self-service behavior and storage projections."
         breadcrumbs={adminBreadcrumbs({ label: "Portal" }, { label: "Settings" })}
         rightContent={
           <div className="flex flex-wrap gap-2">
@@ -283,20 +283,20 @@ export default function PortalSettingsPage() {
               }
             />
             <SettingsItem
-              title="Named bucket creation"
-              description="Allow the portal create form to create a locked Storage Space whose bucket name is based on the submitted name."
+              title="Named storage creation"
+              description="Allow the Portal create form to create a locked Storage Space whose backing storage name is based on the submitted name."
               action={
                 <SettingsToggleAction
                   checked={portalNamedBucketCreateEnabled}
                   onChange={(value) => handleToggleAllowPortalNamedBucketCreate(value)}
                   disabled={!settings}
-                  ariaLabel="Portal named bucket creation"
+                  ariaLabel="Portal named storage creation"
                 />
               }
             />
             <SettingsItem
               title="Access key management"
-              description="Allow portal users to create and delete their own IAM user keys from the portal."
+              description="Allow Portal users to create and delete their own S3 access keys from the Portal."
               action={
                 <SettingsToggleAction
                   checked={portalAccessKeyCreateEnabled}
@@ -307,8 +307,8 @@ export default function PortalSettingsPage() {
               }
             />
             <SettingsItem
-              title="Max IAM user keys per portal user"
-              description="Global limit for IAM user access keys created from the portal."
+              title="Max S3 access keys per portal user"
+              description="Global limit for S3 access keys created from the Portal."
               action={
                 <input
                   type="number"
@@ -317,7 +317,7 @@ export default function PortalSettingsPage() {
                   value={portalMaxAccessKeys}
                   onChange={(e) => handleMaxPortalUserAccessKeysChange(e.target.value)}
                   disabled={!settings}
-                  aria-label="Max IAM user keys per portal user"
+                  aria-label="Max S3 access keys per portal user"
                   className={`w-28 ${settingsCompactInputClassName}`}
                 />
               }
@@ -326,14 +326,14 @@ export default function PortalSettingsPage() {
         </SettingsCard>
         <SettingsCard>
           <SettingsSection
-            title="IAM POLICIES"
-            description="Action lists applied to portal IAM groups and bucket access."
+            title="STORAGE ACCESS PROJECTIONS"
+            description="Action lists used by Portal IAM bootstrap groups and Storage Space access projections."
             layout="stack"
           >
             <div className="grid gap-x-6 md:grid-cols-2 md:[&>*:nth-child(2)]:border-t-0 md:[&>*:nth-child(2)]:pt-0">
               <SettingsItem
-                title="Policy portal-manager"
-                description="Actions granted to the portal-manager IAM group."
+                title="Portal manager bootstrap policy"
+                description="Actions granted to the portal-manager IAM group before Storage Space-specific projections are applied."
                 action={
                   <button
                     type="button"
@@ -357,8 +357,8 @@ export default function PortalSettingsPage() {
                 </div>
               </SettingsItem>
               <SettingsItem
-                title="Policy portal-user"
-                description="Actions granted to the portal-user IAM group."
+                title="Portal user bootstrap policy"
+                description="Actions granted to the portal-user IAM group before Storage Space-specific projections are applied."
                 action={
                   <button
                     type="button"
@@ -383,8 +383,8 @@ export default function PortalSettingsPage() {
               </SettingsItem>
             </div>
             <SettingsItem
-              title="Policy bucket access"
-              description="Actions added when granting a portal user access to a bucket."
+              title="Storage Space access policy"
+              description="Actions projected when a Portal grant gives a user access to a Storage Space."
               action={
                 <button
                   type="button"
@@ -406,7 +406,7 @@ export default function PortalSettingsPage() {
                   disabled={!settings}
                 />
                 <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  Storage Space grant projections receive bucket resources automatically from Portal grants.
+                  Storage Space grant projections receive storage resources automatically from Portal grants.
                 </p>
               </div>
             </SettingsItem>
@@ -414,13 +414,13 @@ export default function PortalSettingsPage() {
         </SettingsCard>
         <SettingsCard>
           <SettingsSection
-            title="BUCKET DEFAULTS"
-            description="Defaults applied when a bucket is created from the portal."
+            title="STORAGE DEFAULTS"
+            description="Defaults applied when backing storage is created from the Portal."
             layout="grid"
           >
             <SettingsItem
               title="Versioning"
-              description="Enable bucket versioning by default."
+              description="Enable versioning by default on newly provisioned Portal storage."
               action={
                 <SettingsToggleAction
                   checked={bucketVersioningEnabled}
@@ -444,7 +444,7 @@ export default function PortalSettingsPage() {
             />
             <SettingsItem
               title="Portal CORS"
-              description="Apply a CORS rule to allow the portal UI to access the bucket."
+              description="Apply a CORS rule to allow the Portal UI to access Storage Space backing storage."
               action={
                 <SettingsToggleAction
                   checked={bucketCorsEnabled}
@@ -456,7 +456,7 @@ export default function PortalSettingsPage() {
             />
             <SettingsItem
               title="CORS allowed origins"
-              description="One URL per line. These origins are added to the portal bucket CORS rule."
+              description="One URL per line. These origins are added to the Portal CORS rule."
               className="md:col-span-2"
             >
               <textarea

@@ -290,7 +290,7 @@ describe("PortalDashboard storage workspace UX", () => {
 
     expect(screen.getByRole("link", { name: /Storage used/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: /Storage spaces 1 1 \/ 4 spaces/ })).toHaveAttribute("href", "/portal/storage-spaces");
-    expect(screen.getByRole("link", { name: /Objects/ })).toHaveAttribute("href", "/portal/usage");
+    expect(screen.getByRole("link", { name: /Files/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: /^Transfer\s+384 B/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
       "href",
@@ -405,7 +405,7 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(kpiValue("Storage used")).toBe("0 B");
-    expect(kpiValue("Objects")).toBe("0");
+    expect(kpiValue("Files")).toBe("0");
     expect(kpiValue("Transfer")).toBe("0 B");
     const topStorageSpaces = screen.getByRole("heading", { name: "Top storage spaces" }).closest("section");
     expect(topStorageSpaces).not.toBeNull();

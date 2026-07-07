@@ -64,12 +64,6 @@ function objectName(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-function parentPrefix(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  parts.pop();
-  return parts.length > 0 ? `${parts.join("/")}/` : "";
-}
-
 function FileIcon() {
   return (
     <span className="inline-flex h-14 w-12 items-center justify-center rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] text-[var(--ui-text-muted)] shadow-[var(--ui-shadow-soft)]">
@@ -173,7 +167,7 @@ export default function PortalObjectDetailPage() {
         if (!cancelled) {
           setObjectDetail(null);
           setPublicLinks([]);
-          setObjectError(extractApiError(err, t({ en: "Unable to load object metadata.", fr: "Impossible de charger les métadonnées de l'objet.", de: "Objektmetadaten können nicht geladen werden." })));
+          setObjectError(extractApiError(err, t({ en: "Unable to load file metadata.", fr: "Impossible de charger les métadonnées du fichier.", de: "Dateimetadaten können nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -206,13 +200,13 @@ export default function PortalObjectDetailPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading object...", fr: "Chargement de l'objet...", de: "Objekt wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this object.", fr: "Sélectionnez un compte pour voir cet objet.", de: "Wählen Sie ein Konto aus, um dieses Objekt anzuzeigen." }),
+    loadingMessage: t({ en: "Loading file...", fr: "Chargement du fichier...", de: "Datei wird geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view this file.", fr: "Sélectionnez un compte pour voir ce fichier.", de: "Wählen Sie ein Konto aus, um diese Datei anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   if (!space || !objectPath) {
-    return <PortalPageState>{t({ en: "Object not available.", fr: "Objet indisponible.", de: "Objekt nicht verfügbar." })}</PortalPageState>;
+    return <PortalPageState>{t({ en: "File not available.", fr: "Fichier indisponible.", de: "Datei nicht verfügbar." })}</PortalPageState>;
   }
 
   const displayPath = object.path;
@@ -311,7 +305,7 @@ export default function PortalObjectDetailPage() {
       setDownloadMessage(t({ en: `${result.filename} downloaded.`, fr: `${result.filename} téléchargé.`, de: `${result.filename} heruntergeladen.` }));
     } catch (err) {
       console.error(err);
-      const message = extractApiError(err, t({ en: "Unable to download this object.", fr: "Impossible de télécharger cet objet.", de: "Dieses Objekt kann nicht heruntergeladen werden." }));
+      const message = extractApiError(err, t({ en: "Unable to download this file.", fr: "Impossible de télécharger ce fichier.", de: "Diese Datei kann nicht heruntergeladen werden." }));
       failPortalTransfer(transferId, message);
       setDownloadMessage(message);
     } finally {
@@ -335,7 +329,7 @@ export default function PortalObjectDetailPage() {
       }, 250);
     } catch (err) {
       console.error(err);
-      setDownloadMessage(extractApiError(err, t({ en: "Unable to delete this object.", fr: "Impossible de supprimer cet objet.", de: "Dieses Objekt kann nicht gelöscht werden." })));
+      setDownloadMessage(extractApiError(err, t({ en: "Unable to delete this file.", fr: "Impossible de supprimer ce fichier.", de: "Diese Datei kann nicht gelöscht werden." })));
       setPendingAction(null);
       setDeleteBusy(false);
     }
@@ -409,7 +403,7 @@ export default function PortalObjectDetailPage() {
                 <QuickAction label={t({ en: "Download", fr: "Télécharger", de: "Herunterladen" })} onClick={handleDownload} />
                 <QuickAction label={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })} onClick={handleCreatePublicLink} disabled={Boolean(publicLinkUnavailableReason) || linkBusy} reason={publicLinkUnavailableReason} />
                 <QuickAction label={t({ en: "Copy path", fr: "Copier le chemin", de: "Pfad kopieren" })} onClick={copyPath} />
-                <QuickAction label={deleteBusy ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete object", fr: "Supprimer l'objet", de: "Objekt löschen" })} tone="rose" onClick={handleDelete} disabled={Boolean(deleteUnavailableReason) || deleteBusy} reason={deleteUnavailableReason} />
+                <QuickAction label={deleteBusy ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })} tone="rose" onClick={handleDelete} disabled={Boolean(deleteUnavailableReason) || deleteBusy} reason={deleteUnavailableReason} />
               </div>
             </UiCard>
           </section>
@@ -437,7 +431,7 @@ export default function PortalObjectDetailPage() {
                 <table className="ui-data-table min-w-[760px]">
                   <thead>
                     <tr>
-                      <th>{t({ en: "Object", fr: "Objet", de: "Objekt" })}</th>
+                      <th>{t({ en: "File", fr: "Fichier", de: "Datei" })}</th>
                       <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
                       <th>{t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}</th>
                       <th>{t({ en: "Link", fr: "Lien", de: "Link" })}</th>
@@ -463,7 +457,7 @@ export default function PortalObjectDetailPage() {
                     {publicLinks.length === 0 ? (
                       <tr>
                         <td colSpan={5} className={cx("py-5 text-center text-xs font-semibold", uiMutedTextClass)}>
-                          {t({ en: "No public links for this object.", fr: "Aucun lien public pour cet objet.", de: "Keine öffentlichen Links für dieses Objekt." })}
+                          {t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
                         </td>
                       </tr>
                     ) : null}
@@ -505,7 +499,7 @@ export default function PortalObjectDetailPage() {
             ))}
             {objectEvents.length === 0 ? (
               <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                {t({ en: "No object events available.", fr: "Aucun événement disponible pour cet objet.", de: "Keine Objektereignisse verfügbar." })}
+                {t({ en: "No file events available.", fr: "Aucun événement disponible pour ce fichier.", de: "Keine Dateiereignisse verfügbar." })}
               </div>
             ) : null}
           </div>
@@ -514,9 +508,9 @@ export default function PortalObjectDetailPage() {
 
       {pendingAction?.type === "delete-object" ? (
         <ConfirmActionDialog
-          title={t({ en: "Delete object", fr: "Supprimer l'objet", de: "Objekt löschen" })}
+          title={t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })}
           description={t({ en: "Confirm that you want to delete this file.", fr: "Confirmez que vous voulez supprimer ce fichier.", de: "Bestätigen Sie, dass Sie diese Datei löschen möchten." })}
-          confirmLabel={t({ en: "Delete object", fr: "Supprimer l'objet", de: "Objekt löschen" })}
+          confirmLabel={t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })}
           loading={deleteBusy}
           details={[
             { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: object.name || objectName(object.path) },
@@ -524,7 +518,7 @@ export default function PortalObjectDetailPage() {
           ]}
           impacts={[
             t({ en: "The file is permanently removed from this Storage Space.", fr: "Le fichier est supprimé définitivement de cet espace de stockage.", de: "Die Datei wird dauerhaft aus diesem Speicherbereich entfernt." }),
-            t({ en: "Existing public links for this file will stop working once the object is gone.", fr: "Les liens publics existants de ce fichier cesseront de fonctionner après suppression de l'objet.", de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr, sobald das Objekt entfernt wurde." }),
+            t({ en: "Existing public links for this file will stop working once the file is deleted.", fr: "Les liens publics existants de ce fichier cesseront de fonctionner après suppression du fichier.", de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr, sobald die Datei gelöscht wurde." }),
             t({ en: "This action cannot be undone from the Portal.", fr: "Cette action ne peut pas être annulée depuis le Portal.", de: "Diese Aktion kann im Portal nicht rückgängig gemacht werden." }),
           ]}
           onCancel={() => setPendingAction(null)}
@@ -539,12 +533,12 @@ export default function PortalObjectDetailPage() {
           confirmLabel={t({ en: "Revoke link", fr: "Révoquer le lien", de: "Link widerrufen" })}
           loading={linkBusy}
           details={[
-            { label: t({ en: "Object", fr: "Objet", de: "Objekt" }), value: pendingAction.link.object_name },
+            { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: pendingAction.link.object_name },
             { label: t({ en: "Link", fr: "Lien", de: "Link" }), value: pendingAction.link.url, mono: true },
           ]}
           impacts={[
             t({ en: "Anyone using this URL loses access immediately.", fr: "Toute personne utilisant cette URL perd immédiatement l'accès.", de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff." }),
-            t({ en: "The object remains in the Storage Space.", fr: "L'objet reste dans l'espace de stockage.", de: "Das Objekt bleibt im Speicherbereich." }),
+            t({ en: "The file remains in the Storage Space.", fr: "Le fichier reste dans l'espace de stockage.", de: "Die Datei bleibt im Speicherbereich." }),
             t({ en: "You can create a new public link later if sharing is still allowed.", fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.", de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind." }),
           ]}
           onCancel={() => setPendingAction(null)}

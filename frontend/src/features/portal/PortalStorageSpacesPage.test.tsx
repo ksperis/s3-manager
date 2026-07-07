@@ -462,4 +462,34 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByRole("button", { name: "Create storage space" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add existing storage" })).not.toBeInTheDocument();
   });
+
+  it("explains the empty state when a portal user has no spaces and cannot create one", () => {
+    mocks.hookResult.workspace.spaces = [];
+    mocks.hookResult.state = {
+      account_role: "portal_user",
+      can_manage_buckets: false,
+      can_create_storage_spaces: false,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Ask an administrator to add you to a Storage Space/i)).toBeInTheDocument();
+  });
+
+  it("nudges creation from the empty state when creation is available", () => {
+    mocks.hookResult.workspace.spaces = [];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("No Storage Spaces yet. Create one to start storing files.")).toBeInTheDocument();
+  });
 });

@@ -117,7 +117,7 @@ describe("PortalSettingsPage", () => {
   it("sends max portal user keys in save payload", async () => {
     render(<PortalSettingsPage />);
 
-    const input = (await screen.findByLabelText("Max IAM user keys per portal user")) as HTMLInputElement;
+    const input = (await screen.findByLabelText("Max S3 access keys per portal user")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "5" } });
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
@@ -129,10 +129,10 @@ describe("PortalSettingsPage", () => {
     expect(payload.portal.max_portal_user_access_keys).toBe(5);
   });
 
-  it("saves named bucket creation setting without override policy controls", async () => {
+  it("saves named storage creation setting without override policy controls", async () => {
     render(<PortalSettingsPage />);
 
-    fireEvent.click(await screen.findByLabelText("Portal named bucket creation"));
+    fireEvent.click(await screen.findByLabelText("Portal named storage creation"));
     expect(screen.queryByRole("checkbox", { name: "Allow override" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
@@ -150,6 +150,8 @@ describe("PortalSettingsPage", () => {
 
     expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
+    expect(screen.queryByText("Policy bucket access")).not.toBeInTheDocument();
+    expect(screen.getByText("Storage Space access policy")).toBeInTheDocument();
     expect(screen.getByLabelText("Portal user Storage Space creation")).toBeInTheDocument();
   });
 });

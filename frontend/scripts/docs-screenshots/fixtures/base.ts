@@ -1867,6 +1867,120 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "portal-storage-space-access-summary",
+      path: /^\/portal\/storage-spaces\/[^/]+\/access-summary$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const space = PORTAL_STORAGE_SPACES.find((item) => item.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+        const isOwner = space.role === "Owner";
+        return {
+          mode: isOwner ? "restricted" : "private",
+          default_account_member_role: null,
+          owner: {
+            user_id: 3,
+            email: "storage.user@example.com",
+            display_name: "Storage User",
+            role: "Owner",
+            account_role: "portal_user",
+            access_source: "owner",
+          },
+          effective_member_count: isOwner ? 3 : 1,
+          explicit_shares: isOwner
+            ? [
+                {
+                  id: `share-${space.id}-alice`,
+                  storage_space_id: space.id,
+                  storage_space_name: space.name,
+                  user_id: 4,
+                  email: "alice@example.com",
+                  role: "Editor",
+                  direction: "by_me",
+                  activity_label: "2h ago",
+                },
+                {
+                  id: `share-${space.id}-bob`,
+                  storage_space_id: space.id,
+                  storage_space_name: space.name,
+                  user_id: 5,
+                  email: "bob@example.com",
+                  role: "Viewer",
+                  direction: "by_me",
+                  activity_label: "1d ago",
+                },
+              ]
+            : [],
+          public_link_count: isOwner ? 1 : 0,
+          can_manage_access: isOwner,
+          can_create_public_links: isOwner,
+        };
+      },
+    },
+    {
+      id: "portal-share-candidates",
+      path: /^\/portal\/share-candidates$/,
+      body: [
+        {
+          user_id: 4,
+          email: "alice@example.com",
+          display_name: "Alice Martin",
+          account_role: "portal_user",
+          access_source: "direct",
+          already_shared: false,
+        },
+        {
+          user_id: 5,
+          email: "bob@example.com",
+          display_name: "Bob Dubois",
+          account_role: "portal_user",
+          access_source: "group",
+          already_shared: false,
+        },
+        {
+          user_id: 6,
+          email: "chen@example.com",
+          display_name: "Chen Wei",
+          account_role: "portal_user",
+          access_source: "direct_and_group",
+          already_shared: false,
+        },
+      ],
+    },
+    {
+      id: "portal-storage-space-share-candidates",
+      path: /^\/portal\/storage-spaces\/[^/]+\/share-candidates$/,
+      body: ({ url }) => {
+        const spaceId = parseStorageSpaceId(url.pathname);
+        const space = PORTAL_STORAGE_SPACES.find((item) => item.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+        const isOwner = space.role === "Owner";
+        return [
+          {
+            user_id: 4,
+            email: "alice@example.com",
+            display_name: "Alice Martin",
+            account_role: "portal_user",
+            access_source: "direct",
+            already_shared: isOwner,
+          },
+          {
+            user_id: 5,
+            email: "bob@example.com",
+            display_name: "Bob Dubois",
+            account_role: "portal_user",
+            access_source: "group",
+            already_shared: isOwner,
+          },
+          {
+            user_id: 6,
+            email: "chen@example.com",
+            display_name: "Chen Wei",
+            account_role: "portal_user",
+            access_source: "direct_and_group",
+            already_shared: false,
+          },
+        ];
+      },
+    },
+    {
       id: "portal-storage-space-objects",
       path: /^\/portal\/storage-spaces\/[^/]+\/objects$/,
       body: ({ url }) => {

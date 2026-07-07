@@ -144,6 +144,7 @@ export default function PortalStorageSpaceDetailPage() {
     accountLoading,
     accountIdForApi,
     selectedAccount,
+    refreshWorkspaceData = () => undefined,
   } = usePortalWorkspaceData({ includeArchived: true });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
@@ -169,7 +170,7 @@ export default function PortalStorageSpaceDetailPage() {
     setMetadataDescription(space.description);
     setAccessMode(spaceAccessMode);
     setAccessAccountMemberRole(space.accountMemberRole ?? "Editor");
-  }, [space]);
+  }, [space, spaceAccessMode]);
 
   const loadAccessSummary = useCallback(async () => {
     if (!space || !accountIdForApi) {
@@ -191,7 +192,7 @@ export default function PortalStorageSpaceDetailPage() {
     } finally {
       setAccessSummaryLoading(false);
     }
-  }, [accountIdForApi, space?.id, space?.accountMemberRole, t]);
+  }, [accountIdForApi, space, t]);
 
   useEffect(() => {
     void loadAccessSummary();
@@ -222,7 +223,7 @@ export default function PortalStorageSpaceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, accessChanged, accessSummary?.can_manage_access, savedAccessMode, space?.id]);
+  }, [accountIdForApi, accessChanged, accessSummary?.can_manage_access, savedAccessMode, space]);
 
   const handleSaveMetadata = async () => {
     if (!space || !accountIdForApi) return;
@@ -233,6 +234,7 @@ export default function PortalStorageSpaceDetailPage() {
         ...(space.nameEditable ? { name: metadataName.trim() || space.name } : {}),
         description: metadataDescription.trim() || null,
       });
+      refreshWorkspaceData();
       setMessage(t({ en: "Storage Space updated.", fr: "Espace de stockage mis à jour.", de: "Speicherbereich aktualisiert." }));
     } catch (err) {
       console.error(err);
@@ -263,6 +265,7 @@ export default function PortalStorageSpaceDetailPage() {
         account_member_role: change.mode === "account" ? change.accountMemberRole : null,
       });
       setPendingAccessChange(null);
+      refreshWorkspaceData();
       await loadAccessSummary();
       setMessage(t({ en: "Access updated.", fr: "Accès mis à jour.", de: "Zugriff aktualisiert." }));
     } catch (err) {
@@ -354,6 +357,7 @@ export default function PortalStorageSpaceDetailPage() {
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, { archived: false });
+      refreshWorkspaceData();
       setMessage(t({ en: "Storage Space restored.", fr: "Espace de stockage restauré.", de: "Speicherbereich wiederhergestellt." }));
     } catch (err) {
       console.error(err);
@@ -402,6 +406,17 @@ export default function PortalStorageSpaceDetailPage() {
     space.visibility === "shared" &&
     accessSummary?.can_create_public_links
   );
+  const pageDescription = space.description
+    ? t({
+        en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
+        fr: `${space.description} Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`,
+        de: `${space.description} Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
+      })
+    : t({
+        en: `Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
+        fr: `Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`,
+        de: `Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
+      });
 
   const openPublicLinkDialog = (target: PublicLinkTarget) => {
     if (target.bucketName !== lockedBucketName || !canCreatePublicLinks) return;
@@ -494,7 +509,7 @@ export default function PortalStorageSpaceDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={space.name}
-        description={t({ en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`, fr: `${space.description} Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`, de: `${space.description} Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.` })}
+        description={pageDescription}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
         inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>}
         actions={!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access) ? [{
@@ -513,8 +528,8 @@ export default function PortalStorageSpaceDetailPage() {
           detail={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`, fr: `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)`, de: `von ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)` })}
           progress={quotaPercent ?? undefined}
         />
-        <ObjectMetricCard label={t({ en: "Objects", fr: "Objets", de: "Objekte" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
-        <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per object", fr: "par objet", de: "pro Objekt" })} />
+        <ObjectMetricCard label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
+        <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per file", fr: "par fichier", de: "pro Datei" })} />
         <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
       </section>
 
@@ -715,7 +730,7 @@ export default function PortalStorageSpaceDetailPage() {
         </PageBanner>
       ) : !canBrowse ? (
         <PageBanner tone="warning">
-          {t({ en: "File browsing is not available for this private Storage Space. You can still manage its Portal metadata.", fr: "La navigation dans les fichiers n'est pas disponible pour cet espace privé. Vous pouvez toujours gérer sa metadata Portal.", de: "Dateibrowsing ist für diesen privaten Speicherbereich nicht verfügbar. Die Portal-Metadaten können weiterhin verwaltet werden." })}
+          {t({ en: "File browsing is not available for this private Storage Space. You can still manage its Portal details.", fr: "La navigation dans les fichiers n'est pas disponible pour cet espace privé. Vous pouvez toujours gérer ses détails Portal.", de: "Dateibrowsing ist für diesen privaten Speicherbereich nicht verfügbar. Die Portal-Details können weiterhin verwaltet werden." })}
         </PageBanner>
       ) : browserAvailable ? (
         <div className="min-h-[520px] h-[min(72vh,760px)]">
@@ -877,7 +892,7 @@ export default function PortalStorageSpaceDetailPage() {
           ]}
           impacts={[
             t({ en: "This person loses direct access immediately.", fr: "Cette personne perd immédiatement son accès direct.", de: "Diese Person verliert sofort den direkten Zugriff." }),
-            t({ en: "Files and objects in the Storage Space are not deleted.", fr: "Les fichiers et objets de l'espace de stockage ne sont pas supprimés.", de: "Dateien und Objekte im Speicherbereich werden nicht gelöscht." }),
+            t({ en: "Files in the Storage Space are not deleted.", fr: "Les fichiers de l'espace de stockage ne sont pas supprimés.", de: "Dateien im Speicherbereich werden nicht gelöscht." }),
           ]}
           onCancel={() => setPendingAccessRevoke(null)}
           onConfirm={() => confirmAccessRevoke(pendingAccessRevoke)}
@@ -896,7 +911,7 @@ export default function PortalStorageSpaceDetailPage() {
           ]}
           impacts={[
             t({ en: "The Storage Space is removed from active file work until it is restored.", fr: "L'espace de stockage est retiré des fichiers actifs jusqu'à sa restauration.", de: "Der Speicherbereich wird bis zur Wiederherstellung aus der aktiven Dateiarbeit entfernt." }),
-            t({ en: "Existing objects are kept and are not deleted.", fr: "Les objets existants sont conservés et ne sont pas supprimés.", de: "Bestehende Objekte bleiben erhalten und werden nicht gelöscht." }),
+            t({ en: "Existing files are kept and are not deleted.", fr: "Les fichiers existants sont conservés et ne sont pas supprimés.", de: "Bestehende Dateien bleiben erhalten und werden nicht gelöscht." }),
             t({ en: "Public links and file access are suspended while archived.", fr: "Les liens publics et l'accès aux fichiers sont suspendus pendant l'archivage.", de: "Öffentliche Links und Dateizugriff sind während der Archivierung ausgesetzt." }),
           ]}
           warning={t({ en: "Archiving is reversible from this settings section.", fr: "L'archivage est réversible depuis cette section de paramètres.", de: "Die Archivierung kann in diesem Einstellungsbereich rückgängig gemacht werden." })}

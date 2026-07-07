@@ -42,15 +42,9 @@ import {
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-const tabs = [
-  { id: "with" },
-  { id: "by" },
-  { id: "links" },
-] as const;
-
 const roles: PortalStorageSpaceRole[] = ["Viewer", "Editor", "Owner"];
 
-type ShareTab = (typeof tabs)[number]["id"];
+type ShareTab = "with" | "by" | "links";
 type PendingShareAction =
   | { type: "revoke-share"; share: ShareRow }
   | { type: "revoke-public-link"; link: PortalPublicLink };
@@ -493,7 +487,7 @@ export default function PortalSharesPage() {
               <thead className="max-md:hidden">
                 <tr>
                   <th>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</th>
-                  <th>{t({ en: "Object", fr: "Objet", de: "Objekt" })}</th>
+                  <th>{t({ en: "File", fr: "Fichier", de: "Datei" })}</th>
                   <th>{t({ en: "Status", fr: "Statut", de: "Status" })}</th>
                   <th>{t({ en: "Expires", fr: "Expire", de: "Läuft ab" })}</th>
                   <th>{t({ en: "URL", fr: "URL", de: "URL" })}</th>
@@ -508,7 +502,7 @@ export default function PortalSharesPage() {
                       {link.storage_space_name}
                     </td>
                     <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Object", fr: "Objet", de: "Objekt" })}</span>
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</span>
                       {link.object_name}
                     </td>
                     <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
@@ -634,7 +628,7 @@ export default function PortalSharesPage() {
           ]}
           impacts={[
             t({ en: "This person loses access to the Storage Space immediately.", fr: "Cette personne perd immédiatement l'accès à l'espace de stockage.", de: "Diese Person verliert sofort den Zugriff auf den Speicherbereich." }),
-            t({ en: "Files and objects in the Storage Space are not deleted.", fr: "Les fichiers et objets de l'espace de stockage ne sont pas supprimés.", de: "Dateien und Objekte im Speicherbereich werden nicht gelöscht." }),
+            t({ en: "Files in the Storage Space are not deleted.", fr: "Les fichiers de l'espace de stockage ne sont pas supprimés.", de: "Dateien im Speicherbereich werden nicht gelöscht." }),
             t({ en: "You can share the Storage Space again later if needed.", fr: "Vous pourrez repartager l'espace de stockage plus tard si nécessaire.", de: "Sie können den Speicherbereich später bei Bedarf erneut freigeben." }),
           ]}
           onCancel={() => setPendingAction(null)}
@@ -649,13 +643,13 @@ export default function PortalSharesPage() {
           confirmLabel={t({ en: "Revoke link", fr: "Révoquer le lien", de: "Link widerrufen" })}
           loading={busyShareId === `public-link-${pendingAction.link.id}`}
           details={[
-            { label: t({ en: "Object", fr: "Objet", de: "Objekt" }), value: pendingAction.link.object_name },
+            { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: pendingAction.link.object_name },
             { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: pendingAction.link.storage_space_name },
             { label: t({ en: "Link", fr: "Lien", de: "Link" }), value: pendingAction.link.url, mono: true },
           ]}
           impacts={[
             t({ en: "Anyone using this URL loses access immediately.", fr: "Toute personne utilisant cette URL perd immédiatement l'accès.", de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff." }),
-            t({ en: "The object remains in the Storage Space.", fr: "L'objet reste dans l'espace de stockage.", de: "Das Objekt bleibt im Speicherbereich." }),
+            t({ en: "The file remains in the Storage Space.", fr: "Le fichier reste dans l'espace de stockage.", de: "Die Datei bleibt im Speicherbereich." }),
             t({ en: "You can create a new public link later if sharing is still allowed.", fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.", de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind." }),
           ]}
           onCancel={() => setPendingAction(null)}

@@ -371,7 +371,7 @@ export default function PortalStorageSpacesPage() {
             <option value="name">{t({ en: "Name", fr: "Nom", de: "Name" })}</option>
             <option value="-created_at">{t({ en: "Newest", fr: "Plus récents", de: "Neueste" })}</option>
             <option value="-used_bytes">{t({ en: "Usage", fr: "Utilisation", de: "Nutzung" })}</option>
-            <option value="-object_count">{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</option>
+            <option value="-object_count">{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</option>
           </select>
         </div>
         <div className="overflow-x-auto max-md:overflow-visible">
@@ -380,7 +380,7 @@ export default function PortalStorageSpacesPage() {
               <tr>
                 <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
                 <th>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</th>
-                <th>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</th>
+                <th>{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</th>
                 <th>{t({ en: "Size", fr: "Taille", de: "Größe" })}</th>
                 <th>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</th>
                 <th>{t({ en: "Region", fr: "Région", de: "Region" })}</th>
@@ -413,7 +413,7 @@ export default function PortalStorageSpacesPage() {
                       </div>
                     </td>
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Objects", fr: "Objets", de: "Objekte" })}</span>
+                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</span>
                       {formatCompactNumber(space.objectCount)}
                     </td>
                     <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
@@ -439,7 +439,17 @@ export default function PortalStorageSpacesPage() {
               {filteredSpaces.length === 0 ? (
                 <tr className="max-md:block max-md:w-full">
                   <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
-                    {t({ en: "No Storage Spaces to display.", fr: "Aucun espace de stockage à afficher.", de: "Keine Speicherbereiche zum Anzeigen." })}
+                    {canCreate
+                      ? t({
+                          en: "No Storage Spaces yet. Create one to start storing files.",
+                          fr: "Aucun espace de stockage pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
+                          de: "Noch keine Speicherbereiche. Erstellen Sie einen, um Dateien zu speichern.",
+                        })
+                      : t({
+                          en: "No Storage Spaces are available. Ask an administrator to add you to a Storage Space or enable creation for your account.",
+                          fr: "Aucun espace de stockage n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
+                          de: "Es sind keine Speicherbereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Speicherbereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
+                        })}
                   </td>
                 </tr>
               ) : null}
@@ -447,7 +457,13 @@ export default function PortalStorageSpacesPage() {
           </table>
         </div>
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
-          <span>{filteredSpaces.length} of {workspace.spaces.length}</span>
+          <span>
+            {t({
+              en: `${filteredSpaces.length} of ${workspace.spaces.length}`,
+              fr: `${filteredSpaces.length} sur ${workspace.spaces.length}`,
+              de: `${filteredSpaces.length} von ${workspace.spaces.length}`,
+            })}
+          </span>
         </div>
       </UiCard>
     </div>

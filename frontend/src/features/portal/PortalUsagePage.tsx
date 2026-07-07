@@ -299,7 +299,7 @@ export default function PortalUsagePage() {
       {activeTab === "storage" ? (
         <MetricsSummaryCard
           title={t({ en: "Storage snapshot", fr: "Instantané du stockage", de: "Speichermomentaufnahme" })}
-          description={t({ en: "Current storage, object and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des objets et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Objekt- und Quotennutzung für dieses Portal-Konto." })}
+          description={t({ en: "Current storage, file and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des fichiers et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Datei- und Quotennutzung für dieses Portal-Konto." })}
         >
           {usageError ? (
             <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles du workspace restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
@@ -312,9 +312,9 @@ export default function PortalUsagePage() {
               loading={usageLoading}
             />
             <MetricsSnapshotCard
-              label={t({ en: "Objects", fr: "Objets", de: "Objekte" })}
+              label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
               value={formatCompactNumber(totalObjects)}
-              hint={objectQuotaPercent == null ? (totalObjects == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })) : t({ en: `${formatPercentage(objectQuotaPercent)} of object quota`, fr: `${formatPercentage(objectQuotaPercent)} du quota d'objets`, de: `${formatPercentage(objectQuotaPercent)} der Objektquote` })}
+              hint={objectQuotaPercent == null ? (totalObjects == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })) : t({ en: `${formatPercentage(objectQuotaPercent)} of file quota`, fr: `${formatPercentage(objectQuotaPercent)} du quota de fichiers`, de: `${formatPercentage(objectQuotaPercent)} der Dateiquote` })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
@@ -336,7 +336,7 @@ export default function PortalUsagePage() {
       {activeTab === "storage-spaces" ? (
         <MetricsCard
           title={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
-          description={t({ en: "Storage and object composition across the Storage Spaces you can access.", fr: "Composition du stockage et des objets pour les espaces de stockage auxquels vous avez accès.", de: "Speicher- und Objektzusammensetzung der Speicherbereiche, auf die Sie zugreifen können." })}
+          description={t({ en: "Storage and file composition across the Storage Spaces you can access.", fr: "Composition du stockage et des fichiers pour les espaces de stockage auxquels vous avez accès.", de: "Speicher- und Dateizusammensetzung der Speicherbereiche, auf die Sie zugreifen können." })}
         >
           {usageError ? (
             <PageBanner tone="warning">{t({ en: "Per-space usage metrics are unavailable. Stored Storage Space metadata is still shown when present.", fr: "Les métriques par espace sont indisponibles. Les métadonnées d'espace stockées restent affichées si elles existent.", de: "Nutzungsmetriken pro Bereich sind nicht verfügbar. Gespeicherte Metadaten werden weiterhin angezeigt, wenn vorhanden." })}</PageBanner>
@@ -350,11 +350,11 @@ export default function PortalUsagePage() {
               emptyMessage={t({ en: "No Storage Space volume metrics available.", fr: "Aucune métrique de volume disponible par espace de stockage.", de: "Keine Volumenmetriken für Speicherbereiche verfügbar." })}
             />
             <UsageBreakdown
-              title={t({ en: "Storage Spaces (objects)", fr: "Espaces de stockage (objets)", de: "Speicherbereiche (Objekte)" })}
+              title={t({ en: "Storage Spaces (files)", fr: "Espaces de stockage (fichiers)", de: "Speicherbereiche (Dateien)" })}
               loading={usageLoading}
               metric="objects"
               items={storageSpaceItems}
-              emptyMessage={t({ en: "No Storage Space object metrics available.", fr: "Aucune métrique d'objets disponible par espace de stockage.", de: "Keine Objektmetriken für Speicherbereiche verfügbar." })}
+              emptyMessage={t({ en: "No Storage Space file metrics available.", fr: "Aucune métrique de fichiers disponible par espace de stockage.", de: "Keine Dateimetriken für Speicherbereiche verfügbar." })}
             />
           </div>
         </MetricsCard>
@@ -425,7 +425,7 @@ export default function PortalUsagePage() {
                 <MetricsSnapshotCard
                   label={t({ en: "Average storage", fr: "Stockage moyen", de: "Durchschnittlicher Speicher" })}
                   value={formatBytes(billing.storage.avg_bytes)}
-                  hint={t({ en: `${formatCompactNumber(billing.storage.total_objects)} objects`, fr: `${formatCompactNumber(billing.storage.total_objects)} objets`, de: `${formatCompactNumber(billing.storage.total_objects)} Objekte` })}
+                  hint={t({ en: `${formatCompactNumber(billing.storage.total_objects)} files`, fr: `${formatCompactNumber(billing.storage.total_objects)} fichiers`, de: `${formatCompactNumber(billing.storage.total_objects)} Dateien` })}
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard

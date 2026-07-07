@@ -82,6 +82,7 @@ const mocks = vi.hoisted(() => ({
     error: null,
     accountError: null,
     hasAccountContext: true,
+    refreshWorkspaceData: vi.fn(),
   },
 }));
 
@@ -200,6 +201,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].shareScope = "restricted";
     mocks.hookResult.workspace.spaces[0].accountMemberRole = null;
     mocks.hookResult.workspace.spaces[0].archivedAt = null;
+    mocks.hookResult.refreshWorkspaceData.mockClear();
   });
 
   it("embeds the main Browser in locked portal-basic mode for the storage space", () => {
@@ -325,6 +327,7 @@ describe("PortalStorageSpaceDetailPage", () => {
         description: "Updated description",
       });
     });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
   it("shows the unified access panel with collaborators and public link context", async () => {
@@ -361,6 +364,21 @@ describe("PortalStorageSpaceDetailPage", () => {
         account_member_role: "Editor",
       });
     });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes workspace data after restoring an archived storage space", async () => {
+    mocks.hookResult.workspace.spaces[0].status = "Archived";
+    mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", { archived: false });
+    });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
   it("hides the embedded Browser when the storage space is archived", () => {
@@ -394,7 +412,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByRole("heading", { name: "Archive Storage Space" })).toBeInTheDocument();
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
-    expect(screen.getByText("Existing objects are kept and are not deleted.")).toBeInTheDocument();
+    expect(screen.getByText("Existing files are kept and are not deleted.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Archive Storage Space" }));
 
