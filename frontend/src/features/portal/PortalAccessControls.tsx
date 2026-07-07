@@ -8,6 +8,8 @@ import {
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
 import UiBadge from "../../components/ui/UiBadge";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCheckboxClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import {
@@ -89,27 +91,29 @@ export function PortalAccessModeFields({
   const { t } = useI18n();
   return (
     <div className="grid gap-3 md:grid-cols-[190px_150px_minmax(0,1fr)]">
-      <select
-        className="ui-control h-9 py-1.5 text-xs"
+      <UiSelect
+        label={modeLabel}
+        size="compact"
+        className="h-9"
         value={mode}
         onChange={(event) => onModeChange(event.target.value as PortalAccessMode)}
-        aria-label={modeLabel}
         disabled={disabled}
       >
         <option value="private">{portalShareScopeLabel("private", "restricted", t)}</option>
         <option value="account">{portalShareScopeLabel("shared", "account", t)}</option>
         <option value="restricted">{portalShareScopeLabel("shared", "restricted", t)}</option>
-      </select>
-      <select
-        className="ui-control h-9 py-1.5 text-xs"
+      </UiSelect>
+      <UiSelect
+        label={roleLabel}
+        size="compact"
+        className="h-9"
         value={accountMemberRole}
         onChange={(event) => onAccountMemberRoleChange(event.target.value as PortalStorageSpaceAccountMemberRole)}
-        aria-label={roleLabel}
         disabled={disabled || mode !== "account"}
       >
         <option value="Editor">{portalRoleLabel("Editor", t)}</option>
         <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
-      </select>
+      </UiSelect>
       <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
         {portalAccessModeDescription(mode, t)}
       </div>
@@ -149,8 +153,10 @@ export function PortalShareCandidatePicker({
   return (
     <div className="space-y-2">
       <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto]">
-        <input
-          className="ui-control h-9 text-xs"
+        <UiInput
+          label={t({ en: "Eligible users", fr: "Utilisateurs éligibles", de: "Berechtigte Benutzer" })}
+          size="compact"
+          className="h-9"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder={t({ en: "Search eligible Portal users...", fr: "Rechercher des utilisateurs Portal éligibles...", de: "Berechtigte Portal-Benutzer suchen..." })}
@@ -189,8 +195,9 @@ export function PortalShareCandidatePicker({
                 {disabled ? (
                   <UiBadge tone="neutral">{t({ en: "Already shared", fr: "Déjà partagé", de: "Bereits geteilt" })}</UiBadge>
                 ) : (
-                  <select
-                    className="ui-control h-8 py-1.5 text-xs"
+                  <UiSelect
+                    size="compact"
+                    className="h-8"
                     value={selectedRole ?? "Viewer"}
                     disabled={!selectedRole}
                     onChange={(event) => onRoleChange(candidate.user_id, event.target.value as PortalStorageSpaceRole)}
@@ -199,7 +206,7 @@ export function PortalShareCandidatePicker({
                     <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
                     <option value="Editor">{portalRoleLabel("Editor", t)}</option>
                     <option value="Owner">{portalRoleLabel("Owner", t)}</option>
-                  </select>
+                  </UiSelect>
                 )}
               </div>
             );

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import UiField from "./UiField";
+import UiInput from "./UiInput";
 import UiSelect from "./UiSelect";
 import UiTextarea from "./UiTextarea";
 
@@ -19,9 +20,10 @@ describe("UiField", () => {
     expect(input).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("renders standard select and textarea controls with shared ui-control styling", () => {
+  it("renders standard form controls with shared ui-control styling", () => {
     render(
       <>
+        <UiInput label="Endpoint" defaultValue="https://s3.example.test" />
         <UiSelect label="Provider" defaultValue="ceph">
           <option value="ceph">Ceph</option>
         </UiSelect>
@@ -29,6 +31,7 @@ describe("UiField", () => {
       </>
     );
 
+    expect(screen.getByLabelText("Endpoint")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Provider")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Policy")).toHaveClass("ui-control");
   });
