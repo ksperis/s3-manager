@@ -72,6 +72,21 @@ python3 -m mkdocs build --strict --config-file doc/mkdocs.yml --site-dir /tmp/s3
 npm --prefix frontend run docs:screenshots:check
 ```
 
+## Visual theme maintenance
+
+The documentation theme intentionally mirrors the application UI language.
+Before changing documentation styling:
+
+1. Start from `frontend/src/index.css` and
+   `doc/docs/developer/ui-theme-guidelines.md`.
+2. Keep MkDocs colors, borders, radii, shadows, active navigation, tables, and
+   screenshot components on the mirrored `--ui-*` and `--shell-*` tokens in
+   `doc/docs/assets/stylesheets/docs-theme.css`.
+3. Avoid documentation-only palettes or decorative effects that do not exist in
+   the application workspace surfaces.
+4. Validate the rendered result on desktop and mobile, especially pages with
+   wide tables and screenshot galleries.
+
 ## User screenshot workflow
 
 User pages in `doc/docs/user/*.md` normally include exactly one themed screenshot block:

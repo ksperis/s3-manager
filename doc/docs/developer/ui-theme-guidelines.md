@@ -42,3 +42,26 @@ The frontend theme is anchored by the shared shell and UI tokens in
   temporary operation states.
 - Do not use visual refactors to change backend contracts, permissions, IAM/S3
   semantics, routes, or execution context behavior.
+
+## Documentation Theme
+
+The published MkDocs theme should feel like the application shell and workspace
+surfaces, not like a separate marketing site.
+
+- `doc/docs/assets/stylesheets/docs-theme.css` mirrors the app tokens from
+  `frontend/src/index.css`. Keep the same `--ui-*` and `--shell-*` token names
+  when changing documentation colors, borders, text, shadows, or active states.
+- Documentation content surfaces should follow app workspace primitives:
+  8px radius (`0.5rem`), `--ui-surface`, `--ui-surface-muted`,
+  `--ui-border`, `--ui-border-soft`, `--ui-text`, `--ui-text-muted`,
+  `--ui-hover`, `--ui-selected-bg`, and soft/no shadows.
+- Documentation chrome should follow app shell primitives:
+  `--shell-topbar-bg`, `--shell-sidebar-bg`, `--shell-border`,
+  `--shell-text`, `--shell-muted`, `--shell-hover`, and
+  `--shell-selected-bg`.
+- Do not introduce one-off documentation palettes such as separate blue,
+  purple, teal, or gradient systems. If the app primary color changes, update
+  the mirrored docs token scale in the same pass.
+- Validate meaningful documentation theme changes with a strict MkDocs build,
+  the screenshot reference check, and at least one desktop/mobile render smoke
+  of a table-heavy docs page.
