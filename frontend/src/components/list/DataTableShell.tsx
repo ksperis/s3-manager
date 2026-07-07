@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { HTMLAttributes, ReactNode } from "react";
+import { Fragment, type HTMLAttributes, type ReactNode } from "react";
 
 import PaginationControls from "../PaginationControls";
 import SortableHeader from "../SortableHeader";
@@ -59,6 +59,8 @@ type DataTableShellProps<Row, SortField extends string = string> = {
   tbodyClassName?: string;
   rowClassName?: string | ((row: Row) => string | undefined);
   rowAttributes?: (row: Row) => Omit<HTMLAttributes<HTMLTableRowElement>, "children" | "className">;
+  expandedRow?: (row: Row) => ReactNode;
+  expandedRowClassName?: string | ((row: Row) => string | undefined);
   overflowXHidden?: boolean;
   responsiveCards?: boolean;
 };
@@ -79,10 +81,14 @@ export default function DataTableShell<Row, SortField extends string = string>({
   tbodyClassName,
   rowClassName = "hover:bg-slate-50 dark:hover:bg-slate-800/40",
   rowAttributes,
+  expandedRow,
+  expandedRowClassName = "bg-slate-50/70 dark:bg-slate-900/40",
   overflowXHidden = false,
   responsiveCards = false,
 }: DataTableShellProps<Row, SortField>) {
   const resolveRowClassName = (row: Row) => (typeof rowClassName === "function" ? rowClassName(row) : rowClassName);
+  const resolveExpandedRowClassName = (row: Row) =>
+    typeof expandedRowClassName === "function" ? expandedRowClassName(row) : expandedRowClassName;
   const containerOverflowClass = responsiveCards
     ? overflowXHidden
       ? "overflow-x-hidden"
@@ -138,31 +144,41 @@ export default function DataTableShell<Row, SortField extends string = string>({
             {status === "empty" && <TableEmptyState colSpan={columns.length} message={emptyMessage} />}
             {rows.map((row) => {
               const key = rowKey(row);
+              const expandedContent = expandedRow?.(row);
               return (
-                <tr key={key} className={resolveRowClassName(row)} {...rowAttributes?.(row)}>
-                  {columns.map((column) => {
-                    const align = column.align ?? "left";
-                    const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
-                    const isPrimary = column.primary || column.id === primaryColumnId;
-                    const mobileRole = column.mobileRole ?? (isPrimary ? "primary" : undefined);
-                    const mobileLabel = column.mobileLabel ?? column.label;
-                    const textClass = isPrimary
-                      ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
-                      : "ui-body text-slate-600 dark:text-slate-300";
-                    return (
-                      <td
-                        key={`${key}:${column.id}`}
-                        className={cx(cellBase, textClass, column.cellClassName)}
-                        data-label={responsiveCards && !mobileRole && !column.mobileHidden ? mobileLabel : undefined}
-                        data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
-                        data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
-                        data-mobile-hidden={responsiveCards && column.mobileHidden ? "true" : undefined}
-                      >
-                        {column.render(row)}
+                <Fragment key={key}>
+                  <tr className={resolveRowClassName(row)} {...rowAttributes?.(row)}>
+                    {columns.map((column) => {
+                      const align = column.align ?? "left";
+                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
+                      const isPrimary = column.primary || column.id === primaryColumnId;
+                      const mobileRole = column.mobileRole ?? (isPrimary ? "primary" : undefined);
+                      const mobileLabel = column.mobileLabel ?? column.label;
+                      const textClass = isPrimary
+                        ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
+                        : "ui-body text-slate-600 dark:text-slate-300";
+                      return (
+                        <td
+                          key={`${key}:${column.id}`}
+                          className={cx(cellBase, textClass, column.cellClassName)}
+                          data-label={responsiveCards && !mobileRole && !column.mobileHidden ? mobileLabel : undefined}
+                          data-mobile-primary={responsiveCards && mobileRole === "primary" ? "true" : undefined}
+                          data-mobile-actions={responsiveCards && mobileRole === "actions" ? "true" : undefined}
+                          data-mobile-hidden={responsiveCards && column.mobileHidden ? "true" : undefined}
+                        >
+                          {column.render(row)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {expandedContent ? (
+                    <tr className={resolveExpandedRowClassName(row)} data-expanded-row="true">
+                      <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                        {expandedContent}
                       </td>
-                    );
-                  })}
-                </tr>
+                    </tr>
+                  ) : null}
+                </Fragment>
               );
             })}
           </tbody>

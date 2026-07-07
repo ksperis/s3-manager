@@ -163,6 +163,24 @@ describe("DataTableShell", () => {
     expect(screen.getByRole("checkbox", { name: "Select Archive" }).closest("td")).not.toHaveAttribute("data-label");
   });
 
+  it("renders optional expanded rows across all columns", () => {
+    render(
+      <DataTableShell
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+        expandedRow={(row) => <span>Details for {row.name}</span>}
+      />
+    );
+
+    expect(screen.getByText("Details for Archive").closest("tr")).toHaveAttribute("data-expanded-row", "true");
+    expect(screen.getByText("Details for Archive").closest("td")).toHaveAttribute("colspan", String(columns.length));
+  });
+
   it("keeps responsive tables fully clipped when horizontal overflow is disabled", () => {
     const { rerender } = render(
       <DataTableShell

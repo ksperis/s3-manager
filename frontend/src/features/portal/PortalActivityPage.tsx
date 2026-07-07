@@ -2,12 +2,14 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import type { PortalWorkspaceActivityItem } from "./portalWorkspaceModel";
 import { resolvePortalWorkspacePageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -29,6 +31,56 @@ export default function PortalActivityPage() {
         return actionMatch && spaceMatch;
       }),
     [actionFilter, spaceFilter, workspace.activity]
+  );
+  const tableStatus = rows.length === 0 ? "empty" : "ready";
+  const activityColumns = useMemo<DataTableColumn<PortalWorkspaceActivityItem>[]>(
+    () => [
+      {
+        id: "time",
+        label: t({ en: "Time", fr: "Heure", de: "Zeit" }),
+        render: (item) => item.timeLabel,
+      },
+      {
+        id: "user",
+        label: t({ en: "User", fr: "Utilisateur", de: "Benutzer" }),
+        primary: true,
+        render: (item) => item.actor,
+      },
+      {
+        id: "action",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+        render: (item) => item.action,
+      },
+      {
+        id: "resource",
+        label: t({ en: "Resource", fr: "Ressource", de: "Ressource" }),
+        render: (item) => item.target,
+      },
+      {
+        id: "space",
+        label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        render: (item) => item.spaceName,
+      },
+      {
+        id: "details",
+        label: t({ en: "Details", fr: "Détails", de: "Details" }),
+        align: "right",
+        mobileRole: "actions",
+        render: (item) => {
+          const expanded = expandedActivityId === item.id;
+          return (
+            <button
+              type="button"
+              onClick={() => setExpandedActivityId(expanded ? null : item.id)}
+              className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+            >
+              {expanded ? t({ en: "Hide details", fr: "Masquer les détails", de: "Details ausblenden" }) : t({ en: "Show details", fr: "Afficher les détails", de: "Details anzeigen" })}
+            </button>
+          );
+        },
+      },
+    ],
+    [expandedActivityId, t]
   );
 
   const pageState = resolvePortalWorkspacePageState({
@@ -66,77 +118,24 @@ export default function PortalActivityPage() {
             ))}
           </select>
         </div>
-        <div className="overflow-x-auto max-md:overflow-visible">
-          <table className="ui-data-table min-w-[760px] max-md:block max-md:w-full max-md:min-w-0">
-            <thead className="max-md:hidden">
-              <tr>
-                <th>{t({ en: "Time", fr: "Heure", de: "Zeit" })}</th>
-                <th>{t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}</th>
-                <th>{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
-                <th>{t({ en: "Resource", fr: "Ressource", de: "Ressource" })}</th>
-                <th>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</th>
-                <th className="text-right">{t({ en: "Details", fr: "Détails", de: "Details" })}</th>
-              </tr>
-            </thead>
-            <tbody className="max-md:block max-md:w-full max-md:space-y-3">
-              {rows.map((item) => {
-                const expanded = expandedActivityId === item.id;
-                return (
-                  <Fragment key={item.id}>
-                    <tr className="max-md:block max-md:w-full max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
-                      <td className="max-md:block max-md:border-0 max-md:p-0">
-                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Time", fr: "Heure", de: "Zeit" })}</span>
-                        {item.timeLabel}
-                      </td>
-                      <td className={cx("max-md:mt-2 max-md:block max-md:border-0 max-md:p-0", uiTitleTextClass)}>
-                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}</span>
-                        {item.actor}
-                      </td>
-                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Action", fr: "Action", de: "Aktion" })}</span>
-                        {item.action}
-                      </td>
-                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Resource", fr: "Ressource", de: "Ressource" })}</span>
-                        {item.target}
-                      </td>
-                      <td className="max-md:mt-2 max-md:block max-md:border-0 max-md:p-0">
-                        <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
-                        {item.spaceName}
-                      </td>
-                      <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedActivityId(expanded ? null : item.id)}
-                          className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
-                        >
-                          {expanded ? t({ en: "Hide details", fr: "Masquer les détails", de: "Details ausblenden" }) : t({ en: "Show details", fr: "Afficher les détails", de: "Details anzeigen" })}
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded ? (
-                      <tr className="max-md:block max-md:w-full">
-                        <td colSpan={6} className="max-md:block max-md:border-0 max-md:p-0">
-                          <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
-                            <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "IP address", fr: "Adresse IP", de: "IP-Adresse" })}</dt>
-                            <dd className={uiTitleTextClass}>{item.ipAddress || "-"}</dd>
-                          </dl>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-              {rows.length === 0 ? (
-                <tr className="max-md:block max-md:w-full">
-                  <td colSpan={6} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
-                    {t({ en: "No activity to display.", fr: "Aucune activité à afficher.", de: "Keine Aktivität zum Anzeigen." })}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={activityColumns}
+          rows={rows}
+          rowKey={(item) => item.id}
+          status={tableStatus}
+          loadingMessage={t({ en: "Loading activity...", fr: "Chargement de l'activité...", de: "Aktivität wird geladen..." })}
+          errorMessage={t({ en: "Unable to load activity.", fr: "Impossible de charger l'activité.", de: "Aktivität kann nicht geladen werden." })}
+          emptyMessage={t({ en: "No activity to display.", fr: "Aucune activité à afficher.", de: "Keine Aktivität zum Anzeigen." })}
+          expandedRow={(item) =>
+            expandedActivityId === item.id ? (
+              <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "IP address", fr: "Adresse IP", de: "IP-Adresse" })}</dt>
+                <dd className={uiTitleTextClass}>{item.ipAddress || "-"}</dd>
+              </dl>
+            ) : null
+          }
+          responsiveCards
+        />
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
           <span>
             {t({
