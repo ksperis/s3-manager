@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   AccountGroupLink,
   AccountUserLink,
@@ -76,6 +76,9 @@ type PortalOverrideFormSnapshot = {
 
 const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
   Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+
+const associationTableContainerClass = uiTableContainerClass;
+const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 const normalizeListInput = (value: string): string[] =>
   value
@@ -1755,8 +1758,8 @@ export default function S3AccountsPage() {
                       {showUserPanel ? "Close" : "Add UI users"}
                     </button>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <div className={associationTableContainerClass}>
+                    <table className={associationTableClass}>
                       <thead className="bg-slate-50 dark:bg-slate-900/50">
                         <tr>
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1978,8 +1981,8 @@ export default function S3AccountsPage() {
                       {showGroupPanel ? "Close" : "Add UI groups"}
                     </button>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <div className={associationTableContainerClass}>
+                    <table className={associationTableClass}>
                       <thead className="bg-slate-50 dark:bg-slate-900/50">
                         <tr>
                           <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

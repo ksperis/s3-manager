@@ -28,6 +28,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
+import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -42,6 +43,9 @@ import { useAdminS3UserStats } from "./useAdminS3UserStats";
 type TextMatchMode = "contains" | "exact";
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
+
+const associationTableContainerClass = uiTableContainerClass;
+const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -1321,8 +1325,8 @@ export default function S3UsersPage() {
                     {showEditPortalUserPanel ? "Close" : "Add UI users"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1476,8 +1480,8 @@ export default function S3UsersPage() {
                     {showEditGroupPanel ? "Close" : "Add UI groups"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

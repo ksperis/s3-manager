@@ -13,6 +13,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
+import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
@@ -48,6 +49,8 @@ const credentialOwnerTypeOptions = [
 type EditTab = "general" | "users" | "groups";
 
 const selectionCheckboxClass = "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary";
+const associationTableContainerClass = uiTableContainerClass;
+const associationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 const createEmptyConnectionForm = () => ({
   name: "",
@@ -1464,8 +1467,8 @@ export default function S3ConnectionsPage() {
                     {showEditUserPanel ? "Close" : "Add UI users"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1602,8 +1605,8 @@ export default function S3ConnectionsPage() {
                     {showEditGroupPanel ? "Close" : "Add UI groups"}
                   </button>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <div className={associationTableContainerClass}>
+                  <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
