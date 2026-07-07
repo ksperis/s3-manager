@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccessKey,
@@ -22,6 +22,11 @@ import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKey
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
+import UiButton from "../../components/ui/UiButton";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
+import UiTextarea from "../../components/ui/UiTextarea";
 import UsageTile from "../../components/UsageTile";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -30,6 +35,7 @@ import { confirmAction } from "../../utils/confirm";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
+import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
 type Props = {
@@ -42,19 +48,18 @@ type Props = {
   onSaved?: (detail: CephAdminRgwUserDetail) => void;
 };
 
-type QuotaUnit = "MiB" | "GiB" | "TiB";
 type TabId = "overview" | "ceph" | "s3" | "metrics";
 type CapsMode = "replace" | "add" | "remove";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
-const UNIT_FACTORS: Record<QuotaUnit, number> = {
+const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
   MiB: 1024 ** 2,
   GiB: 1024 ** 3,
   TiB: 1024 ** 4,
 };
 
-const quotaBytesToForm = (bytes?: number | null): { value: string; unit: QuotaUnit } => {
+const quotaBytesToForm = (bytes?: number | null): { value: string; unit: CephAdminQuotaUnit } => {
   if (bytes == null || bytes <= 0) {
     return { value: "", unit: "GiB" };
   }
@@ -70,7 +75,7 @@ const quotaBytesToForm = (bytes?: number | null): { value: string; unit: QuotaUn
   return { value: String((bytes / UNIT_FACTORS.GiB).toFixed(2)), unit: "GiB" };
 };
 
-const formToQuotaBytes = (value: string, unit: QuotaUnit): number | null => {
+const formToQuotaBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const parsed = Number(trimmed);
@@ -141,7 +146,7 @@ export default function CephAdminUserEditModal({
   const [systemFlag, setSystemFlag] = useState(false);
   const [quotaEnabled, setQuotaEnabled] = useState(true);
   const [quotaSize, setQuotaSize] = useState("");
-  const [quotaUnit, setQuotaUnit] = useState<QuotaUnit>("GiB");
+  const [quotaUnit, setQuotaUnit] = useState<CephAdminQuotaUnit>("GiB");
   const [quotaObjects, setQuotaObjects] = useState("");
   const [capsMode, setCapsMode] = useState<CapsMode>("replace");
   const [capsText, setCapsText] = useState("");
@@ -514,185 +519,126 @@ export default function CephAdminUserEditModal({
       {saveStatus && <PageBanner tone="success">{saveStatus}</PageBanner>}
 
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Display name
-          <input
-            type="text"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Max buckets
-          <input
-            type="number"
-            min={0}
-            value={maxBuckets}
-            onChange={(event) => setMaxBuckets(event.target.value)}
-            placeholder="Leave empty to clear"
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Op mask
-          <input
-            type="text"
-            value={opMask}
-            onChange={(event) => setOpMask(event.target.value)}
-            placeholder="read,write,delete"
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Default placement
-          <input
-            type="text"
-            value={defaultPlacement}
-            onChange={(event) => setDefaultPlacement(event.target.value)}
-            placeholder="e.g. default-placement"
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Default storage class
-          <input
-            type="text"
-            value={defaultStorageClass}
-            onChange={(event) => setDefaultStorageClass(event.target.value)}
-            placeholder="e.g. STANDARD"
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
-        </label>
+        <UiInput
+          label="Display name"
+          type="text"
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          size="compact"
+        />
+        <UiInput
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          size="compact"
+        />
+        <UiInput
+          label="Max buckets"
+          type="number"
+          min={0}
+          value={maxBuckets}
+          onChange={(event) => setMaxBuckets(event.target.value)}
+          placeholder="Leave empty to clear"
+          size="compact"
+        />
+        <UiInput
+          label="Op mask"
+          type="text"
+          value={opMask}
+          onChange={(event) => setOpMask(event.target.value)}
+          placeholder="read,write,delete"
+          size="compact"
+        />
+        <UiInput
+          label="Default placement"
+          type="text"
+          value={defaultPlacement}
+          onChange={(event) => setDefaultPlacement(event.target.value)}
+          placeholder="e.g. default-placement"
+          size="compact"
+        />
+        <UiInput
+          label="Default storage class"
+          type="text"
+          value={defaultStorageClass}
+          onChange={(event) => setDefaultStorageClass(event.target.value)}
+          placeholder="e.g. STANDARD"
+          size="compact"
+        />
       </div>
 
-      <div className="grid gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
-        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={suspended}
-            onChange={(event) => setSuspended(event.target.checked)}
-            className={uiCheckboxClass}
-          />
+      <div className="grid gap-2 rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
+        <UiCheckboxField
+          checked={suspended}
+          onChange={(event) => setSuspended(event.target.checked)}
+          className="ui-body text-slate-700 dark:text-slate-200"
+        >
           Suspended
-        </label>
-        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={adminFlag}
-            onChange={(event) => setAdminFlag(event.target.checked)}
-            className={uiCheckboxClass}
-          />
+        </UiCheckboxField>
+        <UiCheckboxField
+          checked={adminFlag}
+          onChange={(event) => setAdminFlag(event.target.checked)}
+          className="ui-body text-slate-700 dark:text-slate-200"
+        >
           Admin
-        </label>
-        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={systemFlag}
-            onChange={(event) => setSystemFlag(event.target.checked)}
-            className={uiCheckboxClass}
-          />
+        </UiCheckboxField>
+        <UiCheckboxField
+          checked={systemFlag}
+          onChange={(event) => setSystemFlag(event.target.checked)}
+          className="ui-body text-slate-700 dark:text-slate-200"
+        >
           System
-        </label>
+        </UiCheckboxField>
       </div>
 
-      <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={quotaEnabled}
-            onChange={(event) => setQuotaEnabled(event.target.checked)}
-            className={uiCheckboxClass}
-          />
-          Enable user quota
-        </label>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
-          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-            Storage quota
-            <input
-              type="number"
-              min={0}
-              step="any"
-              value={quotaSize}
-              onChange={(event) => setQuotaSize(event.target.value)}
-              placeholder="Leave empty to clear"
-              disabled={!quotaEnabled}
-              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
-          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-            Unit
-            <select
-              value={quotaUnit}
-              onChange={(event) => setQuotaUnit(event.target.value as QuotaUnit)}
-              disabled={!quotaEnabled}
-              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="MiB">MiB</option>
-              <option value="GiB">GiB</option>
-              <option value="TiB">TiB</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-            Object quota
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={quotaObjects}
-              onChange={(event) => setQuotaObjects(event.target.value)}
-              placeholder="Leave empty to clear"
-              disabled={!quotaEnabled}
-              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
-        </div>
-      </div>
+      <CephAdminQuotaFields
+        title="User quota"
+        enabledLabel="Enable user quota"
+        enabled={quotaEnabled}
+        onEnabledChange={setQuotaEnabled}
+        sizeValue={quotaSize}
+        onSizeChange={setQuotaSize}
+        unitValue={quotaUnit}
+        onUnitChange={setQuotaUnit}
+        objectValue={quotaObjects}
+        onObjectChange={setQuotaObjects}
+        sizePlaceholder="Leave empty to clear"
+        objectPlaceholder="Leave empty to clear"
+      />
 
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-          Caps update mode
-          <select
-            value={capsMode}
-            onChange={(event) => setCapsMode(event.target.value as CapsMode)}
-            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          >
-            <option value="replace">Replace</option>
-            <option value="add">Add</option>
-            <option value="remove">Remove</option>
-          </select>
-        </label>
+        <UiSelect
+          label="Caps update mode"
+          value={capsMode}
+          onChange={(event) => setCapsMode(event.target.value as CapsMode)}
+          size="compact"
+        >
+          <option value="replace">Replace</option>
+          <option value="add">Add</option>
+          <option value="remove">Remove</option>
+        </UiSelect>
       </div>
 
-      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-        Caps (one per line, e.g. users=read)
-        <textarea
-          value={capsText}
-          onChange={(event) => setCapsText(event.target.value)}
-          rows={4}
-          className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          spellCheck={false}
-        />
-      </label>
+      <UiTextarea
+        label="Caps (one per line, e.g. users=read)"
+        value={capsText}
+        onChange={(event) => setCapsText(event.target.value)}
+        rows={4}
+        className="font-mono"
+        spellCheck={false}
+        size="compact"
+      />
 
       <div className="flex items-center justify-end gap-2">
-        <button
+        <UiButton
           type="button"
           onClick={submit}
           disabled={saving || detailLoading}
-          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+          size="sm"
         >
           {saving ? "Saving..." : "Save configuration"}
-        </button>
+        </UiButton>
       </div>
     </section>
   );
@@ -712,13 +658,14 @@ export default function CephAdminUserEditModal({
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold">Key created. Secret is shown only once.</p>
-            <button
+            <UiButton
               type="button"
               onClick={() => setShowAddConnectionModal(true)}
-              className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+              variant="secondary"
+              size="sm"
             >
               Add as S3 Connection
-            </button>
+            </UiButton>
           </div>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <div>
@@ -738,22 +685,23 @@ export default function CephAdminUserEditModal({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
+        <UiButton
           type="button"
           onClick={refreshKeys}
           disabled={keysLoading}
-          className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+          variant="secondary"
+          size="sm"
         >
           {keysLoading ? "Loading..." : "Refresh"}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
           type="button"
           onClick={handleCreateKey}
           disabled={keysBusy === "create"}
-          className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-60"
+          size="sm"
         >
           {keysBusy === "create" ? "Creating..." : "New key"}
-        </button>
+        </UiButton>
       </div>
 
       <div className={uiTableContainerClass}>
@@ -899,17 +847,12 @@ export default function CephAdminUserEditModal({
     </section>
   );
 
-  const tabs = useMemo(() => {
-    const baseTabs = [
-      { id: "overview", label: "Overview", content: overviewTab },
-      { id: "ceph", label: "Ceph Admin", content: cephTab },
-      { id: "s3", label: "Key Management", content: s3Tab },
-    ];
-    if (canViewMetrics) {
-      baseTabs.push({ id: "metrics", label: "Metrics", content: metricsTab });
-    }
-    return baseTabs;
-  }, [canViewMetrics, cephTab, metricsTab, overviewTab, s3Tab]);
+  const tabs = [
+    { id: "overview", label: "Overview", content: overviewTab },
+    { id: "ceph", label: "Ceph Admin", content: cephTab },
+    { id: "s3", label: "Key Management", content: s3Tab },
+    ...(canViewMetrics ? [{ id: "metrics", label: "Metrics", content: metricsTab }] : []),
+  ];
   const addConnectionDefaults = useMemo(() => {
     if (!createdKey) return null;
     return buildCephConnectionDefaults(uid, createdKey.access_key, {
@@ -919,7 +862,12 @@ export default function CephAdminUserEditModal({
   }, [createdKey, detail?.account_id, tenant, uid]);
 
   return (
-    <Modal title={`Configure user · ${identityLabel}`} onClose={closeGuard.requestClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
+    <Modal
+      title={`Configure user · ${identityLabel}`}
+      onClose={closeGuard.requestClose}
+      maxWidthClass="max-w-6xl"
+      maxBodyHeightClass="max-h-[85vh]"
+    >
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
       {showAddConnectionModal && createdKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal

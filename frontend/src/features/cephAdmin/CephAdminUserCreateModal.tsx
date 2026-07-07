@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwUserDetail,
   createCephAdminUser,
@@ -13,10 +12,16 @@ import {
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import UiButton from "../../components/ui/UiButton";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
+import UiTextarea from "../../components/ui/UiTextarea";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
+import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 
 type Props = {
   endpointId: number;
@@ -25,7 +30,6 @@ type Props = {
   onCreated?: (detail: CephAdminRgwUserDetail) => void;
 };
 
-type QuotaUnit = "MiB" | "GiB" | "TiB";
 type CapsMode = "replace" | "add" | "remove";
 
 type AccountOption = {
@@ -33,7 +37,7 @@ type AccountOption = {
   account_name?: string | null;
 };
 
-const UNIT_FACTORS: Record<QuotaUnit, number> = {
+const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
   MiB: 1024 ** 2,
   GiB: 1024 ** 3,
   TiB: 1024 ** 4,
@@ -49,7 +53,7 @@ const parseOptionalInt = (value: string): number | null => {
   return parsed;
 };
 
-const parseOptionalBytes = (value: string, unit: QuotaUnit): number | null => {
+const parseOptionalBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const parsed = Number(trimmed);
@@ -85,7 +89,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
   const [generateKey, setGenerateKey] = useState(true);
   const [quotaEnabled, setQuotaEnabled] = useState(false);
   const [quotaSize, setQuotaSize] = useState("");
-  const [quotaUnit, setQuotaUnit] = useState<QuotaUnit>("GiB");
+  const [quotaUnit, setQuotaUnit] = useState<CephAdminQuotaUnit>("GiB");
   const [quotaObjects, setQuotaObjects] = useState("");
   const [capsMode, setCapsMode] = useState<CapsMode>("replace");
   const [capsText, setCapsText] = useState("");
@@ -265,7 +269,12 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
     : null;
 
   return (
-    <Modal title="Create user" onClose={closeGuard.requestClose} maxWidthClass="max-w-5xl">
+    <Modal
+      title="Create user"
+      onClose={closeGuard.requestClose}
+      maxWidthClass="max-w-5xl"
+      maxBodyHeightClass="max-h-[82vh]"
+    >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {status && <PageBanner tone="success">{status}</PageBanner>}
@@ -274,13 +283,14 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">Access key created. Secret is shown only once.</p>
-              <button
+              <UiButton
                 type="button"
                 onClick={() => setShowAddConnectionModal(true)}
-                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+                variant="secondary"
+                size="sm"
               >
                 Add as S3 Connection
-              </button>
+              </UiButton>
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
@@ -299,199 +309,161 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
           </div>
         )}
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Identity</h3>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 md:col-span-2">
-              Account (optional)
-              <select
-                value={selectedAccountId}
-                onChange={(event) => setSelectedAccountId(event.target.value)}
-                disabled={accountsLoading}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="">No account</option>
-                {accounts.map((account) => (
-                  <option key={account.account_id} value={account.account_id}>
-                    {account.account_name ? `${account.account_name} (${account.account_id})` : account.account_id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              UID *
-              <input
-                type="text"
-                value={uid}
-                onChange={(event) => setUid(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Tenant
-              <input
-                type="text"
-                value={tenant}
-                onChange={(event) => setTenant(event.target.value)}
-                placeholder="Optional"
-                disabled={Boolean(selectedAccountId)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Display name
-              <input
-                type="text"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Max buckets
-              <input
-                type="number"
-                min={0}
-                value={maxBuckets}
-                onChange={(event) => setMaxBuckets(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 md:col-span-2">
-              Op mask
-              <input
-                type="text"
-                value={opMask}
-                onChange={(event) => setOpMask(event.target.value)}
-                placeholder="read,write,delete"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Flags and quota</h3>
-          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
-            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-              <input type="checkbox" checked={suspended} onChange={(event) => setSuspended(event.target.checked)} />
-              Suspended
-            </label>
-            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-              <input type="checkbox" checked={adminFlag} onChange={(event) => setAdminFlag(event.target.checked)} />
-              Admin
-            </label>
-            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-              <input type="checkbox" checked={systemFlag} onChange={(event) => setSystemFlag(event.target.checked)} />
-              System
-            </label>
-            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200 sm:col-span-2">
-              <input type="checkbox" checked={generateKey} onChange={(event) => setGenerateKey(event.target.checked)} />
-              Generate access key
-            </label>
-          </div>
-
-          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={quotaEnabled}
-              onChange={(event) => setQuotaEnabled(event.target.checked)}
-              className={uiCheckboxClass}
-            />
-            Configure user quota
-          </label>
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Storage quota
-              <input
-                type="number"
-                min={0}
-                step="any"
-                disabled={!quotaEnabled}
-                value={quotaSize}
-                onChange={(event) => setQuotaSize(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Unit
-              <select
-                disabled={!quotaEnabled}
-                value={quotaUnit}
-                onChange={(event) => setQuotaUnit(event.target.value as QuotaUnit)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="MiB">MiB</option>
-                <option value="GiB">GiB</option>
-                <option value="TiB">TiB</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Object quota
-              <input
-                type="number"
-                min={0}
-                step={1}
-                disabled={!quotaEnabled}
-                value={quotaObjects}
-                onChange={(event) => setQuotaObjects(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Caps</h3>
-          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-            Caps mode
-            <select
-              value={capsMode}
-              onChange={(event) => setCapsMode(event.target.value as CapsMode)}
-              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            <UiSelect
+              label="Account (optional)"
+              value={selectedAccountId}
+              onChange={(event) => setSelectedAccountId(event.target.value)}
+              disabled={accountsLoading}
+              fieldClassName="md:col-span-2"
+              size="compact"
             >
-              <option value="replace">Replace</option>
-              <option value="add">Add</option>
-              <option value="remove">Remove</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-            Caps (one per line)
-            <textarea
-              rows={3}
-              spellCheck={false}
-              value={capsText}
-              onChange={(event) => setCapsText(event.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              <option value="">No account</option>
+              {accounts.map((account) => (
+                <option key={account.account_id} value={account.account_id}>
+                  {account.account_name ? `${account.account_name} (${account.account_id})` : account.account_id}
+                </option>
+              ))}
+            </UiSelect>
+            <UiInput
+              label="UID *"
+              type="text"
+              value={uid}
+              onChange={(event) => setUid(event.target.value)}
+              size="compact"
             />
-          </label>
+            <UiInput
+              label="Tenant"
+              type="text"
+              value={tenant}
+              onChange={(event) => setTenant(event.target.value)}
+              placeholder="Optional"
+              disabled={Boolean(selectedAccountId)}
+              size="compact"
+            />
+            <UiInput
+              label="Display name"
+              type="text"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              size="compact"
+            />
+            <UiInput
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              size="compact"
+            />
+            <UiInput
+              label="Max buckets"
+              type="number"
+              min={0}
+              value={maxBuckets}
+              onChange={(event) => setMaxBuckets(event.target.value)}
+              size="compact"
+            />
+            <UiInput
+              label="Op mask"
+              type="text"
+              value={opMask}
+              onChange={(event) => setOpMask(event.target.value)}
+              placeholder="read,write,delete"
+              fieldClassName="md:col-span-2"
+              size="compact"
+            />
+          </div>
         </section>
 
-        <div className="flex items-center justify-end gap-2">
-          <button
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Flags and quota</h3>
+          <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
+            <UiCheckboxField
+              checked={suspended}
+              onChange={(event) => setSuspended(event.target.checked)}
+              className="ui-body text-slate-700 dark:text-slate-200"
+            >
+              Suspended
+            </UiCheckboxField>
+            <UiCheckboxField
+              checked={adminFlag}
+              onChange={(event) => setAdminFlag(event.target.checked)}
+              className="ui-body text-slate-700 dark:text-slate-200"
+            >
+              Admin
+            </UiCheckboxField>
+            <UiCheckboxField
+              checked={systemFlag}
+              onChange={(event) => setSystemFlag(event.target.checked)}
+              className="ui-body text-slate-700 dark:text-slate-200"
+            >
+              System
+            </UiCheckboxField>
+            <UiCheckboxField
+              checked={generateKey}
+              onChange={(event) => setGenerateKey(event.target.checked)}
+              className="ui-body text-slate-700 sm:col-span-2 dark:text-slate-200"
+            >
+              Generate access key
+            </UiCheckboxField>
+          </div>
+
+          <CephAdminQuotaFields
+            title="User quota"
+            enabledLabel="Configure user quota"
+            enabled={quotaEnabled}
+            onEnabledChange={setQuotaEnabled}
+            sizeValue={quotaSize}
+            onSizeChange={setQuotaSize}
+            unitValue={quotaUnit}
+            onUnitChange={setQuotaUnit}
+            objectValue={quotaObjects}
+            onObjectChange={setQuotaObjects}
+          />
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Caps</h3>
+          <UiSelect
+            label="Caps mode"
+            value={capsMode}
+            onChange={(event) => setCapsMode(event.target.value as CapsMode)}
+            size="compact"
+          >
+            <option value="replace">Replace</option>
+            <option value="add">Add</option>
+            <option value="remove">Remove</option>
+          </UiSelect>
+          <UiTextarea
+            label="Caps (one per line)"
+            rows={3}
+            spellCheck={false}
+            value={capsText}
+            onChange={(event) => setCapsText(event.target.value)}
+            className="font-mono"
+            size="compact"
+          />
+        </section>
+
+        <div className="sticky bottom-0 z-10 -mx-6 -mb-4 flex items-center justify-end gap-2 border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-6 py-3">
+          <UiButton
             type="button"
             onClick={closeGuard.requestClose}
-            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+            variant="secondary"
+            size="sm"
           >
             Close
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="button"
             onClick={submit}
             disabled={saving}
-            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-60"
+            size="sm"
           >
             {saving ? "Creating..." : "Create user"}
-          </button>
+          </UiButton>
         </div>
       </div>
 

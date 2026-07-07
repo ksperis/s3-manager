@@ -10,7 +10,7 @@ export type CephAdminQuotaUnit = "MiB" | "GiB" | "TiB";
 
 const QUOTA_UNIT_OPTIONS: CephAdminQuotaUnit[] = ["MiB", "GiB", "TiB"];
 
-type CephAdminAccountQuotaFieldsProps = {
+type CephAdminQuotaFieldsProps = {
   title: string;
   enabledLabel: string;
   enabled: boolean;
@@ -26,7 +26,7 @@ type CephAdminAccountQuotaFieldsProps = {
   className?: string;
 };
 
-export default function CephAdminAccountQuotaFields({
+export default function CephAdminQuotaFields({
   title,
   enabledLabel,
   enabled,
@@ -40,7 +40,7 @@ export default function CephAdminAccountQuotaFields({
   sizePlaceholder,
   objectPlaceholder,
   className,
-}: CephAdminAccountQuotaFieldsProps) {
+}: CephAdminQuotaFieldsProps) {
   return (
     <section
       className={cx(

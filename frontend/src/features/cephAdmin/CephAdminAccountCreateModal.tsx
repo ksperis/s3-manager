@@ -15,7 +15,7 @@ import UiInput from "../../components/ui/UiInput";
 import { extractApiError } from "../../utils/apiError";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
-import CephAdminAccountQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminAccountQuotaFields";
+import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 
 type Props = {
   endpointId: number;
@@ -278,7 +278,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
           </div>
         </section>
 
-        <CephAdminAccountQuotaFields
+        <CephAdminQuotaFields
           title="Account quota"
           enabledLabel="Enable account quota"
           enabled={accountQuotaEnabled}
@@ -292,7 +292,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
           className="bg-white p-4 dark:bg-slate-900"
         />
 
-        <CephAdminAccountQuotaFields
+        <CephAdminQuotaFields
           title="Bucket quota"
           enabledLabel="Enable bucket quota"
           enabled={bucketQuotaEnabled}

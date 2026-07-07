@@ -1,0 +1,98 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
+
+const createCephAdminUserMock = vi.fn();
+const listCephAdminAccountsMock = vi.fn();
+
+vi.mock("../../api/cephAdmin", async () => {
+  const actual = await vi.importActual<typeof import("../../api/cephAdmin")>("../../api/cephAdmin");
+  return {
+    ...actual,
+    createCephAdminUser: (...args: unknown[]) => createCephAdminUserMock(...args),
+    listCephAdminAccounts: (...args: unknown[]) => listCephAdminAccountsMock(...args),
+  };
+});
+
+describe("CephAdminUserCreateModal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listCephAdminAccountsMock.mockResolvedValue({
+      items: [
+        {
+          account_id: "RGW000000000000001",
+          account_name: "Analytics",
+        },
+      ],
+    });
+    createCephAdminUserMock.mockResolvedValue({
+      detail: {
+        uid: "alice",
+        display_name: "Alice Ops",
+        caps: [],
+        keys: [],
+      },
+      generated_key: null,
+    });
+  });
+
+  it("uses shared form controls and submits normalized quota and caps fields", async () => {
+    const onCreated = vi.fn();
+    render(<CephAdminUserCreateModal endpointId={7} onClose={vi.fn()} onCreated={onCreated} />);
+
+    const dialog = screen.getByRole("dialog", { name: "Create user" });
+    const accountSelect = within(dialog).getByLabelText("Account (optional)");
+    expect(accountSelect).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("UID *")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Caps (one per line)")).toHaveClass("ui-control");
+
+    await screen.findByRole("option", { name: "Analytics (RGW000000000000001)" });
+
+    const userQuotaSection = within(dialog).getByText("User quota").closest("section");
+    if (!userQuotaSection) {
+      throw new Error("User quota section not found");
+    }
+    expect(within(userQuotaSection).getByLabelText("Storage quota")).toHaveClass("ui-control");
+    expect(within(userQuotaSection).getByLabelText("Unit")).toHaveClass("ui-control");
+    expect(within(userQuotaSection).getByLabelText("Object quota")).toHaveClass("ui-control");
+
+    fireEvent.change(accountSelect, { target: { value: "RGW000000000000001" } });
+    fireEvent.change(within(dialog).getByLabelText("UID *"), { target: { value: "alice" } });
+    fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Alice Ops" } });
+    fireEvent.change(within(dialog).getByLabelText("Max buckets"), { target: { value: "8" } });
+    fireEvent.click(within(userQuotaSection).getByRole("checkbox", { name: "Configure user quota" }));
+    fireEvent.change(within(userQuotaSection).getByLabelText("Storage quota"), { target: { value: "3" } });
+    fireEvent.change(within(userQuotaSection).getByLabelText("Object quota"), { target: { value: "1200" } });
+    fireEvent.change(within(dialog).getByLabelText("Caps mode"), { target: { value: "add" } });
+    fireEvent.change(within(dialog).getByLabelText("Caps (one per line)"), {
+      target: { value: "users=read\nusage=read\nusers=read" },
+    });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    await waitFor(() => {
+      expect(createCephAdminUserMock).toHaveBeenCalled();
+    });
+
+    expect(createCephAdminUserMock).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        uid: "alice",
+        account_id: "RGW000000000000001",
+        display_name: "Alice Ops",
+        account_root: true,
+        generate_key: true,
+        max_buckets: 8,
+        quota_enabled: true,
+        quota_max_size_bytes: 3 * 1024 ** 3,
+        quota_max_objects: 1200,
+        caps: {
+          mode: "add",
+          values: ["users=read", "usage=read"],
+        },
+      })
+    );
+    expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ uid: "alice" }));
+  });
+});

@@ -22,7 +22,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
-import CephAdminAccountQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminAccountQuotaFields";
+import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
 
 type Props = {
@@ -493,7 +493,7 @@ export default function CephAdminAccountEditModal({
         />
       </div>
 
-      <CephAdminAccountQuotaFields
+        <CephAdminQuotaFields
         title="Account quota"
         enabledLabel="Enable account quota"
         enabled={quotaEnabled}
@@ -508,7 +508,7 @@ export default function CephAdminAccountEditModal({
         objectPlaceholder="Leave empty to clear"
       />
 
-      <CephAdminAccountQuotaFields
+        <CephAdminQuotaFields
         title="Bucket quota"
         enabledLabel="Enable bucket quota"
         enabled={bucketQuotaEnabled}
