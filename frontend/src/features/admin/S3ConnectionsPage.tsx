@@ -50,6 +50,7 @@ import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
+  adminAssociationCheckboxClass,
   adminAssociationOptionRowClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
@@ -1478,7 +1479,7 @@ export default function S3ConnectionsPage() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleEditUserSelection(option.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{option.label}</span>
                             </label>
@@ -1574,7 +1575,7 @@ export default function S3ConnectionsPage() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleEditGroupSelection(group.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{group.name}</span>
                             </label>

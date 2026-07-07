@@ -52,6 +52,7 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
+  adminAssociationCheckboxClass,
 } from "./AdminAssociationPicker";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
@@ -1730,7 +1731,7 @@ export default function S3AccountsPage() {
                                         ),
                                       }))
                                     }
-                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                    className={adminAssociationCheckboxClass}
                                   />
                                   Admin
                                 </label>
@@ -1829,7 +1830,7 @@ export default function S3AccountsPage() {
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleUserSelection(u.id)}
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  className={adminAssociationCheckboxClass}
                                 />
                                 <span>{u.label}</span>
                               </label>
@@ -1843,7 +1844,7 @@ export default function S3AccountsPage() {
                                       [u.id]: e.target.checked,
                                     }))
                                   }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  className={adminAssociationCheckboxClass}
                                 />
                                 Admin
                               </label>
@@ -1911,7 +1912,7 @@ export default function S3AccountsPage() {
                                         ),
                                       }))
                                     }
-                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                    className={adminAssociationCheckboxClass}
                                   />
                                   Admin
                                 </label>
@@ -2010,7 +2011,7 @@ export default function S3AccountsPage() {
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleGroupSelection(group.id)}
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  className={adminAssociationCheckboxClass}
                                 />
                                 <span>{group.name}</span>
                               </label>
@@ -2024,7 +2025,7 @@ export default function S3AccountsPage() {
                                       [group.id]: e.target.checked,
                                     }))
                                   }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  className={adminAssociationCheckboxClass}
                                 />
                                 Admin
                               </label>

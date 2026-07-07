@@ -45,6 +45,7 @@ import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
+  adminAssociationCheckboxClass,
   adminAssociationOptionRowClass,
 } from "./AdminAssociationPicker";
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
@@ -1338,7 +1339,7 @@ export default function S3UsersPage() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleEditPortalUserSelection(option.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{option.label}</span>
                             </label>
@@ -1449,7 +1450,7 @@ export default function S3UsersPage() {
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleEditGroupSelection(group.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{group.name}</span>
                             </label>

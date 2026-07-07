@@ -61,6 +61,7 @@ import {
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
   adminAssociationAddPanelClass,
+  adminAssociationCheckboxClass,
   adminAssociationCompactInputClass,
   adminAssociationCompactSelectClass,
   adminAssociationOptionRowClass,
@@ -287,7 +288,7 @@ const AssociationsTabs = ({
                                         )
                                       )
                                     }
-                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                    className={adminAssociationCheckboxClass}
                                   />
                                   Admin
                                 </label>
@@ -376,7 +377,7 @@ const AssociationsTabs = ({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => accounts.toggleSelection(accountId)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{opt.label}</span>
                             </label>
@@ -391,7 +392,7 @@ const AssociationsTabs = ({
                                       [accountId]: e.target.checked,
                                     }))
                                   }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  className={adminAssociationCheckboxClass}
                                 />
                                 Admin
                               </label>
@@ -492,7 +493,7 @@ const AssociationsTabs = ({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => s3Users.toggleSelection(opt.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{opt.label}</span>
                             </label>
@@ -598,7 +599,7 @@ const AssociationsTabs = ({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => connections.toggleSelection(opt.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className={adminAssociationCheckboxClass}
                               />
                               <span>{opt.label}</span>
                             </label>
@@ -984,7 +985,7 @@ export default function UsersPage() {
                       type="checkbox"
                       checked={checked}
                       onChange={() => onToggle(group.id)}
-                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                      className={adminAssociationCheckboxClass}
                     />
                     <span>{group.name}</span>
                   </span>
