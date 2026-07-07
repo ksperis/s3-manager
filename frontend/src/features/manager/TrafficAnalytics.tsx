@@ -21,6 +21,7 @@ import {
 } from "../../components/MetricsCard";
 import PageBanner from "../../components/PageBanner";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
+import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -135,22 +136,12 @@ export default function TrafficAnalytics({
       title="Traffic"
       description="Ingress/egress volume, request types, and busiest buckets."
       actions={
-        <div className="flex items-center gap-2 rounded-full bg-[var(--ui-surface-muted)] px-2 py-1">
-          {WINDOW_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`rounded-full px-2.5 py-1 ui-caption font-semibold transition ${
-                option.value === window
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-              }`}
-              onClick={() => setWindow(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <UiSegmentedControl
+          ariaLabel="Traffic window"
+          options={WINDOW_OPTIONS}
+          value={window}
+          onChange={setWindow}
+        />
       }
     >
 

@@ -29,6 +29,7 @@ import {
 } from "./MetricsCard";
 import PageBanner from "./PageBanner";
 import TrafficBytesChart from "./TrafficBytesChart";
+import UiSegmentedControl from "./ui/UiSegmentedControl";
 import { cx, uiMenuClass } from "./ui/styles";
 
 const WINDOW_OPTIONS: { label: string; value: TrafficWindow; helper: string }[] = [
@@ -190,22 +191,12 @@ export default function MetricsTrafficOverview({
       title={title}
       description={subtitle}
       actions={
-        <div className="flex items-center gap-2 rounded-full bg-[var(--ui-surface-muted)] px-2 py-1">
-          {WINDOW_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`rounded-full px-3 py-1 ui-caption font-semibold transition ${
-                option.value === window
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-[var(--ui-text-muted)] hover:bg-[var(--ui-hover)] hover:text-[var(--ui-text)]"
-              }`}
-              onClick={() => onWindowChange(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <UiSegmentedControl
+          ariaLabel={`${title} window`}
+          options={WINDOW_OPTIONS}
+          value={window}
+          onChange={onWindowChange}
+        />
       }
     >
 
