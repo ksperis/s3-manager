@@ -26,4 +26,52 @@ describe("ManagerTable", () => {
     expect(screen.getByText("logs-prod")).toBeInTheDocument();
     expect(screen.getByText("Edit")).toBeInTheDocument();
   });
+
+  it("adds shared responsive-card metadata when requested", () => {
+    render(
+      <ManagerTable
+        responsiveCards
+        columns={[
+          { key: "select", label: "Select", hideLabel: true, mobileLabel: "Select" },
+          { key: "bucket", label: "Bucket", mobileRole: "primary" },
+          { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
+        ]}
+      >
+        <tr>
+          <td>
+            <input aria-label="Select logs-prod" type="checkbox" />
+          </td>
+          <td>logs-prod</td>
+          <td>
+            <button type="button">Open</button>
+          </td>
+        </tr>
+      </ManagerTable>
+    );
+
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-hidden", "md:overflow-x-auto");
+    expect(screen.getByRole("checkbox", { name: "Select logs-prod" }).closest("td")).toHaveAttribute("data-label", "Select");
+    expect(screen.getByText("logs-prod").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
+  });
+
+  it("leaves spanning table states unlabelled in responsive-card mode", () => {
+    render(
+      <ManagerTable
+        responsiveCards
+        columns={[
+          { key: "bucket", label: "Bucket", mobileRole: "primary" },
+          { key: "status", label: "Status" },
+        ]}
+      >
+        <tr>
+          <td colSpan={2}>No buckets.</td>
+        </tr>
+      </ManagerTable>
+    );
+
+    expect(screen.getByText("No buckets.").closest("td")).not.toHaveAttribute("data-label");
+    expect(screen.getByText("No buckets.").closest("td")).not.toHaveAttribute("data-mobile-primary");
+  });
 });

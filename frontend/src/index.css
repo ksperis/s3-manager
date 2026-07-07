@@ -638,11 +638,13 @@ a:hover {
   }
 
   .responsive-data-table tbody td[data-mobile-primary="true"] {
+    order: -1;
     border-bottom: 1px solid var(--ui-border-soft);
     padding-bottom: 0.65rem !important;
   }
 
   .responsive-data-table tbody td[data-mobile-actions="true"] {
+    order: 10;
     border-top: 1px solid var(--ui-border-soft);
     padding-top: 0.65rem !important;
   }

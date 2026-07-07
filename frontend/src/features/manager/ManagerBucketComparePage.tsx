@@ -220,9 +220,10 @@ export default function ManagerBucketComparePage() {
             }
           />
           <ManagerTable
+            responsiveCards
             columns={[
-              { key: "select", label: "Select", className: "w-12", hideLabel: true },
-              { key: "bucket", label: "Bucket" },
+              { key: "select", label: "Select", className: "w-12", hideLabel: true, mobileLabel: "Select" },
+              { key: "bucket", label: "Bucket", mobileRole: "primary" },
             ]}
           >
             {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
@@ -232,6 +233,7 @@ export default function ManagerBucketComparePage() {
               <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className={managerTableCheckboxCellClass}>
                   <input
+                    aria-label={`Select ${bucket.name}`}
                     type="checkbox"
                     checked={selectedBuckets.has(bucket.name)}
                     onChange={() => toggleBucket(bucket.name)}
