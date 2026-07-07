@@ -410,6 +410,10 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     expect(await screen.findByText(/Advanced search in progress/)).toBeInTheDocument();
     expect(screen.getByText(/Loading context bucket listings · 4 \/ 12/)).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Advanced search progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "48"
+    );
 
     pending.resolve({
       items: [baseBucket],

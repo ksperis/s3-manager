@@ -180,13 +180,13 @@ import {
   advancedFilterHeaderClass,
   buildTextFieldRules,
   FILTER_COST_LABEL,
-  formatAdvancedSearchStage,
   formatTextFilterSummary,
   formatTextMatchModeLabel,
   advancedFilterRootClass,
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
   parseExactListInput,
+  renderAdvancedSearchProgress,
   renderFilterCostIndicator,
   type FilterCostLevel,
 } from "../cephAdmin/filtering/advancedFilterShared";
@@ -9881,33 +9881,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
         {selectAllProgress && <ActionProgressCard progress={selectAllProgress} busy className="mb-3" />}
 
-        {advancedProgress.active && (
-          <div className="mb-3 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                {advancedProgress.determinate
-                  ? `Advanced search in progress · ${Math.max(0, Math.min(100, Math.round(advancedProgress.percent)))}%`
-                  : "Advanced search in progress..."}
-              </p>
-              {(advancedProgress.message || advancedProgress.stage) && (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {advancedProgress.message || formatAdvancedSearchStage(advancedProgress.stage)}
-                  {advancedProgress.total > 0 ? ` · ${advancedProgress.processed} / ${advancedProgress.total}` : ""}
-                </p>
-              )}
-            </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
-              {advancedProgress.determinate ? (
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-                  style={{ width: `${Math.max(0, Math.min(100, Math.round(advancedProgress.percent)))}%` }}
-                />
-              ) : (
-                <div className="h-full w-full animate-pulse rounded-full bg-primary/70" />
-              )}
-            </div>
-          </div>
-        )}
+        {renderAdvancedSearchProgress(advancedProgress)}
 
         <div className={showAdvancedFilter ? "overflow-x-hidden" : "overflow-x-auto"}>
           <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">

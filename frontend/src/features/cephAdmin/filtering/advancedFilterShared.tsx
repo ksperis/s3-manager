@@ -143,7 +143,7 @@ export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) =
   const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
   const progressDetails = progress.total > 0 ? ` · ${progress.processed} / ${progress.total}` : "";
   return (
-    <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+    <div className="mb-3 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
           {progress.determinate ? `Advanced search in progress · ${percent}%` : "Advanced search in progress..."}
