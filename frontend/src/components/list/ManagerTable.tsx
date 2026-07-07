@@ -4,7 +4,9 @@
  */
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
+import TableEmptyState from "../TableEmptyState";
 import { cx } from "../ui/styles";
+import type { ListTableStatus } from "./listTableStatus";
 
 type SortDirection = "asc" | "desc";
 
@@ -24,6 +26,12 @@ type ManagerTableProps<TSortField extends string = string> = {
   columns: ManagerTableColumn<TSortField>[];
   children: ReactNode;
   className?: string;
+  listState?: {
+    status: ListTableStatus;
+    loadingMessage: string;
+    errorMessage: string;
+    emptyMessage: string;
+  };
   responsiveCards?: boolean;
   sort?: {
     field: TSortField;
@@ -124,6 +132,7 @@ export default function ManagerTable<TSortField extends string = string>({
   columns,
   children,
   className,
+  listState,
   responsiveCards = false,
   sort,
   tbodyClassName,
@@ -156,7 +165,16 @@ export default function ManagerTable<TSortField extends string = string>({
             })}
           </tr>
         </thead>
-        <tbody className={cx("divide-y divide-slate-200 dark:divide-slate-800", tbodyClassName)}>{bodyChildren}</tbody>
+        <tbody className={cx("divide-y divide-slate-200 dark:divide-slate-800", tbodyClassName)}>
+          {listState?.status === "loading" && (
+            <TableEmptyState colSpan={columns.length} message={listState.loadingMessage} />
+          )}
+          {listState?.status === "error" && (
+            <TableEmptyState colSpan={columns.length} message={listState.errorMessage} tone="error" />
+          )}
+          {listState?.status === "empty" && <TableEmptyState colSpan={columns.length} message={listState.emptyMessage} />}
+          {bodyChildren}
+        </tbody>
       </table>
     </div>
   );

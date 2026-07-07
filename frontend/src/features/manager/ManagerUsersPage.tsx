@@ -27,7 +27,6 @@ import ManagerTable, {
   managerTableWideCellClass,
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
@@ -514,14 +513,15 @@ export default function ManagerUsersPage() {
           />
           <ManagerTable
             columns={userTableColumns}
+            listState={{
+              status: tableStatus,
+              loadingMessage: "Loading users...",
+              errorMessage: "Unable to load users.",
+              emptyMessage: "No users.",
+            }}
             responsiveCards
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
           >
-            {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-            {tableStatus === "error" && (
-              <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
-            )}
-            {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
             {filteredUsers.map((u) => {
               const hasGroups = (u.groups?.length ?? 0) > 0;
               const hasPolicies = (u.policies?.length ?? 0) > 0;

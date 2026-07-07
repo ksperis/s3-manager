@@ -19,7 +19,6 @@ import ManagerTable, {
   managerTableWideCellClass,
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
@@ -373,14 +372,16 @@ export default function ManagerGroupsPage() {
               />
             }
           />
-          <ManagerTable columns={groupTableColumns} responsiveCards>
-            {filteredTableStatus === "loading" && (
-              <TableEmptyState colSpan={groupTableColumns.length} message="Loading groups..." />
-            )}
-            {filteredTableStatus === "error" && (
-              <TableEmptyState colSpan={groupTableColumns.length} message="Unable to load groups." tone="error" />
-            )}
-            {filteredTableStatus === "empty" && <TableEmptyState colSpan={groupTableColumns.length} message="No groups." />}
+          <ManagerTable
+            columns={groupTableColumns}
+            listState={{
+              status: filteredTableStatus,
+              loadingMessage: "Loading groups...",
+              errorMessage: "Unable to load groups.",
+              emptyMessage: "No groups.",
+            }}
+            responsiveCards
+          >
             {filteredGroups.map((g) => (
               <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className={managerTablePrimaryCellClass}>

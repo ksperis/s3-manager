@@ -101,4 +101,61 @@ describe("ManagerTable", () => {
     expect(screen.getByText("No buckets.").closest("td")).not.toHaveAttribute("data-label");
     expect(screen.getByText("No buckets.").closest("td")).not.toHaveAttribute("data-mobile-primary");
   });
+
+  it("renders shared loading, error, and empty list states", () => {
+    const columns = [
+      { key: "bucket", label: "Bucket", mobileRole: "primary" as const },
+      { key: "status", label: "Status" },
+    ];
+    const { rerender } = render(
+      <ManagerTable
+        columns={columns}
+        listState={{
+          status: "loading",
+          loadingMessage: "Loading buckets...",
+          errorMessage: "Unable to load buckets.",
+          emptyMessage: "No buckets.",
+        }}
+        responsiveCards
+      >
+        {null}
+      </ManagerTable>
+    );
+
+    expect(screen.getByText("Loading buckets...").closest("td")).toHaveAttribute("colspan", "2");
+
+    rerender(
+      <ManagerTable
+        columns={columns}
+        listState={{
+          status: "error",
+          loadingMessage: "Loading buckets...",
+          errorMessage: "Unable to load buckets.",
+          emptyMessage: "No buckets.",
+        }}
+        responsiveCards
+      >
+        {null}
+      </ManagerTable>
+    );
+
+    expect(screen.getByText("Unable to load buckets.")).toBeInTheDocument();
+
+    rerender(
+      <ManagerTable
+        columns={columns}
+        listState={{
+          status: "empty",
+          loadingMessage: "Loading buckets...",
+          errorMessage: "Unable to load buckets.",
+          emptyMessage: "No buckets.",
+        }}
+        responsiveCards
+      >
+        {null}
+      </ManagerTable>
+    );
+
+    expect(screen.getByText("No buckets.").closest("td")).not.toHaveAttribute("data-mobile-primary");
+  });
 });
