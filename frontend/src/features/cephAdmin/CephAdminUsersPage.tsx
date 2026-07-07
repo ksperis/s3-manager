@@ -32,9 +32,12 @@ import {
   advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
+  advancedFilterSummaryChipClass,
   advancedFilterSummaryClass,
+  advancedFilterSyncBadgeClass,
   advancedFilterToolbarButtonClass,
   buildTextFieldRules,
+  formatAdvancedFilterSyncLabel,
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
   formatTextFilterSummary,
@@ -1216,14 +1219,8 @@ export default function CephAdminUsersPage() {
                                 Global draft cost
                                 {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
                               </span>
-                              <span
-                                className={`rounded-full border px-2 py-0.5 ui-caption font-semibold ${
-                                  hasPendingAdvancedChanges
-                                    ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200"
-                                    : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200"
-                                }`}
-                              >
-                                {hasPendingAdvancedChanges ? "Unsaved changes" : "In sync"}
+                              <span className={advancedFilterSyncBadgeClass(hasPendingAdvancedChanges)}>
+                                {formatAdvancedFilterSyncLabel(hasPendingAdvancedChanges)}
                               </span>
                             </div>
                           </div>
@@ -1246,7 +1243,7 @@ export default function CephAdminUsersPage() {
                                 {advancedDraftSummaryItems.map((item) => (
                                   <span
                                     key={item.id}
-                                    className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                                    className={advancedFilterSummaryChipClass}
                                   >
                                     {item.label}
                                   </span>

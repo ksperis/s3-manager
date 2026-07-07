@@ -77,6 +77,18 @@ export const advancedFilterToolbarButtonClass = (active: boolean = false) => {
   return toolbarCompactButtonClasses;
 };
 
+export const advancedFilterSummaryChipClass =
+  "rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100";
+
+export const advancedFilterSyncBadgeClass = (pending: boolean) => {
+  if (pending) {
+    return "rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200";
+  }
+  return "rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200";
+};
+
+export const formatAdvancedFilterSyncLabel = (pending: boolean) => (pending ? "Unsaved changes" : "In sync");
+
 const quickFilterMatchModeBaseClass =
   "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
 

@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 
 import {
   advancedFilterMatchModeButtonClass,
+  advancedFilterSummaryChipClass,
+  advancedFilterSyncBadgeClass,
   advancedFilterToolbarButtonClass,
+  formatAdvancedFilterSyncLabel,
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
   quickFilterMatchModeButtonClass,
@@ -19,6 +22,14 @@ describe("advancedFilterShared", () => {
   it("returns stable advanced-filter toolbar button classes", () => {
     expect(advancedFilterToolbarButtonClass(false)).toContain("ui-caption");
     expect(advancedFilterToolbarButtonClass(true)).toContain("bg-primary-50");
+  });
+
+  it("returns stable advanced-filter status badges and summary chip classes", () => {
+    expect(advancedFilterSyncBadgeClass(true)).toContain("bg-amber-100");
+    expect(advancedFilterSyncBadgeClass(false)).toContain("bg-emerald-100");
+    expect(formatAdvancedFilterSyncLabel(true)).toBe("Unsaved changes");
+    expect(formatAdvancedFilterSyncLabel(false)).toBe("In sync");
+    expect(advancedFilterSummaryChipClass).toContain("bg-primary/10");
   });
 
   it("returns stable quick-filter match-mode labels and classes", () => {
