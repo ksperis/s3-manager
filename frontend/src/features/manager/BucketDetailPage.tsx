@@ -4,7 +4,15 @@
  */
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { cx, uiCardMutedClass, uiCheckboxClass, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiCardMutedClass,
+  uiCheckboxClass,
+  uiDataTableClass,
+  uiTableContainerClass,
+} from "../../components/ui/styles";
 import {
   Bucket,
   BucketAcl,
@@ -241,6 +249,7 @@ const publicAccessOptions: { key: keyof BucketPublicAccessBlock; label: string; 
 ];
 
 const publicAccessKeys = publicAccessOptions.map((option) => option.key);
+const bucketFeaturePrimaryActionClass = cx(uiButtonBaseClass, uiButtonVariants.primary, "px-3 py-1");
 
 const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
@@ -3165,7 +3174,7 @@ export default function BucketDetailPage({
                           !versioningDirty
                         }
                         title={versioningDisableBlocked ? "Disable Object Lock to change versioning." : undefined}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {updatingVersioning ? "Saving..." : "Save"}
                       </button>
@@ -3233,7 +3242,7 @@ export default function BucketDetailPage({
                           type="button"
                           onClick={saveEncryption}
                           disabled={!sseFeatureEnabled || encryptionNotImplemented || savingEncryption || encryptionLoading}
-                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          className={bucketFeaturePrimaryActionClass}
                         >
                           {savingEncryption ? "Saving..." : "Save"}
                         </button>
@@ -3294,7 +3303,7 @@ export default function BucketDetailPage({
                           type="submit"
                           form={objectLockFormId}
                           disabled={savingObjectLock || objectLockLoading || Boolean(objectLockLoadError)}
-                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          className={bucketFeaturePrimaryActionClass}
                         >
                           {savingObjectLock ? "Saving..." : "Save"}
                         </button>
@@ -3424,7 +3433,7 @@ export default function BucketDetailPage({
                             type="button"
                             onClick={saveLifecycle}
                             disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
-                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            className={bucketFeaturePrimaryActionClass}
                           >
                             {savingLifecycle ? "Saving..." : "Save"}
                           </button>
@@ -3736,7 +3745,7 @@ export default function BucketDetailPage({
                           <button
                             type="button"
                             onClick={saveBucketTags}
-                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            className={bucketFeaturePrimaryActionClass}
                             disabled={tagsNotImplemented || bucketTagsLoading || savingBucketTags || deletingBucketTags}
                           >
                             {savingBucketTags ? "Saving..." : "Save"}
@@ -3825,7 +3834,7 @@ export default function BucketDetailPage({
                       type="button"
                       onClick={savePublicAccessBlock}
                       disabled={publicAccessNotImplemented || publicAccessLoading || savingPublicAccess}
-                      className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      className={bucketFeaturePrimaryActionClass}
                     >
                       {savingPublicAccess ? "Saving..." : "Save"}
                     </button>
@@ -3870,7 +3879,7 @@ export default function BucketDetailPage({
                     <button
                       type="button"
                       onClick={saveBucketAcl}
-                      className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      className={bucketFeaturePrimaryActionClass}
                       disabled={aclNotImplemented || savingBucketAcl || bucketAclLoading}
                     >
                       {savingBucketAcl ? "Saving..." : "Save"}
@@ -3987,7 +3996,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={savePolicy}
                         disabled={policyNotImplemented || savingPolicy || policyLoading}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {savingPolicy ? "Saving..." : "Save"}
                       </button>
@@ -4057,7 +4066,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={saveCors}
                         disabled={corsNotImplemented || savingCors || corsLoading}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {savingCors ? "Saving..." : "Save"}
                       </button>
@@ -4113,7 +4122,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={saveWebsite}
                         disabled={websiteNotImplemented || savingWebsite || websiteLoading || staticWebsiteBlocked}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {savingWebsite ? "Saving..." : "Save"}
                       </button>
@@ -4288,7 +4297,7 @@ export default function BucketDetailPage({
                           type="button"
                           onClick={saveReplication}
                           disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
-                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          className={bucketFeaturePrimaryActionClass}
                         >
                           {savingReplication ? "Saving..." : "Save"}
                         </button>
@@ -4497,7 +4506,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={saveAccessLogging}
                         disabled={accessLoggingNotImplemented || savingAccessLogging || accessLoggingLoading}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {savingAccessLogging ? "Saving..." : "Save"}
                       </button>
@@ -4584,7 +4593,7 @@ export default function BucketDetailPage({
                         type="button"
                         onClick={saveNotifications}
                         disabled={notificationsNotImplemented || savingNotifications || notificationsLoading}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className={bucketFeaturePrimaryActionClass}
                       >
                         {savingNotifications ? "Saving..." : "Save"}
                       </button>
@@ -4722,7 +4731,7 @@ export default function BucketDetailPage({
                               type="submit"
                               form={quotaFormId}
                               disabled={updatingQuota || !canEditQuota}
-                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                              className={bucketFeaturePrimaryActionClass}
                               title={
                                 !quotaFeatureEnabled
                                   ? "Unavailable on this endpoint"
