@@ -9,7 +9,8 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
 import UiProgressBar from "../../components/ui/UiProgressBar";
-import { UiTone, uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
+import UiSelect from "../../components/ui/UiSelect";
+import { UiTone, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { proxyDownload } from "../../api/browser";
 import {
   compareManagerBucketPair,
@@ -955,37 +956,31 @@ export default function ManagerBucketCompareModal({
           <span className="font-semibold">{sourceContextName ?? sourceContextId}</span>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label className={uiLabelClass}>Target context</label>
-            <select
-              value={targetContextId ?? ""}
-              onChange={(event) => setTargetContextId(event.target.value ? event.target.value : null)}
-              disabled={running || targetContextOptions.length === 0}
-              className={controlClass}
-            >
-              {targetContextOptions.length > 0 && <option value="">Select a target context</option>}
-              {targetContextOptions.length === 0 && <option value="">No other context available</option>}
-              {targetContextOptions.map((context) => (
-                <option key={context.id} value={context.id}>
-                  {context.display_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className={uiLabelClass}>Mapping mode</label>
-            <select
-              value={mappingMode}
-              onChange={(event) => setMappingMode(event.target.value as "by_name" | "manual")}
-              disabled={running}
-              className={controlClass}
-            >
-              <option value="by_name" disabled={sameContextSelected}>
-                1:1 by bucket name{sameContextSelected ? " (disabled on same context)" : ""}
+          <UiSelect
+            label="Target context"
+            value={targetContextId ?? ""}
+            onChange={(event) => setTargetContextId(event.target.value ? event.target.value : null)}
+            disabled={running || targetContextOptions.length === 0}
+          >
+            {targetContextOptions.length > 0 && <option value="">Select a target context</option>}
+            {targetContextOptions.length === 0 && <option value="">No other context available</option>}
+            {targetContextOptions.map((context) => (
+              <option key={context.id} value={context.id}>
+                {context.display_name}
               </option>
-              <option value="manual">Manual mapping</option>
-            </select>
-          </div>
+            ))}
+          </UiSelect>
+          <UiSelect
+            label="Mapping mode"
+            value={mappingMode}
+            onChange={(event) => setMappingMode(event.target.value as "by_name" | "manual")}
+            disabled={running}
+          >
+            <option value="by_name" disabled={sameContextSelected}>
+              1:1 by bucket name{sameContextSelected ? " (disabled on same context)" : ""}
+            </option>
+            <option value="manual">Manual mapping</option>
+          </UiSelect>
         </div>
         {sameContextSelected && (
           <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">

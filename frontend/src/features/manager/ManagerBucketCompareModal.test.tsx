@@ -136,7 +136,8 @@ async function runInitialComparison() {
     />
   );
 
-  const [targetContextSelect] = screen.getAllByRole("combobox");
+  const targetContextSelect = screen.getByLabelText("Target context");
+  expect(screen.getByLabelText("Mapping mode")).toBeInTheDocument();
   await user.selectOptions(targetContextSelect, "ctx-target");
   await waitFor(() => {
     expect(listBucketsMock).toHaveBeenCalled();

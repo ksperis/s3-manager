@@ -99,7 +99,8 @@ describe("CephAdminBucketCompareModal", () => {
       />
     );
 
-    const [targetEndpointSelect] = screen.getAllByRole("combobox");
+    const targetEndpointSelect = screen.getByLabelText("Target endpoint");
+    expect(screen.getByLabelText("Mapping mode")).toBeInTheDocument();
     await user.selectOptions(targetEndpointSelect, "2");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /run comparison/i })).toBeEnabled();

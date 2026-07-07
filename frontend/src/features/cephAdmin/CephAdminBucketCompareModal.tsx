@@ -9,7 +9,8 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
 import UiProgressBar from "../../components/ui/UiProgressBar";
-import { uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
+import UiSelect from "../../components/ui/UiSelect";
+import { uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import {
   CephAdminBucketCompareResult,
   CephAdminEndpoint,
@@ -677,37 +678,31 @@ export default function CephAdminBucketCompareModal({
           <span className="font-semibold">{sourceEndpointName ?? `Endpoint #${sourceEndpointId}`}</span>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label className={uiLabelClass}>Target endpoint</label>
-            <select
-              value={targetEndpointId ?? ""}
-              onChange={(event) => setTargetEndpointId(event.target.value ? Number(event.target.value) : null)}
-              disabled={running || targetEndpointOptions.length === 0}
-              className={controlClass}
-            >
-              {targetEndpointOptions.length > 0 && <option value="">Select a target endpoint</option>}
-              {targetEndpointOptions.length === 0 && <option value="">No other endpoint available</option>}
-              {targetEndpointOptions.map((endpoint) => (
-                <option key={endpoint.id} value={endpoint.id}>
-                  {endpoint.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className={uiLabelClass}>Mapping mode</label>
-            <select
-              value={mappingMode}
-              onChange={(event) => setMappingMode(event.target.value as "by_name" | "manual")}
-              disabled={running}
-              className={controlClass}
-            >
-              <option value="by_name" disabled={sameEndpointSelected}>
-                1:1 by bucket name{sameEndpointSelected ? " (disabled on same endpoint)" : ""}
+          <UiSelect
+            label="Target endpoint"
+            value={targetEndpointId ?? ""}
+            onChange={(event) => setTargetEndpointId(event.target.value ? Number(event.target.value) : null)}
+            disabled={running || targetEndpointOptions.length === 0}
+          >
+            {targetEndpointOptions.length > 0 && <option value="">Select a target endpoint</option>}
+            {targetEndpointOptions.length === 0 && <option value="">No other endpoint available</option>}
+            {targetEndpointOptions.map((endpoint) => (
+              <option key={endpoint.id} value={endpoint.id}>
+                {endpoint.name}
               </option>
-              <option value="manual">Manual mapping</option>
-            </select>
-          </div>
+            ))}
+          </UiSelect>
+          <UiSelect
+            label="Mapping mode"
+            value={mappingMode}
+            onChange={(event) => setMappingMode(event.target.value as "by_name" | "manual")}
+            disabled={running}
+          >
+            <option value="by_name" disabled={sameEndpointSelected}>
+              1:1 by bucket name{sameEndpointSelected ? " (disabled on same endpoint)" : ""}
+            </option>
+            <option value="manual">Manual mapping</option>
+          </UiSelect>
         </div>
         {sameEndpointSelected && (
           <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
