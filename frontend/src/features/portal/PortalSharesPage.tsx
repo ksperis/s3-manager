@@ -25,6 +25,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiDividerClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -106,8 +107,9 @@ function SharesTable({
         label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
         render: (share) =>
           editable && share.userId ? (
-            <select
-              className="ui-control h-8 py-1.5 text-xs"
+            <UiSelect
+              size="compact"
+              className="h-8"
               value={share.access}
               disabled={busyShareId === share.id}
               onChange={(event) => onRoleChange(share, event.target.value as PortalStorageSpaceRole)}
@@ -116,7 +118,7 @@ function SharesTable({
               {roles.map((role) => (
                 <option key={role} value={role}>{portalRoleLabel(role, t)}</option>
               ))}
-            </select>
+            </UiSelect>
           ) : (
             <UiBadge tone={portalRoleTone(share.access)}>{portalRoleLabel(share.access, t)}</UiBadge>
           ),
@@ -581,8 +583,9 @@ export default function PortalSharesPage() {
         <UiCard title={t({ en: "Create a new share", fr: "Créer un nouveau partage", de: "Neue Freigabe erstellen" })}>
           <div className="space-y-3">
             <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto]">
-              <select
-                className="ui-control h-9 py-1.5 text-xs"
+              <UiSelect
+                size="compact"
+                className="h-9"
                 value={selectedSpaceId}
                 onChange={(event) => setSelectedSpaceId(event.target.value)}
                 aria-label={t({ en: "Storage Space to share", fr: "Espace de stockage à partager", de: "Zu teilender Speicherbereich" })}
@@ -590,7 +593,7 @@ export default function PortalSharesPage() {
                 {activeSharedOwnerSpaces.map((space) => (
                   <option key={space.id} value={space.id}>{space.name}</option>
                 ))}
-              </select>
+              </UiSelect>
               <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
                 {t({
                   en: "Select existing Portal members of this account, then assign their role.",

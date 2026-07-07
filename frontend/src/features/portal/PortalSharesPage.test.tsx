@@ -127,6 +127,7 @@ describe("PortalSharesPage", () => {
     await user.click(screen.getByRole("button", { name: "Shared by me" }));
     expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Create a new share" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Storage Space to share")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Eligible users")).toHaveClass("ui-control");
     expect(screen.getByRole("combobox", { name: "Access for editor@example.com" })).toHaveClass("ui-control");
     expect(screen.queryByText("Expires")).not.toBeInTheDocument();
