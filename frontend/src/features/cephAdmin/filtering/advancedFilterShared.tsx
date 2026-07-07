@@ -80,12 +80,28 @@ export const advancedFilterToolbarButtonClass = (active: boolean = false) => {
 export const advancedFilterSummaryChipClass =
   "rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100";
 
+export const advancedFilterHeaderBadgeClass =
+  "rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+
 export const advancedFilterSyncBadgeClass = (pending: boolean) => {
   if (pending) {
     return "rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200";
   }
   return "rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200";
 };
+
+export const renderAdvancedFilterRuleCountBadge = (count: number) => (
+  <span className={advancedFilterHeaderBadgeClass}>
+    {count} rule{count > 1 ? "s" : ""}
+  </span>
+);
+
+export const renderAdvancedFilterCostBadge = (level: FilterCostLevel, tooltip: string) => (
+  <span className={`${advancedFilterHeaderBadgeClass} inline-flex items-center gap-1`} title={tooltip}>
+    Global draft cost
+    {renderFilterCostIndicator(level, tooltip)}
+  </span>
+);
 
 export const formatAdvancedFilterSyncLabel = (pending: boolean) => (pending ? "Unsaved changes" : "In sync");
 

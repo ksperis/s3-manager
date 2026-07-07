@@ -9,6 +9,8 @@ import {
   formatQuickFilterMatchModeTitle,
   formatTextMatchModeSymbol,
   quickFilterMatchModeButtonClass,
+  renderAdvancedFilterCostBadge,
+  renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
   type AdvancedSearchProgress,
 } from "./advancedFilterShared";
@@ -30,6 +32,20 @@ describe("advancedFilterShared", () => {
     expect(formatAdvancedFilterSyncLabel(true)).toBe("Unsaved changes");
     expect(formatAdvancedFilterSyncLabel(false)).toBe("In sync");
     expect(advancedFilterSummaryChipClass).toContain("bg-primary/10");
+  });
+
+  it("renders advanced-filter header badges consistently", () => {
+    render(
+      <>
+        {renderAdvancedFilterRuleCountBadge(1)}
+        {renderAdvancedFilterRuleCountBadge(2)}
+        {renderAdvancedFilterCostBadge("high", "High cost")}
+      </>
+    );
+
+    expect(screen.getByText("1 rule")).toBeInTheDocument();
+    expect(screen.getByText("2 rules")).toBeInTheDocument();
+    expect(screen.getByText("Global draft cost")).toHaveAttribute("title", "High cost");
   });
 
   it("returns stable quick-filter match-mode labels and classes", () => {

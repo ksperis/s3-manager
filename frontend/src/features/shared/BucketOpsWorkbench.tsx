@@ -190,6 +190,8 @@ import {
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
   parseExactListInput,
+  renderAdvancedFilterCostBadge,
+  renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
   renderFilterCostIndicator,
   type FilterCostLevel,
@@ -8361,16 +8363,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
                           <p className="ui-caption text-slate-500 dark:text-slate-400">Buckets listing</p>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {advancedDraftActiveCount} rule{advancedDraftActiveCount > 1 ? "s" : ""}
-                            </span>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                              title={advancedDraftGlobalCostTooltip}
-                            >
-                              Global draft cost
-                              {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
-                            </span>
+                            {renderAdvancedFilterRuleCountBadge(advancedDraftActiveCount)}
+                            {renderAdvancedFilterCostBadge(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
                             <span className={advancedFilterSyncBadgeClass(hasPendingAdvancedChanges)}>
                               {formatAdvancedFilterSyncLabel(hasPendingAdvancedChanges)}
                             </span>
