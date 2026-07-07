@@ -49,7 +49,12 @@ import {
   adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
+  adminAssociationTableActionCellClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
+  adminAssociationTableEmptyCellClass,
+  adminAssociationTableHeaderClass,
+  adminAssociationTableHeaderRightClass,
+  adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
@@ -1257,10 +1262,10 @@ export default function S3UsersPage() {
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           User
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -1268,17 +1273,17 @@ export default function S3UsersPage() {
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {editForm.user_ids.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked users yet.
                           </td>
                         </tr>
                       ) : (
                         editForm.user_ids.map((id) => (
                           <tr key={id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                            <td className={adminAssociationTableLabelCellClass}>
                               {portalUserLabelById.get(id) ?? `User #${id}`}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1368,10 +1373,10 @@ export default function S3UsersPage() {
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           Group
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -1379,17 +1384,17 @@ export default function S3UsersPage() {
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {editForm.group_ids.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked groups yet.
                           </td>
                         </tr>
                       ) : (
                         editForm.group_ids.map((id) => (
                           <tr key={id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                            <td className={adminAssociationTableLabelCellClass}>
                               {groupLabelById.get(id) ?? `Group #${id}`}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() =>

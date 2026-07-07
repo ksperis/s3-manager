@@ -68,7 +68,12 @@ import {
   adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
+  adminAssociationTableActionCellClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
+  adminAssociationTableEmptyCellClass,
+  adminAssociationTableHeaderClass,
+  adminAssociationTableHeaderRightClass,
+  adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
@@ -248,18 +253,18 @@ const AssociationsTabs = ({
                   <table className={associationTableClass}>
                     <thead>
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           Account
                         </th>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           Admin
                         </th>
                         {showPortalRole && (
-                          <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          <th className={adminAssociationTableHeaderClass}>
                             Portal role
                           </th>
                         )}
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -267,7 +272,7 @@ const AssociationsTabs = ({
                     <tbody>
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={showPortalRole ? 4 : 3} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={showPortalRole ? 4 : 3} className={adminAssociationTableEmptyCellClass}>
                             No account linked yet.
                           </td>
                         </tr>
@@ -277,7 +282,7 @@ const AssociationsTabs = ({
                             accounts.optionsById.get(Number(entry.id))?.name ?? `S3Account #${entry.id}`;
                           return (
                             <tr key={entry.id}>
-                              <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{label}</td>
+                              <td className={adminAssociationTableLabelCellClass}>{label}</td>
                               <td className="px-3 py-2">
                                 <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                                   <input
@@ -318,7 +323,7 @@ const AssociationsTabs = ({
                                   </select>
                                 </td>
                               )}
-                              <td className="px-3 py-2 text-right">
+                              <td className={adminAssociationTableActionCellClass}>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -422,10 +427,10 @@ const AssociationsTabs = ({
                   <table className={associationTableClass}>
                     <thead>
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           User
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -433,17 +438,17 @@ const AssociationsTabs = ({
                     <tbody>
                       {s3Users.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No user linked yet.
                           </td>
                         </tr>
                       ) : (
                         s3Users.selected.map((id) => (
                           <tr key={id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                            <td className={adminAssociationTableLabelCellClass}>
                               {s3Users.labelById.get(id) ?? `User #${id}`}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() => s3Users.setSelected((prev) => prev.filter((s3Id) => s3Id !== id))}
@@ -526,10 +531,10 @@ const AssociationsTabs = ({
                   <table className={associationTableClass}>
                     <thead>
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           Connection
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -537,17 +542,17 @@ const AssociationsTabs = ({
                     <tbody>
                       {connections.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No connection linked yet.
                           </td>
                         </tr>
                       ) : (
                         connections.selected.map((id) => (
                           <tr key={id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                            <td className={adminAssociationTableLabelCellClass}>
                               {connections.labelById.get(id) ?? `Connection #${id}`}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() =>

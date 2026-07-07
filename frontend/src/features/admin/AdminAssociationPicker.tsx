@@ -22,6 +22,13 @@ export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses
 export const adminAssociationCheckboxClass = "h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary";
 export const adminAssociationTableContainerClass = uiTableContainerClass;
 export const adminAssociationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
+export const adminAssociationTableHeaderClass =
+  "px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+export const adminAssociationTableHeaderRightClass =
+  "px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+export const adminAssociationTableEmptyCellClass = "px-3 py-3 ui-body text-slate-500 dark:text-slate-400";
+export const adminAssociationTableLabelCellClass = "px-3 py-2 ui-body text-slate-700 dark:text-slate-200";
+export const adminAssociationTableActionCellClass = "px-3 py-2 text-right";
 export const adminAssociationOptionLabelClass = "flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
 export const adminAssociationAccountOptionLabelClass =
   "flex min-w-48 items-center gap-2 ui-body text-slate-700 dark:text-slate-200";

@@ -52,7 +52,12 @@ import {
   adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
+  adminAssociationTableActionCellClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
+  adminAssociationTableEmptyCellClass,
+  adminAssociationTableHeaderClass,
+  adminAssociationTableHeaderRightClass,
+  adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
@@ -1405,10 +1410,10 @@ export default function S3ConnectionsPage() {
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           User
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -1416,15 +1421,15 @@ export default function S3ConnectionsPage() {
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {linkedEditUsers.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked users yet.
                           </td>
                         </tr>
                       ) : (
                         linkedEditUsers.map((user) => (
                           <tr key={user.id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{user.label}</td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableLabelCellClass}>{user.label}</td>
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() => setEditLinkedUserIds((prev) => prev.filter((id) => id !== user.id))}
@@ -1501,10 +1506,10 @@ export default function S3ConnectionsPage() {
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderClass}>
                           Group
                         </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
                       </tr>
@@ -1512,15 +1517,15 @@ export default function S3ConnectionsPage() {
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {linkedEditGroups.length === 0 ? (
                         <tr>
-                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={2} className={adminAssociationTableEmptyCellClass}>
                             No linked groups yet.
                           </td>
                         </tr>
                       ) : (
                         linkedEditGroups.map((group) => (
                           <tr key={group.id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{group.label}</td>
-                            <td className="px-3 py-2 text-right">
+                            <td className={adminAssociationTableLabelCellClass}>{group.label}</td>
+                            <td className={adminAssociationTableActionCellClass}>
                               <button
                                 type="button"
                                 onClick={() => setEditLinkedGroupIds((prev) => prev.filter((id) => id !== group.id))}
