@@ -8446,22 +8446,24 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       contextFieldState.fieldClass
                                     }`}
                                   />
-                                  <button
+                                  <UiButton
                                     type="button"
                                     onClick={selectFilteredStorageOpsContexts}
                                     disabled={filteredStorageOpsContextItems.length === 0 || allFilteredStorageOpsContextsSelected}
-                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                    variant="secondary"
+                                    size="xs"
                                   >
                                     Select filtered
-                                  </button>
-                                  <button
+                                  </UiButton>
+                                  <UiButton
                                     type="button"
                                     onClick={deselectFilteredStorageOpsContexts}
                                     disabled={!hasFilteredStorageOpsContextSelection}
-                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                    variant="secondary"
+                                    size="xs"
                                   >
                                     Deselect filtered
-                                  </button>
+                                  </UiButton>
                                 </div>
                                 <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
                                   {storageOpsContextsLoading ? (
@@ -8542,22 +8544,24 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                                       endpointFieldState.fieldClass
                                     }`}
                                   />
-                                  <button
+                                  <UiButton
                                     type="button"
                                     onClick={selectFilteredStorageOpsEndpoints}
                                     disabled={filteredStorageOpsEndpointItems.length === 0 || allFilteredStorageOpsEndpointsSelected}
-                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                    variant="secondary"
+                                    size="xs"
                                   >
                                     Select filtered
-                                  </button>
-                                  <button
+                                  </UiButton>
+                                  <UiButton
                                     type="button"
                                     onClick={deselectFilteredStorageOpsEndpoints}
                                     disabled={!hasFilteredStorageOpsEndpointSelection}
-                                    className="rounded-md border border-slate-200 px-1.5 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 dark:disabled:text-slate-500"
+                                    variant="secondary"
+                                    size="xs"
                                   >
                                     Deselect filtered
-                                  </button>
+                                  </UiButton>
                                 </div>
                                 <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
                                   {storageOpsContextsLoading ? (

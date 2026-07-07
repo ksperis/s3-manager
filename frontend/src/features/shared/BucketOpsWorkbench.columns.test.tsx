@@ -277,7 +277,11 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     const contextFilter = await screen.findByLabelText("Filter contexts");
     fireEvent.change(contextFilter, { target: { value: "Account" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
+    const contextSelectFilteredButton = screen.getAllByRole("button", { name: "Select filtered" })[0];
+    const contextDeselectFilteredButton = screen.getAllByRole("button", { name: "Deselect filtered" })[0];
+    expect(contextSelectFilteredButton).toHaveClass("ui-button-base");
+    expect(contextDeselectFilteredButton).toHaveClass("ui-button-base");
+    fireEvent.click(contextSelectFilteredButton);
 
     fireEvent.change(contextFilter, { target: { value: "shared" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[0]);
@@ -321,7 +325,11 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     const endpointFilter = await screen.findByLabelText("Filter endpoints");
     fireEvent.change(endpointFilter, { target: { value: "Primary" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[1]);
+    const endpointSelectFilteredButton = screen.getAllByRole("button", { name: "Select filtered" })[1];
+    const endpointDeselectFilteredButton = screen.getAllByRole("button", { name: "Deselect filtered" })[1];
+    expect(endpointSelectFilteredButton).toHaveClass("ui-button-base");
+    expect(endpointDeselectFilteredButton).toHaveClass("ui-button-base");
+    fireEvent.click(endpointSelectFilteredButton);
 
     fireEvent.change(endpointFilter, { target: { value: "cold" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Select filtered" })[1]);
