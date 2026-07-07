@@ -47,6 +47,7 @@ import AssociationSummary, {
   AccountAssociationChips,
   type AssociationAccountItem,
 } from "./AssociationSummary";
+import AdminModalTabs from "./AdminModalTabs";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -1576,73 +1577,25 @@ export default function S3AccountsPage() {
             </span>
           </div>
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setEditTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+            <AdminModalTabs<EditTab>
+              activeTab={editTab}
+              onTabChange={(tab) => {
+                if (tab === "users") {
                   void loadUsersIfNeeded();
-                  setEditTab("users");
-                }}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "users"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Linked UI users
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+                }
+                if (tab === "groups") {
                   void loadGroupsIfNeeded();
-                  setEditTab("groups");
-                }}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "groups"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Linked UI groups
-              </button>
-              {canManagePrivilegedTargets && (
-                <button
-                  type="button"
-                  onClick={() => setEditTab("privileged")}
-                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                    editTab === "privileged"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  }`}
-                >
-                  Privileged access
-                </button>
-              )}
-              {portalEnabled && (
-                <button
-                  type="button"
-                  onClick={() => setEditTab("portal")}
-                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                    editTab === "portal"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  }`}
-                >
-                  Portal overrides
-                </button>
-              )}
-            </div>
+                }
+                setEditTab(tab);
+              }}
+              tabs={[
+                { id: "general", label: "General" },
+                { id: "users", label: "Linked UI users" },
+                { id: "groups", label: "Linked UI groups" },
+                { id: "privileged", label: "Privileged access", visible: canManagePrivilegedTargets },
+                { id: "portal", label: "Portal overrides", visible: portalEnabled },
+              ]}
+            />
             {showGeneralTab && (
               <StorageUsageCard
                 accountName={editingS3Account.name}

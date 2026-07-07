@@ -46,6 +46,7 @@ import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoint
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import AdminModalTabs from "./AdminModalTabs";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -1255,41 +1256,15 @@ export default function S3ConnectionsPage() {
             </div>
           )}
           <form className="space-y-4" onSubmit={submitEdit}>
-            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-              <button
-                type="button"
-                onClick={() => setEditTab("general")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "general"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                General
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditTab("users")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "users"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Linked UI users
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditTab("groups")}
-                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                  editTab === "groups"
-                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                }`}
-              >
-                Linked UI groups
-              </button>
-            </div>
+            <AdminModalTabs<EditTab>
+              activeTab={editTab}
+              onTabChange={setEditTab}
+              tabs={[
+                { id: "general", label: "General" },
+                { id: "users", label: "Linked UI users" },
+                { id: "groups", label: "Linked UI groups" },
+              ]}
+            />
 
             {showEditGeneralTab && (
               <>
