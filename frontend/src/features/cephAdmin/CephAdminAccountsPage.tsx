@@ -15,6 +15,7 @@ import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/styles";
+import UiButton from "../../components/ui/UiButton";
 import {
   CephAdminRgwAccount,
   CephAdminRgwAccountDetail,
@@ -1130,13 +1131,9 @@ export default function CephAdminAccountsPage() {
                               </span>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={advancedFilterCloseGuard.requestClose}
-                            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                          >
+                          <UiButton variant="secondary" size="sm" onClick={advancedFilterCloseGuard.requestClose}>
                             Close
-                          </button>
+                          </UiButton>
                         </div>
                       </div>
 
@@ -1309,25 +1306,17 @@ export default function CephAdminAccountsPage() {
 
                       <div className={advancedFilterFooterClass}>
                         <div className="flex flex-wrap items-center justify-end gap-2">
-                          <button
-                            type="button"
+                          <UiButton
+                            variant="secondary"
+                            size="sm"
                             onClick={resetAdvancedFilter}
                             disabled={!hasAnyAdvancedToClear}
-                            className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                              hasAnyAdvancedToClear
-                                ? "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                                : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                            }`}
                           >
                             Clear
-                          </button>
-                          <button
-                            type="button"
-                            onClick={applyAdvancedFilter}
-                            className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                          >
+                          </UiButton>
+                          <UiButton size="sm" onClick={applyAdvancedFilter}>
                             Apply filter
-                          </button>
+                          </UiButton>
                         </div>
                       </div>
                     </div>
