@@ -123,6 +123,10 @@ describe("EndpointStatusDetailPage latency chart", () => {
     expect(screen.getByText("Degraded window")).toBeInTheDocument();
     expect(screen.getByText("Down window")).toBeInTheDocument();
     expect(screen.getByText(/No measurable latency in this range/i)).toBeInTheDocument();
+    expect(screen.getByText("No raw checks for this range.")).toBeInTheDocument();
+    expect(screen.getByText("No incidents recorded for this range.")).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 1.*0 results/)).toBeInTheDocument();
+    expect(screen.getAllByRole("table").every((table) => table.classList.contains("responsive-data-table"))).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "30d" }));
     await waitFor(() => {

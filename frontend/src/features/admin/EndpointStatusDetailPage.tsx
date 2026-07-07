@@ -28,7 +28,7 @@ import {
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -64,6 +64,9 @@ const WINDOW_OPTIONS: WindowOption[] = [
   { label: "6m", value: "half_year", helper: "Last 6 months" },
 ];
 const RAW_CHECKS_PAGE_SIZE = 25;
+
+type RawCheckRow = EndpointHealthRawCheck & { rowKey: string };
+type IncidentRow = EndpointHealthIncident & { rowKey: string };
 
 export default function EndpointStatusDetailPage() {
   const params = useParams();
@@ -348,6 +351,78 @@ export default function EndpointStatusDetailPage() {
     error: incidentsError,
     rowCount: incidents.length,
   });
+
+  const rawCheckRows = useMemo<RawCheckRow[]>(
+    () => rawChecks.map((check, index) => ({ ...check, rowKey: `${check.checked_at}:${index}` })),
+    [rawChecks]
+  );
+  const incidentRows = useMemo<IncidentRow[]>(
+    () => incidents.map((incident, index) => ({ ...incident, rowKey: `${incident.start}:${index}` })),
+    [incidents]
+  );
+
+  const rawCheckColumns = useMemo<DataTableColumn<RawCheckRow>[]>(
+    () => [
+      {
+        id: "check",
+        label: "Check",
+        primary: true,
+        render: (check) => formatTimestamp(check.checked_at),
+      },
+      {
+        id: "status",
+        label: "Status",
+        render: (check) => <StatusPill status={check.status} />,
+      },
+      {
+        id: "latency",
+        label: "Latency",
+        render: (check) => formatLatency(check.latency_ms ?? null),
+      },
+      {
+        id: "http",
+        label: "HTTP",
+        render: (check) => check.http_status ?? "-",
+      },
+      {
+        id: "mode",
+        label: "Mode",
+        render: (check) => formatCheckMode(check.check_mode),
+      },
+      {
+        id: "error",
+        label: "Error",
+        render: (check) => check.error_message || "-",
+      },
+    ],
+    []
+  );
+  const incidentColumns = useMemo<DataTableColumn<IncidentRow>[]>(
+    () => [
+      {
+        id: "status",
+        label: "Status",
+        primary: true,
+        render: (incident) => <StatusPill status={incident.status} />,
+      },
+      {
+        id: "start",
+        label: "Start",
+        render: (incident) => formatTimestamp(incident.start),
+      },
+      {
+        id: "end",
+        label: "End",
+        render: (incident) => (incident.end ? formatTimestamp(incident.end) : "Ongoing"),
+      },
+      {
+        id: "duration",
+        label: "Duration",
+        render: (incident) => (incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"),
+      },
+    ],
+    []
+  );
 
   useEffect(() => {
     if (rawChecksPage > rawChecksTotalPages) {
@@ -673,61 +748,26 @@ export default function EndpointStatusDetailPage() {
                     <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Raw Healthchecks</p>
                     <p className="ui-caption text-slate-500 dark:text-slate-400">Raw check values for this endpoint and selected range.</p>
                   </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    {rawChecksTotal} checks · Page {rawChecksPage}/{rawChecksTotalPages}
-                  </p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">{rawChecksTotal} checks</p>
                 </div>
-                <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200/80 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
-                      <tr>
-                        {["Check", "Status", "Latency", "HTTP", "Mode", "Error"].map((label) => (
-                          <th key={label} className="px-4 py-2.5 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {rawChecksTableStatus === "loading" && (
-                        <TableEmptyState colSpan={6} message="Loading raw healthchecks..." />
-                      )}
-                      {rawChecksTableStatus === "error" && (
-                        <TableEmptyState colSpan={6} message="Unable to load raw healthchecks." tone="error" />
-                      )}
-                      {rawChecksTableStatus === "empty" && (
-                        <TableEmptyState colSpan={6} message="No raw checks for this range." />
-                      )}
-                      {rawChecks.map((check, index) => (
-                        <tr key={`${check.checked_at}-${index}`}>
-                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(check.checked_at)}</td>
-                          <td className="px-4 py-3"><StatusPill status={check.status} /></td>
-                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatLatency(check.latency_ms ?? null)}</td>
-                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.http_status ?? "-"}</td>
-                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatCheckMode(check.check_mode)}</td>
-                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.error_message || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRawChecksPage((current) => Math.max(1, current - 1))}
-                    disabled={rawChecksLoading || rawChecksPage <= 1}
-                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:enabled:hover:border-primary-500 dark:enabled:hover:text-primary-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRawChecksPage((current) => Math.min(rawChecksTotalPages, current + 1))}
-                    disabled={rawChecksLoading || rawChecksPage >= rawChecksTotalPages}
-                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:enabled:hover:border-primary-500 dark:enabled:hover:text-primary-200"
-                  >
-                    Next
-                  </button>
+                <div className="mt-3 overflow-hidden rounded-lg border border-slate-200/80 dark:border-slate-700">
+                  <DataTableShell
+                    columns={rawCheckColumns}
+                    rows={rawCheckRows}
+                    rowKey={(check) => check.rowKey}
+                    status={rawChecksTableStatus}
+                    loadingMessage="Loading raw healthchecks..."
+                    errorMessage="Unable to load raw healthchecks."
+                    emptyMessage="No raw checks for this range."
+                    pagination={{
+                      page: rawChecksPage,
+                      pageSize: RAW_CHECKS_PAGE_SIZE,
+                      total: rawChecksTotal,
+                      onPageChange: setRawChecksPage,
+                      disabled: rawChecksLoading,
+                    }}
+                    responsiveCards
+                  />
                 </div>
               </div>
             </div>
@@ -739,38 +779,16 @@ export default function EndpointStatusDetailPage() {
         title="Incidents"
         subtitle="Downtime or degraded periods detected for this endpoint."
       >
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {["Status", "Start", "End", "Duration"].map((label) => (
-                  <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {incidentsTableStatus === "loading" && (
-                <TableEmptyState colSpan={4} message="Loading incidents..." />
-              )}
-              {incidentsTableStatus === "error" && (
-                <TableEmptyState colSpan={4} message="Unable to load incidents." tone="error" />
-              )}
-              {incidentsTableStatus === "empty" && (
-                <TableEmptyState colSpan={4} message="No incidents recorded for this range." />
-              )}
-              {incidents.map((incident, index) => (
-                <tr key={`${incident.start}-${index}`}>
-                  <td className="px-6 py-4"><StatusPill status={incident.status} /></td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.end ? formatTimestamp(incident.end) : "Ongoing"}</td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={incidentColumns}
+          rows={incidentRows}
+          rowKey={(incident) => incident.rowKey}
+          status={incidentsTableStatus}
+          loadingMessage="Loading incidents..."
+          errorMessage="Unable to load incidents."
+          emptyMessage="No incidents recorded for this range."
+          responsiveCards
+        />
       </ListSectionCard>
     </div>
   );
