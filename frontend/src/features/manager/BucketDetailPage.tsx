@@ -11,6 +11,7 @@ import {
   uiCardMutedClass,
   uiCheckboxClass,
   uiDataTableClass,
+  uiInputClass,
   uiTableContainerClass,
 } from "../../components/ui/styles";
 import {
@@ -255,6 +256,8 @@ const bucketFeatureDangerActionClass = cx(
   uiButtonBaseClass,
   "border border-rose-200 px-3 py-1 text-rose-700 hover:border-rose-400 hover:text-rose-800 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800",
 );
+const bucketFeatureInputClass = cx(uiInputClass, "px-2 py-1 ui-body");
+const bucketFeatureJsonInputClass = cx(uiInputClass, "px-3 py-2 font-mono ui-caption");
 
 const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
@@ -3269,7 +3272,7 @@ export default function BucketDetailPage({
                           setEncryptionStatus(null);
                         }
                       }}
-                      className="h-40 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={cx(bucketFeatureJsonInputClass, "h-40 w-full")}
                       placeholder='[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]'
                       spellCheck={false}
                       disabled={!sseFeatureEnabled || encryptionNotImplemented || encryptionLoading || savingEncryption || deletingEncryption}
@@ -3368,7 +3371,7 @@ export default function BucketDetailPage({
                             <select
                               value={objectLockMode}
                               onChange={(e) => setObjectLockMode(e.target.value)}
-                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className={bucketFeatureInputClass}
                               disabled={objectLockNotImplemented}
                             >
                               <option value="">(none)</option>
@@ -3384,7 +3387,7 @@ export default function BucketDetailPage({
                               step="1"
                               value={objectLockDays}
                               onChange={(e) => setObjectLockDays(e.target.value)}
-                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className={bucketFeatureInputClass}
                               placeholder="e.g. 30"
                               disabled={objectLockNotImplemented}
                             />
@@ -3397,7 +3400,7 @@ export default function BucketDetailPage({
                               step="1"
                               value={objectLockYears}
                               onChange={(e) => setObjectLockYears(e.target.value)}
-                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className={bucketFeatureInputClass}
                               placeholder="e.g. 1"
                               disabled={objectLockNotImplemented}
                             />
@@ -3589,7 +3592,7 @@ export default function BucketDetailPage({
                                         min={0}
                                         value={transitionCurrentDays}
                                         onChange={(e) => setTransitionCurrentDays(e.target.value)}
-                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-28")}
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
@@ -3600,7 +3603,7 @@ export default function BucketDetailPage({
                                         min={0}
                                         value={transitionNoncurrentDays}
                                         onChange={(e) => setTransitionNoncurrentDays(e.target.value)}
-                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-28")}
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
@@ -3610,7 +3613,7 @@ export default function BucketDetailPage({
                                         type="text"
                                         value={transitionStorageClass}
                                         onChange={(e) => setTransitionStorageClass(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="GLACIER"
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -3621,7 +3624,7 @@ export default function BucketDetailPage({
                                         type="text"
                                         value={transitionPrefix}
                                         onChange={(e) => setTransitionPrefix(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="logs/"
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -3663,7 +3666,7 @@ export default function BucketDetailPage({
                                         min={0}
                                         value={expireCurrentDays}
                                         onChange={(e) => setExpireCurrentDays(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-32")}
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
@@ -3674,7 +3677,7 @@ export default function BucketDetailPage({
                                         min={0}
                                         value={expireNoncurrentDays}
                                         onChange={(e) => setExpireNoncurrentDays(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-32")}
                                         disabled={lifecycleNotImplemented}
                                       />
                                     </label>
@@ -3684,7 +3687,7 @@ export default function BucketDetailPage({
                                         type="text"
                                         value={expirePrefix}
                                         onChange={(e) => setExpirePrefix(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className={cx(bucketFeatureInputClass, "w-32")}
                                         placeholder="archive/"
                                         disabled={lifecycleNotImplemented}
                                       />
@@ -3715,7 +3718,7 @@ export default function BucketDetailPage({
                                 value={lifecycleText}
                                 onChange={(e) => setLifecycleText(e.target.value)}
                                 rows={10}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className={cx(bucketFeatureJsonInputClass, "w-full rounded-lg bg-slate-50 dark:bg-slate-900")}
                                 disabled={lifecycleNotImplemented}
                               />
                               <BucketFeatureJsonExample
@@ -3780,7 +3783,7 @@ export default function BucketDetailPage({
                                 type="text"
                                 value={tag.key}
                                 onChange={(e) => updateBucketTagAt(index, { key: e.target.value })}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className={bucketFeatureInputClass}
                                 placeholder="Tag key"
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               />
@@ -3788,7 +3791,7 @@ export default function BucketDetailPage({
                                 type="text"
                                 value={tag.value}
                                 onChange={(e) => updateBucketTagAt(index, { value: e.target.value })}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className={bucketFeatureInputClass}
                                 placeholder="Tag value"
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               />
@@ -3907,7 +3910,7 @@ export default function BucketDetailPage({
                           setBucketAclStatus(null);
                           setBucketAclError(null);
                         }}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={bucketFeatureInputClass}
                         disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}
                       >
                         {bucketAclOptions.map((option) => (
@@ -3927,7 +3930,7 @@ export default function BucketDetailPage({
                             setBucketAclCustom(e.target.value);
                             setBucketAclStatus(null);
                           }}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={bucketFeatureInputClass}
                           placeholder="e.g. private"
                           disabled={aclNotImplemented || bucketAclLoading || savingBucketAcl}
                         />
@@ -4014,7 +4017,7 @@ export default function BucketDetailPage({
                   <textarea
                     value={policyText}
                     onChange={(e) => setPolicyText(e.target.value)}
-                    className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={cx(bucketFeatureJsonInputClass, "h-72 w-full")}
                     placeholder='{"Version":"2012-10-17","Statement":[...]}'
                     spellCheck={false}
                     disabled={policyNotImplemented}
@@ -4084,7 +4087,7 @@ export default function BucketDetailPage({
                   <textarea
                     value={corsText}
                     onChange={(e) => setCorsText(e.target.value)}
-                    className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={cx(bucketFeatureJsonInputClass, "h-56 w-full")}
                     placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
                     spellCheck={false}
                     disabled={corsNotImplemented}
@@ -4193,7 +4196,7 @@ export default function BucketDetailPage({
                               setWebsiteIndexDocument(e.target.value);
                               setWebsiteStatus(null);
                             }}
-                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={bucketFeatureInputClass}
                             placeholder="index.html"
                             disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                           />
@@ -4207,7 +4210,7 @@ export default function BucketDetailPage({
                               setWebsiteErrorDocument(e.target.value);
                               setWebsiteStatus(null);
                             }}
-                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={bucketFeatureInputClass}
                             placeholder="error.html"
                             disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                           />
@@ -4224,7 +4227,7 @@ export default function BucketDetailPage({
                             setWebsiteStatus(null);
                           }}
                           rows={6}
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={cx(bucketFeatureJsonInputClass, "w-full")}
                           placeholder="[]"
                           spellCheck={false}
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
@@ -4255,7 +4258,7 @@ export default function BucketDetailPage({
                             setWebsiteRedirectHost(e.target.value);
                             setWebsiteStatus(null);
                           }}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={bucketFeatureInputClass}
                           placeholder="www.example.com"
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
@@ -4269,7 +4272,7 @@ export default function BucketDetailPage({
                             setWebsiteRedirectProtocol(e.target.value);
                             setWebsiteStatus(null);
                           }}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={bucketFeatureInputClass}
                           placeholder="https"
                           disabled={websiteNotImplemented || websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
@@ -4345,7 +4348,7 @@ export default function BucketDetailPage({
                               setReplicationRole(e.target.value);
                               setReplicationStatus(null);
                             }}
-                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={bucketFeatureInputClass}
                             placeholder="arn:aws:iam::123456789012:role/replication-role"
                             disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                           />
@@ -4374,7 +4377,7 @@ export default function BucketDetailPage({
                                     type="text"
                                     value={rule.id}
                                     onChange={(e) => updateReplicationRule(index, { id: e.target.value })}
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     placeholder={`rule-${index + 1}`}
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
@@ -4384,7 +4387,7 @@ export default function BucketDetailPage({
                                   <select
                                     value={rule.status}
                                     onChange={(e) => updateReplicationRule(index, { status: e.target.value as "Enabled" | "Disabled" })}
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Enabled">Enabled</option>
@@ -4399,7 +4402,7 @@ export default function BucketDetailPage({
                                     step={1}
                                     value={rule.priority}
                                     onChange={(e) => updateReplicationRule(index, { priority: e.target.value })}
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     placeholder="1"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
@@ -4410,7 +4413,7 @@ export default function BucketDetailPage({
                                     type="text"
                                     value={rule.prefix}
                                     onChange={(e) => updateReplicationRule(index, { prefix: e.target.value })}
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     placeholder="logs/"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
@@ -4421,7 +4424,7 @@ export default function BucketDetailPage({
                                     type="text"
                                     value={rule.destinationBucket}
                                     onChange={(e) => updateReplicationRule(index, { destinationBucket: e.target.value })}
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     placeholder="arn:aws:s3:::target-bucket"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   />
@@ -4435,7 +4438,7 @@ export default function BucketDetailPage({
                                         deleteMarkerStatus: e.target.value as "Enabled" | "Disabled",
                                       })
                                     }
-                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    className={bucketFeatureInputClass}
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   >
                                     <option value="Disabled">Disabled</option>
@@ -4466,7 +4469,7 @@ export default function BucketDetailPage({
                             setReplicationStatus(null);
                           }}
                           rows={14}
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={cx(bucketFeatureJsonInputClass, "w-full")}
                           spellCheck={false}
                           disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                         />
@@ -4549,7 +4552,7 @@ export default function BucketDetailPage({
                           setAccessLoggingStatus(null);
                           setAccessLoggingError(null);
                         }}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={bucketFeatureInputClass}
                         placeholder="logs-bucket"
                         disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       />
@@ -4564,7 +4567,7 @@ export default function BucketDetailPage({
                           setAccessLoggingStatus(null);
                           setAccessLoggingError(null);
                         }}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className={bucketFeatureInputClass}
                         placeholder="access-logs/"
                         disabled={accessLoggingNotImplemented || accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
                       />
@@ -4619,7 +4622,7 @@ export default function BucketDetailPage({
                         setNotificationsStatus(null);
                       }
                     }}
-                    className="h-64 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className={cx(bucketFeatureJsonInputClass, "h-64 w-full")}
                     placeholder={defaultNotificationTemplate}
                     spellCheck={false}
                     disabled={notificationsNotImplemented}
@@ -4766,14 +4769,14 @@ export default function BucketDetailPage({
                             step="0.1"
                             value={quotaSizeGb}
                             onChange={(e) => setQuotaSizeGb(e.target.value)}
-                            className="flex-1 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={cx(bucketFeatureInputClass, "flex-1")}
                             placeholder="e.g. 100"
                             disabled={!canEditQuota}
                           />
                           <select
                             value={quotaSizeUnit}
                             onChange={(e) => setQuotaSizeUnit(e.target.value as "MiB" | "GiB" | "TiB")}
-                            className="w-20 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={cx(bucketFeatureInputClass, "w-20")}
                             disabled={!canEditQuota}
                           >
                             <option value="MiB">MiB</option>
@@ -4790,7 +4793,7 @@ export default function BucketDetailPage({
                           step="1"
                           value={quotaObjects}
                           onChange={(e) => setQuotaObjects(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className={bucketFeatureInputClass}
                           placeholder="e.g. 1000000"
                           disabled={!canEditQuota}
                         />
