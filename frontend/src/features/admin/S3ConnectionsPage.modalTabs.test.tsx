@@ -288,6 +288,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     if (!nameInput) {
       throw new Error("Name input not found");
     }
+    expect(nameInput).toHaveClass("ui-control");
 
     fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
@@ -301,6 +302,10 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeDisabled();
     expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).toBeChecked();
     const providerSelect = within(dialog).getByRole("combobox", { name: "Provider" });
+    expect(providerSelect).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Endpoint URL")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Access key ID *")).toHaveClass("ui-control");
+    expect(within(dialog).getByLabelText("Secret access key *")).toHaveClass("ui-control");
     expect(providerSelect).toHaveValue("");
     fireEvent.change(providerSelect, { target: { value: "aws" } });
     fireEvent.change(tagInput, {

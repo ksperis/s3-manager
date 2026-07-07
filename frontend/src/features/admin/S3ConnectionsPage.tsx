@@ -13,7 +13,17 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
-import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
+import {
+  cx,
+  uiDataTableClass,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+  uiTableContainerClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
@@ -1115,15 +1125,12 @@ export default function S3ConnectionsPage() {
           <form className="space-y-4" onSubmit={submitCreate}>
               <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
-                  required
-                />
-              </div>
+              <UiInput
+                label="Name *"
+                value={createForm.name}
+                onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
+                required
+              />
               <div className="space-y-3 sm:pt-6">
                 {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                 <UiTagEditor
@@ -1164,64 +1171,48 @@ export default function S3ConnectionsPage() {
                   }
                 />
               </div>
-              <div className="rounded-lg border border-slate-200 px-3 py-2 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="ui-body text-slate-700 dark:text-slate-200">
+              <div className={cx("px-3 py-2 sm:col-span-2", uiPanelMutedClass)}>
+                <div className="ui-body text-[var(--ui-text)]">
                   Visibility: <span className="font-semibold">Shared</span>
                 </div>
-                <p className="ui-caption text-slate-500 dark:text-slate-300">
+                <p className={cx("ui-caption", uiMutedTextClass)}>
                   Admin connections are always shared with linked UI users.
                 </p>
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <div className="ui-body font-medium text-slate-700 dark:text-slate-200">Workspace access</div>
+                <div className={cx("ui-body", uiTitleTextClass)}>Workspace access</div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="create-access-manager"
-                      type="checkbox"
-                      checked={createForm.access_manager}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, access_manager: e.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    <label htmlFor="create-access-manager" className="ui-body text-slate-700 dark:text-slate-200">
-                      Access manager
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="create-access-browser"
-                      type="checkbox"
-                      checked={createForm.access_browser}
-                      onChange={(e) => setCreateForm((p) => ({ ...p, access_browser: e.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    <label htmlFor="create-access-browser" className="ui-body text-slate-700 dark:text-slate-200">
-                      Access browser
-                    </label>
-                  </div>
+                  <UiCheckboxField
+                    checked={createForm.access_manager}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, access_manager: e.target.checked }))}
+                    className="ui-body text-[var(--ui-text)]"
+                  >
+                    Access manager
+                  </UiCheckboxField>
+                  <UiCheckboxField
+                    checked={createForm.access_browser}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, access_browser: e.target.checked }))}
+                    className="ui-body text-[var(--ui-text)]"
+                  >
+                    Access browser
+                  </UiCheckboxField>
                 </div>
-                <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
+                <div className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</div>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key ID *</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={createForm.access_key_id}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, access_key_id: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret access key *</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={createForm.secret_access_key}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, secret_access_key: e.target.value }))}
-                  required
-                />
-              </div>
+              <UiInput
+                label="Access key ID *"
+                value={createForm.access_key_id}
+                onChange={(e) => setCreateForm((p) => ({ ...p, access_key_id: e.target.value }))}
+                required
+              />
+              <UiInput
+                label="Secret access key *"
+                value={createForm.secret_access_key}
+                onChange={(e) => setCreateForm((p) => ({ ...p, secret_access_key: e.target.value }))}
+                required
+              />
             </div>
             {createCredentialsValidation.status === "loading" && (
               <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
@@ -1243,20 +1234,12 @@ export default function S3ConnectionsPage() {
             )}
               </>
             <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={createCloseGuard.requestClose}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                disabled={creating}
-              >
+              <UiButton variant="secondary" onClick={createCloseGuard.requestClose} disabled={creating}>
                 Cancel
-              </button>
-              <button
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                disabled={creating}
-              >
+              </UiButton>
+              <UiButton type="submit" disabled={creating}>
                 {creating ? "Creating..." : "Create"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {createCloseGuard.confirmationDialog}
@@ -1311,15 +1294,12 @@ export default function S3ConnectionsPage() {
             {showEditGeneralTab && (
               <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
-                    <input
-                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      value={editForm.name}
-                      onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-                      required
-                    />
-                  </div>
+                  <UiInput
+                    label="Name *"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                    required
+                  />
                   <div className="space-y-3 sm:pt-6">
                     {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                     <UiTagEditor
@@ -1357,94 +1337,78 @@ export default function S3ConnectionsPage() {
                   }
                 />
 
-                <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  <div className="ui-body text-slate-700 dark:text-slate-200">
+                <div className={cx("px-3 py-2", uiPanelMutedClass)}>
+                  <div className="ui-body text-[var(--ui-text)]">
                     Visibility: <span className="font-semibold">Shared</span>
                   </div>
-                  <div className="ui-caption text-slate-500 dark:text-slate-300">
+                  <div className={cx("ui-caption", uiMutedTextClass)}>
                     {`Created by: ${editing.created_by_email || editing.created_by_user_id}`}
                   </div>
                 </div>
 
-                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
                   <div>
-                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Credentials</div>
-                    <div className="ui-caption text-slate-500 dark:text-slate-300">Leave blank to keep the current keys.</div>
+                    <div className={cx("ui-body", uiTitleTextClass)}>Credentials</div>
+                    <div className={cx("ui-caption", uiMutedTextClass)}>Leave blank to keep the current keys.</div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key ID</label>
-                      <input
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editCredentials.access_key_id}
-                        onChange={(e) => setEditCredentials((p) => ({ ...p, access_key_id: e.target.value }))}
-                        placeholder="AKIA..."
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret access key</label>
-                      <input
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editCredentials.secret_access_key}
-                        onChange={(e) => setEditCredentials((p) => ({ ...p, secret_access_key: e.target.value }))}
-                        placeholder="••••••••"
-                      />
-                    </div>
+                    <UiInput
+                      label="Access key ID"
+                      value={editCredentials.access_key_id}
+                      onChange={(e) => setEditCredentials((p) => ({ ...p, access_key_id: e.target.value }))}
+                      placeholder="AKIA..."
+                    />
+                    <UiInput
+                      label="Secret access key"
+                      value={editCredentials.secret_access_key}
+                      onChange={(e) => setEditCredentials((p) => ({ ...p, secret_access_key: e.target.value }))}
+                      placeholder="********"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
                   <div>
-                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access and credential metadata</div>
-                    <div className="ui-caption text-slate-500 dark:text-slate-300">
+                    <div className={cx("ui-body", uiTitleTextClass)}>Access and credential metadata</div>
+                    <div className={cx("ui-caption", uiMutedTextClass)}>
                       Store owner context for keys imported from manager/ceph-admin flows.
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={editForm.access_manager}
-                        onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
+                    <UiCheckboxField
+                      checked={editForm.access_manager}
+                      onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
+                      className="ui-body text-[var(--ui-text)]"
+                    >
                       Access manager
-                    </label>
-                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={editForm.access_browser}
-                        onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
+                    </UiCheckboxField>
+                    <UiCheckboxField
+                      checked={editForm.access_browser}
+                      onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
+                      className="ui-body text-[var(--ui-text)]"
+                    >
                       Access browser
-                    </label>
+                    </UiCheckboxField>
                   </div>
-                  <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
+                  <div className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner type</label>
-                      <select
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.credential_owner_type}
-                        onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
-                      >
-                        {editCredentialOwnerTypeOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner identifier</label>
-                      <input
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.credential_owner_identifier}
-                        onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_identifier: e.target.value }))}
-                        placeholder="account-id / user-id"
-                      />
-                    </div>
+                    <UiSelect
+                      label="Owner type"
+                      value={editForm.credential_owner_type}
+                      onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
+                    >
+                      {editCredentialOwnerTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </UiSelect>
+                    <UiInput
+                      label="Owner identifier"
+                      value={editForm.credential_owner_identifier}
+                      onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_identifier: e.target.value }))}
+                      placeholder="account-id / user-id"
+                    />
                   </div>
                 </div>
               </>
@@ -1512,12 +1476,14 @@ export default function S3ConnectionsPage() {
                         <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
                         <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
                       </div>
-                      <input
+                      <UiInput
+                        aria-label="Search UI users"
                         type="text"
                         value={editUserSearch}
                         onChange={(e) => setEditUserSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        fieldClassName="w-44"
+                        size="compact"
                       />
                     </div>
                     <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -1556,19 +1522,19 @@ export default function S3ConnectionsPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="ui-caption text-slate-500 dark:text-slate-400">{editUserSelections.length} selected</span>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
+                        <UiButton
+                          size="sm"
+                          variant="secondary"
                           onClick={() => {
                             setShowEditUserPanel(false);
                             setEditUserSelections([]);
                             setEditUserSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                         >
                           Cancel
-                        </button>
-                        <button
-                          type="button"
+                        </UiButton>
+                        <UiButton
+                          size="sm"
                           disabled={editUserSelections.length === 0}
                           onClick={() => {
                             if (editUserSelections.length === 0) return;
@@ -1577,10 +1543,9 @@ export default function S3ConnectionsPage() {
                             setEditUserSearch("");
                             setShowEditUserPanel(false);
                           }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           Add selected
-                        </button>
+                        </UiButton>
                       </div>
                     </div>
                   </div>
@@ -1650,12 +1615,14 @@ export default function S3ConnectionsPage() {
                         <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
                         <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
                       </div>
-                      <input
+                      <UiInput
+                        aria-label="Search UI groups"
                         type="text"
                         value={editGroupSearch}
                         onChange={(e) => setEditGroupSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        fieldClassName="w-44"
+                        size="compact"
                       />
                     </div>
                     <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
@@ -1694,19 +1661,19 @@ export default function S3ConnectionsPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="ui-caption text-slate-500 dark:text-slate-400">{editGroupSelections.length} selected</span>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
+                        <UiButton
+                          size="sm"
+                          variant="secondary"
                           onClick={() => {
                             setShowEditGroupPanel(false);
                             setEditGroupSelections([]);
                             setEditGroupSearch("");
                           }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                         >
                           Cancel
-                        </button>
-                        <button
-                          type="button"
+                        </UiButton>
+                        <UiButton
+                          size="sm"
                           disabled={editGroupSelections.length === 0}
                           onClick={() => {
                             if (editGroupSelections.length === 0) return;
@@ -1715,10 +1682,9 @@ export default function S3ConnectionsPage() {
                             setEditGroupSearch("");
                             setShowEditGroupPanel(false);
                           }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           Add selected
-                        </button>
+                        </UiButton>
                       </div>
                     </div>
                   </div>
@@ -1727,20 +1693,12 @@ export default function S3ConnectionsPage() {
             )}
 
             <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={editCloseGuard.requestClose}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                disabled={editBusy}
-              >
+              <UiButton variant="secondary" onClick={editCloseGuard.requestClose} disabled={editBusy}>
                 Close
-              </button>
-              <button
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                disabled={editBusy}
-              >
+              </UiButton>
+              <UiButton type="submit" disabled={editBusy}>
                 {editBusy ? "Saving..." : "Save"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {editCloseGuard.confirmationDialog}
