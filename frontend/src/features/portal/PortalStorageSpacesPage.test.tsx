@@ -133,7 +133,7 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
-    expect(researchRow).toHaveClass("max-md:block");
+    expect(screen.getByText("Research Data").closest("table")).toHaveClass("responsive-data-table");
     expect(within(researchRow!).getByText("Restricted")).toBeInTheDocument();
     expect(within(researchRow!).queryByText("Active")).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
@@ -145,7 +145,7 @@ describe("PortalStorageSpacesPage", () => {
       "href",
       "/portal/storage-spaces/research-data"
     );
-    expect(screen.getByRole("link", { name: "Open" }).closest("td")).toHaveClass("max-md:block");
+    expect(screen.getByRole("link", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(screen.getByRole("button", { name: "Create storage space" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add existing storage" })).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();

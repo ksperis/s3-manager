@@ -13,6 +13,7 @@ import {
   type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceVisibility,
 } from "../../api/portal";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -36,6 +37,7 @@ import {
   portalVisibilityTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
+import type { PortalWorkspaceSpace } from "./portalWorkspaceModel";
 import {
   portalRoleLabel,
   portalShareScopeLabel,
@@ -98,6 +100,76 @@ export default function PortalStorageSpacesPage() {
       return a.name.localeCompare(b.name);
     });
   }, [normalizedQuery, roleFilter, sort, statusFilter, t, workspace.spaces]);
+  const tableStatus = filteredSpaces.length === 0 ? "empty" : "ready";
+  const storageSpaceColumns = useMemo<DataTableColumn<PortalWorkspaceSpace>[]>(
+    () => [
+      {
+        id: "name",
+        label: t({ en: "Name", fr: "Nom", de: "Name" }),
+        mobileLabel: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        primary: true,
+        render: (space) => (
+          <>
+            <Link
+              to={storageSpacePath(space)}
+              className={cx(
+                "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                uiTitleTextClass,
+              )}
+            >
+              {space.name}
+            </Link>
+            <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
+          </>
+        ),
+      },
+      {
+        id: "access",
+        label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
+        render: (space) => {
+          const status = visibleStatus(space);
+          return (
+            <div className="flex flex-wrap items-center gap-2">
+              <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
+              {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
+            </div>
+          );
+        },
+      },
+      {
+        id: "files",
+        label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }),
+        render: (space) => formatCompactNumber(space.objectCount),
+      },
+      {
+        id: "size",
+        label: t({ en: "Size", fr: "Taille", de: "Größe" }),
+        render: (space) => formatBytes(space.usedBytes),
+      },
+      {
+        id: "created",
+        label: t({ en: "Created", fr: "Créé", de: "Erstellt" }),
+        render: (space) => space.createdLabel,
+      },
+      {
+        id: "region",
+        label: t({ en: "Region", fr: "Région", de: "Region" }),
+        render: (space) => space.region,
+      },
+      {
+        id: "action",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+        align: "right",
+        mobileRole: "actions",
+        render: (space) => (
+          <Link to={storageSpacePath(space)} className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">
+            {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
+          </Link>
+        ),
+      },
+    ],
+    [t]
+  );
 
   const canCreate = Boolean(state?.can_create_storage_spaces);
   const canImport = state?.account_role === "portal_manager" && Boolean(state?.can_manage_buckets);
@@ -374,88 +446,28 @@ export default function PortalStorageSpacesPage() {
             <option value="-object_count">{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</option>
           </select>
         </div>
-        <div className="overflow-x-auto max-md:overflow-visible">
-          <table className="ui-data-table min-w-[840px] max-md:block max-md:w-full max-md:min-w-0">
-            <thead className="max-md:hidden">
-              <tr>
-                <th>{t({ en: "Name", fr: "Nom", de: "Name" })}</th>
-                <th>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</th>
-                <th>{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</th>
-                <th>{t({ en: "Size", fr: "Taille", de: "Größe" })}</th>
-                <th>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</th>
-                <th>{t({ en: "Region", fr: "Région", de: "Region" })}</th>
-                <th className="text-right">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
-              </tr>
-            </thead>
-            <tbody className="max-md:block max-md:w-full max-md:space-y-3">
-              {filteredSpaces.map((space) => {
-                const status = visibleStatus(space);
-                return (
-                  <tr key={space.id} className="max-md:block max-md:w-full max-md:rounded-md max-md:border max-md:border-[color:var(--ui-border)] max-md:bg-[color:var(--ui-surface)] max-md:p-3">
-                    <td className="max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
-                      <Link
-                        to={storageSpacePath(space)}
-                        className={cx(
-                          "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                          uiTitleTextClass,
-                        )}
-                      >
-                        {space.name}
-                      </Link>
-                      <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{space.description}</div>
-                    </td>
-                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Access", fr: "Accès", de: "Zugriff" })}</span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <UiBadge tone={portalVisibilityTone(space.visibility)}>{portalShareScopeLabel(space.visibility, space.shareScope, t)}</UiBadge>
-                        {status ? <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(status as "Active" | "Attention" | "Archived", t)}</UiBadge> : null}
-                      </div>
-                    </td>
-                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</span>
-                      {formatCompactNumber(space.objectCount)}
-                    </td>
-                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Size", fr: "Taille", de: "Größe" })}</span>
-                      {formatBytes(space.usedBytes)}
-                    </td>
-                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Created", fr: "Créé", de: "Erstellt" })}</span>
-                      {space.createdLabel}
-                    </td>
-                    <td className="max-md:mt-3 max-md:block max-md:border-0 max-md:p-0">
-                      <span className={cx("hidden text-[11px] font-semibold max-md:block", uiMutedTextClass)}>{t({ en: "Region", fr: "Région", de: "Region" })}</span>
-                      {space.region}
-                    </td>
-                    <td className="text-right max-md:mt-3 max-md:block max-md:border-0 max-md:p-0 max-md:text-left">
-                      <Link to={storageSpacePath(space)} className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">
-                        {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredSpaces.length === 0 ? (
-                <tr className="max-md:block max-md:w-full">
-                  <td colSpan={7} className={cx("py-6 text-center text-xs font-semibold max-md:block max-md:border-0", uiMutedTextClass)}>
-                    {canCreate
-                      ? t({
-                          en: "No Storage Spaces yet. Create one to start storing files.",
-                          fr: "Aucun espace de stockage pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
-                          de: "Noch keine Speicherbereiche. Erstellen Sie einen, um Dateien zu speichern.",
-                        })
-                      : t({
-                          en: "No Storage Spaces are available. Ask an administrator to add you to a Storage Space or enable creation for your account.",
-                          fr: "Aucun espace de stockage n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
-                          de: "Es sind keine Speicherbereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Speicherbereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
-                        })}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={storageSpaceColumns}
+          rows={filteredSpaces}
+          rowKey={(space) => space.id}
+          status={tableStatus}
+          loadingMessage={t({ en: "Loading storage spaces...", fr: "Chargement des espaces de stockage...", de: "Speicherbereiche werden geladen..." })}
+          errorMessage={t({ en: "Unable to load storage spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })}
+          emptyMessage={
+            canCreate
+              ? t({
+                  en: "No Storage Spaces yet. Create one to start storing files.",
+                  fr: "Aucun espace de stockage pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
+                  de: "Noch keine Speicherbereiche. Erstellen Sie einen, um Dateien zu speichern.",
+                })
+              : t({
+                  en: "No Storage Spaces are available. Ask an administrator to add you to a Storage Space or enable creation for your account.",
+                  fr: "Aucun espace de stockage n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
+                  de: "Es sind keine Speicherbereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Speicherbereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
+                })
+          }
+          responsiveCards
+        />
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>
           <span>
             {t({
