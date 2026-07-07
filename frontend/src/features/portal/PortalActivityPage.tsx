@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
 import UiCard from "../../components/ui/UiCard";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
@@ -105,18 +106,32 @@ export default function PortalActivityPage() {
 
       <UiCard>
         <div className="mb-4 flex flex-wrap gap-3">
-          <select className="ui-control h-8 w-44 py-1.5 text-xs" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)}>
+          <UiSelect
+            label={t({ en: "Action", fr: "Action", de: "Aktion" })}
+            size="compact"
+            fieldClassName="w-44"
+            className="h-8"
+            value={actionFilter}
+            onChange={(event) => setActionFilter(event.target.value)}
+          >
             <option value="all">{t({ en: "All actions", fr: "Toutes les actions", de: "Alle Aktionen" })}</option>
             {actionOptions.map((action) => (
               <option key={action} value={action}>{action}</option>
             ))}
-          </select>
-          <select className="ui-control h-8 w-52 py-1.5 text-xs" value={spaceFilter} onChange={(event) => setSpaceFilter(event.target.value)}>
+          </UiSelect>
+          <UiSelect
+            label={t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}
+            size="compact"
+            fieldClassName="w-52"
+            className="h-8"
+            value={spaceFilter}
+            onChange={(event) => setSpaceFilter(event.target.value)}
+          >
             <option value="all">{t({ en: "All storage spaces", fr: "Tous les espaces de stockage", de: "Alle Speicherbereiche" })}</option>
             {workspace.spaces.map((space) => (
               <option key={space.id} value={space.name}>{space.name}</option>
             ))}
-          </select>
+          </UiSelect>
         </div>
         <DataTableShell
           columns={activityColumns}

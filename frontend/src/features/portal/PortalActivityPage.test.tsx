@@ -36,6 +36,8 @@ describe("PortalActivityPage", () => {
     render(<PortalActivityPage />);
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Action")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Storage Space")).toHaveClass("ui-control");
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("alice@example.com").closest("table")).toHaveClass("responsive-data-table");
     expect(screen.getAllByText("Uploaded").length).toBeGreaterThan(0);
