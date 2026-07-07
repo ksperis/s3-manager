@@ -15078,17 +15078,18 @@ export default function BrowserPage({
               </p>
             )}
             <div className="flex items-center justify-end gap-2">
-              <button
+              <UiButton
                 type="button"
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                variant="secondary"
+                size="sm"
                 onClick={createBucketCloseGuard.requestClose}
                 disabled={createBucketLoading}
               >
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                size="sm"
                 disabled={
                   !hasS3AccountContext ||
                   createBucketLoading ||
@@ -15097,7 +15098,7 @@ export default function BrowserPage({
                 }
               >
                 {createBucketLoading ? "Creating..." : "Create bucket"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {createBucketCloseGuard.confirmationDialog}
@@ -15362,23 +15363,24 @@ export default function BrowserPage({
               </p>
             )}
             <div className="flex items-center justify-end gap-2">
-              <button
+              <UiButton
                 type="button"
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                variant="secondary"
+                size="sm"
                 onClick={newFolderCloseGuard.requestClose}
                 disabled={newFolderLoading}
               >
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                size="sm"
                 disabled={
                   !bucketName || !hasS3AccountContext || newFolderLoading
                 }
               >
                 {newFolderLoading ? "Creating..." : "Create"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {newFolderCloseGuard.confirmationDialog}

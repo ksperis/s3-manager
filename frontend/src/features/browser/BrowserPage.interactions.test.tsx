@@ -1696,6 +1696,45 @@ describe("BrowserPage interactions", () => {
     });
   });
 
+  it("uses shared controls in the create folder modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "New folder" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Create folder" });
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toHaveClass("ui-button-base");
+    expect(
+      within(dialog).getByRole("button", { name: "Create" }),
+    ).toHaveClass("ui-button-base");
+  });
+
+  it("uses shared controls in the create bucket modal", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await findRowByLabel("a.txt");
+
+    await user.click(
+      within(getContextToolbar()).getByRole("button", { name: "Select bucket" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Create bucket" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Create bucket" });
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toHaveClass("ui-button-base");
+    expect(
+      within(dialog).getByRole("button", { name: "Create bucket" }),
+    ).toHaveClass("ui-button-base");
+  });
+
   it("renders a passive Presign badge in the More status section", async () => {
     const user = userEvent.setup();
     renderPage();
