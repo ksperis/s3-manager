@@ -130,6 +130,10 @@ describe("PortalStorageSpacesPage", () => {
 
     expect(screen.getByRole("heading", { name: "Storage Spaces" })).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
+    expect(screen.getByLabelText("Search")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Role")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Status")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Sort by")).toHaveClass("ui-control");
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();

@@ -18,6 +18,8 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiField from "../../components/ui/UiField";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -420,31 +422,55 @@ export default function PortalStorageSpacesPage() {
 
       <UiCard>
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]">
-          <input
-            type="search"
-            className="ui-control h-9 py-1.5 text-xs"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t({ en: "Search storage spaces...", fr: "Rechercher des espaces de stockage...", de: "Speicherbereiche suchen..." })}
-          />
-          <select className="ui-control h-9 py-1.5 text-xs" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as PortalStorageSpaceRole | "all")}>
+          <UiField label={t({ en: "Search", fr: "Recherche", de: "Suche" })}>
+            {({ id, describedBy }) => (
+              <input
+                id={id}
+                aria-describedby={describedBy}
+                type="search"
+                className="ui-control h-9 text-xs"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t({ en: "Search storage spaces...", fr: "Rechercher des espaces de stockage...", de: "Speicherbereiche suchen..." })}
+              />
+            )}
+          </UiField>
+          <UiSelect
+            label={t({ en: "Role", fr: "Rôle", de: "Rolle" })}
+            size="compact"
+            className="h-9"
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value as PortalStorageSpaceRole | "all")}
+          >
             <option value="all">{t({ en: "All roles", fr: "Tous les rôles", de: "Alle Rollen" })}</option>
             <option value="Owner">{portalRoleLabel("Owner", t)}</option>
             <option value="Editor">{portalRoleLabel("Editor", t)}</option>
             <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
-          </select>
-          <select className="ui-control h-9 py-1.5 text-xs" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          </UiSelect>
+          <UiSelect
+            label={t({ en: "Status", fr: "Statut", de: "Status" })}
+            size="compact"
+            className="h-9"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
             <option value="all">{t({ en: "All states", fr: "Tous les états", de: "Alle Status" })}</option>
             <option value="Active">{portalStatusLabel("Active", t)}</option>
             <option value="Attention">{portalStatusLabel("Attention", t)}</option>
             <option value="Archived">{portalStatusLabel("Archived", t)}</option>
-          </select>
-          <select className="ui-control h-9 py-1.5 text-xs" value={sort} onChange={(event) => setSort(event.target.value)}>
+          </UiSelect>
+          <UiSelect
+            label={t({ en: "Sort by", fr: "Trier par", de: "Sortieren nach" })}
+            size="compact"
+            className="h-9"
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+          >
             <option value="name">{t({ en: "Name", fr: "Nom", de: "Name" })}</option>
             <option value="-created_at">{t({ en: "Newest", fr: "Plus récents", de: "Neueste" })}</option>
             <option value="-used_bytes">{t({ en: "Usage", fr: "Utilisation", de: "Nutzung" })}</option>
             <option value="-object_count">{t({ en: "Files", fr: "Fichiers", de: "Dateien" })}</option>
-          </select>
+          </UiSelect>
         </div>
         <DataTableShell
           columns={storageSpaceColumns}
