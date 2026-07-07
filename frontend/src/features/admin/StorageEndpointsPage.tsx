@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -155,6 +155,11 @@ const endpointToggleCardClass =
   "flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const endpointToggleCardDisabledClass = cx(endpointToggleCardClass, "opacity-70");
 const endpointToggleCheckboxClass = cx(uiCheckboxClass, "disabled:cursor-not-allowed disabled:opacity-50");
+const endpointFormInputClass = cx(uiInputClass, "rounded-lg font-normal");
+const endpointFormReadOnlyInputClass = cx(
+  endpointFormInputClass,
+  "read-only:bg-slate-100 read-only:text-slate-600 dark:read-only:bg-slate-900 dark:read-only:text-slate-300",
+);
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -1399,7 +1404,7 @@ export default function StorageEndpointsPage() {
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className={endpointFormInputClass}
                     required
                   />
                 </label>
@@ -1467,7 +1472,7 @@ export default function StorageEndpointsPage() {
                       setForm((prev) => ({ ...prev, endpoint_url: e.target.value }));
                     }
                   }}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary read-only:bg-slate-100 read-only:text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:read-only:bg-slate-900 dark:read-only:text-slate-300"
+                  className={endpointFormReadOnlyInputClass}
                   placeholder={awsMode ? computedAwsS3Endpoint : "https://s3.example.com"}
                   readOnly={awsMode}
                   required
@@ -1479,7 +1484,7 @@ export default function StorageEndpointsPage() {
                   type="text"
                   value={form.region}
                   onChange={(e) => handleRegionChange(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className={endpointFormInputClass}
                   placeholder="us-east-1"
                 />
               </label>
@@ -1489,7 +1494,7 @@ export default function StorageEndpointsPage() {
                   type="number"
                   value={form.latitude}
                   onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className={endpointFormInputClass}
                   placeholder="48.8566"
                   min="-90"
                   max="90"
@@ -1502,7 +1507,7 @@ export default function StorageEndpointsPage() {
                   type="number"
                   value={form.longitude}
                   onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className={endpointFormInputClass}
                   placeholder="2.3522"
                   min="-180"
                   max="180"
@@ -1552,7 +1557,7 @@ export default function StorageEndpointsPage() {
                           type="text"
                           value={form.admin_access_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          className={endpointFormInputClass}
                           placeholder="Access key admin"
                           required={form.features.admin.enabled}
                         />
@@ -1560,7 +1565,7 @@ export default function StorageEndpointsPage() {
                           type="password"
                           value={form.admin_secret_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          className={endpointFormInputClass}
                           placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
                           required={!editingId && form.features.admin.enabled}
                         />
@@ -1576,7 +1581,7 @@ export default function StorageEndpointsPage() {
                           type="text"
                           value={form.supervision_access_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          className={endpointFormInputClass}
                           placeholder="Access key supervision"
                           required={form.features.usage.enabled || form.features.metrics.enabled}
                         />
@@ -1584,7 +1589,7 @@ export default function StorageEndpointsPage() {
                           type="password"
                           value={form.supervision_secret_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          className={endpointFormInputClass}
                           placeholder="Secret key supervision"
                           required={!editingId && (form.features.usage.enabled || form.features.metrics.enabled)}
                         />
@@ -1811,7 +1816,7 @@ export default function StorageEndpointsPage() {
                                 admin: { ...current.admin, endpoint: e.target.value },
                               }))
                             }
-                            className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            className={endpointFormInputClass}
                             placeholder="http://rgw-admin.local"
                           />
                         </label>
@@ -1897,7 +1902,7 @@ export default function StorageEndpointsPage() {
                           }));
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary read-only:bg-slate-100 read-only:text-slate-600 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:read-only:bg-slate-900 dark:read-only:text-slate-300"
+                      className={endpointFormReadOnlyInputClass}
                       placeholder={awsMode ? computedAwsStsEndpoint : "https://sts.example.com"}
                       disabled={!form.features.sts.enabled}
                       readOnly={awsMode}
@@ -1917,7 +1922,7 @@ export default function StorageEndpointsPage() {
                           }));
                         }
                       }}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary read-only:bg-slate-100 read-only:text-slate-600 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:read-only:bg-slate-900 dark:read-only:text-slate-300"
+                      className={endpointFormReadOnlyInputClass}
                       placeholder={awsMode ? computedAwsIamEndpoint : "https://iam.example.com"}
                       disabled={!form.features.iam.enabled}
                       readOnly={awsMode}
@@ -1937,7 +1942,7 @@ export default function StorageEndpointsPage() {
                           },
                         }))
                       }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      className={endpointFormInputClass}
                       disabled={!cephMode}
                       title={!cephMode ? "Healthcheck signed mode is available only for Ceph endpoints." : signedProbeBlockedReason ?? undefined}
                     >
@@ -1958,7 +1963,7 @@ export default function StorageEndpointsPage() {
                           healthcheck: { ...current.healthcheck, endpoint: e.target.value },
                         }))
                       }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      className={endpointFormInputClass}
                       placeholder="https://rgw.example.com/healthz"
                     />
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
