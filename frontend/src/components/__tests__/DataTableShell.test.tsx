@@ -138,6 +138,31 @@ describe("DataTableShell", () => {
     expect(screen.getByRole("button", { name: "Open" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
+  it("renders custom column headers for selection controls", () => {
+    render(
+      <DataTableShell
+        columns={[
+          {
+            id: "select",
+            label: "Select",
+            header: <input type="checkbox" aria-label="Select all rows" />,
+            render: () => <input type="checkbox" aria-label="Select Archive" />,
+          },
+          ...columns,
+        ]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        loadingMessage="Loading rows..."
+        errorMessage="Unable to load rows."
+        emptyMessage="No rows."
+      />
+    );
+
+    expect(screen.getByRole("checkbox", { name: "Select all rows" }).closest("th")).toHaveClass("text-left");
+    expect(screen.getByRole("checkbox", { name: "Select Archive" }).closest("td")).not.toHaveAttribute("data-label");
+  });
+
   it("keeps responsive tables fully clipped when horizontal overflow is disabled", () => {
     const { rerender } = render(
       <DataTableShell

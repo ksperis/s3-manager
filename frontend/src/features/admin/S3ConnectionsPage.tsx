@@ -8,9 +8,8 @@ import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import PaginationControls from "../../components/PaginationControls";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
@@ -47,6 +46,8 @@ const credentialOwnerTypeOptions = [
   { value: "s3_user", label: "S3 user" },
 ];
 type EditTab = "general" | "users" | "groups";
+
+const selectionCheckboxClass = "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary";
 
 const createEmptyConnectionForm = () => ({
   name: "",
@@ -870,6 +871,147 @@ export default function S3ConnectionsPage() {
     setBulkDeleteBusy(false);
   };
 
+  const connectionTableColumns: Array<DataTableColumn<S3ConnectionAdminItem>> = [
+    {
+      id: "select",
+      label: "Select",
+      headerClassName: "w-10 px-3",
+      cellClassName: "w-10 px-3 py-4",
+      header: (
+        <input
+          ref={selectionHeaderRef}
+          type="checkbox"
+          aria-label="Select all filtered connections"
+          checked={headerChecked}
+          onChange={(e) => {
+            void setSelectionForFilteredResults(e.target.checked);
+          }}
+          disabled={loading || selectAllFilteredBusy || total === 0 || bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy}
+          className={selectionCheckboxClass}
+        />
+      ),
+      render: (connection) => (
+        <input
+          type="checkbox"
+          aria-label={`Select connection ${connection.name}`}
+          checked={selectedIdSet.has(connection.id)}
+          onChange={() => toggleRowSelection(connection.id)}
+          disabled={bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy || selectAllFilteredBusy}
+          className={selectionCheckboxClass}
+        />
+      ),
+    },
+    {
+      id: "name",
+      label: "Name",
+      primary: true,
+      cellClassName: "min-w-[240px]",
+      render: (connection) => {
+        const tagItems = buildUiTagItems(connection.tags);
+        return (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="min-w-0 flex-1 truncate">{connection.name}</p>
+            {tagItems.length > 0 && (
+              <UiTagBadgeList
+                items={tagItems}
+                variant="listing-compact"
+                layout="inline-compact"
+                className="ml-auto max-w-full"
+                maxVisible={4}
+              />
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "endpoint",
+      label: "Endpoint",
+      cellClassName: "min-w-[220px]",
+      render: (connection) =>
+        connection.storage_endpoint_id != null ? (
+          <span>{endpointNameById.get(connection.storage_endpoint_id) || `Endpoint #${connection.storage_endpoint_id}`}</span>
+        ) : (
+          <span className="ui-mono">{connection.endpoint_url || "-"}</span>
+        ),
+    },
+    {
+      id: "status",
+      label: "Status",
+      render: (connection) => {
+        const isActive = connection.is_active !== false;
+        return (
+          <span
+            className={`rounded-full px-2 py-1 ui-caption font-semibold ${
+              isActive
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+            }`}
+          >
+            {isActive ? "Active" : "Inactive"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "created-by",
+      label: "Created by",
+      render: (connection) => (
+        <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          {connection.created_by_email || connection.created_by_user_id}
+        </span>
+      ),
+    },
+    {
+      id: "associations",
+      label: "UI Users / Groups",
+      cellClassName: "min-w-[240px]",
+      render: renderConnectionAssociations,
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      cellClassName: "min-w-[260px]",
+      render: (connection) => {
+        const isActive = connection.is_active !== false;
+        return (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className={tableActionButtonClasses}
+              onClick={() => void submitToggleConnectionStatus(connection)}
+              disabled={
+                statusBusyId === connection.id ||
+                bulkActivateBusy ||
+                bulkDisableBusy ||
+                bulkDeleteBusy ||
+                selectAllFilteredBusy
+              }
+            >
+              {statusBusyId === connection.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
+            </button>
+            <button
+              type="button"
+              className={tableActionButtonClasses}
+              onClick={() => openEdit(connection)}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className={tableDeleteActionClasses}
+              onClick={() => setDeleteTarget(connection)}
+            >
+              Delete
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -937,132 +1079,25 @@ export default function S3ConnectionsPage() {
             </div>
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-3 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <input
-                    ref={selectionHeaderRef}
-                    type="checkbox"
-                    aria-label="Select all filtered connections"
-                    checked={headerChecked}
-                    onChange={(e) => {
-                      void setSelectionForFilteredResults(e.target.checked);
-                    }}
-                    disabled={loading || selectAllFilteredBusy || total === 0 || bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                </th>
-                {["Name", "Endpoint", "Status", "Created by", "UI Users / Groups", "Actions"].map((label) => (
-                  <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={7} message="Loading connections..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={7} message="Unable to load connections." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={7} message="No connections." />}
-              {items.map((c) => {
-                const isActive = c.is_active !== false;
-                const tagItems = buildUiTagItems(c.tags);
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="px-3 py-4">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select connection ${c.name}`}
-                        checked={selectedIdSet.has(c.id)}
-                        onChange={() => toggleRowSelection(c.id)}
-                        disabled={bulkActivateBusy || bulkDisableBusy || bulkDeleteBusy || selectAllFilteredBusy}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                    </td>
-                    <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="min-w-0 flex-1 truncate">{c.name}</p>
-                        {tagItems.length > 0 && (
-                          <UiTagBadgeList
-                            items={tagItems}
-                            variant="listing-compact"
-                            layout="inline-compact"
-                            className="ml-auto max-w-full"
-                            maxVisible={4}
-                          />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {c.storage_endpoint_id != null ? (
-                        <span>{endpointNameById.get(c.storage_endpoint_id) || `Endpoint #${c.storage_endpoint_id}`}</span>
-                      ) : (
-                        <span className="ui-mono">{c.endpoint_url || "-"}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      <span
-                        className={`rounded-full px-2 py-1 ui-caption font-semibold ${
-                          isActive
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
-                            : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                        }`}
-                      >
-                        {isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {c.created_by_email || c.created_by_user_id}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {renderConnectionAssociations(c)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className={tableActionButtonClasses}
-                          onClick={() => void submitToggleConnectionStatus(c)}
-                          disabled={
-                            statusBusyId === c.id ||
-                            bulkActivateBusy ||
-                            bulkDisableBusy ||
-                            bulkDeleteBusy ||
-                            selectAllFilteredBusy
-                          }
-                        >
-                          {statusBusyId === c.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          className={tableActionButtonClasses}
-                          onClick={() => openEdit(c)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className={tableDeleteActionClasses}
-                          onClick={() => setDeleteTarget(c)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-          disabled={loading}
+        <DataTableShell
+          columns={connectionTableColumns}
+          rows={items}
+          rowKey={(connection) => connection.id}
+          status={tableStatus}
+          loadingMessage="Loading connections..."
+          errorMessage="Unable to load connections."
+          emptyMessage="No connections."
+          primaryColumnId="name"
+          responsiveCards
+          tableClassName="compact-table"
+          pagination={{
+            page,
+            pageSize,
+            total,
+            onPageChange: handlePageChange,
+            onPageSizeChange: handlePageSizeChange,
+            disabled: loading,
+          }}
         />
       </div>
 

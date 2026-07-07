@@ -15,6 +15,7 @@ type SortDirection = "asc" | "desc";
 export type DataTableColumn<Row, SortField extends string = string> = {
   id: string;
   label: string;
+  header?: ReactNode;
   field?: SortField | null;
   align?: "left" | "right";
   headerClassName?: string;
@@ -103,16 +104,31 @@ export default function DataTableShell<Row, SortField extends string = string>({
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               {columns.map((column) => (
-                <SortableHeader
-                  key={column.id}
-                  label={column.label}
-                  field={column.field ?? null}
-                  activeField={sort?.field ?? null}
-                  direction={sort?.direction ?? "asc"}
-                  align={column.align ?? "left"}
-                  className={column.headerClassName ?? ""}
-                  onSort={sort?.onSort}
-                />
+                column.header ? (
+                  <th
+                    key={column.id}
+                    className={cx(
+                      "px-6 py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
+                      (column.align ?? "left") === "right" ? "text-right" : "text-left",
+                      column.headerClassName
+                    )}
+                  >
+                    <div className={cx("flex items-center", (column.align ?? "left") === "right" ? "justify-end" : "gap-1")}>
+                      {column.header}
+                    </div>
+                  </th>
+                ) : (
+                  <SortableHeader
+                    key={column.id}
+                    label={column.label}
+                    field={column.field ?? null}
+                    activeField={sort?.field ?? null}
+                    direction={sort?.direction ?? "asc"}
+                    align={column.align ?? "left"}
+                    className={column.headerClassName ?? ""}
+                    onSort={sort?.onSort}
+                  />
+                )
               ))}
             </tr>
           </thead>

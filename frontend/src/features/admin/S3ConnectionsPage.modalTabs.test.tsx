@@ -137,8 +137,16 @@ describe("S3ConnectionsPage modal tabs", () => {
     render(<S3ConnectionsPage />);
 
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByText("connection-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("https://endpoint-1.example.test").closest("td")).toHaveAttribute("data-label", "Endpoint");
+    expect(within(table).getByText("Active").closest("td")).toHaveAttribute("data-label", "Status");
+    expect(within(table).getByText("owner@example.com").closest("td")).toHaveAttribute("data-label", "Created by");
     expect(await screen.findByText("u11@example.com")).toBeInTheDocument();
     expect(screen.getByText("Storage Operators")).toBeInTheDocument();
+    expect(within(table).getByText("Storage Operators").closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
+    expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 
   it("keeps linked UI user selections across tabs and syncs add/remove on save", async () => {
