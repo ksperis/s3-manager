@@ -80,6 +80,9 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByRole("heading", { name: "Access keys" })).toBeInTheDocument();
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
     expect(screen.queryByText("AK-PORTAL")).not.toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("AK-USER").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.getByRole("button", { name: "Disable" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(screen.getByRole("button", { name: "New key" })).toBeEnabled();
     expect(screen.getByText(/Use endpoint https:\/\/s3\.example\.test with these keys/i)).toBeInTheDocument();
     expect(mocks.fetchPortalAccessKeysState).toHaveBeenCalledWith("101");

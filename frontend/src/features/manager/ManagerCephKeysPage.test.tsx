@@ -74,9 +74,12 @@ describe("ManagerCephKeysPage", () => {
 
     expect(await screen.findByText("AK-PORTAL")).toBeInTheDocument();
     expect(screen.getByText("S3M")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.getByText("AK-PORTAL").closest("td")).toHaveAttribute("data-mobile-primary", "true");
 
     const lockedButtons = screen.getAllByTitle("Portal key is locked");
     expect(lockedButtons).toHaveLength(2);
+    expect(lockedButtons[0].closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(lockedButtons.every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
     expect((lockedButtons[0] as HTMLButtonElement).className).toContain("disabled:cursor-not-allowed");
     expect((lockedButtons[0] as HTMLButtonElement).className).toContain("disabled:text-slate-400");

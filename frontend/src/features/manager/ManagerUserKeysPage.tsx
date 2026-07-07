@@ -2,8 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import {
   AccessKey,
@@ -14,32 +14,27 @@ import {
 } from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
-import PageHeader from "../../components/PageHeader";
+import ListToolbar from "../../components/ListToolbar";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
+import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ManagerTable, {
+  managerTableActionCellClass,
+  managerTableCellClass,
+  managerTableMutedRowClass,
+  managerTablePrimaryCellClass,
+} from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import UiButton from "../../components/ui/UiButton";
+import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const handleCopy = () => {
-    if (!value) return;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(value).catch(() => {});
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-    >
-      <span aria-hidden>📋</span>
-      {label}
-    </button>
-  );
+function extractError(err: unknown): string {
+  return extractApiError(err, "Unexpected error");
 }
 
 export default function ManagerUserKeysPage() {
@@ -47,18 +42,6 @@ export default function ManagerUserKeysPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
-  if (isS3User) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title="User access keys"
-          description="Rotate IAM access keys for a specific user."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }, { label: "Access keys" }]}
-        />
-        <PageBanner tone="info">IAM users are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
-    );
-  }
   const [keys, setKeys] = useState<AccessKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,11 +65,7 @@ export default function ManagerUserKeysPage() {
     return true;
   };
 
-  const extractError = (err: unknown): string => {
-    return extractApiError(err, "Unexpected error");
-  };
-
-  const load = async (accountId: S3AccountSelector, targetUser: string) => {
+  const load = useCallback(async (accountId: S3AccountSelector, targetUser: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -97,10 +76,10 @@ export default function ManagerUserKeysPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (needsS3AccountSelection) {
+    if (needsS3AccountSelection || isS3User) {
       setKeys([]);
       setLoading(false);
       return;
@@ -108,7 +87,7 @@ export default function ManagerUserKeysPage() {
     if (userName) {
       load(accountIdForApi, userName);
     }
-  }, [accountIdForApi, needsS3AccountSelection, userName, accessMode]);
+  }, [accountIdForApi, needsS3AccountSelection, isS3User, userName, accessMode, load]);
 
   const handleCreateKey = async () => {
     if (needsS3AccountSelection || !userName) return;
@@ -181,6 +160,19 @@ export default function ManagerUserKeysPage() {
     rowCount: keys.length,
   });
 
+  if (isS3User) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title="User access keys"
+          description="Rotate IAM access keys for a specific user."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }, { label: "Access keys" }]}
+        />
+        <PageBanner tone="info">IAM users are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
+      </div>
+    );
+  }
+
   if (!userName) {
     return <div className="ui-body text-slate-600">User not specified.</div>;
   }
@@ -219,99 +211,80 @@ export default function ManagerUserKeysPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {createdKey && createdKey.secret_access_key && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">Key created for {pageTitle}</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAddConnectionModal(true)}
-                disabled={!createdKey.secret_access_key}
-                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
-              >
-                Add as S3 Connection
-              </button>
-              <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-                Copy these values now
-              </span>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Access key</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.access_key_id}
-                </div>
-                <CopyButton value={createdKey.access_key_id} label="Copy" />
-              </div>
-            </div>
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Secret key</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.secret_access_key}
-                </div>
-                <CopyButton value={createdKey.secret_access_key} label="Copy" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <OneTimeSecretPanel
+          title={`Key created for ${pageTitle}`}
+          description="The secret is shown only once."
+          badge="Copy these values now"
+          actions={
+            <UiButton
+              type="button"
+              variant="secondary"
+              size="xs"
+              onClick={() => setShowAddConnectionModal(true)}
+              disabled={!createdKey.secret_access_key}
+            >
+              Add as S3 Connection
+            </UiButton>
+          }
+          values={[
+            { label: "Access key", value: createdKey.access_key_id, copyLabel: "Copy" },
+            { label: "Secret key", value: createdKey.secret_access_key, copyLabel: "Copy" },
+          ]}
+        />
       )}
 
       <div className="ui-surface-card">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Keys</p>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">IAM access keys for this user.</p>
-        </div>
-        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Access key</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
-              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Created on</th>
-              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys for this user." />}
-            {keys.map((k) => (
-                <tr
-                  key={k.access_key_id}
-                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
-                >
-                  <td className="manager-table-cell px-6 py-4 font-mono text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                    {k.status ?? (isKeyActive(k) ? "Active" : "Inactive")}
-                  </td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        onClick={() => handleToggleKey(k.access_key_id, !isKeyActive(k))}
-                        className={tableActionButtonClasses}
-                        disabled={Boolean(busy)}
-                      >
-                        {busy === `toggle:${k.access_key_id}` ? "Saving..." : isKeyActive(k) ? "Disable" : "Enable"}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteKey(k.access_key_id)}
-                        className={tableDeleteActionClasses}
-                        disabled={Boolean(busy)}
-                      >
-                        {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <ListToolbar
+          title="Keys"
+          description="IAM access keys for this user."
+          showHeading={false}
+          countLabel={`${keys.length} key${keys.length === 1 ? "" : "s"}`}
+        />
+        <ManagerTable
+          responsiveCards
+          columns={[
+            { key: "access-key", label: "Access key", mobileRole: "primary" },
+            { key: "status", label: "Status" },
+            { key: "created", label: "Created on" },
+            { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
+          ]}
+        >
+          {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
+          {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
+          {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys for this user." />}
+          {keys.map((k) => {
+            const active = isKeyActive(k);
+            return (
+              <tr key={k.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
+                <td className={cx(managerTablePrimaryCellClass, "font-mono")}>{k.access_key_id}</td>
+                <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
+                  {k.status ?? (active ? "Active" : "Inactive")}
+                </td>
+                <td className={managerTableCellClass}>{formatDate(k.created_at)}</td>
+                <td className={managerTableActionCellClass}>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleKey(k.access_key_id, !active)}
+                      className={tableActionButtonClasses}
+                      disabled={Boolean(busy)}
+                    >
+                      {busy === `toggle:${k.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteKey(k.access_key_id)}
+                      className={tableDeleteActionClasses}
+                      disabled={Boolean(busy)}
+                    >
+                      {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </ManagerTable>
       </div>
 
       {showAddConnectionModal && createdKey && createdKey.secret_access_key && addConnectionDefaults && (

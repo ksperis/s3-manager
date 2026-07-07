@@ -14,12 +14,20 @@ import {
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ManagerTable, {
+  managerTableActionCellClass,
+  managerTableCellClass,
+  managerTableMutedRowClass,
+  managerTablePrimaryCellClass,
+} from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { cx } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
@@ -38,22 +46,6 @@ function isKeyActive(key: PortalAccessKey): boolean {
   if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
   if (["active", "enabled"].includes(normalized)) return true;
   return true;
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const handleCopy = () => {
-    if (!value || typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
-    navigator.clipboard.writeText(value).catch(() => {});
-  };
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-    >
-      {label}
-    </button>
-  );
 }
 
 export default function PortalAccessKeysPage() {
@@ -86,7 +78,7 @@ export default function PortalAccessKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountIdForApi, hasAccountContext]);
+  }, [accountIdForApi, hasAccountContext, t]);
 
   useEffect(() => {
     setCreatedKey(null);
@@ -209,37 +201,23 @@ export default function PortalAccessKeysPage() {
       )}
 
       {createdKey?.secret_access_key && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">{t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })}</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">{t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })}</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-              {t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">{t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="max-w-full break-all rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.access_key_id}
-                </div>
-                <CopyButton value={createdKey.access_key_id} label={t({ en: "Copy", fr: "Copier", de: "Kopieren" })} />
-              </div>
-            </div>
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">{t({ en: "Secret key", fr: "Clé secrète", de: "Geheimer Schlüssel" })}</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="max-w-full break-all rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.secret_access_key}
-                </div>
-                <CopyButton value={createdKey.secret_access_key} label={t({ en: "Copy", fr: "Copier", de: "Kopieren" })} />
-              </div>
-            </div>
-          </div>
-        </div>
+        <OneTimeSecretPanel
+          title={t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })}
+          description={t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })}
+          badge={t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
+          values={[
+            {
+              label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }),
+              value: createdKey.access_key_id,
+              copyLabel: t({ en: "Copy", fr: "Copier", de: "Kopieren" }),
+            },
+            {
+              label: t({ en: "Secret key", fr: "Clé secrète", de: "Geheimer Schlüssel" }),
+              value: createdKey.secret_access_key,
+              copyLabel: t({ en: "Copy", fr: "Copier", de: "Kopieren" }),
+            },
+          ]}
+        />
       )}
 
       {accountLoading ? (
@@ -262,73 +240,56 @@ export default function PortalAccessKeysPage() {
             showHeading={false}
             countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} key(s)`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} clé(s)`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Schlüssel` })}
           />
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}
-                </th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {t({ en: "Status", fr: "Statut", de: "Status" })}
-                </th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {t({ en: "Created on", fr: "Créée le", de: "Erstellt am" })}
-                </th>
-                <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  {t({ en: "Actions", fr: "Actions", de: "Aktionen" })}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
-              {tableStatus === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })} />}
-              {visibleKeys.map((key) => {
-                const active = isKeyActive(key);
-                const disabled = Boolean(busy) || !canManageAccessKeys;
-                return (
-                  <tr
-                    key={key.access_key_id}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${active ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
-                  >
-                    <td className="manager-table-cell max-w-[18rem] break-all px-6 py-4 font-mono text-slate-800 dark:text-slate-100">
-                      {key.access_key_id}
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                      {portalAccessKeyStatusLabel(key.status, active, t)}
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {portalDateTimeLabel(key.created_at, locale)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleKey(key)}
-                          className={tableActionButtonClasses}
-                          disabled={disabled}
-                        >
-                          {busy === `toggle:${key.access_key_id}`
-                            ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
-                            : active
-                              ? t({ en: "Disable", fr: "Désactiver", de: "Deaktivieren" })
-                              : t({ en: "Enable", fr: "Activer", de: "Aktivieren" })}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteKey(key)}
-                          className={tableDeleteActionClasses}
-                          disabled={disabled}
-                        >
-                          {busy === `delete:${key.access_key_id}` ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete", fr: "Supprimer", de: "Löschen" })}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <ManagerTable
+            responsiveCards
+            columns={[
+              { key: "access-key", label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), mobileRole: "primary" },
+              { key: "status", label: t({ en: "Status", fr: "Statut", de: "Status" }) },
+              { key: "created", label: t({ en: "Created on", fr: "Créée le", de: "Erstellt am" }) },
+              { key: "actions", label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }), align: "right", mobileRole: "actions" },
+            ]}
+          >
+            {tableStatus === "loading" && <TableEmptyState colSpan={4} message={t({ en: "Loading keys...", fr: "Chargement des clés...", de: "Schlüssel werden geladen..." })} />}
+            {tableStatus === "error" && <TableEmptyState colSpan={4} message={t({ en: "Unable to load keys.", fr: "Impossible de charger les clés.", de: "Schlüssel können nicht geladen werden." })} tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={4} message={t({ en: "No external access keys.", fr: "Aucune clé d'accès externe.", de: "Keine externen Zugriffsschlüssel." })} />}
+            {visibleKeys.map((key) => {
+              const active = isKeyActive(key);
+              const disabled = Boolean(busy) || !canManageAccessKeys;
+              return (
+                <tr key={key.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
+                  <td className={cx(managerTablePrimaryCellClass, "max-w-[18rem] break-all font-mono")}>{key.access_key_id}</td>
+                  <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
+                    {portalAccessKeyStatusLabel(key.status, active, t)}
+                  </td>
+                  <td className={managerTableCellClass}>{portalDateTimeLabel(key.created_at, locale)}</td>
+                  <td className={managerTableActionCellClass}>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleKey(key)}
+                        className={tableActionButtonClasses}
+                        disabled={disabled}
+                      >
+                        {busy === `toggle:${key.access_key_id}`
+                          ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
+                          : active
+                            ? t({ en: "Disable", fr: "Désactiver", de: "Deaktivieren" })
+                            : t({ en: "Enable", fr: "Activer", de: "Aktivieren" })}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKey(key)}
+                        className={tableDeleteActionClasses}
+                        disabled={disabled}
+                      >
+                        {busy === `delete:${key.access_key_id}` ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete", fr: "Supprimer", de: "Löschen" })}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </ManagerTable>
         </div>
       )}
 

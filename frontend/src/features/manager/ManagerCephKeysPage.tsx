@@ -13,33 +13,23 @@ import {
   updateManagerCephAccessKeyStatus,
 } from "../../api/managerCephKeys";
 import ListToolbar from "../../components/ListToolbar";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ManagerTable, {
+  managerTableActionCellClass,
+  managerTableCellClass,
+  managerTableMutedRowClass,
+  managerTablePrimaryCellClass,
+} from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const handleCopy = () => {
-    if (!value) return;
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(value).catch(() => {});
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-    >
-      {label}
-    </button>
-  );
-}
 
 function parseError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -189,37 +179,15 @@ export default function ManagerCephKeysPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {createdKey && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">Access key created</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-              Copy these values now
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Access key</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.access_key_id}
-                </div>
-                <CopyButton value={createdKey.access_key_id} label="Copy" />
-              </div>
-            </div>
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600">Secret key</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {createdKey.secret_access_key}
-                </div>
-                <CopyButton value={createdKey.secret_access_key} label="Copy" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <OneTimeSecretPanel
+          title="Access key created"
+          description="The secret is shown only once."
+          badge="Copy these values now"
+          values={[
+            { label: "Access key", value: createdKey.access_key_id, copyLabel: "Copy" },
+            { label: "Secret key", value: createdKey.secret_access_key, copyLabel: "Copy" },
+          ]}
+        />
       )}
 
       {!hasS3AccountContext ? (
@@ -262,79 +230,66 @@ export default function ManagerCephKeysPage() {
               />
             }
           />
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Access key
-                </th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Created on
-                </th>
-                <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys." />}
-              {filteredKeys.map((key) => {
-                const active = isKeyActive(key);
-                const locked = Boolean(key.is_ui_managed);
-                return (
-                  <tr
-                    key={key.access_key_id}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${active ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
-                  >
-                    <td className="manager-table-cell px-6 py-4 font-mono text-slate-800 dark:text-slate-100">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>{key.access_key_id}</span>
-                        {locked && (
-                          <span
-                            className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-                            title="Portal key (locked)"
-                          >
-                            S3M
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                      {key.status ?? (active ? "Active" : "Inactive")}
-                    </td>
-                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(key.created_at)}</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleKey(key)}
-                          className={tableActionButtonClasses}
-                          disabled={Boolean(busy) || locked}
-                          title={locked ? "Portal key is locked" : undefined}
+          <ManagerTable
+            responsiveCards
+            columns={[
+              { key: "access-key", label: "Access key", mobileRole: "primary" },
+              { key: "status", label: "Status" },
+              { key: "created", label: "Created on" },
+              { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
+            ]}
+          >
+            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys." />}
+            {filteredKeys.map((key) => {
+              const active = isKeyActive(key);
+              const locked = Boolean(key.is_ui_managed);
+              return (
+                <tr key={key.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
+                  <td className={cx(managerTablePrimaryCellClass, "font-mono")}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{key.access_key_id}</span>
+                      {locked && (
+                        <span
+                          className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                          title="Portal key (locked)"
                         >
-                          {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteKey(key)}
-                          className={tableDeleteActionClasses}
-                          disabled={Boolean(busy) || locked}
-                          title={locked ? "Portal key is locked" : undefined}
-                        >
-                          {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          S3M
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
+                    {key.status ?? (active ? "Active" : "Inactive")}
+                  </td>
+                  <td className={managerTableCellClass}>{formatDate(key.created_at)}</td>
+                  <td className={managerTableActionCellClass}>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleKey(key)}
+                        className={tableActionButtonClasses}
+                        disabled={Boolean(busy) || locked}
+                        title={locked ? "Portal key is locked" : undefined}
+                      >
+                        {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKey(key)}
+                        className={tableDeleteActionClasses}
+                        disabled={Boolean(busy) || locked}
+                        title={locked ? "Portal key is locked" : undefined}
+                      >
+                        {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </ManagerTable>
         </div>
       )}
     </div>
