@@ -69,6 +69,33 @@ export const advancedFilterMatchModeButtonClass = (active: boolean, locked: bool
   return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
 };
 
+const quickFilterMatchModeBaseClass =
+  "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
+
+export const quickFilterMatchModeButtonClass = (
+  mode: TextMatchMode,
+  isPending: boolean,
+  locked: boolean = false
+) => {
+  if (locked) {
+    return `${quickFilterMatchModeBaseClass} cursor-not-allowed border-primary-400 bg-primary-100 text-primary-700 opacity-80 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+  }
+  if (isPending) {
+    return `${quickFilterMatchModeBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
+  }
+  if (mode === "exact") {
+    return `${quickFilterMatchModeBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+  }
+  return `${quickFilterMatchModeBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
+};
+
+export const formatQuickFilterMatchModeTitle = (mode: TextMatchMode, locked: boolean = false) => {
+  if (locked) return "Quick filter mode: exact (locked by list input)";
+  return `Quick filter mode: ${mode === "exact" ? "exact" : "contains"}`;
+};
+
+export const formatTextMatchModeSymbol = (mode: TextMatchMode) => (mode === "contains" ? "~" : "=");
+
 export const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
   none: "No additional cost",
   low: "Low cost",

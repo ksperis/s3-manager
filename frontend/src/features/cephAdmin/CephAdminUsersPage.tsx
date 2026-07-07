@@ -31,10 +31,13 @@ import {
   advancedFilterSectionClass,
   advancedFilterSummaryClass,
   buildTextFieldRules,
+  formatQuickFilterMatchModeTitle,
+  formatTextMatchModeSymbol,
   formatTextFilterSummary,
   isCancelledError,
   parseExactListInput,
   progressFromAdvancedSearchEvent,
+  quickFilterMatchModeButtonClass,
   renderAdvancedSearchProgress,
   renderFilterCostIndicator,
   type FilterCostLevel,
@@ -513,20 +516,6 @@ export default function CephAdminUsersPage() {
 
   const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
-  };
-  const modeToggleBaseClass =
-    "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
-  const modeToggleClass = (mode: TextMatchMode, isPending: boolean, locked: boolean = false) => {
-    if (locked) {
-      return `${modeToggleBaseClass} cursor-not-allowed border-primary-400 bg-primary-100 text-primary-700 opacity-80 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
-    }
-    if (isPending) {
-      return `${modeToggleBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
-    }
-    if (mode === "exact") {
-      return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
-    }
-    return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
   };
   const activeFieldClass =
     "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
@@ -1121,15 +1110,15 @@ export default function CephAdminUsersPage() {
                   type="button"
                   onClick={toggleQuickFilterMode}
                   disabled={quickFilterDraftForcesExact}
-                  className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
-                  title={
+                  className={quickFilterMatchModeButtonClass(
+                    quickFilterModeForDisplay,
+                    quickFilterPending,
                     quickFilterDraftForcesExact
-                      ? "Quick filter mode: exact (locked by list input)"
-                      : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
-                  }
+                  )}
+                  title={formatQuickFilterMatchModeTitle(quickFilterModeForDisplay, quickFilterDraftForcesExact)}
                   aria-label="Toggle quick filter match mode"
                 >
-                  {quickFilterModeForDisplay === "contains" ? "~" : "="}
+                  {formatTextMatchModeSymbol(quickFilterModeForDisplay)}
                 </button>
               </div>
             }
