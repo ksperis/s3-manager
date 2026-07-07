@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwAccountDetail,
   createCephAdminAccount,
@@ -11,9 +10,12 @@ import {
 } from "../../api/cephAdmin";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
 import { extractApiError } from "../../utils/apiError";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
+import CephAdminAccountQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminAccountQuotaFields";
 
 type Props = {
   endpointId: number;
@@ -21,9 +23,7 @@ type Props = {
   onCreated?: (detail: CephAdminRgwAccountDetail) => void;
 };
 
-type QuotaUnit = "MiB" | "GiB" | "TiB";
-
-const UNIT_FACTORS: Record<QuotaUnit, number> = {
+const UNIT_FACTORS: Record<CephAdminQuotaUnit, number> = {
   MiB: 1024 ** 2,
   GiB: 1024 ** 3,
   TiB: 1024 ** 4,
@@ -39,7 +39,7 @@ const parseOptionalInt = (value: string): number | null => {
   return parsed;
 };
 
-const parseOptionalBytes = (value: string, unit: QuotaUnit): number | null => {
+const parseOptionalBytes = (value: string, unit: CephAdminQuotaUnit): number | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const parsed = Number(trimmed);
@@ -58,12 +58,12 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
 
   const [accountQuotaEnabled, setAccountQuotaEnabled] = useState(false);
   const [accountQuotaSize, setAccountQuotaSize] = useState("");
-  const [accountQuotaUnit, setAccountQuotaUnit] = useState<QuotaUnit>("GiB");
+  const [accountQuotaUnit, setAccountQuotaUnit] = useState<CephAdminQuotaUnit>("GiB");
   const [accountQuotaObjects, setAccountQuotaObjects] = useState("");
 
   const [bucketQuotaEnabled, setBucketQuotaEnabled] = useState(false);
   const [bucketQuotaSize, setBucketQuotaSize] = useState("");
-  const [bucketQuotaUnit, setBucketQuotaUnit] = useState<QuotaUnit>("GiB");
+  const [bucketQuotaUnit, setBucketQuotaUnit] = useState<CephAdminQuotaUnit>("GiB");
   const [bucketQuotaObjects, setBucketQuotaObjects] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -201,211 +201,118 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
   };
 
   return (
-    <Modal title="Create account" onClose={closeGuard.requestClose} maxWidthClass="max-w-5xl">
+    <Modal
+      title="Create account"
+      onClose={closeGuard.requestClose}
+      maxWidthClass="max-w-5xl"
+      maxBodyHeightClass="max-h-[82vh]"
+    >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {status && <PageBanner tone="success">{status}</PageBanner>}
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Account</h3>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Account name *
-              <input
-                type="text"
-                value={accountName}
-                onChange={(event) => setAccountName(event.target.value)}
-                placeholder="Enter account name"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Max buckets
-              <input
-                type="number"
-                min={0}
-                value={maxBuckets}
-                onChange={(event) => setMaxBuckets(event.target.value)}
-                placeholder="Leave empty for unlimited"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Max users
-              <input
-                type="number"
-                min={0}
-                value={maxUsers}
-                onChange={(event) => setMaxUsers(event.target.value)}
-                placeholder="Leave empty for unlimited"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Max roles
-              <input
-                type="number"
-                min={0}
-                value={maxRoles}
-                onChange={(event) => setMaxRoles(event.target.value)}
-                placeholder="Leave empty for unlimited"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Max groups
-              <input
-                type="number"
-                min={0}
-                value={maxGroups}
-                onChange={(event) => setMaxGroups(event.target.value)}
-                placeholder="Leave empty for unlimited"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 md:col-span-2">
-              Max access keys
-              <input
-                type="number"
-                min={0}
-                value={maxAccessKeys}
-                onChange={(event) => setMaxAccessKeys(event.target.value)}
-                placeholder="Leave empty for unlimited"
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Account quota</h3>
-          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={accountQuotaEnabled}
-              onChange={(event) => setAccountQuotaEnabled(event.target.checked)}
-              className={uiCheckboxClass}
+            <UiInput
+              label="Account name *"
+              type="text"
+              value={accountName}
+              onChange={(event) => setAccountName(event.target.value)}
+              placeholder="Enter account name"
+              size="compact"
             />
-            Enable account quota
-          </label>
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Storage quota
-              <input
-                type="number"
-                min={0}
-                step="any"
-                disabled={!accountQuotaEnabled}
-                value={accountQuotaSize}
-                onChange={(event) => setAccountQuotaSize(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Unit
-              <select
-                disabled={!accountQuotaEnabled}
-                value={accountQuotaUnit}
-                onChange={(event) => setAccountQuotaUnit(event.target.value as QuotaUnit)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="MiB">MiB</option>
-                <option value="GiB">GiB</option>
-                <option value="TiB">TiB</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Object quota
-              <input
-                type="number"
-                min={0}
-                step={1}
-                disabled={!accountQuotaEnabled}
-                value={accountQuotaObjects}
-                onChange={(event) => setAccountQuotaObjects(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket quota</h3>
-          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={bucketQuotaEnabled}
-              onChange={(event) => setBucketQuotaEnabled(event.target.checked)}
-              className={uiCheckboxClass}
+            <UiInput
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              size="compact"
             />
-            Enable bucket quota
-          </label>
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Storage quota
-              <input
-                type="number"
-                min={0}
-                step="any"
-                disabled={!bucketQuotaEnabled}
-                value={bucketQuotaSize}
-                onChange={(event) => setBucketQuotaSize(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Unit
-              <select
-                disabled={!bucketQuotaEnabled}
-                value={bucketQuotaUnit}
-                onChange={(event) => setBucketQuotaUnit(event.target.value as QuotaUnit)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                <option value="MiB">MiB</option>
-                <option value="GiB">GiB</option>
-                <option value="TiB">TiB</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-              Object quota
-              <input
-                type="number"
-                min={0}
-                step={1}
-                disabled={!bucketQuotaEnabled}
-                value={bucketQuotaObjects}
-                onChange={(event) => setBucketQuotaObjects(event.target.value)}
-                className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
+            <UiInput
+              label="Max buckets"
+              type="number"
+              min={0}
+              value={maxBuckets}
+              onChange={(event) => setMaxBuckets(event.target.value)}
+              placeholder="Leave empty for unlimited"
+              size="compact"
+            />
+            <UiInput
+              label="Max users"
+              type="number"
+              min={0}
+              value={maxUsers}
+              onChange={(event) => setMaxUsers(event.target.value)}
+              placeholder="Leave empty for unlimited"
+              size="compact"
+            />
+            <UiInput
+              label="Max roles"
+              type="number"
+              min={0}
+              value={maxRoles}
+              onChange={(event) => setMaxRoles(event.target.value)}
+              placeholder="Leave empty for unlimited"
+              size="compact"
+            />
+            <UiInput
+              label="Max groups"
+              type="number"
+              min={0}
+              value={maxGroups}
+              onChange={(event) => setMaxGroups(event.target.value)}
+              placeholder="Leave empty for unlimited"
+              size="compact"
+            />
+            <UiInput
+              label="Max access keys"
+              type="number"
+              min={0}
+              value={maxAccessKeys}
+              onChange={(event) => setMaxAccessKeys(event.target.value)}
+              placeholder="Leave empty for unlimited"
+              fieldClassName="md:col-span-2"
+              size="compact"
+            />
           </div>
         </section>
 
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={closeGuard.requestClose}
-            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-          >
+        <CephAdminAccountQuotaFields
+          title="Account quota"
+          enabledLabel="Enable account quota"
+          enabled={accountQuotaEnabled}
+          onEnabledChange={setAccountQuotaEnabled}
+          sizeValue={accountQuotaSize}
+          onSizeChange={setAccountQuotaSize}
+          unitValue={accountQuotaUnit}
+          onUnitChange={setAccountQuotaUnit}
+          objectValue={accountQuotaObjects}
+          onObjectChange={setAccountQuotaObjects}
+          className="bg-white p-4 dark:bg-slate-900"
+        />
+
+        <CephAdminAccountQuotaFields
+          title="Bucket quota"
+          enabledLabel="Enable bucket quota"
+          enabled={bucketQuotaEnabled}
+          onEnabledChange={setBucketQuotaEnabled}
+          sizeValue={bucketQuotaSize}
+          onSizeChange={setBucketQuotaSize}
+          unitValue={bucketQuotaUnit}
+          onUnitChange={setBucketQuotaUnit}
+          objectValue={bucketQuotaObjects}
+          onObjectChange={setBucketQuotaObjects}
+          className="bg-white p-4 dark:bg-slate-900"
+        />
+
+        <div className="sticky bottom-0 z-10 -mx-6 -mb-4 flex items-center justify-end gap-2 border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-6 py-3">
+          <UiButton variant="secondary" size="sm" onClick={closeGuard.requestClose}>
             Close
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={saving}
-            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-60"
-          >
+          </UiButton>
+          <UiButton size="sm" onClick={submit} disabled={saving}>
             {saving ? "Creating..." : "Create account"}
-          </button>
+          </UiButton>
         </div>
       </div>
       {closeGuard.confirmationDialog}
