@@ -49,6 +49,7 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   adminAssociationCheckboxClass,
+  adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
@@ -1471,7 +1472,7 @@ export default function S3ConnectionsPage() {
                             key={option.id}
                             className={adminAssociationOptionRowClass(isSelected)}
                           >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <label className={adminAssociationOptionLabelClass}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -1567,7 +1568,7 @@ export default function S3ConnectionsPage() {
                             key={group.id}
                             className={adminAssociationOptionRowClass(isSelected)}
                           >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <label className={adminAssociationOptionLabelClass}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}

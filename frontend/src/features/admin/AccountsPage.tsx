@@ -52,7 +52,9 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
+  adminAssociationAdminLabelClass,
   adminAssociationCheckboxClass,
+  adminAssociationOptionLabelClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
 } from "./AdminAssociationPicker";
@@ -1824,7 +1826,7 @@ export default function S3AccountsPage() {
                               key={u.id}
                               className={adminAssociationAccountOptionRowClass(isSelected)}
                             >
-                              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <label className={adminAssociationOptionLabelClass}>
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -1833,7 +1835,7 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{u.label}</span>
                               </label>
-                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <label className={adminAssociationAdminLabelClass}>
                                 <input
                                   type="checkbox"
                                   checked={Boolean(adminChecked)}
@@ -2005,7 +2007,7 @@ export default function S3AccountsPage() {
                               key={group.id}
                               className={adminAssociationAccountOptionRowClass(isSelected)}
                             >
-                              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <label className={adminAssociationOptionLabelClass}>
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -2014,7 +2016,7 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{group.name}</span>
                               </label>
-                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <label className={adminAssociationAdminLabelClass}>
                                 <input
                                   type="checkbox"
                                   checked={Boolean(adminChecked)}

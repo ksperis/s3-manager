@@ -22,6 +22,11 @@ export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses
 export const adminAssociationCheckboxClass = "h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary";
 export const adminAssociationTableContainerClass = uiTableContainerClass;
 export const adminAssociationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
+export const adminAssociationOptionLabelClass = "flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
+export const adminAssociationAccountOptionLabelClass =
+  "flex min-w-48 items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
+export const adminAssociationAdminLabelClass =
+  "flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300";
 
 export const adminAssociationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${

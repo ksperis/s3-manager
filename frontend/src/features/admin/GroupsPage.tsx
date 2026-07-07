@@ -35,6 +35,8 @@ import {
 import {
   AdminAssociationSelectionPanel,
   adminAssociationAccountOptionRowClass,
+  adminAssociationAccountOptionLabelClass,
+  adminAssociationAdminLabelClass,
   adminAssociationCheckboxClass,
   adminAssociationCompactSelectClass,
   adminAssociationOptionRowClass,
@@ -448,7 +450,7 @@ export default function GroupsPage() {
                     key={accountId}
                     className={adminAssociationAccountOptionRowClass(selected)}
                   >
-                    <label className="flex min-w-48 items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                    <label className={adminAssociationAccountOptionLabelClass}>
                       <input
                         type="checkbox"
                         checked={selected}
@@ -459,7 +461,7 @@ export default function GroupsPage() {
                     </label>
                     {selected && (
                       <div className="flex flex-wrap items-center gap-2">
-                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <label className={adminAssociationAdminLabelClass}>
                           <input
                             type="checkbox"
                             checked={Boolean(link?.account_admin)}

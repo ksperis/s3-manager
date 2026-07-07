@@ -60,10 +60,12 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
+  adminAssociationAdminLabelClass,
   adminAssociationAddPanelClass,
   adminAssociationCheckboxClass,
   adminAssociationCompactInputClass,
   adminAssociationCompactSelectClass,
+  adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
@@ -372,7 +374,7 @@ const AssociationsTabs = ({
                             key={opt.id}
                             className={associationAccountOptionRowClass(isSelected)}
                           >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <label className={adminAssociationOptionLabelClass}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -382,7 +384,7 @@ const AssociationsTabs = ({
                               <span>{opt.label}</span>
                             </label>
                             <div className="flex items-center gap-2">
-                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <label className={adminAssociationAdminLabelClass}>
                                 <input
                                   type="checkbox"
                                   checked={Boolean(adminChecked)}
@@ -488,7 +490,7 @@ const AssociationsTabs = ({
                             key={opt.id}
                             className={associationOptionRowClass(isSelected)}
                           >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <label className={adminAssociationOptionLabelClass}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -594,7 +596,7 @@ const AssociationsTabs = ({
                             key={opt.id}
                             className={associationOptionRowClass(isSelected)}
                           >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <label className={adminAssociationOptionLabelClass}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -980,7 +982,7 @@ export default function UsersPage() {
                   key={group.id}
                   className={associationOptionRowClass(checked)}
                 >
-                  <span className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                  <span className={adminAssociationOptionLabelClass}>
                     <input
                       type="checkbox"
                       checked={checked}
