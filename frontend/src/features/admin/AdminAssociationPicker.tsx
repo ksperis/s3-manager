@@ -6,8 +6,22 @@ import type { ReactNode } from "react";
 
 import UiButton from "../../components/ui/UiButton";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
+
+export const adminAssociationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
+export const adminAssociationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
+export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
+
+export const adminAssociationOptionRowClass = (selected: boolean) =>
+  `flex items-center justify-between rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
+
+export const adminAssociationAccountOptionRowClass = (selected: boolean) =>
+  `flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+    selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
+  }`;
 
 type AdminAssociationSectionHeaderProps = {
   title: ReactNode;
@@ -48,6 +62,7 @@ type AdminAssociationPickerPanelProps = {
   onAdd: () => void;
   addDisabled: boolean;
   loadingLabel: ReactNode;
+  searchAriaLabel?: string;
   emptyLabel?: ReactNode;
   addLabel?: ReactNode;
   children: ReactNode;
@@ -66,12 +81,13 @@ export function AdminAssociationPickerPanel({
   onAdd,
   addDisabled,
   loadingLabel,
+  searchAriaLabel,
   emptyLabel = "No results.",
   addLabel = "Add selected",
   children,
 }: AdminAssociationPickerPanelProps) {
   return (
-    <div className={cx(uiCardMutedClass, "space-y-2 px-3 py-2")}>
+    <div className={adminAssociationAddPanelClass}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={cx("ui-body font-medium", uiTitleTextClass)}>{title}</span>
@@ -82,7 +98,8 @@ export function AdminAssociationPickerPanel({
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search..."
-          className={cx(toolbarCompactInputClasses, "w-44")}
+          aria-label={searchAriaLabel}
+          className={adminAssociationCompactInputClass}
         />
       </div>
       <div className="max-h-48 space-y-1 overflow-y-auto pr-1">

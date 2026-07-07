@@ -41,6 +41,7 @@ describe("AdminAssociationPicker", () => {
         maxVisibleOptions={10}
         selectedCount={1}
         loadingLabel="Loading accounts..."
+        searchAriaLabel="Search accounts"
         addDisabled={false}
         onCancel={onCancel}
         onAdd={onAdd}
@@ -49,7 +50,7 @@ describe("AdminAssociationPicker", () => {
       </AdminAssociationPickerPanel>
     );
 
-    await user.type(screen.getByPlaceholderText("Search..."), "hel");
+    await user.type(screen.getByRole("textbox", { name: "Search accounts" }), "hel");
     expect(onSearchChange).toHaveBeenLastCalledWith("l");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));

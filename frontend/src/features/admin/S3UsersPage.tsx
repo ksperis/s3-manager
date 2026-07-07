@@ -42,6 +42,11 @@ import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import AdminModalTabs from "./AdminModalTabs";
+import {
+  AdminAssociationPickerPanel,
+  AdminAssociationSectionHeader,
+  adminAssociationOptionRowClass,
+} from "./AdminAssociationPicker";
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
@@ -1240,22 +1245,13 @@ export default function S3UsersPage() {
             )}
 
             {showEditUsersTab && (
-              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">
-                      {editForm.user_ids.length} linked
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditPortalUserPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {showEditPortalUserPanel ? "Close" : "Add UI users"}
-                  </button>
-                </div>
+              <div className={cx("space-y-3 px-3 py-2", uiPanelMutedClass)}>
+                <AdminAssociationSectionHeader
+                  title="Linked UI users"
+                  countLabel={`${editForm.user_ids.length} linked`}
+                  actionLabel={showEditPortalUserPanel ? "Close" : "Add UI users"}
+                  onAction={() => setShowEditPortalUserPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1302,36 +1298,40 @@ export default function S3UsersPage() {
                   </table>
                 </div>
                 {showEditPortalUserPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
-                      </div>
-                      <UiInput
-                        aria-label="Search UI users"
-                        type="text"
-                        value={portalUserSearch}
-                        onChange={(e) => setPortalUserSearch(e.target.value)}
-                        placeholder="Search..."
-                        fieldClassName="w-44"
-                        size="compact"
-                      />
-                    </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {availablePortalUsers.length === 0 && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      )}
+                  <AdminAssociationPickerPanel
+                    title="Add UI users"
+                    hint="(filter by email)"
+                    search={portalUserSearch}
+                    onSearchChange={setPortalUserSearch}
+                    searchAriaLabel="Search UI users"
+                    loading={false}
+                    availableCount={availablePortalUsers.length}
+                    maxVisibleOptions={MAX_LINK_OPTIONS}
+                    selectedCount={editPortalUserSelections.length}
+                    loadingLabel="Loading UI users..."
+                    onCancel={() => {
+                      setShowEditPortalUserPanel(false);
+                      setEditPortalUserSelections([]);
+                      setPortalUserSearch("");
+                    }}
+                    onAdd={() => {
+                      if (editPortalUserSelections.length === 0) return;
+                      setEditForm((prev) => ({
+                        ...prev,
+                        user_ids: [...prev.user_ids, ...editPortalUserSelections],
+                      }));
+                      setEditPortalUserSelections([]);
+                      setPortalUserSearch("");
+                      setShowEditPortalUserPanel(false);
+                    }}
+                    addDisabled={editPortalUserSelections.length === 0}
+                  >
                       {visiblePortalUsers.map((option) => {
                         const isSelected = editPortalUserSelections.includes(option.id);
                         return (
                           <div
                             key={option.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={adminAssociationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -1345,73 +1345,24 @@ export default function S3UsersPage() {
                           </div>
                         );
                       })}
-                      {availablePortalUsers.length > MAX_LINK_OPTIONS && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {editPortalUserSelections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <UiButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setShowEditPortalUserPanel(false);
-                            setEditPortalUserSelections([]);
-                            setPortalUserSearch("");
-                          }}
-                        >
-                          Cancel
-                        </UiButton>
-                        <UiButton
-                          size="sm"
-                          disabled={editPortalUserSelections.length === 0}
-                          onClick={() => {
-                            if (editPortalUserSelections.length === 0) return;
-                            setEditForm((prev) => ({
-                              ...prev,
-                              user_ids: [...prev.user_ids, ...editPortalUserSelections],
-                            }));
-                            setEditPortalUserSelections([]);
-                            setPortalUserSearch("");
-                            setShowEditPortalUserPanel(false);
-                          }}
-                        >
-                          Add selected
-                        </UiButton>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             )}
 
             {showEditGroupsTab && (
-              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">
-                      {editForm.group_ids.length} linked{uiGroupsLoading ? " · loading..." : ""}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!showEditGroupPanel) {
-                        void loadGroupsIfNeeded();
-                      }
-                      setShowEditGroupPanel((prev) => !prev);
-                    }}
-                    className={tableActionButtonClasses}
-                  >
-                    {showEditGroupPanel ? "Close" : "Add UI groups"}
-                  </button>
-                </div>
+              <div className={cx("space-y-3 px-3 py-2", uiPanelMutedClass)}>
+                <AdminAssociationSectionHeader
+                  title="Linked UI groups"
+                  countLabel={`${editForm.group_ids.length} linked${uiGroupsLoading ? " · loading..." : ""}`}
+                  actionLabel={showEditGroupPanel ? "Close" : "Add UI groups"}
+                  onAction={() => {
+                    if (!showEditGroupPanel) {
+                      void loadGroupsIfNeeded();
+                    }
+                    setShowEditGroupPanel((prev) => !prev);
+                  }}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1458,36 +1409,40 @@ export default function S3UsersPage() {
                   </table>
                 </div>
                 {showEditGroupPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
-                      </div>
-                      <UiInput
-                        aria-label="Search UI groups"
-                        type="text"
-                        value={groupSearch}
-                        onChange={(e) => setGroupSearch(e.target.value)}
-                        placeholder="Search..."
-                        fieldClassName="w-44"
-                        size="compact"
-                      />
-                    </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {availableGroups.length === 0 && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      )}
+                  <AdminAssociationPickerPanel
+                    title="Add UI groups"
+                    hint="(filter by name)"
+                    search={groupSearch}
+                    onSearchChange={setGroupSearch}
+                    searchAriaLabel="Search UI groups"
+                    loading={uiGroupsLoading}
+                    availableCount={availableGroups.length}
+                    maxVisibleOptions={MAX_LINK_OPTIONS}
+                    selectedCount={editGroupSelections.length}
+                    loadingLabel="Loading UI groups..."
+                    onCancel={() => {
+                      setShowEditGroupPanel(false);
+                      setEditGroupSelections([]);
+                      setGroupSearch("");
+                    }}
+                    onAdd={() => {
+                      if (editGroupSelections.length === 0) return;
+                      setEditForm((prev) => ({
+                        ...prev,
+                        group_ids: [...prev.group_ids, ...editGroupSelections],
+                      }));
+                      setEditGroupSelections([]);
+                      setGroupSearch("");
+                      setShowEditGroupPanel(false);
+                    }}
+                    addDisabled={editGroupSelections.length === 0}
+                  >
                       {visibleGroups.map((group) => {
                         const isSelected = editGroupSelections.includes(group.id);
                         return (
                           <div
                             key={group.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={adminAssociationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -1501,47 +1456,7 @@ export default function S3UsersPage() {
                           </div>
                         );
                       })}
-                      {availableGroups.length > MAX_LINK_OPTIONS && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {editGroupSelections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <UiButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setShowEditGroupPanel(false);
-                            setEditGroupSelections([]);
-                            setGroupSearch("");
-                          }}
-                        >
-                          Cancel
-                        </UiButton>
-                        <UiButton
-                          size="sm"
-                          disabled={editGroupSelections.length === 0}
-                          onClick={() => {
-                            if (editGroupSelections.length === 0) return;
-                            setEditForm((prev) => ({
-                              ...prev,
-                              group_ids: [...prev.group_ids, ...editGroupSelections],
-                            }));
-                            setEditGroupSelections([]);
-                            setGroupSearch("");
-                            setShowEditGroupPanel(false);
-                          }}
-                        >
-                          Add selected
-                        </UiButton>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             )}

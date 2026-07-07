@@ -47,6 +47,11 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import AdminModalTabs from "./AdminModalTabs";
+import {
+  AdminAssociationPickerPanel,
+  AdminAssociationSectionHeader,
+  adminAssociationOptionRowClass,
+} from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -1390,22 +1395,13 @@ export default function S3ConnectionsPage() {
             )}
 
             {showEditUsersTab && (
-              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">
-                      {linkedEditUsers.length} linked
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditUserPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {showEditUserPanel ? "Close" : "Add UI users"}
-                  </button>
-                </div>
+              <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
+                <AdminAssociationSectionHeader
+                  title="Linked UI users"
+                  countLabel={`${linkedEditUsers.length} linked`}
+                  actionLabel={showEditUserPanel ? "Close" : "Add UI users"}
+                  onAction={() => setShowEditUserPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1445,36 +1441,37 @@ export default function S3ConnectionsPage() {
                   </table>
                 </div>
                 {showEditUserPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
-                      </div>
-                      <UiInput
-                        aria-label="Search UI users"
-                        type="text"
-                        value={editUserSearch}
-                        onChange={(e) => setEditUserSearch(e.target.value)}
-                        placeholder="Search..."
-                        fieldClassName="w-44"
-                        size="compact"
-                      />
-                    </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {availableEditUsers.length === 0 && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      )}
+                  <AdminAssociationPickerPanel
+                    title="Add UI users"
+                    hint="(filter by email)"
+                    search={editUserSearch}
+                    onSearchChange={setEditUserSearch}
+                    searchAriaLabel="Search UI users"
+                    loading={false}
+                    availableCount={availableEditUsers.length}
+                    maxVisibleOptions={maxLinkOptions}
+                    selectedCount={editUserSelections.length}
+                    loadingLabel="Loading UI users..."
+                    onCancel={() => {
+                      setShowEditUserPanel(false);
+                      setEditUserSelections([]);
+                      setEditUserSearch("");
+                    }}
+                    onAdd={() => {
+                      if (editUserSelections.length === 0) return;
+                      setEditLinkedUserIds((prev) => normalizeLinkedUserIds([...prev, ...editUserSelections]));
+                      setEditUserSelections([]);
+                      setEditUserSearch("");
+                      setShowEditUserPanel(false);
+                    }}
+                    addDisabled={editUserSelections.length === 0}
+                  >
                       {visibleAvailableEditUsers.map((option) => {
                         const isSelected = editUserSelections.includes(option.id);
                         return (
                           <div
                             key={option.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={adminAssociationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -1488,63 +1485,19 @@ export default function S3ConnectionsPage() {
                           </div>
                         );
                       })}
-                      {availableEditUsers.length > maxLinkOptions && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {maxLinkOptions} matches. Refine your search to see more.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">{editUserSelections.length} selected</span>
-                      <div className="flex items-center gap-2">
-                        <UiButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setShowEditUserPanel(false);
-                            setEditUserSelections([]);
-                            setEditUserSearch("");
-                          }}
-                        >
-                          Cancel
-                        </UiButton>
-                        <UiButton
-                          size="sm"
-                          disabled={editUserSelections.length === 0}
-                          onClick={() => {
-                            if (editUserSelections.length === 0) return;
-                            setEditLinkedUserIds((prev) => normalizeLinkedUserIds([...prev, ...editUserSelections]));
-                            setEditUserSelections([]);
-                            setEditUserSearch("");
-                            setShowEditUserPanel(false);
-                          }}
-                        >
-                          Add selected
-                        </UiButton>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             )}
 
             {showEditGroupsTab && (
-              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI groups</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">
-                      {linkedEditGroups.length} linked
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditGroupPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {showEditGroupPanel ? "Close" : "Add UI groups"}
-                  </button>
-                </div>
+              <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
+                <AdminAssociationSectionHeader
+                  title="Linked UI groups"
+                  countLabel={`${linkedEditGroups.length} linked`}
+                  actionLabel={showEditGroupPanel ? "Close" : "Add UI groups"}
+                  onAction={() => setShowEditGroupPanel((prev) => !prev)}
+                />
                 <div className={associationTableContainerClass}>
                   <table className={associationTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -1584,36 +1537,37 @@ export default function S3ConnectionsPage() {
                   </table>
                 </div>
                 {showEditGroupPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI groups</label>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
-                      </div>
-                      <UiInput
-                        aria-label="Search UI groups"
-                        type="text"
-                        value={editGroupSearch}
-                        onChange={(e) => setEditGroupSearch(e.target.value)}
-                        placeholder="Search..."
-                        fieldClassName="w-44"
-                        size="compact"
-                      />
-                    </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {availableEditGroups.length === 0 && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      )}
+                  <AdminAssociationPickerPanel
+                    title="Add UI groups"
+                    hint="(filter by name)"
+                    search={editGroupSearch}
+                    onSearchChange={setEditGroupSearch}
+                    searchAriaLabel="Search UI groups"
+                    loading={false}
+                    availableCount={availableEditGroups.length}
+                    maxVisibleOptions={maxLinkOptions}
+                    selectedCount={editGroupSelections.length}
+                    loadingLabel="Loading UI groups..."
+                    onCancel={() => {
+                      setShowEditGroupPanel(false);
+                      setEditGroupSelections([]);
+                      setEditGroupSearch("");
+                    }}
+                    onAdd={() => {
+                      if (editGroupSelections.length === 0) return;
+                      setEditLinkedGroupIds((prev) => normalizeLinkedUserIds([...prev, ...editGroupSelections]));
+                      setEditGroupSelections([]);
+                      setEditGroupSearch("");
+                      setShowEditGroupPanel(false);
+                    }}
+                    addDisabled={editGroupSelections.length === 0}
+                  >
                       {visibleAvailableEditGroups.map((group) => {
                         const isSelected = editGroupSelections.includes(group.id);
                         return (
                           <div
                             key={group.id}
-                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
+                            className={adminAssociationOptionRowClass(isSelected)}
                           >
                             <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
                               <input
@@ -1627,42 +1581,7 @@ export default function S3ConnectionsPage() {
                           </div>
                         );
                       })}
-                      {availableEditGroups.length > maxLinkOptions && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {maxLinkOptions} matches. Refine your search to see more.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">{editGroupSelections.length} selected</span>
-                      <div className="flex items-center gap-2">
-                        <UiButton
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setShowEditGroupPanel(false);
-                            setEditGroupSelections([]);
-                            setEditGroupSearch("");
-                          }}
-                        >
-                          Cancel
-                        </UiButton>
-                        <UiButton
-                          size="sm"
-                          disabled={editGroupSelections.length === 0}
-                          onClick={() => {
-                            if (editGroupSelections.length === 0) return;
-                            setEditLinkedGroupIds((prev) => normalizeLinkedUserIds([...prev, ...editGroupSelections]));
-                            setEditGroupSelections([]);
-                            setEditGroupSearch("");
-                            setShowEditGroupPanel(false);
-                          }}
-                        >
-                          Add selected
-                        </UiButton>
-                      </div>
-                    </div>
-                  </div>
+                  </AdminAssociationPickerPanel>
                 )}
               </div>
             )}
