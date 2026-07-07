@@ -2,6 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 
 type ActionProgressCardProps = {
@@ -40,12 +41,12 @@ export default function ActionProgressCard({ progress, busy = false, className =
         </span>
         <span>{percent}%</span>
       </div>
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div
-          className="h-full bg-primary-500 transition-[width] duration-200"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      <UiProgressBar
+        value={percent}
+        label={`${progress.label} progress`}
+        className="h-2.5 overflow-hidden bg-slate-200 dark:bg-slate-800"
+        barClassName="bg-primary-500 transition-[width] duration-200"
+      />
       {progress.failed > 0 && (
         <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
           Failures so far: {progress.failed}

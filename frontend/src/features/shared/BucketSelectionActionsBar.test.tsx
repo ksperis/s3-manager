@@ -41,6 +41,10 @@ describe("BucketSelectionActionsBar progress", () => {
 
     expect(screen.getByText("Preparing CSV export · 4 / 10")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Preparing CSV export progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "40"
+    );
     expect(screen.getByText("Failures so far: 2")).toBeInTheDocument();
   });
 
