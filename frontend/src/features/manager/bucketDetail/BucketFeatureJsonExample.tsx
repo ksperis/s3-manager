@@ -4,6 +4,8 @@
  */
 import { ReactNode } from "react";
 
+import UiButton from "../../../components/ui/UiButton";
+
 type BucketFeatureJsonExampleProps = {
   show: boolean;
   onToggle: () => void;
@@ -24,23 +26,27 @@ export default function BucketFeatureJsonExample({
   return (
     <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2 ui-caption text-[var(--ui-text-muted)]">
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <UiButton
           type="button"
           onClick={onToggle}
           disabled={disabled}
-          className="ui-caption font-semibold text-primary hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-primary-200 dark:hover:text-primary-100"
+          variant="ghost"
+          size="xs"
+          className="h-auto px-1.5 py-0.5"
         >
           {show ? "Hide example" : "Show example"}
-        </button>
+        </UiButton>
         {onUseExample && (
-          <button
+          <UiButton
             type="button"
             onClick={onUseExample}
             disabled={disabled}
-            className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100"
+            variant="secondary"
+            size="xs"
+            className="h-auto rounded-full px-2 py-0.5"
           >
             Use example
-          </button>
+          </UiButton>
         )}
         {helperText}
       </div>
