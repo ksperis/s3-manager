@@ -191,10 +191,14 @@ describe("ManagerFeatureRulesPage", () => {
     renderPage();
 
     expect(await screen.findByText("logs-prod")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Unavailable" }));
+    const statusGroup = screen.getByRole("group", { name: "Status" });
+    expect(within(statusGroup).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(statusGroup).getByRole("button", { name: "Unavailable" }));
 
     expect(screen.queryByText("logs-prod")).not.toBeInTheDocument();
     expect(screen.getByText("broken")).toBeInTheDocument();
+    expect(within(statusGroup).getByRole("button", { name: "Unavailable" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByText("AccessDenied").length).toBeGreaterThan(0);
   });
 });

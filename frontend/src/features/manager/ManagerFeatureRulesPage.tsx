@@ -10,6 +10,7 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
+import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -48,11 +49,11 @@ const FEATURE_OPTIONS: Array<{ id: FeatureRuleFeature; label: string }> = [
   { id: "tags", label: "Bucket tags" },
 ];
 
-const STATUS_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "configured", label: "Configured" },
-  { id: "empty", label: "Empty" },
-  { id: "unavailable", label: "Unavailable" },
+const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "configured", label: "Configured" },
+  { value: "empty", label: "Empty" },
+  { value: "unavailable", label: "Unavailable" },
 ];
 
 const statusTone: Record<FeatureRuleInventoryStatus, "active" | "inactive" | "unknown"> = {
@@ -213,22 +214,12 @@ export default function ManagerFeatureRulesPage() {
                     ))}
                   </select>
                 </label>
-                <div className="flex flex-wrap gap-1" role="group" aria-label="Status">
-                  {STATUS_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setStatusFilterValue(option.id)}
-                      className={`rounded-md border px-2.5 py-1 ui-caption font-semibold ${
-                        statusFilterValue === option.id
-                          ? "border-primary bg-primary text-white"
-                          : "border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                <UiSegmentedControl
+                  ariaLabel="Status"
+                  options={STATUS_OPTIONS}
+                  value={statusFilterValue}
+                  onChange={setStatusFilterValue}
+                />
               </>
             }
           />
