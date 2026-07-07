@@ -15,7 +15,6 @@ import ManagerTable, {
   managerTablePrimaryCellClass,
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
@@ -191,14 +190,16 @@ export default function PoliciesPage() {
               />
             }
           />
-          <ManagerTable columns={policyTableColumns} responsiveCards>
-            {filteredTableStatus === "loading" && (
-              <TableEmptyState colSpan={policyTableColumns.length} message="Loading policies..." />
-            )}
-            {filteredTableStatus === "error" && (
-              <TableEmptyState colSpan={policyTableColumns.length} message="Unable to load policies." tone="error" />
-            )}
-            {filteredTableStatus === "empty" && <TableEmptyState colSpan={policyTableColumns.length} message="No policies." />}
+          <ManagerTable
+            columns={policyTableColumns}
+            listState={{
+              status: filteredTableStatus,
+              loadingMessage: "Loading policies...",
+              errorMessage: "Unable to load policies.",
+              emptyMessage: "No policies.",
+            }}
+            responsiveCards
+          >
             {filteredPolicies.map((p) => (
               <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className={managerTablePrimaryCellClass}>

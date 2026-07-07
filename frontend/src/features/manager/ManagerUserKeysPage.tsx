@@ -18,7 +18,6 @@ import ListToolbar from "../../components/ListToolbar";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -248,10 +247,13 @@ export default function ManagerUserKeysPage() {
             { key: "created", label: "Created on" },
             { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
           ]}
+          listState={{
+            status: tableStatus,
+            loadingMessage: "Loading keys...",
+            errorMessage: "Unable to load keys.",
+            emptyMessage: "No keys for this user.",
+          }}
         >
-          {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
-          {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-          {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys for this user." />}
           {keys.map((k) => {
             const active = isKeyActive(k);
             return (

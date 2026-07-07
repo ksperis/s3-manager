@@ -17,7 +17,6 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -238,10 +237,13 @@ export default function ManagerCephKeysPage() {
               { key: "created", label: "Created on" },
               { key: "actions", label: "Actions", align: "right", mobileRole: "actions" },
             ]}
+            listState={{
+              status: tableStatus,
+              loadingMessage: "Loading keys...",
+              errorMessage: "Unable to load keys.",
+              emptyMessage: "No keys.",
+            }}
           >
-            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys." />}
             {filteredKeys.map((key) => {
               const active = isKeyActive(key);
               const locked = Boolean(key.is_ui_managed);

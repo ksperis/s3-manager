@@ -28,7 +28,6 @@ import ManagerTable, {
   managerTableWideCellClass,
   type ManagerTableColumn,
 } from "../../components/list/ManagerTable";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
@@ -534,14 +533,16 @@ export default function ManagerRolesPage() {
               />
             }
           />
-          <ManagerTable columns={roleTableColumns} responsiveCards>
-            {filteredTableStatus === "loading" && (
-              <TableEmptyState colSpan={roleTableColumns.length} message="Loading roles..." />
-            )}
-            {filteredTableStatus === "error" && (
-              <TableEmptyState colSpan={roleTableColumns.length} message="Unable to load roles." tone="error" />
-            )}
-            {filteredTableStatus === "empty" && <TableEmptyState colSpan={roleTableColumns.length} message="No roles." />}
+          <ManagerTable
+            columns={roleTableColumns}
+            listState={{
+              status: filteredTableStatus,
+              loadingMessage: "Loading roles...",
+              errorMessage: "Unable to load roles.",
+              emptyMessage: "No roles.",
+            }}
+            responsiveCards
+          >
             {filteredRoles.map((r) => (
               <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className={managerTablePrimaryCellClass}>

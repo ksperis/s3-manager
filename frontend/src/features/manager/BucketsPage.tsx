@@ -31,7 +31,6 @@ import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
-import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -1060,12 +1059,13 @@ export default function BucketsPage() {
             responsiveCards
             className="w-full min-w-[760px]"
             sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+            listState={{
+              status: tableStatus,
+              loadingMessage: "Loading buckets...",
+              errorMessage: "Unable to load buckets.",
+              emptyMessage: "No buckets.",
+            }}
           >
-            {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
-            {tableStatus === "error" && (
-              <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
-            )}
-            {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets." />}
             {filteredBuckets.map((bucket) => (
               <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                 {bucketTableColumns.map((col) => {

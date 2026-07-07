@@ -10,7 +10,6 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
-import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -20,6 +19,7 @@ import ManagerTable, {
   managerTablePrimaryCellClass,
   managerTableWideCellClass,
 } from "../../components/list/ManagerTable";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import {
@@ -147,6 +147,10 @@ export default function ManagerFeatureRulesPage() {
       return ruleSearchText(item).includes(needle);
     });
   }, [filter, items, statusFilterValue]);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    rowCount: filteredItems.length,
+  });
 
   const configuredCount = items.filter((item) => item.status === "configured").length;
   const ruleCount = items.reduce((sum, item) => sum + item.rules.length, 0);
@@ -237,13 +241,14 @@ export default function ManagerFeatureRulesPage() {
               { key: "summary", label: feature === "tags" ? "Value" : "Summary" },
               { key: "json", label: "JSON", align: "right" },
             ]}
+            listState={{
+              status: tableStatus,
+              loadingMessage: `Loading ${selectedFeatureLabel.toLowerCase()}...`,
+              errorMessage: "Unable to load buckets.",
+              emptyMessage: "No buckets match the current filters.",
+            }}
           >
-            {loading ? (
-              <TableEmptyState colSpan={5} message={`Loading ${selectedFeatureLabel.toLowerCase()}...`} />
-            ) : filteredItems.length === 0 ? (
-              <TableEmptyState colSpan={5} message="No buckets match the current filters." />
-            ) : (
-              filteredItems.flatMap((item) => {
+            {filteredItems.flatMap((item) => {
                 const bucketRow = (
                   <tr key={`${item.bucket_name}:bucket`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className={managerTablePrimaryCellClass}>
@@ -332,8 +337,7 @@ export default function ManagerFeatureRulesPage() {
                     </tr>
                   )),
                 ];
-              })
-            )}
+              })}
           </ManagerTable>
         </div>
       )}

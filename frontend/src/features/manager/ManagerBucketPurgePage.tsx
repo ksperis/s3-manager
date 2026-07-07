@@ -9,7 +9,6 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import TableEmptyState from "../../components/TableEmptyState";
 import ManagerTable, { managerTableCheckboxCellClass, managerTablePrimaryCellClass } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -190,10 +189,13 @@ export default function ManagerBucketPurgePage() {
               { key: "select", label: "Select", className: "w-12", hideLabel: true, mobileLabel: "Select" },
               { key: "bucket", label: "Bucket", mobileRole: "primary" },
             ]}
+            listState={{
+              status: tableStatus,
+              loadingMessage: "Loading buckets...",
+              errorMessage: "Unable to load buckets.",
+              emptyMessage: "No buckets.",
+            }}
           >
-            {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading buckets..." />}
-            {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
-            {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets." />}
             {filteredBuckets.map((bucket) => (
               <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className={managerTableCheckboxCellClass}>
