@@ -14,6 +14,7 @@ import {
   type UsageHistorySubjectType,
 } from "../../api/usageHistory";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
@@ -21,7 +22,6 @@ import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import StatCards from "../../components/StatCards";
-import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import {
   toolbarCompactButtonClasses,
@@ -32,9 +32,7 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
-  uiDataTableClass,
   uiMutedTextClass,
-  uiTableContainerClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { RefreshIcon } from "../browser/browserIcons";
@@ -113,6 +111,88 @@ function collectionIssueMessage(kind: "error" | "warning", issues?: unknown[]): 
   const label = kind === "error" ? "error" : "warning";
   return `Collection finished with ${issues.length} ${label}${issues.length === 1 ? "" : "s"}. First ${label}: ${first}`;
 }
+
+const historyTableColumns: Array<DataTableColumn<UsageHistoryRecord, UsageHistorySortBy>> = [
+  {
+    id: "period",
+    label: "Period",
+    field: "period",
+    primary: true,
+    render: (item) => (
+      <>
+        <div className={cx("font-medium", uiTitleTextClass)}>{formatDateTime(item.period_start)}</div>
+        <div className={cx("ui-caption", uiMutedTextClass)}>{item.granularity}</div>
+      </>
+    ),
+  },
+  {
+    id: "endpoint",
+    label: "Endpoint",
+    render: (item) => (
+      <>
+        <div className={cx("font-medium", uiTitleTextClass)}>{item.endpoint_name}</div>
+        <div className={cx("ui-caption", uiMutedTextClass)}>#{item.storage_endpoint_id}</div>
+      </>
+    ),
+  },
+  {
+    id: "subject",
+    label: "Subject",
+    field: "subject",
+    render: (item) => (
+      <>
+        <div className={cx("font-medium", uiTitleTextClass)}>{item.subject_name}</div>
+        <div className={cx("ui-caption", uiMutedTextClass)}>
+          {formatSubjectType(item.subject_type)}
+          {item.subject_identifier ? ` - ${item.subject_identifier}` : ""}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "storage",
+    label: "Storage",
+    field: "used_bytes",
+    render: (item) => (
+      <>
+        <div className={cx("font-medium", uiTitleTextClass)}>{formatBytes(item.used_bytes)}</div>
+        {item.quota_size_bytes != null ? (
+          <div className={cx("ui-caption", uiMutedTextClass)}>Quota {formatBytes(item.quota_size_bytes)}</div>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "objects",
+    label: "Objects",
+    field: "used_objects",
+    render: (item) => (
+      <>
+        <div className={cx("font-medium", uiTitleTextClass)}>{formatCompactNumber(item.used_objects)}</div>
+        {item.quota_objects != null ? (
+          <div className={cx("ui-caption", uiMutedTextClass)}>Quota {formatCompactNumber(item.quota_objects)}</div>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "ratio",
+    label: "Quota ratio",
+    field: "ratio",
+    render: (item) => formatPercentage(item.usage_ratio_pct),
+  },
+  {
+    id: "samples",
+    label: "Samples",
+    align: "right",
+    render: (item) => item.samples_count ?? (item.granularity === "hourly" ? "1" : "-"),
+  },
+  {
+    id: "collected",
+    label: "Collected",
+    render: (item) => formatDateTime(item.collected_at),
+  },
+];
 
 export default function UsageHistoryPage() {
   const { generalSettings } = useGeneralSettings();
@@ -275,6 +355,15 @@ export default function UsageHistoryPage() {
     }
   }
 
+  function handleTableSort(field: UsageHistorySortBy) {
+    if (field === sortBy) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(field);
+    setSortDir("desc");
+  }
+
   if (!generalSettings.usage_history_enabled) {
     return <FeatureDisabledPage feature="Usage history" />;
   }
@@ -420,61 +509,24 @@ export default function UsageHistoryPage() {
           description="Usage history rows stored by the quota monitor."
           countLabel={`${history?.total ?? 0} record${history?.total === 1 ? "" : "s"}`}
         />
-        <div className={uiTableContainerClass}>
-          <table className={cx(uiDataTableClass, "min-w-[980px]")}>
-            <thead>
-              <tr>
-                <th className="text-left">Period</th>
-                <th className="text-left">Endpoint</th>
-                <th className="text-left">Subject</th>
-                <th className="text-left">Storage</th>
-                <th className="text-left">Objects</th>
-                <th className="text-left">Quota ratio</th>
-                <th className="text-left">Samples</th>
-                <th className="text-left">Collected</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableStatus === "loading" && <TableEmptyState colSpan={8} message="Loading usage history..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={8} message="Unable to load usage history." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={8} message="No usage history for this scope." />}
-              {(history?.items ?? []).map((item) => (
-                <tr key={`${item.granularity}-${item.id}`}>
-                  <td>
-                    <div className={cx("font-medium", uiTitleTextClass)}>{formatDateTime(item.period_start)}</div>
-                    <div className={cx("ui-caption", uiMutedTextClass)}>{item.granularity}</div>
-                  </td>
-                  <td>
-                    <div className={cx("font-medium", uiTitleTextClass)}>{item.endpoint_name}</div>
-                    <div className={cx("ui-caption", uiMutedTextClass)}>#{item.storage_endpoint_id}</div>
-                  </td>
-                  <td>
-                    <div className={cx("font-medium", uiTitleTextClass)}>{item.subject_name}</div>
-                    <div className={cx("ui-caption", uiMutedTextClass)}>
-                      {formatSubjectType(item.subject_type)}
-                      {item.subject_identifier ? ` - ${item.subject_identifier}` : ""}
-                    </div>
-                  </td>
-                  <td>
-                    <div className={cx("font-medium", uiTitleTextClass)}>{formatBytes(item.used_bytes)}</div>
-                    {item.quota_size_bytes != null ? (
-                      <div className={cx("ui-caption", uiMutedTextClass)}>Quota {formatBytes(item.quota_size_bytes)}</div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <div className={cx("font-medium", uiTitleTextClass)}>{formatCompactNumber(item.used_objects)}</div>
-                    {item.quota_objects != null ? (
-                      <div className={cx("ui-caption", uiMutedTextClass)}>Quota {formatCompactNumber(item.quota_objects)}</div>
-                    ) : null}
-                  </td>
-                  <td>{formatPercentage(item.usage_ratio_pct)}</td>
-                  <td>{item.samples_count ?? (item.granularity === "hourly" ? "1" : "-")}</td>
-                  <td>{formatDateTime(item.collected_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={historyTableColumns}
+          rows={history?.items ?? []}
+          rowKey={(item) => `${item.granularity}-${item.id}`}
+          status={tableStatus}
+          loadingMessage="Loading usage history..."
+          errorMessage="Unable to load usage history."
+          emptyMessage="No usage history for this scope."
+          primaryColumnId="period"
+          sort={{
+            field: sortBy,
+            direction: sortDir,
+            onSort: handleTableSort,
+          }}
+          responsiveCards
+          tableClassName="compact-table"
+          rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
+        />
       </section>
     </div>
   );

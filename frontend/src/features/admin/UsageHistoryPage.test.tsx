@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneralSettings } from "../../api/appSettings";
@@ -126,6 +126,40 @@ describe("UsageHistoryPage", () => {
     expect(await screen.findByText("Tenant A")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
+
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByText("2026-06-07").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("Ceph main").closest("td")).toHaveAttribute("data-label", "Endpoint");
+    expect(within(table).getByText("Tenant A").closest("td")).toHaveAttribute("data-label", "Subject");
+    expect(within(table).getByText("2.0 KB").closest("td")).toHaveAttribute("data-label", "Storage");
+  });
+
+  it("sorts usage history from the shared table headers", async () => {
+    renderPage();
+
+    await screen.findByText("Tenant A");
+    fireEvent.click(screen.getByRole("button", { name: /^Storage$/ }));
+
+    await waitFor(() =>
+      expect(mocks.listUsageHistory).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: "used_bytes",
+          sortDir: "desc",
+        })
+      )
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Storage/ }));
+
+    await waitFor(() =>
+      expect(mocks.listUsageHistory).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: "used_bytes",
+          sortDir: "asc",
+        })
+      )
+    );
   });
 
   it("triggers collection from the top action and reloads history", async () => {
