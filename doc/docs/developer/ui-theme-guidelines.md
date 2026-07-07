@@ -56,8 +56,9 @@ surfaces, not like a separate marketing site.
   `--ui-border`, `--ui-border-soft`, `--ui-text`, `--ui-text-muted`,
   `--ui-hover`, `--ui-selected-bg`, and soft/no shadows.
 - Documentation density should also follow the app workspace posture: compact
-  headings, tight vertical rhythm, dense tables, and screenshot chrome that
-  leaves as much room as possible for the actual capture.
+  headings, tight vertical rhythm, dense tables, compact primary navigation,
+  compact table of contents, and screenshot chrome that leaves as much room as
+  possible for the actual capture.
 - Documentation chrome should follow app shell primitives:
   `--shell-topbar-bg`, `--shell-sidebar-bg`, `--shell-border`,
   `--shell-text`, `--shell-muted`, `--shell-hover`, and

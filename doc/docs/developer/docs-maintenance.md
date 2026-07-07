@@ -83,8 +83,8 @@ Before changing documentation styling:
    screenshot components on the mirrored `--ui-*` and `--shell-*` tokens in
    `doc/docs/assets/stylesheets/docs-theme.css`.
 3. Preserve the compact application posture: restrained headings, reduced
-   vertical gaps, dense tables, and screenshot controls that do not crowd the
-   actual capture.
+   vertical gaps, dense tables, compact primary navigation, compact table of
+   contents, and screenshot controls that do not crowd the actual capture.
 4. Avoid documentation-only palettes or decorative effects that do not exist in
    the application workspace surfaces.
 5. Validate the rendered result on desktop and mobile, especially pages with
