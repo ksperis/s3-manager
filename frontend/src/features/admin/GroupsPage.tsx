@@ -40,11 +40,9 @@ import {
   normalizeManagerToolAccess,
   normalizePortalRole,
   type ManagerToolKey,
-  type PortalAccountRole,
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
-import PaginationControls from "../../components/PaginationControls";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -54,11 +52,6 @@ import { extractApiError } from "../../utils/apiError";
 
 type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "browser" | "manager_tools";
 type AssociationTab = "accounts" | "s3_users" | "connections";
-type AccountSelection = {
-  account_id: number;
-  account_admin?: boolean | null;
-  account_role?: PortalAccountRole | string | null;
-};
 const labelClass = "ui-body font-medium text-slate-700 dark:text-slate-200";
 const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
@@ -180,13 +173,7 @@ export default function GroupsPage() {
 
   const managerToolDefinitions = useMemo(
     () => buildManagerToolDefinitions(generalSettings),
-    [
-      generalSettings.bucket_compare_enabled,
-      generalSettings.bucket_integrity_check_enabled,
-      generalSettings.bucket_migration_enabled,
-      generalSettings.bucket_purge_enabled,
-      generalSettings.manager_ceph_s3_user_keys_enabled,
-    ]
+    [generalSettings]
   );
 
   const fetchGroups = useCallback(async () => {
@@ -643,6 +630,86 @@ export default function GroupsPage() {
       />
     );
   };
+  const groupTableColumns: Array<DataTableColumn<UiGroup, SortField>> = [
+    {
+      id: "name",
+      label: "Name",
+      field: "name",
+      primary: true,
+      cellClassName: "align-top min-w-[14rem]",
+      render: (group) => (
+        <button
+          type="button"
+          onClick={() => openEditModal(group)}
+          className="w-full text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+        >
+          <span>{group.name}</span>
+          {group.description && (
+            <span className="mt-1 block ui-caption font-normal text-slate-500 dark:text-slate-400">{group.description}</span>
+          )}
+        </button>
+      ),
+    },
+    {
+      id: "rights",
+      label: "Rights",
+      cellClassName: "align-top min-w-[12rem]",
+      render: (group) => {
+        const access = normalizeManagerToolAccess(group.manager_tool_access);
+        const toolCount = Object.values(access).filter(Boolean).length;
+        return (
+          <div className="flex flex-wrap gap-2">
+            {group.can_access_ceph_admin && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                Ceph Admin
+              </span>
+            )}
+            {group.can_access_storage_ops && (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                Storage Ops
+              </span>
+            )}
+            {toolCount > 0 && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                {toolCount} Manager tools
+              </span>
+            )}
+            {!group.can_access_ceph_admin && !group.can_access_storage_ops && toolCount === 0 && (
+              <span className="ui-caption text-slate-500 dark:text-slate-400">No workspace/tool rights</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "associations",
+      label: "Associations",
+      cellClassName: "align-top min-w-[20rem]",
+      render: (group) => renderGroupAssociations(group),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      align: "right",
+      mobileRole: "actions",
+      cellClassName: "align-top",
+      render: (group) => (
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => openEditModal(group)} className={tableActionButtonClasses}>
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingDeleteGroup(group)}
+            disabled={busyId === group.id}
+            className={tableDeleteActionClasses}
+          >
+            {busyId === group.id ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -679,96 +746,29 @@ export default function GroupsPage() {
             </div>
           }
         />
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {[
-                  { label: "Name", field: "name" as SortField },
-                  { label: "Rights", field: null },
-                  { label: "Associations", field: null },
-                  { label: "Actions", field: null },
-                ].map((column) => (
-                  <th
-                    key={column.label}
-                    onClick={column.field ? () => toggleSort(column.field) : undefined}
-                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                      column.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : ""
-                    }`}
-                  >
-                    <div className={`flex items-center ${column.label === "Actions" ? "justify-end" : "gap-1"}`}>
-                      <span>{column.label}</span>
-                      {column.field && sort.field === column.field && (
-                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading groups..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load groups." tone="error" />}
-              {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No groups." />}
-              {groups.map((group) => {
-                const access = normalizeManagerToolAccess(group.manager_tool_access);
-                const toolCount = Object.values(access).filter(Boolean).length;
-                return (
-                  <tr key={group.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(group)}
-                        className="w-full text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
-                      >
-                        {group.name}
-                      </button>
-                      {group.description && (
-                        <p className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">{group.description}</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      <div className="flex flex-wrap gap-2">
-                        {group.can_access_ceph_admin && <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">Ceph Admin</span>}
-                        {group.can_access_storage_ops && <span className="rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">Storage Ops</span>}
-                        {toolCount > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">{toolCount} Manager tools</span>}
-                        {!group.can_access_ceph_admin && !group.can_access_storage_ops && toolCount === 0 && <span className="ui-caption text-slate-500 dark:text-slate-400">No workspace/tool rights</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                      {renderGroupAssociations(group)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => openEditModal(group)} className={tableActionButtonClasses}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingDeleteGroup(group)}
-                          disabled={busyId === group.id}
-                          className={tableDeleteActionClasses}
-                        >
-                          {busyId === group.id ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          page={page}
-          pageSize={pageSize}
-          total={totalGroups}
-          onPageChange={(nextPage) => setPage(Math.max(1, nextPage))}
-          onPageSizeChange={(nextSize) => {
-            setPageSize(nextSize);
-            setPage(1);
+        <DataTableShell
+          columns={groupTableColumns}
+          rows={groups}
+          rowKey={(group) => group.id}
+          status={tableStatus}
+          loadingMessage="Loading groups..."
+          errorMessage="Unable to load groups."
+          emptyMessage="No groups."
+          sort={{ field: sort.field, direction: sort.direction, onSort: toggleSort }}
+          pagination={{
+            page,
+            pageSize,
+            total: totalGroups,
+            onPageChange: (nextPage) => setPage(Math.max(1, nextPage)),
+            onPageSizeChange: (nextSize) => {
+              setPageSize(nextSize);
+              setPage(1);
+            },
+            disabled: loading,
           }}
-          disabled={loading}
+          primaryColumnId="name"
+          responsiveCards
+          tableClassName="compact-table"
         />
       </div>
 

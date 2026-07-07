@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import GroupsPage from "./GroupsPage";
 
@@ -137,6 +137,12 @@ describe("GroupsPage", () => {
     render(<GroupsPage />);
 
     expect(await screen.findByText("production-account")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("responsive-data-table");
+    expect(within(table).getByRole("button", { name: "ops-group" }).closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(within(table).getByText("No workspace/tool rights").closest("td")).toHaveAttribute("data-label", "Rights");
+    expect(within(table).getByText("production-account").closest("td")).toHaveAttribute("data-label", "Associations");
+    expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Portal manager")).toBeInTheDocument();
     expect(screen.getByText("Accounts")).toBeInTheDocument();
