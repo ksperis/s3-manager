@@ -109,11 +109,12 @@ LDAP only authenticates the UI identity. First LDAP login creates a user with
 Primary model: `backend/app/models/app_settings.py`.
 Persistence source: the `app_settings` database table.
 
-`APP_SETTINGS_PATH` is now a legacy import and fallback path. On startup or first
+`APP_SETTINGS_PATH` is an optional bootstrap import path. On startup or first
 settings read, a deployment with an empty `app_settings` table imports the JSON
-file once, then live reads and writes go through the database. Environment
-force-locks such as `FEATURE_PORTAL_ENABLED` still override the effective value
-without changing the persisted setting.
+file once, then live reads and writes go through the database. Runtime database
+errors are not hidden by a file fallback. Environment force-locks such as
+`FEATURE_PORTAL_ENABLED` still override the effective value without changing the
+persisted setting.
 
 Managed from Admin UI:
 

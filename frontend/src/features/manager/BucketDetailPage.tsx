@@ -214,6 +214,17 @@ type SimpleLifecycleRule = {
   status: "Enabled" | "Disabled";
 };
 
+type LifecycleRuleStatus = "Enabled" | "Disabled";
+type LifecycleTagFilter = { Key?: unknown; Value?: unknown };
+type LifecycleAndFilter = { Prefix?: unknown; Tags?: unknown };
+type LifecycleFilter = { Prefix?: unknown; Tag?: LifecycleTagFilter; And?: LifecycleAndFilter };
+type LifecycleRuleRecord = Record<string, unknown> & {
+  ID?: unknown;
+  Prefix?: unknown;
+  Status?: unknown;
+  Filter?: LifecycleFilter;
+};
+
 const defaultPublicAccessBlock: BucketPublicAccessBlock = {
   block_public_acls: false,
   ignore_public_acls: false,
@@ -316,6 +327,49 @@ function randomLifecycleId() {
     }
   }
   return `rule-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function lifecycleRuleId(rule: LifecycleRuleRecord): string | null {
+  return typeof rule.ID === "string" && rule.ID.trim() ? rule.ID.trim() : null;
+}
+
+function lifecycleRulePrefix(rule: LifecycleRuleRecord): string | null {
+  return typeof rule.Prefix === "string" && rule.Prefix.trim() ? rule.Prefix.trim() : null;
+}
+
+function lifecycleRuleStatus(rule: LifecycleRuleRecord): LifecycleRuleStatus {
+  return rule.Status === "Disabled" ? "Disabled" : "Enabled";
+}
+
+function lifecycleTagLabel(tag: LifecycleTagFilter): string | null {
+  if (typeof tag.Key !== "string" || !tag.Key.trim()) return null;
+  return `${tag.Key.trim()}=${typeof tag.Value === "string" ? tag.Value.trim() : ""}`;
+}
+
+function lifecycleFilterLabel(filter: LifecycleFilter | undefined): string {
+  if (!filter) return "-";
+  if (typeof filter.Prefix === "string" && filter.Prefix.trim()) {
+    return `Prefix: ${filter.Prefix.trim()}`;
+  }
+  if (filter.Tag) {
+    const tag = lifecycleTagLabel(filter.Tag);
+    if (tag) return `Tag: ${tag}`;
+  }
+  if (filter.And) {
+    const andPrefix =
+      typeof filter.And.Prefix === "string" && filter.And.Prefix.trim()
+        ? `Prefix: ${filter.And.Prefix.trim()}`
+        : "";
+    const tags = Array.isArray(filter.And.Tags)
+      ? filter.And.Tags
+          .filter((tag): tag is LifecycleTagFilter => Boolean(tag) && typeof tag === "object")
+          .map(lifecycleTagLabel)
+          .filter((tag): tag is string => Boolean(tag))
+      : [];
+    const andTags = tags.length > 0 ? `Tags: ${tags.join(", ")}` : "";
+    return [andPrefix, andTags].filter(Boolean).join(" · ") || "Combined filter";
+  }
+  return "-";
 }
 
 type BucketDetailPageProps = {
@@ -1412,7 +1466,7 @@ export default function BucketDetailPage({
     setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
   };
 
-  const describeLifecycleActions = (rule: Record<string, unknown>): string => {
+  const describeLifecycleActions = (rule: LifecycleRuleRecord): string => {
     const actions: string[] = [];
     const expiration = rule.Expiration as Record<string, unknown> | undefined;
     if (expiration?.Days != null) {
@@ -1487,9 +1541,9 @@ export default function BucketDetailPage({
     [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]
   );
 
-  const updateLifecycleRules = async (updater: (rules: Record<string, unknown>[]) => Record<string, unknown>[]) => {
+  const updateLifecycleRules = async (updater: (rules: LifecycleRuleRecord[]) => LifecycleRuleRecord[]) => {
     if (!bucketName || !hasContext) return;
-    const current = lifecycle.rules ?? [];
+    const current = (lifecycle.rules ?? []) as LifecycleRuleRecord[];
     const next = updater(current);
     await persistLifecycleRules(next);
     await loadLifecycle();
@@ -1509,21 +1563,21 @@ export default function BucketDetailPage({
     await updateLifecycleRules((rules) =>
       rules.map((rule, idx) => {
         if (idx !== index) return rule;
-        const currentStatus = (rule as any).Status === "Disabled" ? "Disabled" : "Enabled"; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const currentStatus = lifecycleRuleStatus(rule);
         return { ...rule, Status: currentStatus === "Enabled" ? "Disabled" : "Enabled" };
       })
     );
   };
 
-  const handleAddExampleRule = async (rule: Record<string, unknown>) => {
+  const handleAddExampleRule = async (rule: LifecycleRuleRecord) => {
     if (!bucketName || !hasContext) return;
     try {
       const current = lifecycle.rules ?? [];
-      const ruleWithId = { ID: (rule as any).ID || randomLifecycleId(), ...rule }; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const ruleWithId = { ...rule, ID: lifecycleRuleId(rule) ?? randomLifecycleId() };
       const merged = [...current, ruleWithId];
       setLifecycleMode("json");
       setLifecycleText(JSON.stringify(merged, null, 2));
-      await persistLifecycleRules(merged as Record<string, unknown>[]);
+      await persistLifecycleRules(merged);
       setShowLifecycleEditor(true);
     } catch {
       setLifecycleError("Invalid or unreadable example.");
@@ -3438,43 +3492,35 @@ export default function BucketDetailPage({
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                                {lifecycle.rules?.map((rule, idx) => {
-                                  const filter = (rule as any).Filter as Record<string, any> | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
-                                  let filterLabel = "-";
-                                  if (filter?.Prefix) filterLabel = `Prefix: ${filter.Prefix}`;
-                                  if (filter?.Tag) filterLabel = `Tag: ${filter.Tag.Key}=${filter.Tag.Value}`;
-                                  if (filter?.And) {
-                                    const andPrefix = filter.And.Prefix ? `Prefix: ${filter.And.Prefix}` : "";
-                                    const andTags =
-                                      Array.isArray(filter.And.Tags) && filter.And.Tags.length > 0
-                                        ? `Tags: ${filter.And.Tags.map((t: any) => `${t.Key}=${t.Value}`).join(", ")}`
-                                        : "";
-                                    filterLabel = [andPrefix, andTags].filter(Boolean).join(" · ") || "Combined filter";
-                                  }
+                                {lifecycle.rules?.map((rawRule, idx) => {
+                                  const rule = rawRule as LifecycleRuleRecord;
+                                  const ruleId = lifecycleRuleId(rule);
+                                  const filterLabel = lifecycleFilterLabel(rule.Filter);
+                                  const status = lifecycleRuleStatus(rule);
                                   return (
                                     <tr
-                                      key={`${(rule as any).ID ?? (rule as any).Prefix ?? "rule"}-${idx}`}
+                                      key={`${ruleId ?? lifecycleRulePrefix(rule) ?? "rule"}-${idx}`}
                                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     >
                                       <td className="px-3 py-1.5 font-semibold text-slate-900 dark:text-slate-100">
-                                        {(rule as any).ID ?? "(no ID)"}
+                                        {ruleId ?? "(no ID)"}
                                       </td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <button
                                           type="button"
                                           onClick={() => toggleRuleStatusAt(idx)}
                                           className={`flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${
-                                            (rule as any).Status === "Disabled"
+                                            status === "Disabled"
                                               ? "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-200"
                                               : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
                                           }`}
                                           disabled={lifecycleNotImplemented || savingLifecycle || lifecycleLoading}
                                         >
-                                          {(rule as any).Status === "Disabled" ? "Disabled" : "Enabled"}
+                                          {status}
                                         </button>
                                       </td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{filterLabel}</td>
-                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule as any)}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule)}</td>
                                       <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <div className="flex flex-wrap gap-2">
                                           <button

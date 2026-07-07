@@ -103,7 +103,7 @@ def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch
     assert saved_effective.general.billing_enabled is False
 
 
-def test_legacy_app_settings_json_imports_once_to_db(monkeypatch, tmp_path, db_session):
+def test_app_settings_json_bootstrap_imports_once_to_db(monkeypatch, tmp_path, db_session):
     settings_path = tmp_path / "app_settings.json"
     legacy = AppSettings()
     legacy.general.browser_enabled = False
@@ -120,6 +120,18 @@ def test_legacy_app_settings_json_imports_once_to_db(monkeypatch, tmp_path, db_s
     loaded_again = app_settings_service.load_persisted_app_settings()
     assert loaded_again.general.browser_enabled is False
     assert db_session.query(AppSetting).count() == 1
+
+
+def test_app_settings_db_errors_are_not_hidden_by_disk_fallback(monkeypatch):
+    def _broken_session():
+        raise RuntimeError("settings db unavailable")
+
+    monkeypatch.setattr(app_settings_service, "_open_settings_session", _broken_session)
+
+    with pytest.raises(RuntimeError, match="settings db unavailable"):
+        app_settings_service.load_persisted_app_settings()
+    with pytest.raises(RuntimeError, match="settings db unavailable"):
+        app_settings_service.save_app_settings(AppSettings())
 
 
 def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
@@ -204,11 +216,24 @@ def test_endpoint_status_and_usage_history_default_enabled():
     assert settings.general.usage_history_enabled is True
 
 
-def test_portal_manager_legacy_bucket_create_policy_normalizes_to_session_actions():
+def test_portal_manager_bucket_create_policy_normalizes_to_session_actions():
     settings = AppSettings(
         portal={
             "iam_group_manager_policy": {
                 "actions": ["s3:ListAllMyBuckets", "s3:CreateBucket"],
+                "advanced_policy": None,
+            },
+        }
+    )
+
+    assert settings.portal.iam_group_manager_policy.actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+
+
+def test_portal_manager_create_bucket_only_policy_normalizes_to_session_actions():
+    settings = AppSettings(
+        portal={
+            "iam_group_manager_policy": {
+                "actions": ["s3:CreateBucket"],
                 "advanced_policy": None,
             },
         }

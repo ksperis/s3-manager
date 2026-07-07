@@ -187,18 +187,11 @@ const MANAGER_FEATURE_LABELS: Record<ManagerFeatureKey, string> = {
   notifications: "Notifications",
 };
 
-const LEGACY_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 const defaultVisibleColumns: ColumnId[] = ["used_bytes", "object_count"];
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
-  try {
-    window.localStorage.removeItem(LEGACY_COLUMNS_STORAGE_KEY);
-  } catch {
-    // Ignore storage access failures; the default column set remains safe.
-  }
-
   let raw: string | null = null;
   try {
     raw = window.sessionStorage.getItem(COLUMNS_STORAGE_KEY);

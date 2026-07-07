@@ -18,7 +18,6 @@ const fetchManagerUsageTrendsMock = vi.fn();
 const getManagerUsageStatsAggregateMock = vi.fn();
 let bucketUsageStatsEnabled = false;
 let bucketPurgeEnabled = false;
-const LEGACY_MANAGER_BUCKET_COLUMNS_STORAGE_KEY = "manager.bucket_list.columns.v1";
 const MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
 
 vi.mock("./S3AccountContext", () => ({
@@ -1382,62 +1381,6 @@ describe("manager shell pages", () => {
 
     expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
     expect(screen.getByLabelText("Type DELETE BUCKET bucket-huge")).toBeInTheDocument();
-  });
-
-  it("ignores legacy manager bucket column preferences from localStorage", async () => {
-    window.localStorage.setItem(
-      LEGACY_MANAGER_BUCKET_COLUMNS_STORAGE_KEY,
-      JSON.stringify(["used_bytes", "object_count", "tags", "lifecycle_rules"])
-    );
-    listBucketsMock.mockResolvedValue([
-      {
-        name: "bucket-a",
-        used_bytes: 1024,
-        object_count: 1,
-        tags: [{ key: "env", value: "prod" }],
-        features: {
-          lifecycle_rules: { state: "Enabled", tone: "active" },
-        },
-      },
-    ]);
-    useS3AccountContextMock.mockReturnValue({
-      accounts: [
-        {
-          id: "account-1",
-          name: "Account Alpha",
-          type: "account",
-          endpoint_provider: "ceph",
-          storage_endpoint_capabilities: { iam: true, metrics: true, usage: true, sns: true },
-        },
-      ],
-      selectedS3AccountId: "account-1",
-      requiresS3AccountSelection: false,
-      sessionS3AccountName: null,
-      selectedS3AccountType: "account",
-      hasS3AccountContext: true,
-      accountIdForApi: "account-1",
-      accessMode: "default",
-      managerStatsEnabled: true,
-      managerStatsMessage: null,
-      managerBrowserEnabled: true,
-    });
-
-    render(
-      <MemoryRouter>
-        <BucketsPage />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
-    expect(window.localStorage.getItem(LEGACY_MANAGER_BUCKET_COLUMNS_STORAGE_KEY)).toBeNull();
-    expect(
-      listBucketsMock.mock.calls.some(([, options]) => {
-        const include = (options as { include?: string[] } | undefined)?.include;
-        return Array.isArray(include) && include.length > 0;
-      })
-    ).toBe(false);
-    expect(screen.queryByRole("button", { name: "S3 tags details" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Lifecycle rules details" })).not.toBeInTheDocument();
   });
 
   it("loads manager bucket feature summaries only when a feature chip is focused", async () => {

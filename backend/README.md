@@ -81,7 +81,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `REFRESH_TOKEN_COOKIE_SECURE` (default: `false`)
 - `REFRESH_TOKEN_COOKIE_SAMESITE` (default: `lax`)
 - `DATABASE_URL` (default: SQLite file at `backend/app.db`; relative SQLite paths are normalized against `backend/`; use PostgreSQL for multi-backend)
-- `APP_SETTINGS_PATH` (default: `backend/app/data/app_settings.json`; legacy import/fallback path, live app settings are stored in the database)
+- `APP_SETTINGS_PATH` (optional JSON bootstrap import when the `app_settings` DB row is missing; live app settings are stored in the database)
 - `BACKEND_REPLICAS` (default: `1`, used to warn about unsupported SQLite multi-backend deployments)
 - `OPERATION_LEASE_TTL_SECONDS` (default: `1800`, DB lease TTL for healthcheck/quota/history jobs)
 - `BILLING_OPERATION_LEASE_TTL_SECONDS` (default: `7200`, DB lease TTL for daily billing collection)

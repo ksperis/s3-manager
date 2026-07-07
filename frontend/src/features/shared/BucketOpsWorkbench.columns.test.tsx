@@ -129,7 +129,6 @@ vi.mock("./BucketOpsRowActionsMenu", () => ({
 import BucketOpsWorkbench from "./BucketOpsWorkbench";
 
 const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
-const LEGACY_STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v1";
 
 const baseResponse = {
   total: 1,
@@ -235,23 +234,6 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       writable: true,
       value: vi.fn(),
     });
-  });
-
-  it("ignores legacy v1 column preferences after the storage key bump", async () => {
-    window.localStorage.setItem(
-      LEGACY_STORAGE_OPS_COLUMNS_STORAGE_KEY,
-      JSON.stringify(["context_name", "owner_quota_max_size_bytes"])
-    );
-    mocks.listStorageOpsBuckets.mockResolvedValue({
-      items: [baseBucket],
-      ...baseResponse,
-    });
-
-    renderStorageOps();
-
-    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
-    expect(screen.getByText("UI tags")).toBeInTheDocument();
-    expect(screen.queryByText("Owner quota")).not.toBeInTheDocument();
   });
 
   it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {

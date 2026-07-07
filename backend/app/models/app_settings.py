@@ -29,11 +29,11 @@ def _default_portal_user_actions() -> list[str]:
 
 
 def _normalize_portal_manager_actions(actions: list[str]) -> list[str]:
-    legacy_default = {"s3:listallmybuckets", "s3:createbucket"}
-    action_keys = {action.lower() for action in actions}
-    if action_keys == legacy_default:
+    cleaned = [action for action in actions if action.lower() != "s3:createbucket"]
+    action_keys = {action.lower() for action in cleaned}
+    if not action_keys or action_keys == {"s3:listallmybuckets"}:
         return _default_portal_manager_actions()
-    return [action for action in actions if action.lower() != "s3:createbucket"]
+    return cleaned
 
 
 def _default_portal_bucket_access_actions() -> list[str]:
