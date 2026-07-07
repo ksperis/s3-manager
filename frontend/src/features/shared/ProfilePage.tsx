@@ -13,6 +13,7 @@ import UiTagEditor from "../../components/UiTagEditor";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { cx, uiDataTableClass } from "../../components/ui/styles";
 import { useTheme } from "../../components/theme";
 import { UiLanguagePreference, useLanguage } from "../../components/language";
 import { fetchCurrentUser, updateCurrentUser } from "../../api/users";
@@ -81,6 +82,8 @@ type ConnectionCredentialDraft = {
   access_key_id: string;
   secret_access_key: string;
 };
+
+const privateConnectionsTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
 function persistStoredUser(values: { fullName?: string | null; uiLanguage?: "en" | "fr" | "de" | null }) {
   if (typeof window === "undefined") return;
@@ -1516,7 +1519,7 @@ export default function ProfilePage({
                   </div>
                 )}
                 <div className="overflow-x-auto">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <table className={privateConnectionsTableClass}>
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
                         <th className="px-4 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
