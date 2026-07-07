@@ -19,7 +19,7 @@ import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
-import TableEmptyState from "../../components/TableEmptyState";
+import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
 import {
@@ -34,6 +34,7 @@ import {
 
 type WindowOption = { label: string; value: "day" | "week" | "month"; helper: string };
 type IncidentWindowOption = { label: string; value: "month" | "quarter" | "half_year"; helper: string };
+type IncidentRow = EndpointHealthGlobalIncident & { rowKey: string };
 
 const TIMELINE_WINDOW_OPTIONS: WindowOption[] = [
   { label: "24h", value: "day", helper: "Last 24 hours" },
@@ -192,6 +193,27 @@ export default function EndpointStatusPage() {
     () => timelineEndpoints.filter((endpoint) => statusFilter === "all" || endpoint.status === statusFilter),
     [timelineEndpoints, statusFilter]
   );
+  const filteredGlobalIncidents = useMemo(
+    () => globalIncidents.filter((incident) => statusFilter === "all" || incident.status === statusFilter),
+    [globalIncidents, statusFilter]
+  );
+  const incidentRows = useMemo<IncidentRow[]>(
+    () =>
+      filteredGlobalIncidents.map((incident, index) => ({
+        ...incident,
+        rowKey: [
+          incident.endpoint_id,
+          incident.start,
+          incident.end ?? "ongoing",
+          incident.status,
+          incident.check_mode ?? "http",
+          incident.check_type ?? "availability",
+          incident.scope ?? "endpoint",
+          index,
+        ].join(":"),
+      })),
+    [filteredGlobalIncidents]
+  );
 
   const maxOverviewLatency = useMemo(() => {
     const values = filteredLatencyEndpoints
@@ -203,13 +225,75 @@ export default function EndpointStatusPage() {
   const incidentsTableStatus = resolveListTableStatus({
     loading: incidentsLoading,
     error: incidentsError,
-    rowCount: globalIncidents.length,
+    rowCount: incidentRows.length,
   });
   const statusFilterTitle =
     statusFilter === "all" ? "All endpoints" : `${statusFilter.charAt(0).toUpperCase()}${statusFilter.slice(1)} endpoints`;
   const timelineWindowHelper = TIMELINE_WINDOW_OPTIONS.find((option) => option.value === timelineWindow)?.helper ?? "Last 7 days";
   const incidentsWindowHelper =
     INCIDENT_WINDOW_OPTIONS.find((option) => option.value === incidentWindow)?.helper ?? "Last 6 months";
+  const incidentsCountLabel =
+    statusFilter === "all"
+      ? `${globalIncidentsTotal} incident${globalIncidentsTotal === 1 ? "" : "s"}${
+          globalIncidentsTotal > globalIncidents.length ? ` · showing first ${globalIncidents.length}` : ""
+        }`
+      : `${incidentRows.length} of ${globalIncidents.length} loaded incident${
+          globalIncidents.length === 1 ? "" : "s"
+        } matching ${statusFilter}`;
+  const incidentsEmptyMessage =
+    statusFilter === "all" ? "No incidents for this range." : `No ${statusFilter} incidents for this range.`;
+  const incidentTableColumns = useMemo<Array<DataTableColumn<IncidentRow>>>(
+    () => [
+      {
+        id: "endpoint",
+        label: "Endpoint",
+        primary: true,
+        cellClassName: "align-top min-w-[16rem]",
+        render: (incident) => (
+          <button
+            type="button"
+            onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
+            className="max-w-full text-left hover:text-primary"
+          >
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
+            <p className="break-all ui-caption text-slate-500 dark:text-slate-400">{incident.endpoint_url || "-"}</p>
+          </button>
+        ),
+      },
+      {
+        id: "status",
+        label: "Status",
+        cellClassName: "align-top",
+        render: (incident) => <StatusPill status={incident.status} />,
+      },
+      {
+        id: "start",
+        label: "Start",
+        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        render: (incident) => formatTimestamp(incident.start),
+      },
+      {
+        id: "end",
+        label: "End",
+        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        render: (incident) => (incident.end ? formatTimestamp(incident.end) : "Ongoing"),
+      },
+      {
+        id: "duration",
+        label: "Duration",
+        cellClassName: "align-top whitespace-nowrap ui-caption text-slate-500 dark:text-slate-400",
+        render: (incident) => (incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"),
+      },
+      {
+        id: "type",
+        label: "Type",
+        cellClassName: "align-top min-w-[14rem] ui-caption text-slate-500 dark:text-slate-400",
+        render: (incident) =>
+          `${(incident.check_type || "availability").toUpperCase()} · ${(incident.scope || "endpoint").toUpperCase()} · ${formatCheckMode(incident.check_mode)}`,
+      },
+    ],
+    [navigate]
+  );
 
   return (
     <div className="space-y-4">
@@ -397,7 +481,7 @@ export default function EndpointStatusPage() {
         <ListToolbar
           title="Incidents"
           description="All incidents across endpoints. Default view is 6 months."
-          countLabel={`${globalIncidentsTotal} incident${globalIncidentsTotal === 1 ? "" : "s"}${globalIncidentsTotal > globalIncidents.length ? ` · showing first ${globalIncidents.length}` : ""}`}
+          countLabel={incidentsCountLabel}
           filters={
             <div className="flex flex-wrap gap-2">
               {INCIDENT_WINDOW_OPTIONS.map((option) => (
@@ -418,64 +502,19 @@ export default function EndpointStatusPage() {
             </div>
           }
         />
-        <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-900/50">
-              <tr>
-                {[
-                  "Endpoint",
-                  "Status",
-                  "Start",
-                  "End",
-                  "Duration",
-                  "Type",
-                ].map((label) => (
-                  <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {incidentsTableStatus === "loading" && (
-                <TableEmptyState colSpan={6} message="Loading incidents..." />
-              )}
-              {incidentsTableStatus === "error" && (
-                <TableEmptyState colSpan={6} message="Unable to load incidents." tone="error" />
-              )}
-              {incidentsTableStatus === "empty" && (
-                <TableEmptyState colSpan={6} message="No incidents for this range." />
-              )}
-              {globalIncidents.map((incident, index) => (
-                <tr key={`${incident.endpoint_id}-${incident.start}-${index}`}>
-                  <td className="px-6 py-4">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
-                      className="text-left hover:text-primary"
-                    >
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">{incident.endpoint_url || "-"}</p>
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusPill status={incident.status} />
-                  </td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                    {incident.end ? formatTimestamp(incident.end) : "Ongoing"}
-                  </td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                    {incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}
-                  </td>
-                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                    {(incident.check_type || "availability").toUpperCase()} · {(incident.scope || "endpoint").toUpperCase()} · {formatCheckMode(incident.check_mode)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTableShell
+          columns={incidentTableColumns}
+          rows={incidentRows}
+          rowKey={(incident) => incident.rowKey}
+          status={incidentsTableStatus}
+          loadingMessage="Loading incidents..."
+          errorMessage="Unable to load incidents."
+          emptyMessage={incidentsEmptyMessage}
+          primaryColumnId="endpoint"
+          responsiveCards
+          tableClassName="compact-table"
+          rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
+        />
       </div>
     </div>
   );
