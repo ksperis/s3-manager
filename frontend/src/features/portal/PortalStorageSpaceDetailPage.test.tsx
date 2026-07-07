@@ -283,6 +283,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByRole("dialog", { name: "Create public link" })).toBeInTheDocument();
     expect(screen.getByText("raw-data/report.csv")).toBeInTheDocument();
+    expect(screen.getByLabelText("Public link expiration")).toHaveClass("ui-control");
     fireEvent.change(screen.getByLabelText("Public link expiration"), {
       target: { value: "2026-06-10T10:00" },
     });
@@ -316,7 +317,9 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
+    expect(screen.getByLabelText("Storage Space name")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Storage Space name")).toBeDisabled();
+    expect(screen.getByLabelText("Storage Space description")).toHaveClass("ui-control");
     fireEvent.change(screen.getByLabelText("Storage Space description"), {
       target: { value: "Updated description" },
     });
@@ -337,6 +340,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getAllByText("Restricted").length).toBeGreaterThan(0);
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
+    expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveClass("ui-control");
     expect(screen.getByText("2 public links")).toHaveAttribute(
       "href",
       "/portal/shares?space_id=research-data&tab=links"

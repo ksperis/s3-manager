@@ -27,7 +27,9 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiInput from "../../components/ui/UiInput";
 import UiMeterBar from "../../components/ui/UiMeterBar";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
@@ -479,16 +481,25 @@ export default function PortalStorageSpaceDetailPage() {
 
   const storageSpaceSettingsCard = space.role === "Owner" ? (
     <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
-      <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto]">
-        <input
-          className="ui-control h-9 text-xs disabled:opacity-70"
+      <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto] lg:items-end">
+        <UiInput
+          label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+          size="compact"
+          className="h-9 disabled:opacity-70"
           value={metadataName}
           onChange={(event) => setMetadataName(event.target.value)}
           aria-label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
           disabled={!canRename || metadataBusy}
           title={canRename ? t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" }) : t({ en: "Name locked for this Storage Space", fr: "Nom verrouillé pour cet espace de stockage", de: "Name für diesen Speicherbereich gesperrt" })}
         />
-        <input className="ui-control h-9 text-xs" value={metadataDescription} onChange={(event) => setMetadataDescription(event.target.value)} aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })} />
+        <UiInput
+          label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })}
+          size="compact"
+          className="h-9"
+          value={metadataDescription}
+          onChange={(event) => setMetadataDescription(event.target.value)}
+          aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })}
+        />
         <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
           {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
         </UiButton>
@@ -644,8 +655,9 @@ export default function PortalStorageSpaceDetailPage() {
                         ) : null}
                       </div>
                       {accessSummary.can_manage_access && share.user_id != null && savedAccessMode !== "private" ? (
-                        <select
-                          className="ui-control h-8 py-1.5 text-xs"
+                        <UiSelect
+                          size="compact"
+                          className="h-8"
                           value={share.role}
                           disabled={accessBusy || accessChanged || isArchived}
                           onChange={(event) => handleAccessRoleChange(share, event.target.value as PortalStorageSpaceRole)}
@@ -654,7 +666,7 @@ export default function PortalStorageSpaceDetailPage() {
                           <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
                           <option value="Editor">{portalRoleLabel("Editor", t)}</option>
                           <option value="Owner">{portalRoleLabel("Owner", t)}</option>
-                        </select>
+                        </UiSelect>
                       ) : (
                         <PortalRoleBadge role={share.role} />
                       )}
@@ -797,17 +809,16 @@ export default function PortalStorageSpaceDetailPage() {
                 <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
               </div>
             </dl>
-            <label className="grid gap-1 text-xs font-semibold">
-              <span className={uiMutedTextClass}>{t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}</span>
-              <input
-                type="datetime-local"
-                className="ui-control h-9 text-xs"
-                value={publicLinkExpiration}
-                disabled={publicLinkBusy || Boolean(createdPublicLink)}
-                onChange={(event) => setPublicLinkExpiration(event.target.value)}
-                aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
-              />
-            </label>
+            <UiInput
+              type="datetime-local"
+              label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
+              size="compact"
+              className="h-9"
+              value={publicLinkExpiration}
+              disabled={publicLinkBusy || Boolean(createdPublicLink)}
+              onChange={(event) => setPublicLinkExpiration(event.target.value)}
+              aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
+            />
             {createdPublicLink ? (
               <div className="rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-3">
                 <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
