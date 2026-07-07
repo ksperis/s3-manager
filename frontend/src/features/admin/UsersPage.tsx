@@ -71,6 +71,7 @@ import {
   adminAssociationTableActionCellClass,
   adminAssociationTableBodyClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
+  adminAssociationTableControlCellClass,
   adminAssociationTableEmptyCellClass,
   adminAssociationTableHeaderClass,
   adminAssociationTableHeadClass,
@@ -285,8 +286,8 @@ const AssociationsTabs = ({
                           return (
                             <tr key={entry.id}>
                               <td className={adminAssociationTableLabelCellClass}>{label}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <td className={adminAssociationTableControlCellClass}>
+                                <label className={adminAssociationAdminLabelClass}>
                                   <input
                                     type="checkbox"
                                     checked={Boolean(entry.account_admin)}
@@ -303,7 +304,7 @@ const AssociationsTabs = ({
                                 </label>
                               </td>
                               {showPortalRole && (
-                                <td className="px-3 py-2">
+                                <td className={adminAssociationTableControlCellClass}>
                                   <select
                                     value={normalizePortalRole(entry.account_role)}
                                     onChange={(e) =>

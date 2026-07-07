@@ -58,6 +58,7 @@ import {
   adminAssociationTableClass as associationTableClass,
   adminAssociationTableActionCellClass,
   adminAssociationTableContainerClass as associationTableContainerClass,
+  adminAssociationTableControlCellClass,
   adminAssociationTableEmptyCellClass,
   adminAssociationTableBodyClass,
   adminAssociationTableHeaderClass,
@@ -1726,8 +1727,8 @@ export default function S3AccountsPage() {
                           assignedUsers.map((u) => (
                             <tr key={u.id}>
                               <td className={adminAssociationTableLabelCellClass}>{u.label}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <td className={adminAssociationTableControlCellClass}>
+                                <label className={adminAssociationAdminLabelClass}>
                                   <input
                                     type="checkbox"
                                     checked={u.account_admin}
@@ -1745,7 +1746,7 @@ export default function S3AccountsPage() {
                                 </label>
                               </td>
                               {portalEnabled && (
-                                <td className="px-3 py-2">
+                                <td className={adminAssociationTableControlCellClass}>
                                   <UiSelect
                                     aria-label={`Portal role for ${u.label}`}
                                     size="compact"
@@ -1907,8 +1908,8 @@ export default function S3AccountsPage() {
                           assignedGroups.map((group) => (
                             <tr key={group.id}>
                               <td className={adminAssociationTableLabelCellClass}>{group.label}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                              <td className={adminAssociationTableControlCellClass}>
+                                <label className={adminAssociationAdminLabelClass}>
                                   <input
                                     type="checkbox"
                                     checked={group.account_admin}
@@ -1926,7 +1927,7 @@ export default function S3AccountsPage() {
                                 </label>
                               </td>
                               {portalEnabled && (
-                                <td className="px-3 py-2">
+                                <td className={adminAssociationTableControlCellClass}>
                                   <UiSelect
                                     aria-label={`Portal role for ${group.label}`}
                                     size="compact"
