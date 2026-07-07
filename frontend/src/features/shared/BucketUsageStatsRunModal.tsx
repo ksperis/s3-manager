@@ -14,6 +14,7 @@ import {
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 
@@ -198,12 +199,12 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
                 {formatCompactNumber(progress.listed_versions)} version(s) - {formatBytes(progress.total_bytes)}
               </p>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
-                style={{ width: `${progressPercent ?? 100}%` }}
-              />
-            </div>
+            <UiProgressBar
+              value={progressPercent ?? 100}
+              label="Bucket usage stats progress"
+              className="mt-2 h-2 overflow-hidden bg-slate-200 dark:bg-slate-800"
+              barClassName="bg-primary transition-[width] duration-150 ease-out"
+            />
             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
               {formatCompactNumber(progress.completed_buckets)} / {formatCompactNumber(progress.total_buckets)} buckets completed
               {progress.listed_delete_markers > 0 ? ` - ${formatCompactNumber(progress.listed_delete_markers)} delete markers` : ""}
