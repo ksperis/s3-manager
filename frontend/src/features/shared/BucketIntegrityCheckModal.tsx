@@ -19,6 +19,7 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiProgressBar from "../../components/ui/UiProgressBar";
+import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 
@@ -115,6 +116,11 @@ function parseOptionalMaxMb(value: string): number | null {
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
 }
+
+const CHECK_MODE_OPTIONS: Array<{ value: BucketIntegrityCheckMode; label: string }> = [
+  { value: "head", label: "HEAD only" },
+  { value: "get", label: "GET body" },
+];
 
 export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckModalProps) {
   const [parallelism, setParallelism] = useState(10);
@@ -273,36 +279,12 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <div className="space-y-1 ui-caption">
             <span className="font-semibold text-slate-700 dark:text-slate-200">Mode</span>
-            <div
-              className="grid grid-cols-2 overflow-hidden rounded-md border border-slate-300 dark:border-slate-700"
-              role="group"
-              aria-label="Bucket integrity check mode"
-            >
-              {(
-                [
-                  { value: "head", label: "HEAD only" },
-                  { value: "get", label: "GET body" },
-                ] as Array<{ value: BucketIntegrityCheckMode; label: string }>
-              ).map((option) => {
-                const active = checkMode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={active}
-                    disabled={running}
-                    onClick={() => setCheckMode(option.value)}
-                    className={`px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      active
-                        ? "bg-primary text-white"
-                        : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+            <UiSegmentedControl
+              ariaLabel="Bucket integrity check mode"
+              options={CHECK_MODE_OPTIONS.map((option) => ({ ...option, disabled: running }))}
+              value={checkMode}
+              onChange={setCheckMode}
+            />
           </div>
           <label className="space-y-1 ui-caption">
             <span className="font-semibold text-slate-700 dark:text-slate-200">Parallelism</span>

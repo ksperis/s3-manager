@@ -131,6 +131,8 @@ describe("BucketIntegrityCheckModal results", () => {
 
     const maxMbInput = screen.getByLabelText("Max MB per object") as HTMLInputElement;
     expect(maxMbInput).toBeDisabled();
+    const modeGroup = screen.getByRole("group", { name: "Bucket integrity check mode" });
+    expect(within(modeGroup).getByRole("button", { name: "HEAD only" })).toHaveAttribute("aria-pressed", "true");
 
     const runButton = screen.getByRole("button", { name: "Run check" });
     expect(runButton).toHaveClass("ui-button-base");
@@ -154,7 +156,8 @@ describe("BucketIntegrityCheckModal results", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "GET body" }));
+    await user.click(within(modeGroup).getByRole("button", { name: "GET body" }));
+    expect(within(modeGroup).getByRole("button", { name: "GET body" })).toHaveAttribute("aria-pressed", "true");
     const enabledMaxMbInput = screen.getByLabelText("Max MB per object") as HTMLInputElement;
     expect(enabledMaxMbInput).not.toBeDisabled();
     await user.type(enabledMaxMbInput, "1.5");
