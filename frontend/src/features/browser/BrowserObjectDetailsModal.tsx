@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
 import {
   fetchObjectMetadata,
@@ -1530,15 +1531,14 @@ export default function BrowserObjectDetailsModal({
             />
           </label>
         </div>
-        <label className="mt-2 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-          <input
-            type="checkbox"
-            checked={retentionBypass}
-            onChange={(event) => setRetentionBypass(event.target.checked)}
-            disabled={objectLockUnavailable}
-          />
+        <UiCheckboxField
+          checked={retentionBypass}
+          onChange={(event) => setRetentionBypass(event.target.checked)}
+          disabled={objectLockUnavailable}
+          className="mt-2 ui-caption text-slate-500 dark:text-slate-400"
+        >
           Bypass governance retention
-        </label>
+        </UiCheckboxField>
         <div className="mt-3 flex items-center justify-end">
           <button
             type="button"

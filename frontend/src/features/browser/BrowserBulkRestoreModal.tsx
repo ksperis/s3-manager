@@ -5,8 +5,8 @@
 import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import { stableSignature } from "../../utils/stableSignature";
 
 type BrowserBulkRestoreModalProps = {
@@ -94,15 +94,13 @@ export default function BrowserBulkRestoreModal({
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
         )}
         <div className={browserPanelCardClasses}>
-          <label className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={bulkRestoreRestoreDeleted}
-              onChange={(event) => setBulkRestoreRestoreDeleted(event.target.checked)}
-              className={uiCheckboxClass}
-            />
+          <UiCheckboxField
+            checked={bulkRestoreRestoreDeleted}
+            onChange={(event) => setBulkRestoreRestoreDeleted(event.target.checked)}
+            className="ui-caption text-slate-500 dark:text-slate-400"
+          >
             Restore deleted objects to their latest version
-          </label>
+          </UiCheckboxField>
           <div className={`mt-3 space-y-2 ${bulkRestoreRestoreDeleted ? "opacity-60" : ""}`}>
             <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Target date</label>
             <input
@@ -116,29 +114,23 @@ export default function BrowserBulkRestoreModal({
               <p className="ui-caption text-slate-400">Date is ignored while latest deleted-object restore is enabled.</p>
             )}
           </div>
-          <label
-            className={`mt-3 flex items-center gap-2 ui-caption ${
+          <UiCheckboxField
+            checked={bulkRestoreDeleteMissing}
+            onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
+            disabled={bulkRestoreRestoreDeleted}
+            className={`mt-3 ui-caption ${
               bulkRestoreRestoreDeleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"
             }`}
           >
-            <input
-              type="checkbox"
-              checked={bulkRestoreDeleteMissing}
-              onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
-              disabled={bulkRestoreRestoreDeleted}
-              className={uiCheckboxClass}
-            />
             Delete objects not present at the selected date
-          </label>
-          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={bulkRestoreDryRun}
-              onChange={(event) => setBulkRestoreDryRun(event.target.checked)}
-              className={uiCheckboxClass}
-            />
+          </UiCheckboxField>
+          <UiCheckboxField
+            checked={bulkRestoreDryRun}
+            onChange={(event) => setBulkRestoreDryRun(event.target.checked)}
+            className="mt-3 ui-caption text-slate-500 dark:text-slate-400"
+          >
             Dry run (preview only)
-          </label>
+          </UiCheckboxField>
         </div>
         {bulkRestorePreview && (
           <div className={browserPanelCardClasses}>

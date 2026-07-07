@@ -5,8 +5,8 @@
 import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import { stableSignature } from "../../utils/stableSignature";
 
 type BrowserCleanupModalProps = {
@@ -92,15 +92,13 @@ export default function BrowserCleanupModal({
             onChange={(event) => setCleanupOlderThanDays(event.target.value)}
             placeholder="e.g. 30"
           />
-          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={cleanupDeleteOrphanMarkers}
-              onChange={(event) => setCleanupDeleteOrphanMarkers(event.target.checked)}
-              className={uiCheckboxClass}
-            />
+          <UiCheckboxField
+            checked={cleanupDeleteOrphanMarkers}
+            onChange={(event) => setCleanupDeleteOrphanMarkers(event.target.checked)}
+            className="mt-3 ui-caption text-slate-500 dark:text-slate-400"
+          >
             Delete orphan delete markers (runs after version cleanup)
-          </label>
+          </UiCheckboxField>
         </div>
         <p className="ui-caption text-slate-500 dark:text-slate-400">
           If multiple rules are set, versions matching any rule are removed. The latest version is never deleted.
