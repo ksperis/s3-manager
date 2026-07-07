@@ -184,13 +184,12 @@ import {
   formatAdvancedFilterSyncLabel,
   formatTextFilterSummary,
   formatTextMatchModeLabel,
-  advancedFilterSummaryChipClass,
   advancedFilterSyncBadgeClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
-  advancedFilterSummaryClass,
   parseExactListInput,
   renderAdvancedFilterCostBadge,
+  renderAdvancedFilterDraftSummary,
   renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
   renderFilterCostIndicator,
@@ -8382,27 +8381,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
                     <div className={advancedFilterBodyClass}>
                       <div className="space-y-4">
-                        <section className={advancedFilterSummaryClass}>
-                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Draft summary
-                          </p>
-                          {advancedDraftSummaryItems.length === 0 ? (
-                            <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                              No advanced rule in draft.
-                            </p>
-                          ) : (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {advancedDraftSummaryItems.map((item) => (
-                                <span
-                                  key={item.id}
-                                  className={advancedFilterSummaryChipClass}
-                                >
-                                  {item.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </section>
+                        {renderAdvancedFilterDraftSummary(advancedDraftSummaryItems)}
 
                         <section className={advancedFilterSectionClass}>
                           <div className="mb-3 flex items-center justify-between">

@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import type { ReactNode } from "react";
 import UiProgressBar from "../../../components/ui/UiProgressBar";
 import { toolbarCompactButtonClasses } from "../../../components/toolbarControlClasses";
 
@@ -79,6 +80,30 @@ export const advancedFilterToolbarButtonClass = (active: boolean = false) => {
 
 export const advancedFilterSummaryChipClass =
   "rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100";
+
+export type AdvancedFilterSummaryItem = {
+  id: string;
+  label: ReactNode;
+};
+
+export const renderAdvancedFilterDraftSummary = (items: AdvancedFilterSummaryItem[]) => (
+  <section className={advancedFilterSummaryClass}>
+    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      Draft summary
+    </p>
+    {items.length === 0 ? (
+      <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No advanced rule in draft.</p>
+    ) : (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <span key={item.id} className={advancedFilterSummaryChipClass}>
+            {item.label}
+          </span>
+        ))}
+      </div>
+    )}
+  </section>
+);
 
 export const advancedFilterHeaderBadgeClass =
   "rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";

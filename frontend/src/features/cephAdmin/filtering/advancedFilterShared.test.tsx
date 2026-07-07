@@ -10,6 +10,7 @@ import {
   formatTextMatchModeSymbol,
   quickFilterMatchModeButtonClass,
   renderAdvancedFilterCostBadge,
+  renderAdvancedFilterDraftSummary,
   renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
   type AdvancedSearchProgress,
@@ -46,6 +47,26 @@ describe("advancedFilterShared", () => {
     expect(screen.getByText("1 rule")).toBeInTheDocument();
     expect(screen.getByText("2 rules")).toBeInTheDocument();
     expect(screen.getByText("Global draft cost")).toHaveAttribute("title", "High cost");
+  });
+
+  it("renders advanced-filter draft summaries consistently", () => {
+    const { rerender } = render(<>{renderAdvancedFilterDraftSummary([])}</>);
+
+    expect(screen.getByText("Draft summary")).toBeInTheDocument();
+    expect(screen.getByText("No advanced rule in draft.")).toBeInTheDocument();
+
+    rerender(
+      <>
+        {renderAdvancedFilterDraftSummary([
+          { id: "owner", label: "Owner contains demo" },
+          { id: "bytes", label: "Size greater than 1 GiB" },
+        ])}
+      </>
+    );
+
+    expect(screen.getByText("Owner contains demo")).toBeInTheDocument();
+    expect(screen.getByText("Size greater than 1 GiB")).toBeInTheDocument();
+    expect(screen.queryByText("No advanced rule in draft.")).not.toBeInTheDocument();
   });
 
   it("returns stable quick-filter match-mode labels and classes", () => {

@@ -37,8 +37,6 @@ import {
   advancedFilterMatchModeButtonClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
-  advancedFilterSummaryChipClass,
-  advancedFilterSummaryClass,
   advancedFilterSyncBadgeClass,
   advancedFilterToolbarButtonClass,
   buildTextFieldRules,
@@ -50,6 +48,7 @@ import {
   parseExactListInput,
   progressFromAdvancedSearchEvent,
   quickFilterMatchModeButtonClass,
+  renderAdvancedFilterDraftSummary,
   renderAdvancedFilterCostBadge,
   renderAdvancedFilterRuleCountBadge,
   renderAdvancedSearchProgress,
@@ -1130,25 +1129,7 @@ export default function CephAdminAccountsPage() {
 
                       <div className={advancedFilterBodyClass}>
                         <div className="space-y-4">
-                          <section className={advancedFilterSummaryClass}>
-                            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Draft summary
-                            </p>
-                            {advancedDraftSummaryItems.length === 0 ? (
-                              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No advanced rule in draft.</p>
-                            ) : (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {advancedDraftSummaryItems.map((item) => (
-                                  <span
-                                    key={item.id}
-                                    className={advancedFilterSummaryChipClass}
-                                  >
-                                    {item.label}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </section>
+                          {renderAdvancedFilterDraftSummary(advancedDraftSummaryItems)}
 
                           <section className={advancedFilterSectionClass}>
                             <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
