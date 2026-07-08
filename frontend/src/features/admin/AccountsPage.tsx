@@ -71,6 +71,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
+import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 
@@ -78,7 +79,6 @@ type SortField = "name" | "rgw_account_id";
 type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
-type TextMatchMode = "contains" | "exact";
 type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
 type PortalOverrideFormSnapshot = {
   bucketCreate: TriState;
@@ -350,10 +350,9 @@ export default function S3AccountsPage() {
           nextPage += 1;
         }
 
-        const needle = quick.toLowerCase();
         const exactMatches = allMatches.filter((account) => {
           const candidates = [account.name, account.rgw_account_id ?? "", account.id ?? "", ...extractUiTagLabels(account.tags)];
-          return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
+          return matchesExactTextCandidate(candidates, quick);
         });
         const totalExact = exactMatches.length;
         const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));

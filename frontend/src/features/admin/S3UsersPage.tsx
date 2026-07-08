@@ -41,6 +41,7 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
 import AdminModalTabs from "./AdminModalTabs";
@@ -63,7 +64,6 @@ import {
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
-type TextMatchMode = "contains" | "exact";
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
 
@@ -235,10 +235,9 @@ export default function S3UsersPage() {
           nextPage += 1;
         }
 
-        const needle = quick.toLowerCase();
         const exactMatches = allMatches.filter((user) => {
           const candidates = [user.name, user.rgw_user_uid, user.email ?? "", ...extractUiTagLabels(user.tags)];
-          return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
+          return matchesExactTextCandidate(candidates, quick);
         });
         const totalExact = exactMatches.length;
         const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));

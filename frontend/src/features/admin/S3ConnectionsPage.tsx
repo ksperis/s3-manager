@@ -41,9 +41,11 @@ import {
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
-import { buildUiTagItems, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
+import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
+import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationPickerPanel,
@@ -76,6 +78,16 @@ const credentialOwnerTypeOptions = [
 ];
 type EditTab = "general" | "users" | "groups";
 
+function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array<string | number | null | undefined> {
+  return [
+    connection.name,
+    connection.endpoint_url,
+    connection.created_by_email,
+    ...(connection.group_details ?? []).map((group) => group.name),
+    ...extractUiTagLabels(connection.tags),
+  ];
+}
+
 const selectionCheckboxClass = "h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary";
 const createEmptyConnectionForm = () => ({
   name: "",
@@ -99,6 +111,7 @@ export default function S3ConnectionsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState("");
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
 
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
@@ -239,18 +252,47 @@ export default function S3ConnectionsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listAdminS3Connections({
-        page,
-        page_size: pageSize,
-        search: filter.trim() || undefined,
-      });
-      const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
-      if (response.total > 0 && page > totalPages) {
-        setPage(totalPages);
-        return;
+      const quick = filter.trim();
+      if (quick && quickFilterMode === "exact") {
+        const allMatches: S3ConnectionAdminItem[] = [];
+        let nextPage = 1;
+        while (true) {
+          const response = await listAdminS3Connections({
+            page: nextPage,
+            page_size: 200,
+            search: quick,
+          });
+          allMatches.push(...response.items);
+          if (!response.has_next) break;
+          nextPage += 1;
+        }
+
+        const exactMatches = allMatches.filter((connection) =>
+          matchesExactTextCandidate(getConnectionSearchCandidates(connection), quick)
+        );
+        const totalExact = exactMatches.length;
+        const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));
+        if (totalExact > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        const start = (page - 1) * pageSize;
+        setItems(exactMatches.slice(start, start + pageSize));
+        setTotal(totalExact);
+      } else {
+        const response = await listAdminS3Connections({
+          page,
+          page_size: pageSize,
+          search: quick || undefined,
+        });
+        const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
+        if (response.total > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setItems(response.items);
+        setTotal(response.total);
       }
-      setItems(response.items);
-      setTotal(response.total);
       setAllFilteredSelectableIds(null);
       setAllFilteredSelectableIdsKey(null);
     } catch (err) {
@@ -258,7 +300,7 @@ export default function S3ConnectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, page, pageSize]);
+  }, [filter, page, pageSize, quickFilterMode]);
 
   useEffect(() => {
     fetchItems();
@@ -462,12 +504,14 @@ export default function S3ConnectionsPage() {
     error,
     rowCount: items.length,
   });
+  const quickFilterActive = filter.trim().length > 0;
   const selectionQueryKey = useMemo(
     () =>
       JSON.stringify({
         filter: filter.trim() || null,
+        matchMode: quickFilterMode,
       }),
-    [filter]
+    [filter, quickFilterMode]
   );
   const selectableOnPageIds = useMemo(
     () => items.map((item) => item.id),
@@ -528,6 +572,17 @@ export default function S3ConnectionsPage() {
     setSelectedIds([]);
     setPage(1);
   };
+  const toggleQuickFilterMode = () => {
+    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
+    setSelectedIds([]);
+    setPage(1);
+  };
+  const clearAllFilters = () => {
+    setFilter("");
+    setQuickFilterMode("contains");
+    setSelectedIds([]);
+    setPage(1);
+  };
   const handlePageChange = (nextPage: number) => {
     if (nextPage === page) return;
     setPage(Math.max(1, nextPage));
@@ -560,7 +615,9 @@ export default function S3ConnectionsPage() {
         search: filter.trim() || undefined,
       });
       response.items.forEach((item) => {
-        ids.add(item.id);
+        if (!filter.trim() || quickFilterMode === "contains" || matchesExactTextCandidate(getConnectionSearchCandidates(item), filter)) {
+          ids.add(item.id);
+        }
       });
       if (!response.has_next) {
         break;
@@ -571,7 +628,7 @@ export default function S3ConnectionsPage() {
     setAllFilteredSelectableIds(resolved);
     setAllFilteredSelectableIdsKey(selectionQueryKey);
     return resolved;
-  }, [allFilteredSelectableIds, allFilteredSelectableIdsKey, filter, selectionQueryKey]);
+  }, [allFilteredSelectableIds, allFilteredSelectableIdsKey, filter, quickFilterMode, selectionQueryKey]);
 
   const setSelectionForFilteredResults = useCallback(
     async (checked: boolean) => {
@@ -1064,7 +1121,24 @@ export default function S3ConnectionsPage() {
               onChange={handleFilterChange}
               placeholder="Search name, endpoint, created by, group, or tag..."
               className="w-full sm:w-64"
+              active={quickFilterActive}
+              matchMode={quickFilterMode}
+              onToggleMatchMode={toggleQuickFilterMode}
             />
+          }
+          secondaryContent={
+            quickFilterActive ? (
+              <ActiveFiltersBar
+                label="Active filters summary"
+                items={[
+                  {
+                    id: "search",
+                    label: `Search ${quickFilterMode === "exact" ? "exact" : "contains"}: ${filter.trim()}`,
+                  },
+                ]}
+                onClearAll={clearAllFilters}
+              />
+            ) : null
           }
         />
         {selectedIds.length > 0 && (

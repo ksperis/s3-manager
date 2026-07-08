@@ -313,4 +313,57 @@ describe("S3ConnectionsPage live validation", () => {
     expect(screen.queryByText("connection-plain")).not.toBeInTheDocument();
     expect(screen.getByText("shared").parentElement?.className).toContain("text-[10px]");
   });
+
+  it("keeps exact search and select-all filtered aligned", async () => {
+    const exactConnection = makeConnection(1, {
+      name: "connection-tagged",
+      tags: [{ id: 701, label: "prod", color_key: "sky", scope: "standard" }],
+    });
+    const containsConnection = makeConnection(2, {
+      name: "production-connection",
+      tags: [{ id: 702, label: "production", color_key: "slate", scope: "standard" }],
+    });
+
+    listAdminS3ConnectionsMock.mockImplementation((params?: { search?: string; page?: number; page_size?: number }) => {
+      const items = params?.search === "prod" ? [exactConnection, containsConnection] : [exactConnection, containsConnection];
+      return Promise.resolve({
+        items,
+        total: items.length,
+        page: params?.page ?? 1,
+        page_size: params?.page_size ?? 25,
+        has_next: false,
+      });
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-tagged");
+
+    fireEvent.change(screen.getByLabelText("Search"), {
+      target: { value: "prod" },
+    });
+
+    await screen.findByText("Search contains: prod");
+    expect(screen.getByText("production-connection")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle filter match mode" }));
+
+    await screen.findByText("Search exact: prod");
+    await waitFor(() => {
+      expect(screen.queryByText("production-connection")).not.toBeInTheDocument();
+    });
+    expect(listAdminS3ConnectionsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page_size: 200,
+        search: "prod",
+      })
+    );
+
+    fireEvent.click(screen.getByLabelText("Select all filtered connections"));
+    fireEvent.click(await screen.findByRole("button", { name: "Disable selected" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, { is_active: false });
+  });
 });
