@@ -292,7 +292,13 @@ describe("S3ConnectionsPage live validation", () => {
     await screen.findByText("connection-tagged");
     await screen.findByText("connection-plain");
 
-    fireEvent.change(screen.getByPlaceholderText("Search name, endpoint, created by, group, or tag..."), {
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute(
+      "placeholder",
+      "Search name, endpoint, created by, group, or tag..."
+    );
+
+    fireEvent.change(screen.getByLabelText("Search"), {
       target: { value: "shared" },
     });
 

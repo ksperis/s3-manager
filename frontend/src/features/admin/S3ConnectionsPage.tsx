@@ -10,6 +10,7 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
@@ -23,7 +24,6 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
 import {
@@ -1059,18 +1059,12 @@ export default function S3ConnectionsPage() {
           showHeading={false}
           countLabel={`${total} entr${total === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex items-center gap-2">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Filter
-              </span>
-              <input
-                type="text"
-                value={filter}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                placeholder="Search name, endpoint, created by, group, or tag..."
-                className={`${toolbarCompactInputClasses} w-full sm:w-64`}
-              />
-            </div>
+            <ToolbarSearchInput
+              value={filter}
+              onChange={handleFilterChange}
+              placeholder="Search name, endpoint, created by, group, or tag..."
+              className="w-full sm:w-64"
+            />
           }
         />
         {selectedIds.length > 0 && (
