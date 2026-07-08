@@ -9,6 +9,7 @@ export type PortalSettings = {
   allow_portal_user_bucket_create: boolean;
   allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
+  storage_space_version_cleanup_enabled: boolean;
   max_portal_user_access_keys: number;
   iam_group_manager_policy: PortalIAMPolicySettings;
   iam_group_user_policy: PortalIAMPolicySettings;
@@ -45,6 +46,7 @@ export type PortalSettingsOverride = {
   allow_portal_user_bucket_create?: boolean | null;
   allow_portal_named_bucket_create?: boolean | null;
   allow_portal_user_access_key_create?: boolean | null;
+  storage_space_version_cleanup_enabled?: boolean | null;
   iam_group_manager_policy?: PortalIAMPolicyOverride | null;
   iam_group_user_policy?: PortalIAMPolicyOverride | null;
   bucket_access_policy?: PortalIAMPolicyOverride | null;

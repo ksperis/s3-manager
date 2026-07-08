@@ -84,6 +84,7 @@ type PortalOverrideFormSnapshot = {
   bucketCreate: TriState;
   namedBucketCreate: TriState;
   accessKeyCreate: TriState;
+  versionCleanup: TriState;
   versioning: TriState;
   lifecycle: TriState;
   cors: TriState;
@@ -197,6 +198,7 @@ export default function S3AccountsPage() {
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalNamedBucketCreateOverride, setAdminPortalNamedBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
+  const [adminPortalVersionCleanupOverride, setAdminPortalVersionCleanupOverride] = useState<TriState>("inherit");
   const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
   const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
   const [adminBucketCorsOverride, setAdminBucketCorsOverride] = useState<TriState>("inherit");
@@ -468,6 +470,7 @@ export default function S3AccountsPage() {
       setAdminPortalBucketCreateOverride("inherit");
       setAdminPortalNamedBucketCreateOverride("inherit");
       setAdminPortalAccessKeyCreateOverride("inherit");
+      setAdminPortalVersionCleanupOverride("inherit");
       setAdminBucketVersioningOverride("inherit");
       setAdminBucketLifecycleOverride("inherit");
       setAdminBucketCorsOverride("inherit");
@@ -484,6 +487,7 @@ export default function S3AccountsPage() {
     const bucketCreate = resolveTriState(override.allow_portal_user_bucket_create);
     const namedBucketCreate = resolveTriState(override.allow_portal_named_bucket_create);
     const accessKeyCreate = resolveTriState(override.allow_portal_user_access_key_create);
+    const versionCleanup = resolveTriState(override.storage_space_version_cleanup_enabled);
     const bucketDefaultsOverride = override.bucket_defaults;
     const versioning = resolveTriState(bucketDefaultsOverride?.versioning);
     const lifecycle = resolveTriState(bucketDefaultsOverride?.enable_lifecycle);
@@ -508,6 +512,7 @@ export default function S3AccountsPage() {
     setAdminPortalBucketCreateOverride(bucketCreate);
     setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
     setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
+    setAdminPortalVersionCleanupOverride(versionCleanup);
     setAdminBucketVersioningOverride(versioning);
     setAdminBucketLifecycleOverride(lifecycle);
     setAdminBucketCorsOverride(cors);
@@ -522,6 +527,7 @@ export default function S3AccountsPage() {
         bucketCreate,
         namedBucketCreate,
         accessKeyCreate,
+        versionCleanup,
         versioning,
         lifecycle,
         cors,
@@ -968,6 +974,7 @@ export default function S3AccountsPage() {
         bucketCreate: adminPortalBucketCreateOverride,
         namedBucketCreate: adminPortalNamedBucketCreateOverride,
         accessKeyCreate: adminPortalAccessKeyCreateOverride,
+        versionCleanup: adminPortalVersionCleanupOverride,
         versioning: adminBucketVersioningOverride,
         lifecycle: adminBucketLifecycleOverride,
         cors: adminBucketCorsOverride,
@@ -988,6 +995,7 @@ export default function S3AccountsPage() {
       adminManagerPolicyActionsText,
       adminManagerPolicyMode,
       adminPortalAccessKeyCreateOverride,
+      adminPortalVersionCleanupOverride,
       adminPortalBucketCreateOverride,
       adminUserPolicyActionsText,
       adminUserPolicyMode,
@@ -1094,6 +1102,10 @@ export default function S3AccountsPage() {
     const allowAccessKeyCreateValue = toOverrideValue(adminPortalAccessKeyCreateOverride);
     if (allowAccessKeyCreateValue !== undefined) {
       payload.allow_portal_user_access_key_create = allowAccessKeyCreateValue;
+    }
+    const versionCleanupValue = toOverrideValue(adminPortalVersionCleanupOverride);
+    if (versionCleanupValue !== undefined) {
+      payload.storage_space_version_cleanup_enabled = versionCleanupValue;
     }
 
     const bucketDefaults: NonNullable<PortalSettingsOverride["bucket_defaults"]> = {};
@@ -2107,6 +2119,24 @@ export default function S3AccountsPage() {
                               <select
                                 value={adminPortalAccessKeyCreateOverride}
                                 onChange={(e) => setAdminPortalAccessKeyCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Storage Space history cleanup"
+                            description={`Effective for storage spaces: ${
+                              effectivePortalSettings.storage_space_version_cleanup_enabled ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalVersionCleanupOverride}
+                                onChange={(e) => setAdminPortalVersionCleanupOverride(e.target.value as TriState)}
                                 className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 disabled={portalSettingsLoading || portalSettingsSaving}
                               >

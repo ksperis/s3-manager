@@ -50,6 +50,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
       allow_portal_user_bucket_create: true,
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
+      storage_space_version_cleanup_enabled: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: { actions: [], advanced_policy: null },
       iam_group_user_policy: { actions: [], advanced_policy: null },

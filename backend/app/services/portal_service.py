@@ -12,11 +12,13 @@ from .portal.settings import PortalSettingsMixin
 from .portal.sharing import PortalSharingMixin
 from .portal.state_usage import PortalStateUsageMixin
 from .portal.storage_spaces import PortalStorageSpacesMixin
+from .portal.version_cleanup import PortalStorageSpaceVersionCleanupMixin
 
 
 class PortalService(
     PortalSettingsMixin,
     PortalIamMixin,
+    PortalStorageSpaceVersionCleanupMixin,
     PortalStorageSpacesMixin,
     PortalObjectsMixin,
     PortalSharingMixin,

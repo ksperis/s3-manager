@@ -56,6 +56,7 @@ from app.services.portal_service import (
     PortalAccessKeyProtected,
     PortalService,
 )
+from app.services.portal.version_cleanup import PortalStorageSpaceVersionCleanupTarget
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
@@ -1553,6 +1554,92 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     assert metadata.name_editable is True
     assert storage_space.id == bucket_name
 
+def test_storage_space_version_cleanup_deletes_noncurrent_versions_and_orphan_markers(db_session):
+    class _FakeVersionClient:
+        def __init__(self):
+            self.deleted_batches = []
+
+        def list_object_versions(self, **kwargs):  # noqa: ANN001
+            assert kwargs["Bucket"] == "research-data"
+            return {
+                "Versions": [
+                    {"Key": "current.txt", "VersionId": "v-current", "IsLatest": True, "Size": 100},
+                    {"Key": "current.txt", "VersionId": "v-old", "IsLatest": False, "Size": 20},
+                    {"Key": "removed.txt", "VersionId": "v-removed", "IsLatest": False, "Size": 30},
+                ],
+                "DeleteMarkers": [
+                    {"Key": "current.txt", "VersionId": "dm-old", "IsLatest": False},
+                    {"Key": "removed.txt", "VersionId": "dm-latest", "IsLatest": True},
+                ],
+            }
+
+        def delete_objects(self, **kwargs):  # noqa: ANN001
+            self.deleted_batches.append(kwargs["Delete"]["Objects"])
+            return {"Deleted": kwargs["Delete"]["Objects"]}
+
+    service = PortalService(db_session)
+    client = _FakeVersionClient()
+    progress = []
+
+    result = service.run_storage_space_version_cleanup(
+        PortalStorageSpaceVersionCleanupTarget(
+            client=client,
+            bucket_name="research-data",
+            storage_space_id="research-data",
+            storage_space_name="Research Data",
+        ),
+        progress_callback=progress.append,
+    )
+
+    assert result.status == "completed"
+    assert result.scanned_versions == 3
+    assert result.scanned_delete_markers == 2
+    assert result.deleted_versions == 2
+    assert result.deleted_delete_markers == 1
+    assert result.bytes_freed == 50
+    assert client.deleted_batches == [
+        [
+            {"Key": "current.txt", "VersionId": "v-old"},
+            {"Key": "removed.txt", "VersionId": "v-removed"},
+        ],
+        [{"Key": "removed.txt", "VersionId": "dm-latest"}],
+    ]
+    assert progress[-1].stage == "completed"
+    assert progress[-1].bytes_freed == 50
+
+
+def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkeypatch, db_session):
+    account = S3Account(name="portal-cleanup-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-cleanup-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="research-data",
+            display_name="Research Data",
+            owner_user_id=user.id,
+            visibility="shared",
+        )
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    monkeypatch.setattr(
+        service,
+        "_effective_portal_settings",
+        lambda _account: PortalSettings(storage_space_version_cleanup_enabled=False),
+    )
+
+    with pytest.raises(RuntimeError, match="not allowed"):
+        service.prepare_storage_space_version_cleanup(
+            user,
+            access,
+            "research-data",
+            confirmation="CLEAN HISTORY Research Data",
+        )
+
 
 def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatch, db_session):
     account = S3Account(name="portal-storage-user-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
@@ -2147,6 +2234,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     assert effective.allow_portal_user_bucket_create is False
     assert effective.allow_portal_named_bucket_create is False
     assert effective.allow_portal_user_access_key_create is True
+    assert effective.storage_space_version_cleanup_enabled is True
     assert effective.bucket_defaults.enable_cors is True
 
     account_settings = service.get_portal_account_settings(account).model_dump(exclude_unset=True)
@@ -2158,12 +2246,20 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
         account,
         PortalSettingsOverride(
             allow_portal_user_bucket_create=True,
+            storage_space_version_cleanup_enabled=False,
             bucket_defaults={"enable_cors": False},
         ),
     )
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
-    assert stored == {"admin": {"allow_portal_user_bucket_create": True, "bucket_defaults": {"enable_cors": False}}}
+    assert stored == {
+        "admin": {
+            "allow_portal_user_bucket_create": True,
+            "bucket_defaults": {"enable_cors": False},
+            "storage_space_version_cleanup_enabled": False,
+        }
+    }
+    assert service.get_effective_portal_settings(account).storage_space_version_cleanup_enabled is False
     assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
 
 

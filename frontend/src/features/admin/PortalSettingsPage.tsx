@@ -72,6 +72,12 @@ export default function PortalSettingsPage() {
     );
   };
 
+  const handleToggleStorageSpaceVersionCleanup = (value: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, portal: { ...prev.portal, storage_space_version_cleanup_enabled: value } } : prev
+    );
+  };
+
   const handleMaxPortalUserAccessKeysChange = (value: string) => {
     setSettings((prev) =>
       prev
@@ -217,6 +223,7 @@ export default function PortalSettingsPage() {
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
   const portalNamedBucketCreateEnabled = Boolean(settings?.portal.allow_portal_named_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
+  const portalStorageSpaceVersionCleanupEnabled = Boolean(settings?.portal.storage_space_version_cleanup_enabled);
   const portalMaxAccessKeys = settings?.portal.max_portal_user_access_keys ?? 2;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(settings?.portal.bucket_defaults.enable_lifecycle);
@@ -286,6 +293,18 @@ export default function PortalSettingsPage() {
                   onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
                   disabled={!settings}
                   ariaLabel="Portal user access key management"
+                />
+              }
+            />
+            <SettingsItem
+              title="Storage Space history cleanup"
+              description="Allow Storage Space owners to remove historical object versions and orphan delete markers from the Portal."
+              action={
+                <SettingsToggleAction
+                  checked={portalStorageSpaceVersionCleanupEnabled}
+                  onChange={(value) => handleToggleStorageSpaceVersionCleanup(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal Storage Space history cleanup"
                 />
               }
             />

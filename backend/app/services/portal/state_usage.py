@@ -112,6 +112,7 @@ class PortalStateUsageMixin:
             can_create_storage_spaces=can_create_storage_spaces,
             can_manage_portal_users=access.capabilities.can_manage_portal_users,
             allow_named_bucket_create=portal_settings.allow_portal_named_bucket_create,
+            storage_space_version_cleanup_enabled=portal_settings.storage_space_version_cleanup_enabled,
         )
 
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:

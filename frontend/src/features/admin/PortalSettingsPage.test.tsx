@@ -50,6 +50,7 @@ function buildSettings(): AppSettings {
       allow_portal_user_bucket_create: true,
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
+      storage_space_version_cleanup_enabled: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
         actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
@@ -133,6 +134,7 @@ describe("PortalSettingsPage", () => {
     render(<PortalSettingsPage />);
 
     fireEvent.click(await screen.findByLabelText("Portal named storage creation"));
+    fireEvent.click(screen.getByLabelText("Portal Storage Space history cleanup"));
     expect(screen.queryByRole("checkbox", { name: "Allow override" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
@@ -142,6 +144,7 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.allow_portal_named_bucket_create).toBe(true);
+    expect(payload.portal.storage_space_version_cleanup_enabled).toBe(false);
     expect("override_policy" in payload.portal).toBe(false);
   });
 

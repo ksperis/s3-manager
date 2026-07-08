@@ -7,6 +7,7 @@ import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
 import type { BucketUsageStatsAggregateResponse } from "./bucketUsageStats";
+import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
 
@@ -59,6 +60,7 @@ export type PortalState = {
   can_create_storage_spaces?: boolean;
   can_manage_portal_users?: boolean;
   allow_named_bucket_create?: boolean;
+  storage_space_version_cleanup_enabled?: boolean;
 };
 
 export type PortalAccessKeysState = {
@@ -171,6 +173,39 @@ export type PortalStorageObjectDetail = {
 export type PortalStorageObjectDownload = {
   blob: Blob;
   filename: string;
+};
+
+export type PortalStorageSpaceVersionCleanupProgress = {
+  request_id?: string | null;
+  stage: "prepare" | "list" | "delete" | "completed";
+  storage_space_id: string;
+  storage_space_name: string;
+  scanned_versions: number;
+  scanned_delete_markers: number;
+  delete_candidates: number;
+  deleted_versions: number;
+  deleted_delete_markers: number;
+  bytes_freed: number;
+  total_candidates_final?: boolean;
+  message?: string | null;
+};
+
+export type PortalStorageSpaceVersionCleanupResult = {
+  status: "completed" | "failed" | "canceled";
+  storage_space_id: string;
+  storage_space_name: string;
+  scanned_versions: number;
+  scanned_delete_markers: number;
+  deleted_versions: number;
+  deleted_delete_markers: number;
+  bytes_freed: number;
+  started_at: string;
+  finished_at: string;
+};
+
+export type PortalStorageSpaceVersionCleanupStreamOptions = {
+  signal?: AbortSignal;
+  onProgress?: (event: PortalStorageSpaceVersionCleanupProgress) => void;
 };
 
 export type PortalStorageSpaceShareDirection = "with_me" | "by_me";
@@ -649,4 +684,45 @@ export async function fetchPortalTraffic(
   const params = withS3AccountParam(baseParams, accountId);
   const { data } = await client.get<import("./stats").ManagerTrafficStats>("/portal/traffic", { params });
   return data;
+}
+
+export function portalStorageSpaceVersionCleanupConfirmationPhrase(spaceName: string): string {
+  return `CLEAN HISTORY ${spaceName}`;
+}
+
+function buildPortalVersionCleanupPostInit(payload: { confirmation: string }): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  };
+}
+
+export function streamPortalStorageSpaceVersionCleanup(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  payload: { confirmation: string },
+  options?: PortalStorageSpaceVersionCleanupStreamOptions
+): Promise<PortalStorageSpaceVersionCleanupResult> {
+  const baseUrl = resolveApiBaseUrl();
+  const queryParams = withS3AccountParam(undefined, accountId) ?? {};
+  const query = new URLSearchParams();
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return streamBucketsWithSse<
+    PortalStorageSpaceVersionCleanupProgress,
+    PortalStorageSpaceVersionCleanupResult
+  >({
+    url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/versions/cleanup/stream${suffix}`,
+    options,
+    requestInit: buildPortalVersionCleanupPostInit(payload),
+    streamFailedLabel: "Storage Space history cleanup stream failed",
+    missingResultMessage: "Storage Space history cleanup stream ended without a result payload",
+  });
 }

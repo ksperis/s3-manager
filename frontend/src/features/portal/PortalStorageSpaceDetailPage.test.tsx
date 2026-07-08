@@ -7,6 +7,7 @@ import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
   createPublicLinkMock: vi.fn(),
+  streamHistoryCleanupMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
@@ -27,6 +28,12 @@ const mocks = vi.hoisted(() => ({
       quota_max_size_gb: 10,
       quota_max_objects: 1000,
       storage_endpoint_capabilities: { sse: true, sts: true },
+    },
+    state: {
+      account_id: 101,
+      iam_user: {},
+      access_keys: [],
+      storage_space_version_cleanup_enabled: true,
     },
     workspace: {
       accountName: "Account 1",
@@ -104,8 +111,10 @@ vi.mock("../../api/portal", () => ({
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
+  portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName}`,
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
+  streamPortalStorageSpaceVersionCleanup: (...args: unknown[]) => mocks.streamHistoryCleanupMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 
@@ -188,6 +197,33 @@ describe("PortalStorageSpaceDetailPage", () => {
       created_at: "2026-06-01T10:00:00Z",
       expires_at: null,
     });
+    mocks.streamHistoryCleanupMock.mockImplementation((_accountId, _spaceId, _payload, options) => {
+      options?.onProgress?.({
+        stage: "delete",
+        storage_space_id: "research-data",
+        storage_space_name: "Research Data",
+        scanned_versions: 3,
+        scanned_delete_markers: 1,
+        delete_candidates: 3,
+        deleted_versions: 1,
+        deleted_delete_markers: 0,
+        bytes_freed: 1024,
+        total_candidates_final: true,
+        message: "Deleting historical versions...",
+      });
+      return Promise.resolve({
+        status: "completed",
+        storage_space_id: "research-data",
+        storage_space_name: "Research Data",
+        scanned_versions: 3,
+        scanned_delete_markers: 1,
+        deleted_versions: 2,
+        deleted_delete_markers: 1,
+        bytes_freed: 1536,
+        started_at: "2026-07-08T10:00:00Z",
+        finished_at: "2026-07-08T10:00:01Z",
+      });
+    });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].role = "Owner";
@@ -202,6 +238,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].accountMemberRole = null;
     mocks.hookResult.workspace.spaces[0].archivedAt = null;
     mocks.hookResult.refreshWorkspaceData.mockClear();
+    mocks.hookResult.state.storage_space_version_cleanup_enabled = true;
   });
 
   it("embeds the main Browser in locked portal-basic mode for the space", () => {
@@ -335,6 +372,45 @@ describe("PortalStorageSpaceDetailPage", () => {
       });
     });
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs history cleanup with confirmation, progress, and gained-space summary", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
+
+    expect(screen.getByRole("dialog", { name: "Clean up history" })).toBeInTheDocument();
+    expect(screen.getByText(/deletes historical object versions/i)).toBeInTheDocument();
+    const startButton = screen.getByRole("button", { name: "Start cleanup" });
+    expect(startButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY Research Data"), {
+      target: { value: "CLEAN HISTORY Research Data" },
+    });
+    fireEvent.click(startButton);
+
+    await waitFor(() => {
+      expect(mocks.streamHistoryCleanupMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        { confirmation: "CLEAN HISTORY Research Data" },
+        expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) })
+      );
+    });
+    expect(await screen.findByRole("progressbar", { name: "Storage Space history cleanup progress" })).toBeInTheDocument();
+    expect(await screen.findByText("1.5 KB")).toBeInTheDocument();
+    expect(screen.getByText("Versions deleted")).toBeInTheDocument();
+    expect(screen.getByText("Markers removed")).toBeInTheDocument();
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows history cleanup disabled when the account override turns it off", async () => {
+    mocks.hookResult.state.storage_space_version_cleanup_enabled = false;
+
+    renderPage();
+
+    expect(await screen.findByText("History cleanup is disabled for this project.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clean up history" })).toBeDisabled();
   });
 
   it("shows the collaborator panel with public link context", async () => {

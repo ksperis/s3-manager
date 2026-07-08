@@ -81,6 +81,7 @@ class PortalState(BaseModel):
     can_create_storage_spaces: bool = False
     can_manage_portal_users: bool = False
     allow_named_bucket_create: bool = False
+    storage_space_version_cleanup_enabled: bool = True
 
 
 class PortalAccessKeysState(BaseModel):
@@ -219,6 +220,46 @@ class PortalStorageSpaceUpdate(BaseModel):
         if not cleaned:
             raise ValueError("Storage Space name is required")
         return cleaned
+
+
+PortalStorageSpaceVersionCleanupStatus = Literal["completed", "failed", "canceled"]
+PortalStorageSpaceVersionCleanupStage = Literal["prepare", "list", "delete", "completed"]
+
+
+class PortalStorageSpaceVersionCleanupRequest(BaseModel):
+    confirmation: str = ""
+
+
+def portal_storage_space_version_cleanup_confirmation_phrase(space_name: str) -> str:
+    return f"CLEAN HISTORY {space_name}"
+
+
+class PortalStorageSpaceVersionCleanupProgress(BaseModel):
+    request_id: Optional[str] = None
+    stage: PortalStorageSpaceVersionCleanupStage = "prepare"
+    storage_space_id: str
+    storage_space_name: str
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+    delete_candidates: int = 0
+    deleted_versions: int = 0
+    deleted_delete_markers: int = 0
+    bytes_freed: int = 0
+    total_candidates_final: bool = False
+    message: Optional[str] = None
+
+
+class PortalStorageSpaceVersionCleanupResult(BaseModel):
+    status: PortalStorageSpaceVersionCleanupStatus
+    storage_space_id: str
+    storage_space_name: str
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+    deleted_versions: int = 0
+    deleted_delete_markers: int = 0
+    bytes_freed: int = 0
+    started_at: datetime
+    finished_at: datetime
 
 
 class PortalStorageObjectDeleteResponse(BaseModel):

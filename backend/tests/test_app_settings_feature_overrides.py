@@ -205,6 +205,11 @@ def test_bucket_purge_flag_default_disabled():
     assert settings.general.bucket_purge_enabled is False
 
 
+def test_portal_storage_space_version_cleanup_default_enabled():
+    settings = AppSettings()
+    assert settings.portal.storage_space_version_cleanup_enabled is True
+
+
 def test_bucket_compare_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.bucket_compare_enabled is True

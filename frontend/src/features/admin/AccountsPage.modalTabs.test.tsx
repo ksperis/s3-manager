@@ -32,6 +32,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     allow_portal_user_bucket_create: true,
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
+    storage_space_version_cleanup_enabled: true,
     max_portal_user_access_keys: 2,
     iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"], advanced_policy: null },
     iam_group_user_policy: { actions: ["s3:ListAllMyBuckets"], advanced_policy: null },
@@ -480,6 +481,7 @@ describe("AccountsPage modal tabs", () => {
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
     expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.getByText("Storage Space history cleanup")).toBeInTheDocument();
     expect(screen.queryByText("Portal manager overrides are active for this account.")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
   });
@@ -513,18 +515,22 @@ describe("AccountsPage modal tabs", () => {
       .getByText("Portal user Storage Space creation")
       .closest("div")?.parentElement?.parentElement;
     const namedBucketCreation = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
+    const historyCleanup = screen.getByText("Storage Space history cleanup").closest("div")?.parentElement?.parentElement;
     expect(storageSpaceCreation).not.toBeNull();
     expect(namedBucketCreation).not.toBeNull();
+    expect(historyCleanup).not.toBeNull();
     fireEvent.change(within(storageSpaceCreation as HTMLElement).getByRole("combobox"), {
       target: { value: "disabled" },
     });
     fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
+    fireEvent.change(within(historyCleanup as HTMLElement).getByRole("combobox"), { target: { value: "disabled" } });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
         allow_portal_user_bucket_create: false,
         allow_portal_named_bucket_create: true,
+        storage_space_version_cleanup_enabled: false,
       });
     });
   });

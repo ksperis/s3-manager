@@ -2,16 +2,20 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
   fetchPortalStorageSpaceAccessSummary,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
+  portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpaceShare,
+  streamPortalStorageSpaceVersionCleanup,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
+  type PortalStorageSpaceVersionCleanupProgress,
+  type PortalStorageSpaceVersionCleanupResult,
   type PortalPublicLink,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceAccessSummary,
@@ -28,6 +32,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
@@ -110,6 +115,9 @@ function ObjectMetricCard({
     </UiCard>
   );
 }
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
 
 export default function PortalStorageSpaceDetailPage() {
   const { t } = useI18n();
@@ -139,6 +147,13 @@ export default function PortalStorageSpaceDetailPage() {
   const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
   const [createdPublicLink, setCreatedPublicLink] = useState<PortalPublicLink | null>(null);
   const [publicLinkCopyMessage, setPublicLinkCopyMessage] = useState<string | null>(null);
+  const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
+  const [historyCleanupConfirmation, setHistoryCleanupConfirmation] = useState("");
+  const [historyCleanupRunning, setHistoryCleanupRunning] = useState(false);
+  const [historyCleanupProgress, setHistoryCleanupProgress] = useState<PortalStorageSpaceVersionCleanupProgress | null>(null);
+  const [historyCleanupResult, setHistoryCleanupResult] = useState<PortalStorageSpaceVersionCleanupResult | null>(null);
+  const [historyCleanupError, setHistoryCleanupError] = useState<string | null>(null);
+  const historyCleanupAbortRef = useRef<AbortController | null>(null);
   const {
     workspace,
     loading,
@@ -147,6 +162,7 @@ export default function PortalStorageSpaceDetailPage() {
     accountError,
     accountLoading,
     accountIdForApi,
+    state,
     selectedAccount,
     refreshWorkspaceData = () => undefined,
   } = usePortalWorkspaceData({ includeArchived: true });
@@ -403,6 +419,24 @@ export default function PortalStorageSpaceDetailPage() {
     space.visibility === "shared" &&
     accessSummary?.can_create_public_links
   );
+  const historyCleanupEnabled = Boolean(state?.storage_space_version_cleanup_enabled);
+  const canCleanHistory = Boolean(historyCleanupEnabled && !isArchived && space.role === "Owner" && contentRole === "Owner");
+  const expectedHistoryCleanupConfirmation = portalStorageSpaceVersionCleanupConfirmationPhrase(space.name);
+  const historyCleanupDeletedEntries =
+    (historyCleanupProgress?.deleted_versions ?? 0) + (historyCleanupProgress?.deleted_delete_markers ?? 0);
+  const historyCleanupProgressPercent = historyCleanupProgress
+    ? historyCleanupProgress.delete_candidates > 0
+      ? Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round((historyCleanupDeletedEntries / historyCleanupProgress.delete_candidates) * 100)
+          )
+        )
+      : historyCleanupProgress.stage === "completed"
+      ? 100
+      : null
+    : null;
   const pageDescription = space.description
     ? t({
         en: `${space.description} Created ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
@@ -474,6 +508,79 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
+  const openHistoryCleanupDialog = () => {
+    if (!canCleanHistory) return;
+    setHistoryCleanupDialogOpen(true);
+    setHistoryCleanupConfirmation("");
+    setHistoryCleanupProgress(null);
+    setHistoryCleanupResult(null);
+    setHistoryCleanupError(null);
+  };
+
+  const closeHistoryCleanupDialog = () => {
+    if (historyCleanupRunning) return;
+    historyCleanupAbortRef.current?.abort();
+    setHistoryCleanupDialogOpen(false);
+    setHistoryCleanupConfirmation("");
+    setHistoryCleanupProgress(null);
+    setHistoryCleanupResult(null);
+    setHistoryCleanupError(null);
+  };
+
+  const cancelHistoryCleanup = () => {
+    historyCleanupAbortRef.current?.abort();
+  };
+
+  const runHistoryCleanup = async () => {
+    if (!accountIdForApi || !canCleanHistory || historyCleanupRunning) return;
+    if (historyCleanupConfirmation !== expectedHistoryCleanupConfirmation) return;
+    const controller = new AbortController();
+    historyCleanupAbortRef.current = controller;
+    setHistoryCleanupRunning(true);
+    setHistoryCleanupProgress(null);
+    setHistoryCleanupResult(null);
+    setHistoryCleanupError(null);
+    setMessage(null);
+    try {
+      const result = await streamPortalStorageSpaceVersionCleanup(
+        accountIdForApi,
+        space.id,
+        { confirmation: historyCleanupConfirmation },
+        {
+          signal: controller.signal,
+          onProgress: (event) => setHistoryCleanupProgress(event),
+        }
+      );
+      setHistoryCleanupResult(result);
+      refreshWorkspaceData();
+      setMessage(
+        t({
+          en: `History cleanup completed. Estimated space gained: ${formatBytes(result.bytes_freed)}.`,
+          fr: `Nettoyage de l'historique terminé. Espace estimé gagné : ${formatBytes(result.bytes_freed)}.`,
+          de: `Historienbereinigung abgeschlossen. Geschätzter frei gewordener Speicher: ${formatBytes(result.bytes_freed)}.`,
+        })
+      );
+    } catch (err) {
+      if (isAbortError(err)) {
+        setHistoryCleanupError(t({ en: "Cleanup canceled.", fr: "Nettoyage annulé.", de: "Bereinigung abgebrochen." }));
+      } else {
+        setHistoryCleanupError(
+          extractApiError(
+            err,
+            t({
+              en: "Unable to clean up this Storage Space history.",
+              fr: "Impossible de nettoyer l'historique de cet espace.",
+              de: "Der Verlauf dieses Bereichs kann nicht bereinigt werden.",
+            })
+          )
+        );
+      }
+    } finally {
+      setHistoryCleanupRunning(false);
+      historyCleanupAbortRef.current = null;
+    }
+  };
+
   const storageSpaceSettingsCard = space.role === "Owner" ? (
     <UiCard title={t({ en: "Space settings", fr: "Paramètres de l'espace", de: "Bereichseinstellungen" })}>
       <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto] lg:items-end">
@@ -507,6 +614,43 @@ export default function PortalStorageSpaceDetailPage() {
             {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
           </UiButton>
         )}
+      </div>
+    </UiCard>
+  ) : null;
+
+  const historyCleanupCard = space.role === "Owner" ? (
+    <UiCard title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className={cx("max-w-3xl text-xs font-medium leading-5", uiMutedTextClass)}>
+            {t({
+              en: "Current files stay available. The cleanup removes older object versions and orphan delete markers to reclaim storage.",
+              fr: "Les fichiers courants restent disponibles. Le nettoyage retire les anciennes versions d'objets et les delete markers orphelins pour récupérer du stockage.",
+              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt ältere Objektversionen und verwaiste Delete Marker, um Speicher zurückzugewinnen.",
+            })}
+          </p>
+          <UiButton
+            size="sm"
+            variant="danger"
+            disabled={!canCleanHistory || historyCleanupRunning}
+            onClick={openHistoryCleanupDialog}
+          >
+            {t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
+          </UiButton>
+        </div>
+        {!historyCleanupEnabled ? (
+          <PageBanner tone="info">
+            {t({ en: "History cleanup is disabled for this project.", fr: "Le nettoyage de l'historique est désactivé pour ce projet.", de: "Die Historienbereinigung ist für dieses Projekt deaktiviert." })}
+          </PageBanner>
+        ) : isArchived ? (
+          <PageBanner tone="warning">
+            {t({ en: "Restore this space before running history cleanup.", fr: "Restaurez cet espace avant de nettoyer son historique.", de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen." })}
+          </PageBanner>
+        ) : contentRole !== "Owner" ? (
+          <PageBanner tone="warning">
+            {t({ en: "Only the content owner can clean up this space history.", fr: "Seul le propriétaire du contenu peut nettoyer l'historique de cet espace.", de: "Nur der Inhaltseigentümer kann die Historie dieses Bereichs bereinigen." })}
+          </PageBanner>
+        ) : null}
       </div>
     </UiCard>
   ) : null;
@@ -856,6 +1000,8 @@ export default function PortalStorageSpaceDetailPage() {
 
       {storageSpaceSettingsCard}
 
+      {historyCleanupCard}
+
       {externalToolsCard}
 
       {publicLinkTarget ? (
@@ -918,6 +1064,152 @@ export default function PortalStorageSpaceDetailPage() {
                   ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
                   : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
               </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {historyCleanupDialogOpen ? (
+        <Modal
+          title={t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
+          onClose={closeHistoryCleanupDialog}
+          closeOnBackdropClick={!historyCleanupRunning}
+          closeOnEscape={!historyCleanupRunning}
+          maxWidthClass="max-w-3xl"
+        >
+          <div className="space-y-4">
+            {historyCleanupError ? <PageBanner tone="warning">{historyCleanupError}</PageBanner> : null}
+            <PageBanner tone="warning">
+              {t({
+                en: "This scans the entire Storage Space, deletes historical object versions, then removes orphan delete markers left behind. Current files are kept, but deleted history cannot be restored from the Portal.",
+                fr: "Cette opération parcourt tout l'espace, supprime les versions historiques des objets, puis retire les delete markers orphelins restants. Les fichiers courants sont conservés, mais l'historique supprimé ne pourra pas être restauré depuis le portail.",
+                de: "Diese Aktion durchsucht den gesamten Bereich, löscht historische Objektversionen und entfernt danach verwaiste Delete Marker. Aktuelle Dateien bleiben erhalten, gelöschte Historie kann im Portal aber nicht wiederhergestellt werden.",
+              })}
+            </PageBanner>
+
+            <dl className="grid gap-3 text-xs sm:grid-cols-2">
+              <div>
+                <dt className={cx("font-semibold uppercase", uiMutedTextClass)}>
+                  {t({ en: "Space", fr: "Espace", de: "Bereich" })}
+                </dt>
+                <dd className={cx("mt-1 break-all font-bold", uiTitleTextClass)}>{space.name}</dd>
+              </div>
+              <div>
+                <dt className={cx("font-semibold uppercase", uiMutedTextClass)}>
+                  {t({ en: "Current storage", fr: "Stockage courant", de: "Aktueller Speicher" })}
+                </dt>
+                <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{formatBytes(space.usedBytes)}</dd>
+              </div>
+            </dl>
+
+            <UiInput
+              label={t({
+                en: `Type ${expectedHistoryCleanupConfirmation}`,
+                fr: `Tapez ${expectedHistoryCleanupConfirmation}`,
+                de: `${expectedHistoryCleanupConfirmation} eingeben`,
+              })}
+              size="compact"
+              className="h-9 font-mono"
+              value={historyCleanupConfirmation}
+              disabled={historyCleanupRunning || Boolean(historyCleanupResult)}
+              onChange={(event) => setHistoryCleanupConfirmation(event.target.value)}
+            />
+
+            {historyCleanupProgress ? (
+              <div className="rounded-md border border-[color:var(--ui-border)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className={cx("text-xs font-semibold", uiTitleTextClass)}>
+                    {historyCleanupProgress.message ?? historyCleanupProgress.stage}
+                  </p>
+                  <p className={cx("text-xs font-medium", uiMutedTextClass)}>
+                    {formatCompactNumber(historyCleanupDeletedEntries)} / {historyCleanupProgress.total_candidates_final
+                      ? formatCompactNumber(historyCleanupProgress.delete_candidates)
+                      : historyCleanupProgress.delete_candidates > 0
+                      ? t({
+                          en: `at least ${formatCompactNumber(historyCleanupProgress.delete_candidates)}`,
+                          fr: `au moins ${formatCompactNumber(historyCleanupProgress.delete_candidates)}`,
+                          de: `mindestens ${formatCompactNumber(historyCleanupProgress.delete_candidates)}`,
+                        })
+                      : t({ en: "discovering", fr: "détection", de: "wird ermittelt" })}
+                  </p>
+                </div>
+                {historyCleanupProgressPercent === null ? (
+                  <div
+                    className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--ui-surface-muted)]"
+                    role="progressbar"
+                    aria-label={t({
+                      en: "Storage Space history cleanup progress",
+                      fr: "Progression du nettoyage de l'historique",
+                      de: "Fortschritt der Historienbereinigung",
+                    })}
+                  >
+                    <div className="h-full w-full animate-pulse rounded-full bg-rose-500/70" />
+                  </div>
+                ) : (
+                  <UiProgressBar
+                    value={historyCleanupProgressPercent}
+                    label={t({
+                      en: "Storage Space history cleanup progress",
+                      fr: "Progression du nettoyage de l'historique",
+                      de: "Fortschritt der Historienbereinigung",
+                    })}
+                    className="mt-2 h-2 bg-[var(--ui-surface-muted)]"
+                    barClassName="bg-rose-600 transition-[width] duration-150 ease-out"
+                  />
+                )}
+                <p className={cx("mt-2 text-xs font-medium", uiMutedTextClass)}>
+                  {t({
+                    en: `${formatCompactNumber(historyCleanupProgress.scanned_versions)} versions scanned, ${formatCompactNumber(historyCleanupProgress.scanned_delete_markers)} delete markers scanned, ${formatBytes(historyCleanupProgress.bytes_freed)} gained so far.`,
+                    fr: `${formatCompactNumber(historyCleanupProgress.scanned_versions)} versions scannées, ${formatCompactNumber(historyCleanupProgress.scanned_delete_markers)} delete markers scannés, ${formatBytes(historyCleanupProgress.bytes_freed)} gagnés pour l'instant.`,
+                    de: `${formatCompactNumber(historyCleanupProgress.scanned_versions)} Versionen geprüft, ${formatCompactNumber(historyCleanupProgress.scanned_delete_markers)} Delete Marker geprüft, bisher ${formatBytes(historyCleanupProgress.bytes_freed)} frei geworden.`,
+                  })}
+                </p>
+              </div>
+            ) : null}
+
+            {historyCleanupResult ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                <ObjectMetricCard
+                  label={t({ en: "Space gained", fr: "Espace gagné", de: "Frei geworden" })}
+                  value={formatBytes(historyCleanupResult.bytes_freed)}
+                  detail={t({ en: "estimated", fr: "estimé", de: "geschätzt" })}
+                />
+                <ObjectMetricCard
+                  label={t({ en: "Versions deleted", fr: "Versions supprimées", de: "Versionen gelöscht" })}
+                  value={formatCompactNumber(historyCleanupResult.deleted_versions)}
+                  detail={t({ en: "historical", fr: "historiques", de: "historisch" })}
+                />
+                <ObjectMetricCard
+                  label={t({ en: "Markers removed", fr: "Markers retirés", de: "Marker entfernt" })}
+                  value={formatCompactNumber(historyCleanupResult.deleted_delete_markers)}
+                  detail={t({ en: "orphan delete markers", fr: "delete markers orphelins", de: "verwaiste Delete Marker" })}
+                />
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton variant="secondary" onClick={closeHistoryCleanupDialog} disabled={historyCleanupRunning}>
+                {historyCleanupResult
+                  ? t({ en: "Done", fr: "Terminer", de: "Fertig" })
+                  : t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              {historyCleanupRunning ? (
+                <UiButton variant="danger" onClick={cancelHistoryCleanup}>
+                  {t({ en: "Stop cleanup", fr: "Arrêter le nettoyage", de: "Bereinigung stoppen" })}
+                </UiButton>
+              ) : (
+                <UiButton
+                  variant="danger"
+                  onClick={runHistoryCleanup}
+                  disabled={
+                    Boolean(historyCleanupResult) ||
+                    historyCleanupConfirmation !== expectedHistoryCleanupConfirmation ||
+                    !canCleanHistory
+                  }
+                >
+                  {t({ en: "Start cleanup", fr: "Démarrer le nettoyage", de: "Bereinigung starten" })}
+                </UiButton>
+              )}
             </div>
           </div>
         </Modal>

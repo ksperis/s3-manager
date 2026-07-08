@@ -103,6 +103,8 @@ class PortalSettingsMixin:
             portal_settings.allow_portal_named_bucket_create = override.allow_portal_named_bucket_create
         if override.allow_portal_user_access_key_create is not None:
             portal_settings.allow_portal_user_access_key_create = override.allow_portal_user_access_key_create
+        if override.storage_space_version_cleanup_enabled is not None:
+            portal_settings.storage_space_version_cleanup_enabled = override.storage_space_version_cleanup_enabled
         self._apply_policy_override(
             portal_settings.iam_group_manager_policy,
             override.iam_group_manager_policy,
