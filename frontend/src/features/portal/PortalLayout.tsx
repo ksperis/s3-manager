@@ -31,6 +31,7 @@ function usePortalNavSections(): SidebarSection[] {
           { to: "/portal/activity", label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }), icon: <ActivityIcon /> },
           { to: "/portal/transfers", label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }), icon: <TransferIcon /> },
           { to: "/portal/usage", label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }), icon: <ChartIcon /> },
+          { to: "/portal/requests", label: t({ en: "Requests", fr: "Demandes", de: "Anfragen" }), icon: <RequestIcon /> },
           { to: "/portal/settings", label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }), icon: <SettingsIcon /> },
         ],
       },
@@ -214,6 +215,15 @@ function ChartIcon() {
   return (
     <IconBase>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 16V9m6 7V4m6 12v-5" />
+    </IconBase>
+  );
+}
+
+function RequestIcon() {
+  return (
+    <IconBase>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M5 3.8h7l3 3V16H5V3.8Z" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M8 8.8h4M8 12h4" />
     </IconBase>
   );
 }

@@ -81,6 +81,7 @@ describe("portal routes", () => {
       "storage-spaces/:spaceId",
       "access-keys",
       "shares",
+      "requests",
       "activity",
       "transfers",
       "usage",

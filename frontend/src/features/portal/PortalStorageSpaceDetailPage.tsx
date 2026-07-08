@@ -41,14 +41,14 @@ import {
   PortalAccessModeFields,
   PortalRoleBadge,
   PortalShareCandidatePicker,
+  portalAccessModeFromParts,
+  portalAccessPayloadFromMode,
   portalAccessModeDescription,
   portalAccessModeSummary,
   selectedPortalShares,
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-  portalAccessModeFromParts,
-  portalAccessPayloadFromMode,
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {

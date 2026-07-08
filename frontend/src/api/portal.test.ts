@@ -13,6 +13,15 @@ vi.mock("./client", () => ({
 }));
 
 import {
+  addAdminPortalRequestMessage,
+  approveAdminPortalRequest,
+  createPortalRequest,
+  listAdminPortalRequests,
+  listPortalRequests,
+  rejectAdminPortalRequest,
+} from "./portalRequests";
+
+import {
   createPortalAccessKey,
   fetchPortalActivity,
   deletePortalAccessKey,
@@ -297,5 +306,74 @@ describe("portal storage spaces api", () => {
     expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-history-trends", {
       params: { account_id: "101", window: "month" },
     });
+  });
+
+  it("manages portal admin request endpoints", async () => {
+    await listPortalRequests("101");
+    await createPortalRequest("101", {
+      request_type: "portal_user_access",
+      target_name: "Jane Viewer",
+      target_email: "jane@example.org",
+    });
+    await createPortalRequest("101", {
+      request_type: "portal_user_removal",
+      target_name: "Old User",
+      target_email: "old@example.org",
+      reason: "Left the project",
+    });
+    await listAdminPortalRequests({
+      status: "pending",
+      request_type: "account_quota_change",
+      account_id: 101,
+      search: "jane",
+      limit: 50,
+    });
+    await approveAdminPortalRequest(7, { message: "Approved" });
+    await rejectAdminPortalRequest(8, { message: "Rejected" });
+    await addAdminPortalRequestMessage(9, { message: "Need more context" });
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/requests", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/requests",
+      {
+        request_type: "portal_user_access",
+        target_name: "Jane Viewer",
+        target_email: "jane@example.org",
+      },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/requests",
+      {
+        request_type: "portal_user_removal",
+        target_name: "Old User",
+        target_email: "old@example.org",
+        reason: "Left the project",
+      },
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.get).toHaveBeenCalledWith("/admin/portal-requests", {
+      params: {
+        status: "pending",
+        request_type: "account_quota_change",
+        account_id: 101,
+        search: "jane",
+        limit: 50,
+      },
+    });
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/admin/portal-requests/7/approve",
+      { message: "Approved" }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/admin/portal-requests/8/reject",
+      { message: "Rejected" }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/admin/portal-requests/9/messages",
+      { message: "Need more context" }
+    );
   });
 });

@@ -720,6 +720,53 @@ const PORTAL_ACCESS_KEYS_STATE = {
   access_keys: PORTAL_STATE.access_keys,
 };
 
+const PORTAL_COLLABORATORS = {
+  summary: {
+    collaborator_count: 4,
+    external_access_key_count: 2,
+    trend: {
+      window: "month",
+      label: "last 30 days",
+      period_start: "2026-02-08",
+      collaborator_count: 3,
+    },
+  },
+  collaborators: [
+    {
+      user_id: 3,
+      email: "storage.user@example.com",
+      display_name: "Storage User",
+      account_role: "portal_user",
+      access_source: "direct",
+      member_since: "2026-01-12T10:00:00Z",
+    },
+    {
+      user_id: 4,
+      email: "alice@example.com",
+      display_name: "Alice Martin",
+      account_role: "portal_user",
+      access_source: "direct",
+      member_since: "2026-01-20T10:00:00Z",
+    },
+    {
+      user_id: 5,
+      email: "bob@example.com",
+      display_name: "Bob Dubois",
+      account_role: "portal_user",
+      access_source: "group",
+      member_since: "2026-02-01T10:00:00Z",
+    },
+    {
+      user_id: 6,
+      email: "chen@example.com",
+      display_name: "Chen Wei",
+      account_role: "portal_manager",
+      access_source: "direct_and_group",
+      member_since: "2026-03-01T10:00:00Z",
+    },
+  ],
+};
+
 const PORTAL_TRAFFIC = {
   window: "day",
   start: "2026-03-08T00:00:00Z",
@@ -915,6 +962,78 @@ const PORTAL_ALERTS = [
     severity_label: "Info",
     storage_space_id: "photos",
     created_at: NOW,
+  },
+];
+
+const PORTAL_REQUESTS = [
+  {
+    id: 701,
+    account_id: 101,
+    account_name: "Helios Retail",
+    request_type: "portal_user_access",
+    status: "pending",
+    payload: {
+      target_name: "Maya Chen",
+      target_email: "maya.chen@example.org",
+    },
+    requester_user_id: 3,
+    requester_email: "storage.user@example.com",
+    decided_by_user_id: null,
+    decided_by_email: null,
+    decided_at: null,
+    created_at: "2026-03-08T08:30:00Z",
+    updated_at: "2026-03-08T08:30:00Z",
+    messages: [],
+  },
+  {
+    id: 702,
+    account_id: 101,
+    account_name: "Helios Retail",
+    request_type: "account_quota_change",
+    status: "approved",
+    payload: {
+      direction: "increase",
+      target_quota_value: 25,
+      target_quota_unit: "TiB",
+      reason: "New analysis campaign",
+    },
+    requester_user_id: 3,
+    requester_email: "storage.user@example.com",
+    decided_by_user_id: 2,
+    decided_by_email: "platform.admin@example.com",
+    decided_at: "2026-03-08T09:00:00Z",
+    created_at: "2026-03-07T15:15:00Z",
+    updated_at: "2026-03-08T09:00:00Z",
+    messages: [
+      {
+        id: 1,
+        author_user_id: 2,
+        author_email: "platform.admin@example.com",
+        author_role: "admin",
+        message: "Approved for the March campaign.",
+        created_at: "2026-03-08T09:00:00Z",
+      },
+    ],
+  },
+  {
+    id: 703,
+    account_id: 101,
+    account_name: "Helios Retail",
+    request_type: "portal_user_removal",
+    status: "pending",
+    payload: {
+      target_name: "Old Collaborator",
+      target_email: "old.collaborator@example.org",
+      reason: "The person left the project.",
+    },
+    requester_user_id: 3,
+    requester_email: "storage.user@example.com",
+    decided_by_user_id: null,
+    decided_by_email: null,
+    decided_at: null,
+    created_at: "2026-03-08T09:15:00Z",
+    updated_at: "2026-03-08T09:15:00Z",
+    messages: [],
   },
 ];
 
@@ -1569,6 +1688,11 @@ export function buildBaseRules(): MockRule[] {
       body: ADMIN_ACCOUNTS_MINIMAL,
     },
     {
+      id: "admin-portal-requests",
+      path: /^\/admin\/portal-requests$/,
+      body: PORTAL_REQUESTS,
+    },
+    {
       id: "onboarding",
       path: /^\/admin\/onboarding$/,
       body: {
@@ -1792,6 +1916,8 @@ export function buildBaseRules(): MockRule[] {
       body: {
         used_bytes: PORTAL_STATE.used_bytes,
         used_objects: PORTAL_STATE.used_objects,
+        quota_max_size_bytes: PORTAL_STATE.quota_max_size_bytes,
+        quota_max_objects: PORTAL_STATE.quota_max_objects,
       },
     },
     {
@@ -1838,6 +1964,16 @@ export function buildBaseRules(): MockRule[] {
       id: "portal-access-keys",
       path: /^\/portal\/access-keys$/,
       body: PORTAL_ACCESS_KEYS_STATE,
+    },
+    {
+      id: "portal-collaborators",
+      path: /^\/portal\/collaborators$/,
+      body: PORTAL_COLLABORATORS,
+    },
+    {
+      id: "portal-requests",
+      path: /^\/portal\/requests$/,
+      body: PORTAL_REQUESTS,
     },
     {
       id: "portal-endpoint-health",

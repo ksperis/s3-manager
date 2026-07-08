@@ -15,6 +15,12 @@ const ROUTE_CASES: Array<{
   runScenarioWaitActions?: boolean;
 }> = [
   { scenarioId: "workspace-admin", workspace: "admin", route: "/admin" },
+  {
+    scenarioId: "workspace-admin",
+    workspace: "admin-portal-requests",
+    route: "/admin/portal-requests",
+    waitFor: "h1:has-text('Portal requests')",
+  },
   { scenarioId: "workspace-manager", workspace: "manager", route: "/manager" },
   {
     scenarioId: "feature-objects-browser",

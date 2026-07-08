@@ -62,6 +62,14 @@ describe("buildAdminNav", () => {
     expect(disabledLink).toBeUndefined();
   });
 
+  it("exposes Portal Requests only when Portal is enabled", () => {
+    const enabledLink = getAuditReportingLink("Portal Requests", [true, true, false, false, false, true]);
+    const disabledLink = getAuditReportingLink("Portal Requests", [false, true, false, false, false, true]);
+
+    expect(enabledLink?.to).toBe("/admin/portal-requests");
+    expect(disabledLink).toBeUndefined();
+  });
+
   it("groups metrics in overview and billing with audit reporting", () => {
     const adminNav = buildAdminNav(true, true, true, true, false, true);
     const overview = adminNav.find((section) => section.label === "Overview");
@@ -69,6 +77,7 @@ describe("buildAdminNav", () => {
 
     expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard", "Usage & Metrics"]);
     expect(auditReporting?.links.map((link) => link.label)).toEqual([
+      "Portal Requests",
       "Billing",
       "Usage History",
       "Audit trail",

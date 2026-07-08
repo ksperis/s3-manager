@@ -109,6 +109,7 @@ describe("PortalLayout", () => {
       "Activity",
       "Transfers",
       "Usage & Analytics",
+      "Requests",
       "Settings",
     ]);
     expect(nav).not.toHaveTextContent("Administration");
@@ -165,6 +166,7 @@ describe("PortalLayout", () => {
       "Activité",
       "Transferts",
       "Utilisation et analyses",
+      "Demandes",
       "Paramètres",
     ]);
   });

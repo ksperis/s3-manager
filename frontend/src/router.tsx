@@ -41,6 +41,7 @@ const UsersPage = lazy(() => import("./features/admin/UsersPage"));
 const GroupsPage = lazy(() => import("./features/admin/GroupsPage"));
 const AdminDashboard = lazy(() => import("./features/admin/AdminDashboard"));
 const AdminMetricsPage = lazy(() => import("./features/admin/AdminMetricsPage"));
+const AdminPortalRequestsPage = lazy(() => import("./features/admin/AdminPortalRequestsPage"));
 const BillingPage = lazy(() => import("./features/admin/BillingPage"));
 const UsageHistoryPage = lazy(() => import("./features/admin/UsageHistoryPage"));
 const S3UsersPage = lazy(() => import("./features/admin/S3UsersPage"));
@@ -88,6 +89,7 @@ const PortalStorageSpaceDetailPage = lazy(() => import("./features/portal/Portal
 const PortalObjectDetailPage = lazy(() => import("./features/portal/PortalObjectDetailPage"));
 const PortalSharesPage = lazy(() => import("./features/portal/PortalSharesPage"));
 const PortalActivityPage = lazy(() => import("./features/portal/PortalActivityPage"));
+const PortalRequestsPage = lazy(() => import("./features/portal/PortalRequestsPage"));
 const PortalTransfersPage = lazy(() => import("./features/portal/PortalTransfersPage"));
 const PortalUsagePage = lazy(() => import("./features/portal/PortalUsagePage"));
 const PortalSettingsPage = lazy(() => import("./features/portal/PortalSettingsPage"));
@@ -185,6 +187,7 @@ export const buildAdminNav = (
     {
       label: "Audit & Reporting",
       links: [
+        ...(portalEnabled ? [{ to: "/admin/portal-requests", label: "Portal Requests" }] : []),
         ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
         ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
         { to: "/admin/audit", label: "Audit trail" },
@@ -279,6 +282,7 @@ export function createAppRoutes() {
             <Route path="groups" element={<GroupsPage />} />
             <Route path="audit" element={<AuditLogsPage />} />
             <Route path="metrics" element={<AdminMetricsPage />} />
+            <Route path="portal-requests" element={<AdminPortalRequestsPage />} />
             <Route path="billing" element={<AdminBillingRoute />} />
             <Route path="usage-history" element={<AdminUsageHistoryRoute />} />
             <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
@@ -376,6 +380,7 @@ export function createAppRoutes() {
               <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
               <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="shares" element={<PortalSharesPage />} />
+              <Route path="requests" element={<PortalRequestsPage />} />
               <Route path="activity" element={<PortalActivityPage />} />
               <Route path="transfers" element={<PortalTransfersPage />} />
               <Route path="usage" element={<PortalUsagePage />} />

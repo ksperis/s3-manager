@@ -17,6 +17,7 @@ from app.core.db_init import init_db
 from app.routers.http_errors import sanitize_error_detail, sanitized_error_log_detail
 from app.routers import auth, users, settings as public_settings, browser as user_browser
 from app.routers import portal
+from app.routers import portal_requests
 from app.routers import execution_contexts
 from app.routers import connections as user_connections
 from app.routers.admin import s3_accounts as admin_s3_accounts
@@ -36,6 +37,7 @@ from app.routers.admin import key_rotation as admin_key_rotation
 from app.routers.admin import onboarding as admin_onboarding
 from app.routers.admin import automation as admin_automation
 from app.routers.admin import healthchecks as admin_healthchecks
+from app.routers.admin import portal_requests as admin_portal_requests
 from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
 from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import users as ceph_admin_users
@@ -171,6 +173,7 @@ app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_portal_requests.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
 app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
@@ -226,6 +229,11 @@ app.include_router(
 )
 app.include_router(
     portal.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_portal_enabled)],
+)
+app.include_router(
+    portal_requests.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_portal_enabled)],
 )

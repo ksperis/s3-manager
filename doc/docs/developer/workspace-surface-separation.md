@@ -9,8 +9,8 @@ execution identity.
 ## Surfaces
 
 - `/portal` is the end-user Storage Workspace. It is centered on storage spaces,
-  simple file operations, shares, activity, transfers, usage, alerts, and user
-  preferences.
+  simple file operations, shares, activity, transfers, usage, alerts, requests
+  to storage admins, and user preferences.
 - `/browser` is the advanced object explorer. It owns bucket/object diagnostics,
   versions, metadata, tags, batch operations, advanced object actions, and
   technical S3 inspection workflows.
@@ -19,7 +19,7 @@ execution identity.
   lifecycle, replication, notifications, and topics.
 - `/admin` is the platform administration workspace. It owns UI users,
   endpoints, accounts, global quotas, billing administration, feature flags,
-  audit, health, and governance.
+  audit, health, Portal request validation, and governance.
 
 ## Browser Disablement Matrix
 
@@ -78,7 +78,7 @@ placeholder.
 ## Portal Rules
 
 - Keep Portal labels user-oriented: `Storage Spaces`, `Shares`, `Activity`,
-  `Transfers`, `Usage & Analytics`, and `Settings`.
+  `Transfers`, `Storage health`, `Requests`, and `Settings`.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   `portal-basic` action profile and `X-S3-Workspace: portal`. Portal users may
@@ -130,6 +130,10 @@ placeholder.
   Storage IAM policies are synchronized projections for personal S3 keys and
   external enforcement; they must not be read back as the Portal source of
   listings or roles.
+- Keep Portal requests on `/portal/requests` as an end-user submission and
+  follow-up surface. Portal users can request project membership for another
+  person, remove a Portal user, or request a target quota change, but the
+  approval workflow and execution stay in Admin on `/admin/portal-requests`.
 
 ## Routing Contract
 
@@ -144,6 +148,7 @@ Portal canonical routes are:
 - `/portal/activity`
 - `/portal/transfers`
 - `/portal/usage`
+- `/portal/requests`
 - `/portal/settings`
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
@@ -152,13 +157,14 @@ surface. They can return later only as real user-facing Portal features or
 isolated demo/test fixtures. `/portal/access-keys` is a real user-facing Portal
 feature for the current user's personal keys and Storage Space-scoped external
 credentials. It must never expose the active Portal runtime key.
+The Admin counterpart for storage-admin triage is `/admin/portal-requests`.
 
 ## Portal Backend Cleanup Notes
 
 Portal uses Storage Space, file, share, activity, transfer, usage, alert,
-billing-source, health, and simple settings endpoints only. Legacy backend
-routes that exposed bucket-centric or advanced identity concepts have been
-removed from the Portal router and API client:
+billing-source, health, request, and simple settings endpoints only. Legacy
+backend routes that exposed bucket-centric or advanced identity concepts have
+been removed from the Portal router and API client:
 
 - `/portal/buckets*`;
 - `/portal/bootstrap`;
@@ -193,6 +199,9 @@ Use these replacement surfaces instead:
   `/portal/access-keys`, excluding the active Portal runtime key. Personal keys
   follow the user's Portal grants; external credentials are dedicated IAM users
   limited to one Storage Space and one selected permission level.
+- Portal storage-admin requests:
+  `/portal/requests*` for the current user's submissions and
+  `/admin/portal-requests*` for Admin review, messages, approval, and rejection.
 - Super-admin Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
 
@@ -203,9 +212,12 @@ they are needed by operators.
 ## Portal Data Flow
 
 Portal uses thin FastAPI route handlers in `backend/app/routers/portal.py` and
-keeps business logic in `PortalService`. The frontend API client is
-`frontend/src/api/portal.ts`, and production Portal pages live under
-`frontend/src/features/portal`.
+keeps business logic in `PortalService`. Portal request routes live in
+`backend/app/routers/portal_requests.py` and
+`backend/app/routers/admin/portal_requests.py`; all request business logic stays
+in `PortalRequestsService`. The frontend API clients are
+`frontend/src/api/portal.ts` and `frontend/src/api/portalRequests.ts`, and
+production Portal pages live under `frontend/src/features/portal`.
 
 The current backend flow is:
 
@@ -231,6 +243,15 @@ The current backend flow is:
 8. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.
 
+Portal request approvals are Admin-owned mutations. A Portal user creates a
+typed payload on `/portal/requests`, then an Admin approves, rejects, or sends
+messages from `/admin/portal-requests`. Approval must use `processing` to avoid
+double execution, audit the decision, notify the requester in-app, and either
+link/create the requested Portal UI user, remove a Portal user link, or apply
+the target account capacity quota through the existing account service. Portal
+must block quota targets below the currently used capacity when that usage is
+known.
+
 Storage Space remains an API/UI abstraction. In v1 it maps to a bucket, but the
 UI must keep the Storage Space label so future project, dataset, or workspace
 concepts can be introduced without another surface rewrite.
@@ -247,6 +268,8 @@ Use focused Portal validation before broader suites:
   `rtk npm run deadcode:check`
 - Backend Portal service and route-contract checks:
   `rtk env PYTHONPATH=backend backend/.venv/bin/pytest backend/tests/test_portal_service.py backend/tests/test_manager_workspace_access_rules.py -q`
+- Backend Portal request workflow checks:
+  `rtk env PYTHONPATH=backend backend/.venv/bin/pytest backend/tests/test_portal_requests_service.py backend/tests/test_portal_requests_routes.py -q`
 - Diff hygiene:
   `rtk git diff --check`
 
@@ -299,6 +322,7 @@ viewports:
 - `/portal/activity`
 - `/portal/transfers`
 - `/portal/usage`
+- `/portal/requests`
 - `/portal/access-keys`
 - `/portal/settings`
 

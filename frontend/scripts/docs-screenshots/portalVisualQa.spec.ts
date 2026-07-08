@@ -31,6 +31,7 @@ const portalRoutes = [
   { path: "/portal/transfers", expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" } },
   { path: "/portal/usage", expected: { en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" } },
   { path: "/portal/access-keys", expected: { en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" } },
+  { path: "/portal/requests", expected: { en: "Requests", fr: "Demandes", de: "Anfragen" } },
   { path: "/portal/settings", expected: { en: "Settings", fr: "Paramètres", de: "Einstellungen" } },
 ];
 
