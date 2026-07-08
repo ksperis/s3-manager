@@ -507,8 +507,12 @@ describe("S3UsersPage modal tabs", () => {
     await screen.findByText("rgw-user-1");
     await screen.findByText("rgw-user-2");
 
+    const searchInput = screen.getByLabelText("Search");
+    expect(searchInput).toHaveAttribute("type", "search");
+    expect(searchInput).toHaveAttribute("placeholder", "Search by name, UID, email, group, or tag");
+
     fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
-    fireEvent.change(screen.getByPlaceholderText("Search by name, UID, email, group, or tag"), {
+    fireEvent.change(searchInput, {
       target: { value: "legacy" },
     });
 

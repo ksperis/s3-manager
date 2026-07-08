@@ -20,6 +20,7 @@ import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../..
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
@@ -35,7 +36,6 @@ import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiPanelMutedClass } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { extractApiError } from "../../utils/apiError";
@@ -855,18 +855,16 @@ export default function S3UsersPage() {
           showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex items-center gap-2">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Filter
-              </span>
-              <div className="relative w-full sm:w-64">
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name, UID, email, group, or tag"
-                  className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
-                />
+            <ToolbarSearchInput
+              value={filter}
+              onChange={handleFilterChange}
+              placeholder="Search by name, UID, email, group, or tag"
+              className="w-full sm:w-64"
+              inputClassName={cx(
+                "pr-9",
+                quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""
+              )}
+              trailingControl={
                 <button
                   type="button"
                   onClick={toggleQuickFilterMode}
@@ -876,8 +874,8 @@ export default function S3UsersPage() {
                 >
                   {quickFilterMode === "contains" ? "~" : "="}
                 </button>
-              </div>
-            </div>
+              }
+            />
           }
           secondaryContent={
             quickFilterActive ? (
