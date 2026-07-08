@@ -20,6 +20,7 @@ import {
 } from "../../api/cephAdmin";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
@@ -655,33 +656,24 @@ export default function CephAdminUserEditModal({
       {keysStatus && <PageBanner tone="success">{keysStatus}</PageBanner>}
 
       {createdKey && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold">Key created. Secret is shown only once.</p>
+        <OneTimeSecretPanel
+          title="Key created"
+          description="Secret is shown only once."
+          values={[
+            { label: "Access key", value: createdKey.access_key, copyLabel: "Copy" },
+            { label: "Secret key", value: createdKey.secret_key, copyLabel: "Copy" },
+          ]}
+          actions={
             <UiButton
               type="button"
               onClick={() => setShowAddConnectionModal(true)}
               variant="secondary"
-              size="sm"
+              size="xs"
             >
               Add as S3 Connection
             </UiButton>
-          </div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            <div>
-              <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Access key</p>
-              <p className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                {createdKey.access_key}
-              </p>
-            </div>
-            <div>
-              <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Secret key</p>
-              <p className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                {createdKey.secret_key}
-              </p>
-            </div>
-          </div>
-        </div>
+          }
+        />
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">

@@ -11,6 +11,7 @@ import {
 } from "../../api/cephAdmin";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
@@ -280,33 +281,24 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
         {status && <PageBanner tone="success">{status}</PageBanner>}
         {accountsError && <PageBanner tone="warning">Unable to load account list: {accountsError}</PageBanner>}
         {generatedKey && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-semibold">Access key created. Secret is shown only once.</p>
+          <OneTimeSecretPanel
+            title="Access key created"
+            description="Secret is shown only once."
+            values={[
+              { label: "Access key", value: generatedKey.access_key, copyLabel: "Copy" },
+              { label: "Secret key", value: generatedKey.secret_key, copyLabel: "Copy" },
+            ]}
+            actions={
               <UiButton
                 type="button"
                 onClick={() => setShowAddConnectionModal(true)}
                 variant="secondary"
-                size="sm"
+                size="xs"
               >
                 Add as S3 Connection
               </UiButton>
-            </div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div>
-                <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Access key</p>
-                <p className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {generatedKey.access_key}
-                </p>
-              </div>
-              <div>
-                <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Secret key</p>
-                <p className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                  {generatedKey.secret_key}
-                </p>
-              </div>
-            </div>
-          </div>
+            }
+          />
         )}
 
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

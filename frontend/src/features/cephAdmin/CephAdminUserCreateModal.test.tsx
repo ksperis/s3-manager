@@ -95,4 +95,33 @@ describe("CephAdminUserCreateModal", () => {
     );
     expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ uid: "alice" }));
   });
+
+  it("shows generated keys in the shared one-time secret panel", async () => {
+    createCephAdminUserMock.mockResolvedValue({
+      detail: {
+        uid: "bob",
+        display_name: "Bob Ops",
+        caps: [],
+        keys: [],
+      },
+      generated_key: {
+        access_key: "AKIA-CEPH-BOB",
+        secret_key: "SECRET-CEPH-BOB",
+      },
+    });
+
+    render(<CephAdminUserCreateModal endpointId={7} onClose={vi.fn()} />);
+
+    const dialog = screen.getByRole("dialog", { name: "Create user" });
+    fireEvent.change(within(dialog).getByLabelText("UID *"), { target: { value: "bob" } });
+    fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Bob Ops" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    expect(await within(dialog).findByText("Access key created")).toBeInTheDocument();
+    expect(within(dialog).getByText("Secret is shown only once.")).toBeInTheDocument();
+    expect(within(dialog).getByText("AKIA-CEPH-BOB")).toHaveClass("font-mono");
+    expect(within(dialog).getByText("SECRET-CEPH-BOB")).toHaveClass("font-mono");
+    expect(within(dialog).getAllByRole("button", { name: "Copy" })).toHaveLength(2);
+    expect(within(dialog).getByRole("button", { name: "Add as S3 Connection" })).toHaveClass("h-7");
+  });
 });
