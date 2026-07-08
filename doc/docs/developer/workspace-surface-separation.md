@@ -148,7 +148,8 @@ Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 and `/portal/policies` are intentionally not routed in the production Portal
 surface. They can return later only as real user-facing Portal features or
 isolated demo/test fixtures. `/portal/access-keys` is a real user-facing Portal
-feature and must stay limited to the current user's non-Portal IAM keys.
+feature for the current user's personal keys and Storage Space-scoped external
+credentials. It must never expose the active Portal runtime key.
 
 ## Portal Backend Cleanup Notes
 
@@ -187,7 +188,9 @@ Use these replacement surfaces instead:
 - Usage, activity, transfers, alerts, traffic, health, and billing source:
   the remaining Portal read endpoints.
 - External S3 credentials:
-  `/portal/access-keys`, excluding the active Portal runtime key.
+  `/portal/access-keys`, excluding the active Portal runtime key. Personal keys
+  follow the user's Portal grants; external credentials are dedicated IAM users
+  limited to one Storage Space and one selected permission level.
 - Super-admin Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
 

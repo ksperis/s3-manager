@@ -14,6 +14,7 @@ from app.db import AccountRole, QuotaUsageDaily, S3Account, User, UserS3Account,
 from app.models.bucket_usage_stats import BucketUsageStatsAggregateResponse
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyCreate,
     PortalAccessKeysState,
     PortalAccessKeyStatusChange,
     PortalActivityItem,
@@ -109,9 +110,11 @@ def _raise_portal_access_key_runtime(exc: RuntimeError) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=safe_detail) from exc
     if isinstance(exc, PortalAccessKeyProtected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=safe_detail) from exc
+    if "is required" in lowered:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=safe_detail) from exc
     if "not found" in lowered or "introuvable" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
-    if "not allowed" in lowered or "not provisioned" in lowered:
+    if "not allowed" in lowered or "not provisioned" in lowered or "owner content role required" in lowered or "archived" in lowered:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
@@ -440,6 +443,7 @@ def portal_access_keys(
 
 @router.post("/access-keys", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
 def create_portal_access_key(
+    payload: Optional[PortalAccessKeyCreate] = None,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
@@ -448,7 +452,17 @@ def create_portal_access_key(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
-        key = service.create_access_key(actor, access)
+        key = service.create_access_key(actor, access, payload)
+        audit_metadata = {"access_key_id": key.access_key_id}
+        if key.target_type == "external":
+            audit_metadata.update(
+                {
+                    "target_type": key.target_type,
+                    "storage_space_id": key.storage_space_id,
+                    "permission": key.permission,
+                    "external_email": key.external_email,
+                }
+            )
         audit_service.record_action(
             user=actor,
             scope="portal",
@@ -456,7 +470,7 @@ def create_portal_access_key(
             entity_type="portal_access_key",
             entity_id=key.access_key_id,
             account=access.account,
-            metadata={"access_key_id": key.access_key_id},
+            metadata=audit_metadata,
         )
         return key
     except RuntimeError as exc:
@@ -476,6 +490,16 @@ def update_portal_access_key_status(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
         key = service.update_access_key_status(actor, access, access_key_id, payload.active)
+        audit_metadata = {"access_key_id": access_key_id, "active": payload.active}
+        if key.target_type == "external":
+            audit_metadata.update(
+                {
+                    "target_type": key.target_type,
+                    "storage_space_id": key.storage_space_id,
+                    "permission": key.permission,
+                    "external_email": key.external_email,
+                }
+            )
         audit_service.record_action(
             user=actor,
             scope="portal",
@@ -483,7 +507,7 @@ def update_portal_access_key_status(
             entity_type="portal_access_key",
             entity_id=access_key_id,
             account=access.account,
-            metadata={"access_key_id": access_key_id, "active": payload.active},
+            metadata=audit_metadata,
         )
         return key
     except RuntimeError as exc:
@@ -501,7 +525,17 @@ def delete_portal_access_key(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
-        service.delete_access_key(actor, access, access_key_id)
+        key = service.delete_access_key(actor, access, access_key_id)
+        audit_metadata = {"access_key_id": access_key_id}
+        if key is not None and key.target_type == "external":
+            audit_metadata.update(
+                {
+                    "target_type": key.target_type,
+                    "storage_space_id": key.storage_space_id,
+                    "permission": key.permission,
+                    "external_email": key.external_email,
+                }
+            )
         audit_service.record_action(
             user=actor,
             scope="portal",
@@ -509,7 +543,7 @@ def delete_portal_access_key(
             entity_type="portal_access_key",
             entity_id=access_key_id,
             account=access.account,
-            metadata={"access_key_id": access_key_id},
+            metadata=audit_metadata,
         )
     except RuntimeError as exc:
         _raise_portal_access_key_runtime(exc)

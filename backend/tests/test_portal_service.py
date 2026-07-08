@@ -17,6 +17,7 @@ from app.db import (
     AuditLog,
     AccountIAMUser,
     AccountRole,
+    PortalExternalAccessCredential,
     PortalPublicLink,
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
@@ -35,6 +36,7 @@ from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, Buc
 from app.models.iam import AccessKey as IAMAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyCreate,
     PortalAccessKeyStatusChange,
     PortalAlert,
     PortalIAMUser,
@@ -4155,6 +4157,264 @@ def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
     assert iam_service.create_calls == 1
 
 
+@pytest.mark.parametrize(
+    ("permission", "expected_actions", "blocked_actions"),
+    [
+        ("read_only", {"s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}, {"s3:PutObject", "s3:DeleteObject"}),
+        ("read_write", {"s3:PutObject", "s3:DeleteObject"}, {"s3:*"}),
+    ],
+)
+def test_create_external_access_key_scopes_policy_to_storage_space(
+    monkeypatch,
+    db_session,
+    permission,
+    expected_actions,
+    blocked_actions,
+):
+    account = S3Account(name=f"portal-account-ext-{permission}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email=f"portal-owner-{permission}@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name=f"research-{permission}",
+        display_name="Research Data",
+        owner_user_id=user.id,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    class _FakeIAMService:
+        def __init__(self):
+            self.policies = {}
+            self.created_users = []
+
+        def get_user(self, iam_username):  # noqa: ARG002
+            return None
+
+        def create_user(self, name, create_key=False, allow_existing=False):  # noqa: ARG002
+            self.created_users.append(name)
+            return IAMUser(name=name, user_id=f"uid-{name}"), None
+
+        def put_user_inline_policy(self, user_name, policy_name, policy_document):
+            self.policies[(user_name, policy_name)] = policy_document
+
+        def create_access_key(self, user_name):
+            return IAMAccessKey(
+                access_key_id=f"AK-{permission}",
+                secret_access_key=f"SK-{permission}",
+                status="Active",
+            )
+
+        def delete_access_key(self, user_name, access_key_id):  # noqa: ARG002
+            pytest.fail("cleanup should not run for successful creation")
+
+        def delete_user_inline_policy(self, user_name, policy_name):  # noqa: ARG002
+            pytest.fail("cleanup should not run for successful creation")
+
+        def delete_user(self, user_name):  # noqa: ARG002
+            pytest.fail("cleanup should not run for successful creation")
+
+    iam_service = _FakeIAMService()
+    synced = []
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
+    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda acc, bucket, meta: synced.append((bucket, meta.id)))
+
+    created = service.create_access_key(
+        user,
+        _portal_access(account, user),
+        PortalAccessKeyCreate(
+            target_type="external",
+            storage_space_id=metadata.bucket_name,
+            external_email="partner@example.org",
+            permission=permission,
+        ),
+    )
+
+    row = db_session.query(PortalExternalAccessCredential).filter_by(access_key_id=f"AK-{permission}").one()
+    assert created.target_type == "external"
+    assert created.secret_access_key == f"SK-{permission}"
+    assert created.external_email == "partner@example.org"
+    assert created.storage_space_id == metadata.bucket_name
+    assert created.permission == permission
+    assert row.external_email == "partner@example.org"
+    assert not hasattr(row, "secret_access_key")
+    assert synced == [(metadata.bucket_name, metadata.id)]
+    policy = iam_service.policies[(row.iam_username, "portal-external-storage-space")]
+    statements = policy["Statement"]
+    actions = set(statements[0]["Action"])
+    resources = set(statements[0]["Resource"])
+    assert expected_actions.issubset(actions)
+    assert actions.isdisjoint(blocked_actions)
+    assert resources == {f"arn:aws:s3:::{metadata.bucket_name}", f"arn:aws:s3:::{metadata.bucket_name}/*"}
+
+
+def test_create_external_access_key_requires_content_owner(monkeypatch, db_session):
+    account = S3Account(name="portal-account-ext-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="portal-owner-ext-denied@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="portal-viewer-ext-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="shared-viewer",
+        display_name="Shared Viewer",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceGrant(
+            storage_space_metadata_id=metadata.id,
+            user_id=viewer.id,
+            role="Viewer",
+            created_by_user_id=owner.id,
+        )
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("IAM should not be reached when owner check fails"))
+
+    with pytest.raises(RuntimeError, match="Owner content role required"):
+        service.create_access_key(
+            viewer,
+            _portal_access(account, viewer),
+            PortalAccessKeyCreate(
+                target_type="external",
+                storage_space_id=metadata.bucket_name,
+                external_email="partner@example.org",
+                permission="read_only",
+            ),
+        )
+
+
+def test_external_access_key_status_and_delete_resync_policy(monkeypatch, db_session):
+    account = S3Account(name="portal-account-ext-lifecycle", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-owner-ext-lifecycle@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="external-lifecycle",
+        display_name="External Lifecycle",
+        owner_user_id=user.id,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+    credential = PortalExternalAccessCredential(
+        account_id=account.id,
+        storage_space_metadata_id=metadata.id,
+        bucket_name=metadata.bucket_name,
+        created_by_user_id=user.id,
+        external_email="partner@example.org",
+        permission="read_only",
+        iam_user_id="iam-ext",
+        iam_username="portal-ext-lifecycle",
+        access_key_id="AK-EXT-LIFE",
+        status="Active",
+    )
+    db_session.add(credential)
+    db_session.commit()
+
+    class _FakeIAMService:
+        def __init__(self):
+            self.calls = []
+
+        def update_access_key_status(self, user_name, access_key_id, status_value):
+            self.calls.append(("update", user_name, access_key_id, status_value))
+
+        def delete_access_key(self, user_name, access_key_id):
+            self.calls.append(("delete_key", user_name, access_key_id))
+
+        def delete_user_inline_policy(self, user_name, policy_name):
+            self.calls.append(("delete_policy", user_name, policy_name))
+
+        def delete_user(self, user_name):
+            self.calls.append(("delete_user", user_name))
+
+    iam_service = _FakeIAMService()
+    synced = []
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
+    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda acc, bucket, meta: synced.append(bucket))
+
+    updated = service.update_access_key_status(user, _portal_access(account, user), "AK-EXT-LIFE", False)
+    assert updated.target_type == "external"
+    assert updated.is_active is False
+    assert iam_service.calls[0] == ("update", "portal-ext-lifecycle", "AK-EXT-LIFE", "Inactive")
+    assert synced == [metadata.bucket_name]
+
+    deleted = service.delete_access_key(user, _portal_access(account, user), "AK-EXT-LIFE")
+    db_session.refresh(credential)
+
+    assert deleted is not None
+    assert deleted.target_type == "external"
+    assert credential.revoked_at is not None
+    assert credential.status == "Inactive"
+    assert ("delete_key", "portal-ext-lifecycle", "AK-EXT-LIFE") in iam_service.calls
+    assert ("delete_policy", "portal-ext-lifecycle", "portal-external-storage-space") in iam_service.calls
+    assert ("delete_user", "portal-ext-lifecycle") in iam_service.calls
+    assert synced == [metadata.bucket_name, metadata.bucket_name]
+
+
+def test_bucket_policy_principals_include_active_external_credentials(db_session):
+    account = S3Account(
+        name="portal-account-ext-policy",
+        rgw_account_id="RGW1",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-owner-ext-policy@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="external-policy",
+        owner_user_id=user.id,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+    active = PortalExternalAccessCredential(
+        account_id=account.id,
+        storage_space_metadata_id=metadata.id,
+        bucket_name=metadata.bucket_name,
+        created_by_user_id=user.id,
+        external_email="active@example.org",
+        permission="read_only",
+        iam_user_id="iam-active",
+        iam_username="portal-ext-active",
+        access_key_id="AK-ACTIVE",
+        status="Active",
+    )
+    inactive = PortalExternalAccessCredential(
+        account_id=account.id,
+        storage_space_metadata_id=metadata.id,
+        bucket_name=metadata.bucket_name,
+        created_by_user_id=user.id,
+        external_email="inactive@example.org",
+        permission="read_only",
+        iam_user_id="iam-inactive",
+        iam_username="portal-ext-inactive",
+        access_key_id="AK-INACTIVE",
+        status="Inactive",
+    )
+    db_session.add_all([active, inactive])
+    db_session.commit()
+
+    principals = PortalService(db_session)._portal_policy_principals_for_space(account, metadata)
+
+    assert "arn:aws:iam::RGW1:user/portal-ext-active" in principals
+    assert "arn:aws:iam:::user/portal-ext-active" in principals
+    assert not any("portal-ext-inactive" in principal for principal in principals)
+
+
 def test_portal_access_key_routes_record_audit(db_session):
     account = S3Account(name="portal-account-key-routes", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-routes@example.com", hashed_password="x", role="ui_user")
@@ -4163,7 +4423,7 @@ def test_portal_access_key_routes_record_audit(db_session):
     access = _portal_access(account, user)
 
     class FakeService:
-        def create_access_key(self, user_obj, access_obj):
+        def create_access_key(self, user_obj, access_obj, payload=None):  # noqa: ARG002
             assert user_obj == user
             assert access_obj == access
             return PortalAccessKey(access_key_id="AK-NEW", secret_access_key="SK-NEW", is_portal=False)
@@ -4179,6 +4439,7 @@ def test_portal_access_key_routes_record_audit(db_session):
             assert user_obj == user
             assert access_obj == access
             assert access_key_id == "AK-NEW"
+            return None
 
     class FakeAuditService:
         def __init__(self):
@@ -4216,6 +4477,61 @@ def test_portal_access_key_routes_record_audit(db_session):
     assert audit_service.actions[2]["metadata"] == {"access_key_id": "AK-NEW"}
 
 
+def test_portal_access_key_route_audits_external_metadata_without_secret(db_session):
+    account = S3Account(name="portal-account-key-route-external", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-key-route-external@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user)
+    payload = PortalAccessKeyCreate(
+        target_type="external",
+        storage_space_id="research-data",
+        external_email="partner@example.org",
+        permission="read_write",
+    )
+
+    class FakeService:
+        def create_access_key(self, user_obj, access_obj, payload_obj):
+            assert user_obj == user
+            assert access_obj == access
+            assert payload_obj == payload
+            return PortalAccessKey(
+                access_key_id="AK-EXT",
+                secret_access_key="SK-EXT",
+                target_type="external",
+                external_email="partner@example.org",
+                storage_space_id="research-data",
+                storage_space_name="Research Data",
+                permission="read_write",
+            )
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+
+    created = portal_router.create_portal_access_key(
+        payload=payload,
+        access=access,
+        audit_service=audit_service,
+        service=FakeService(),
+    )
+
+    assert created.secret_access_key == "SK-EXT"
+    assert audit_service.actions[0]["metadata"] == {
+        "access_key_id": "AK-EXT",
+        "target_type": "external",
+        "storage_space_id": "research-data",
+        "permission": "read_write",
+        "external_email": "partner@example.org",
+    }
+    assert "SK-EXT" not in json.dumps(audit_service.actions[0]["metadata"])
+
+
 def test_portal_access_key_routes_translate_disabled_management(db_session):
     account = S3Account(name="portal-account-key-route-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-route-disabled@example.com", hashed_password="x", role="ui_user")
@@ -4223,7 +4539,7 @@ def test_portal_access_key_routes_translate_disabled_management(db_session):
     db_session.commit()
 
     class FakeService:
-        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
+        def create_access_key(self, user_obj, access_obj, payload=None):  # noqa: ARG002
             raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
 
     class FakeAuditService:

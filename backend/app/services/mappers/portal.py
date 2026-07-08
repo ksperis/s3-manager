@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from app.db import AccountIAMUser
+from app.db import AccountIAMUser, PortalExternalAccessCredential
 from app.models.portal import PortalAccessKey
 
 
@@ -48,4 +48,26 @@ def portal_access_key_from_active_link(
         secret_access_key=link.active_secret_key if include_secret else None,
         is_portal=True,
         deletable=False,
+    )
+
+
+def portal_access_key_from_external_credential(
+    credential: PortalExternalAccessCredential,
+    *,
+    storage_space_name: Optional[str] = None,
+    secret_access_key: Optional[str] = None,
+) -> PortalAccessKey:
+    return PortalAccessKey(
+        access_key_id=credential.access_key_id,
+        status=credential.status,
+        created_at=credential.created_at.isoformat() if credential.created_at else None,
+        is_active=credential.revoked_at is None and portal_access_key_is_active(credential.status, default=True),
+        is_portal=False,
+        deletable=credential.revoked_at is None,
+        secret_access_key=secret_access_key,
+        target_type="external",
+        external_email=credential.external_email,
+        storage_space_id=credential.bucket_name,
+        storage_space_name=storage_space_name,
+        permission=credential.permission,
     )

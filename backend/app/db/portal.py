@@ -105,3 +105,46 @@ class PortalPublicLink(Base):
 
     account = relationship("S3Account")
     created_by = relationship("User")
+
+
+class PortalExternalAccessCredential(Base):
+    __tablename__ = "portal_external_access_credentials"
+    __table_args__ = (
+        UniqueConstraint("iam_username", name="uq_portal_external_access_credentials_iam_username"),
+        UniqueConstraint("access_key_id", name="uq_portal_external_access_credentials_access_key"),
+        CheckConstraint(
+            "permission IN ('read_only', 'read_write')",
+            name="ck_portal_external_access_credentials_permission",
+        ),
+        CheckConstraint(
+            "status IN ('Active', 'Inactive')",
+            name="ck_portal_external_access_credentials_status",
+        ),
+        Index("ix_portal_external_access_credentials_account", "account_id"),
+        Index("ix_portal_external_access_credentials_space", "storage_space_metadata_id"),
+        Index("ix_portal_external_access_credentials_creator", "created_by_user_id"),
+        Index("ix_portal_external_access_credentials_revoked", "revoked_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id", ondelete="CASCADE"), nullable=False)
+    storage_space_metadata_id = Column(
+        Integer,
+        ForeignKey("portal_storage_space_metadata.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    bucket_name = Column(String, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    external_email = Column(String, nullable=False)
+    permission = Column(String, nullable=False)
+    iam_user_id = Column(String, nullable=True)
+    iam_username = Column(String, nullable=False)
+    access_key_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="Active", server_default="Active")
+    revoked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    account = relationship("S3Account")
+    storage_space = relationship("PortalStorageSpaceMetadata")
+    created_by = relationship("User")

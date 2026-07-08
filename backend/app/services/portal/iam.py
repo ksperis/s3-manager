@@ -372,6 +372,31 @@ class PortalIamMixin:
             principals.update(self._portal_iam_principal_arns(account, iam_username, iam_user_id))
         return sorted(principals)
 
+    def _portal_policy_principals_for_external_credentials(
+        self,
+        account: S3Account,
+        metadata: PortalStorageSpaceMetadata,
+    ) -> list[str]:
+        if metadata.id is None:
+            return []
+        rows = (
+            self.db.query(
+                PortalExternalAccessCredential.iam_username,
+                PortalExternalAccessCredential.iam_user_id,
+            )
+            .filter(
+                PortalExternalAccessCredential.account_id == account.id,
+                PortalExternalAccessCredential.storage_space_metadata_id == metadata.id,
+                PortalExternalAccessCredential.revoked_at.is_(None),
+                PortalExternalAccessCredential.status == "Active",
+            )
+            .all()
+        )
+        principals: set[str] = set()
+        for iam_username, iam_user_id in rows:
+            principals.update(self._portal_iam_principal_arns(account, iam_username, iam_user_id))
+        return sorted(principals)
+
     def _portal_storage_space_allowed_user_ids(
         self,
         account: S3Account,
@@ -414,9 +439,10 @@ class PortalIamMixin:
     ) -> list[str]:
         allowed_user_ids = self._portal_storage_space_allowed_user_ids(account, metadata)
         user_principals = self._portal_policy_principals_for_user_ids(account, allowed_user_ids)
-        if not user_principals:
+        external_principals = self._portal_policy_principals_for_external_credentials(account, metadata)
+        if not user_principals and not external_principals:
             return []
-        principals = set(user_principals)
+        principals = {*user_principals, *external_principals}
         if self._metadata_visibility(metadata) == "shared":
             principals.update(self._portal_storage_space_technical_principal_arns(account))
         return sorted(principals)

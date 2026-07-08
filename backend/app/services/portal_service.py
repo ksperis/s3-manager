@@ -32,6 +32,7 @@ class PortalService(
         self._manager_group_name = "portal-manager"
         self._user_group_name = "portal-user"
         self._bucket_access_policy_name = "portal-user-buckets"
+        self._external_access_policy_name = "portal-external-storage-space"
         self._bucket_access_sid = "PortalUserBuckets"
         self._storage_space_share_sid_prefix = "PortalStorageSpace"
         self._storage_space_access_sid = "PortalStorageSpaceAccess"

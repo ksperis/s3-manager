@@ -20,6 +20,7 @@ from app.db import (
     AuditLog,
     AccountIAMUser,
     AccountRole,
+    PortalExternalAccessCredential,
     PortalPublicLink as DBPortalPublicLink,
     PortalStorageSpaceGrant,
     PortalStorageSpaceMetadata,
@@ -44,6 +45,7 @@ from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import (
     PortalAccessKey,
+    PortalAccessKeyCreate,
     PortalAccessKeysState,
     PortalAccountSettings,
     PortalActivityItem,

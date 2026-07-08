@@ -20,6 +20,18 @@ export type PortalAccessKey = {
   secret_access_key?: string | null;
   session_token?: string | null;
   expires_at?: string | null;
+  target_type?: "self" | "external";
+  external_email?: string | null;
+  storage_space_id?: string | null;
+  storage_space_name?: string | null;
+  permission?: "read_only" | "read_write" | null;
+};
+
+export type PortalAccessKeyCreate = {
+  target_type?: "self" | "external";
+  storage_space_id?: string | null;
+  external_email?: string | null;
+  permission?: "read_only" | "read_write" | null;
 };
 
 export type PortalIAMUser = {
@@ -276,10 +288,13 @@ export async function fetchPortalAccessKeysState(accountId: S3AccountSelector): 
   return data;
 }
 
-export async function createPortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
+export async function createPortalAccessKey(
+  accountId: S3AccountSelector,
+  payload?: PortalAccessKeyCreate
+): Promise<PortalAccessKey> {
   const { data } = await client.post<PortalAccessKey>(
     "/portal/access-keys",
-    undefined,
+    payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;

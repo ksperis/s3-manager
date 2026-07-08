@@ -8,12 +8,16 @@ import {
   createPortalAccessKey,
   deletePortalAccessKey,
   fetchPortalAccessKeysState,
+  listPortalStorageSpaces,
   updatePortalAccessKeyStatus,
   type PortalAccessKey,
+  type PortalAccessKeyCreate,
   type PortalAccessKeysState,
+  type PortalStorageSpaceSummary,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
+import Modal from "../../components/Modal";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -21,7 +25,8 @@ import PageHeader from "../../components/PageHeader";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { cx } from "../../components/ui/styles";
+import UiButton from "../../components/ui/UiButton";
+import { cx, uiInputClass, uiLabelClass, uiMutedTextClass, uiPanelMutedClass, uiRadioClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
@@ -32,6 +37,9 @@ type PendingAccessKeyAction =
   | { type: "disable"; key: PortalAccessKey }
   | { type: "delete"; key: PortalAccessKey };
 
+type CreateTarget = "self" | "external";
+type ExternalPermission = "read_only" | "read_write";
+
 function isKeyActive(key: PortalAccessKey): boolean {
   if (typeof key.is_active === "boolean") {
     return key.is_active;
@@ -40,6 +48,27 @@ function isKeyActive(key: PortalAccessKey): boolean {
   if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
   if (["active", "enabled"].includes(normalized)) return true;
   return true;
+}
+
+function keyTargetLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"]): string {
+  if (key.target_type === "external") {
+    return key.external_email || t({ en: "External user", fr: "Utilisateur externe", de: "Externer Benutzer" });
+  }
+  return t({ en: "Myself", fr: "Moi-même", de: "Ich selbst" });
+}
+
+function keyScopeLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"]): string {
+  if (key.target_type === "external") {
+    const permission = key.permission === "read_write"
+      ? t({ en: "Read/write", fr: "Lecture/écriture", de: "Lesen/Schreiben" })
+      : t({ en: "Read only", fr: "Lecture seule", de: "Nur lesen" });
+    return key.storage_space_name ? `${key.storage_space_name} · ${permission}` : permission;
+  }
+  return t({ en: "Portal grants", fr: "Droits Portal", de: "Portal-Berechtigungen" });
+}
+
+function isOwnerStorageSpace(space: PortalStorageSpaceSummary): boolean {
+  return (space.content_role ?? space.role) === "Owner" && !space.archived_at;
 }
 
 export default function PortalAccessKeysPage() {
@@ -52,6 +81,14 @@ export default function PortalAccessKeysPage() {
   const [createdKey, setCreatedKey] = useState<PortalAccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAccessKeyAction | null>(null);
+  const [createWizardOpen, setCreateWizardOpen] = useState(false);
+  const [createTarget, setCreateTarget] = useState<CreateTarget>("self");
+  const [externalEmail, setExternalEmail] = useState("");
+  const [externalPermission, setExternalPermission] = useState<ExternalPermission>("read_only");
+  const [selectedSpaceId, setSelectedSpaceId] = useState("");
+  const [storageSpaces, setStorageSpaces] = useState<PortalStorageSpaceSummary[]>([]);
+  const [storageSpacesLoading, setStorageSpacesLoading] = useState(false);
+  const [storageSpacesError, setStorageSpacesError] = useState<string | null>(null);
 
   const loadKeys = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -80,21 +117,84 @@ export default function PortalAccessKeysPage() {
     void loadKeys();
   }, [loadKeys]);
 
+  const loadStorageSpacesForWizard = useCallback(async () => {
+    if (!accountIdForApi) return;
+    setStorageSpacesLoading(true);
+    setStorageSpacesError(null);
+    try {
+      const spaces = await listPortalStorageSpaces(accountIdForApi, { sort: "name" });
+      const ownerSpaces = spaces.filter(isOwnerStorageSpace);
+      setStorageSpaces(ownerSpaces);
+      setSelectedSpaceId((current) => {
+        if (current && ownerSpaces.some((space) => space.id === current)) {
+          return current;
+        }
+        return ownerSpaces[0]?.id || "";
+      });
+    } catch (err) {
+      console.error(err);
+      setStorageSpaces([]);
+      setSelectedSpaceId("");
+      setStorageSpacesError(extractApiError(err, t({ en: "Unable to load Storage Spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })));
+    } finally {
+      setStorageSpacesLoading(false);
+    }
+  }, [accountIdForApi, t]);
+
+  useEffect(() => {
+    if (!createWizardOpen || createTarget !== "external") return;
+    void loadStorageSpacesForWizard();
+  }, [createTarget, createWizardOpen, loadStorageSpacesForWizard]);
+
   const visibleKeys = useMemo(() => (state?.access_keys ?? []).filter((key) => !key.is_portal), [state?.access_keys]);
   const canManageAccessKeys = Boolean(state?.can_manage_access_keys);
   const maxAccessKeys = state?.max_access_keys ?? 0;
   const maxReached = maxAccessKeys > 0 && visibleKeys.length >= maxAccessKeys;
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: visibleKeys.length });
+  const selectedSpace = useMemo(
+    () => storageSpaces.find((space) => space.id === selectedSpaceId) ?? null,
+    [selectedSpaceId, storageSpaces]
+  );
+
+  const openCreateWizard = () => {
+    if (createDisabled) return;
+    setCreateTarget("self");
+    setExternalEmail("");
+    setExternalPermission("read_only");
+    setSelectedSpaceId(storageSpaces[0]?.id || "");
+    setStorageSpacesError(null);
+    setCreateWizardOpen(true);
+  };
+
+  const closeCreateWizard = () => {
+    if (busy === "create") return;
+    setCreateWizardOpen(false);
+  };
 
   const handleCreateKey = async () => {
     if (!accountIdForApi || !canManageAccessKeys || maxReached) return;
+    const payload: PortalAccessKeyCreate =
+      createTarget === "external"
+        ? {
+            target_type: "external",
+            storage_space_id: selectedSpaceId,
+            external_email: externalEmail.trim(),
+            permission: externalPermission,
+          }
+        : { target_type: "self" };
+    if (payload.target_type === "external" && (!payload.storage_space_id || !payload.external_email)) return;
     setBusy("create");
     setError(null);
     setActionMessage(null);
     try {
-      const key = await createPortalAccessKey(accountIdForApi);
+      const key = await createPortalAccessKey(accountIdForApi, payload);
       setCreatedKey(key);
-      setActionMessage(t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" }));
+      setActionMessage(
+        key.target_type === "external"
+          ? t({ en: "External credential created", fr: "Credential externe créé", de: "Externe Zugangsdaten erstellt" })
+          : t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })
+      );
+      setCreateWizardOpen(false);
       await loadKeys();
     } catch (err) {
       console.error(err);
@@ -158,6 +258,11 @@ export default function PortalAccessKeysPage() {
   };
 
   const createDisabled = !state || !canManageAccessKeys || maxReached || Boolean(busy);
+  const createWizardSubmitDisabled =
+    busy === "create" ||
+    !accountIdForApi ||
+    (createTarget === "external" &&
+      (!selectedSpaceId || !externalEmail.trim() || storageSpacesLoading || Boolean(storageSpacesError)));
   const accessKeyColumns: DataTableColumn<PortalAccessKey>[] = [
     {
       id: "access-key",
@@ -171,6 +276,18 @@ export default function PortalAccessKeysPage() {
       label: t({ en: "Status", fr: "Statut", de: "Status" }),
       cellClassName: "text-slate-700 dark:text-slate-200",
       render: (key) => portalAccessKeyStatusLabel(key.status, isKeyActive(key), t),
+    },
+    {
+      id: "target",
+      label: t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" }),
+      cellClassName: "min-w-[10rem]",
+      render: (key) => keyTargetLabel(key, t),
+    },
+    {
+      id: "scope",
+      label: t({ en: "Scope", fr: "Périmètre", de: "Umfang" }),
+      cellClassName: "min-w-[12rem]",
+      render: (key) => keyScopeLabel(key, t),
     },
     {
       id: "created",
@@ -222,7 +339,7 @@ export default function PortalAccessKeysPage() {
         actions={[
           {
             label: busy === "create" ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "New key", fr: "Nouvelle clé", de: "Neuer Schlüssel" }),
-            onClick: handleCreateKey,
+            onClick: openCreateWizard,
             variant: "primary",
             disabled: createDisabled,
           },
@@ -250,8 +367,16 @@ export default function PortalAccessKeysPage() {
 
       {createdKey?.secret_access_key && (
         <OneTimeSecretPanel
-          title={t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })}
-          description={t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })}
+          title={
+            createdKey.target_type === "external"
+              ? t({ en: "External credential created", fr: "Credential externe créé", de: "Externe Zugangsdaten erstellt" })
+              : t({ en: "Access key created", fr: "Clé d'accès créée", de: "Zugriffsschlüssel erstellt" })
+          }
+          description={
+            createdKey.target_type === "external"
+              ? t({ en: "The secret is shown only once and is limited to the selected Storage Space.", fr: "Le secret n'est affiché qu'une seule fois et reste limité à l'espace de stockage sélectionné.", de: "Das Secret wird nur einmal angezeigt und bleibt auf den ausgewählten Speicherbereich beschränkt." })
+              : t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })
+          }
           badge={t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
           values={[
             {
@@ -307,6 +432,163 @@ export default function PortalAccessKeysPage() {
         </div>
       )}
 
+      {createWizardOpen ? (
+        <Modal
+          title={t({ en: "Create access key", fr: "Créer une clé d'accès", de: "Zugriffsschlüssel erstellen" })}
+          onClose={closeCreateWizard}
+          closeOnBackdropClick={busy !== "create"}
+          closeOnEscape={busy !== "create"}
+          maxWidthClass="max-w-3xl"
+        >
+          <div className="space-y-4">
+            {storageSpacesError ? <PageBanner tone="warning">{storageSpacesError}</PageBanner> : null}
+            <section className="space-y-2">
+              <p className={uiLabelClass}>{t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" })}</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <label className={cx("flex min-h-[88px] cursor-pointer gap-3 p-3", uiPanelMutedClass, createTarget === "self" && "ring-2 ring-primary")}>
+                  <input
+                    type="radio"
+                    name="portal-access-key-target"
+                    aria-label={t({ en: "For myself", fr: "Pour moi-même", de: "Für mich" })}
+                    className={cx("mt-1", uiRadioClass)}
+                    checked={createTarget === "self"}
+                    onChange={() => setCreateTarget("self")}
+                    disabled={busy === "create"}
+                  />
+                  <span className="space-y-1">
+                    <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "For myself", fr: "Pour moi-même", de: "Für mich" })}</span>
+                    <span className={cx("block ui-caption", uiMutedTextClass)}>
+                      {t({ en: "Uses my current Portal grants.", fr: "Utilise mes droits Portal actuels.", de: "Verwendet meine aktuellen Portal-Berechtigungen." })}
+                    </span>
+                  </span>
+                </label>
+                <label className={cx("flex min-h-[88px] cursor-pointer gap-3 p-3", uiPanelMutedClass, createTarget === "external" && "ring-2 ring-primary")}>
+                  <input
+                    type="radio"
+                    name="portal-access-key-target"
+                    aria-label={t({ en: "For an external user", fr: "Pour un utilisateur externe", de: "Für einen externen Benutzer" })}
+                    className={cx("mt-1", uiRadioClass)}
+                    checked={createTarget === "external"}
+                    onChange={() => setCreateTarget("external")}
+                    disabled={busy === "create"}
+                  />
+                  <span className="space-y-1">
+                    <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "For an external user", fr: "Pour un utilisateur externe", de: "Für einen externen Benutzer" })}</span>
+                    <span className={cx("block ui-caption", uiMutedTextClass)}>
+                      {t({ en: "Limits the credential to one Storage Space.", fr: "Limite le credential à un seul espace de stockage.", de: "Beschränkt die Zugangsdaten auf einen Speicherbereich." })}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            {createTarget === "external" ? (
+              <section className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className={uiLabelClass}>{t({ en: "External user", fr: "Utilisateur externe", de: "Externer Benutzer" })}</span>
+                  <input
+                    className={uiInputClass}
+                    value={externalEmail}
+                    onChange={(event) => setExternalEmail(event.target.value)}
+                    placeholder={t({ en: "name@example.org", fr: "nom@example.org", de: "name@example.org" })}
+                    disabled={busy === "create"}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className={uiLabelClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                  <select
+                    className={uiInputClass}
+                    value={selectedSpaceId}
+                    onChange={(event) => setSelectedSpaceId(event.target.value)}
+                    disabled={busy === "create" || storageSpacesLoading || storageSpaces.length === 0}
+                  >
+                    {storageSpacesLoading ? (
+                      <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
+                    ) : storageSpaces.length === 0 ? (
+                      <option value="">{t({ en: "No owner Storage Space", fr: "Aucun espace propriétaire", de: "Kein eigener Speicherbereich" })}</option>
+                    ) : (
+                      storageSpaces.map((space) => (
+                        <option key={space.id} value={space.id}>
+                          {space.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <fieldset className="space-y-2 md:col-span-2">
+                  <legend className={uiLabelClass}>{t({ en: "Permission", fr: "Droits", de: "Berechtigung" })}</legend>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <label className={cx("flex min-h-[74px] cursor-pointer gap-3 p-3", uiPanelMutedClass, externalPermission === "read_only" && "ring-2 ring-primary")}>
+                      <input
+                        type="radio"
+                        name="portal-external-access-permission"
+                        aria-label={t({ en: "Read only", fr: "Lecture seule", de: "Nur lesen" })}
+                        className={cx("mt-1", uiRadioClass)}
+                        checked={externalPermission === "read_only"}
+                        onChange={() => setExternalPermission("read_only")}
+                        disabled={busy === "create"}
+                      />
+                      <span>
+                        <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "Read only", fr: "Lecture seule", de: "Nur lesen" })}</span>
+                        <span className={cx("block ui-caption", uiMutedTextClass)}>{t({ en: "List and download.", fr: "Lister et télécharger.", de: "Auflisten und herunterladen." })}</span>
+                      </span>
+                    </label>
+                    <label className={cx("flex min-h-[74px] cursor-pointer gap-3 p-3", uiPanelMutedClass, externalPermission === "read_write" && "ring-2 ring-primary")}>
+                      <input
+                        type="radio"
+                        name="portal-external-access-permission"
+                        aria-label={t({ en: "Read/write", fr: "Lecture/écriture", de: "Lesen/Schreiben" })}
+                        className={cx("mt-1", uiRadioClass)}
+                        checked={externalPermission === "read_write"}
+                        onChange={() => setExternalPermission("read_write")}
+                        disabled={busy === "create"}
+                      />
+                      <span>
+                        <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "Read/write", fr: "Lecture/écriture", de: "Lesen/Schreiben" })}</span>
+                        <span className={cx("block ui-caption", uiMutedTextClass)}>{t({ en: "List, download, upload, and delete.", fr: "Lister, télécharger, déposer et supprimer.", de: "Auflisten, herunterladen, hochladen und löschen." })}</span>
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+              </section>
+            ) : null}
+
+            <section className={cx("space-y-2 p-3", uiPanelMutedClass)}>
+              <p className={uiLabelClass}>{t({ en: "Summary", fr: "Récapitulatif", de: "Zusammenfassung" })}</p>
+              <dl className="grid gap-2 ui-caption md:grid-cols-2">
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" })}</dt>
+                  <dd className={cx("font-semibold", uiTitleTextClass)}>
+                    {createTarget === "external"
+                      ? externalEmail.trim() || t({ en: "External user", fr: "Utilisateur externe", de: "Externer Benutzer" })
+                      : t({ en: "Myself", fr: "Moi-même", de: "Ich selbst" })}
+                  </dd>
+                </div>
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Scope", fr: "Périmètre", de: "Umfang" })}</dt>
+                  <dd className={cx("font-semibold", uiTitleTextClass)}>
+                    {createTarget === "external"
+                      ? selectedSpace?.name || t({ en: "Select a Storage Space", fr: "Sélectionner un espace", de: "Speicherbereich auswählen" })
+                      : t({ en: "My Portal access", fr: "Mes accès Portal", de: "Mein Portal-Zugriff" })}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton variant="secondary" onClick={closeCreateWizard} disabled={busy === "create"}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton onClick={handleCreateKey} loading={busy === "create"} disabled={createWizardSubmitDisabled}>
+                {busy === "create"
+                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
+                  : t({ en: "Create key", fr: "Créer la clé", de: "Schlüssel erstellen" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
       {pendingAction?.type === "disable" ? (
         <ConfirmActionDialog
           title={t({ en: "Disable access key", fr: "Désactiver la clé d'accès", de: "Zugriffsschlüssel deaktivieren" })}
@@ -315,6 +597,8 @@ export default function PortalAccessKeysPage() {
           loading={busy === `toggle:${pendingAction.key.access_key_id}`}
           details={[
             { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
+            { label: t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" }), value: keyTargetLabel(pendingAction.key, t) },
+            { label: t({ en: "Scope", fr: "Périmètre", de: "Umfang" }), value: keyScopeLabel(pendingAction.key, t) },
             { label: t({ en: "Endpoint", fr: "Point de terminaison", de: "Endpunkt" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[
@@ -335,6 +619,8 @@ export default function PortalAccessKeysPage() {
           loading={busy === `delete:${pendingAction.key.access_key_id}`}
           details={[
             { label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }), value: pendingAction.key.access_key_id, mono: true },
+            { label: t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" }), value: keyTargetLabel(pendingAction.key, t) },
+            { label: t({ en: "Scope", fr: "Périmètre", de: "Umfang" }), value: keyScopeLabel(pendingAction.key, t) },
             { label: t({ en: "Endpoint", fr: "Point de terminaison", de: "Endpunkt" }), value: state?.s3_endpoint ?? t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" }) },
           ]}
           impacts={[

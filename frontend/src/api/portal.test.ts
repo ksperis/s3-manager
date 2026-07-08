@@ -242,6 +242,12 @@ describe("portal storage spaces api", () => {
   it("manages portal access keys through user-facing endpoints", async () => {
     await fetchPortalAccessKeysState("101");
     await createPortalAccessKey("101");
+    await createPortalAccessKey("101", {
+      target_type: "external",
+      storage_space_id: "research data",
+      external_email: "partner@example.org",
+      permission: "read_only",
+    });
     await updatePortalAccessKeyStatus("101", "AK USER", false);
     await deletePortalAccessKey("101", "AK USER");
 
@@ -251,6 +257,16 @@ describe("portal storage spaces api", () => {
     expect(clientMock.post).toHaveBeenCalledWith(
       "/portal/access-keys",
       undefined,
+      { params: { account_id: "101" } }
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/access-keys",
+      {
+        target_type: "external",
+        storage_space_id: "research data",
+        external_email: "partner@example.org",
+        permission: "read_only",
+      },
       { params: { account_id: "101" } }
     );
     expect(clientMock.put).toHaveBeenCalledWith(

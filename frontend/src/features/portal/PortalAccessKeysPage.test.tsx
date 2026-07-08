@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     ],
   } as PortalAccessKeysState,
   fetchPortalAccessKeysState: vi.fn(),
+  listPortalStorageSpaces: vi.fn(),
   createPortalAccessKey: vi.fn(),
   updatePortalAccessKeyStatus: vi.fn(),
   deletePortalAccessKey: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("./PortalAccountContext", () => ({
 
 vi.mock("../../api/portal", () => ({
   fetchPortalAccessKeysState: mocks.fetchPortalAccessKeysState,
+  listPortalStorageSpaces: mocks.listPortalStorageSpaces,
   createPortalAccessKey: mocks.createPortalAccessKey,
   updatePortalAccessKeyStatus: mocks.updatePortalAccessKeyStatus,
   deletePortalAccessKey: mocks.deletePortalAccessKey,
@@ -64,6 +66,10 @@ describe("PortalAccessKeysPage", () => {
       ],
     };
     mocks.fetchPortalAccessKeysState.mockImplementation(async () => mocks.state);
+    mocks.listPortalStorageSpaces.mockResolvedValue([
+      { id: "research-data", name: "Research Data", role: "Owner", content_role: "Owner" },
+      { id: "shared-readonly", name: "Shared Readonly", role: "Viewer", content_role: "Viewer" },
+    ]);
     mocks.createPortalAccessKey.mockResolvedValue({
       access_key_id: "AK-NEW",
       status: "Active",
@@ -94,11 +100,51 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "New key" }));
+    const dialog = screen.getByRole("dialog", { name: "Create access key" });
+    await user.click(within(dialog).getByRole("button", { name: "Create key" }));
 
-    expect(mocks.createPortalAccessKey).toHaveBeenCalledWith("101");
+    expect(mocks.createPortalAccessKey).toHaveBeenCalledWith("101", { target_type: "self" });
     expect(await screen.findByText("The secret is shown only once.")).toBeInTheDocument();
     expect(screen.getByText("AK-NEW")).toBeInTheDocument();
     expect(screen.getByText("SK-NEW")).toBeInTheDocument();
+  });
+
+  it("creates an external credential for an owner Storage Space", async () => {
+    mocks.state = { ...mocks.state, access_keys: [] };
+    mocks.createPortalAccessKey.mockResolvedValue({
+      access_key_id: "AK-EXT",
+      status: "Active",
+      is_active: true,
+      secret_access_key: "SK-EXT",
+      target_type: "external",
+      external_email: "partner@example.org",
+      storage_space_id: "research-data",
+      storage_space_name: "Research Data",
+      permission: "read_write",
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "New key" }));
+    const dialog = screen.getByRole("dialog", { name: "Create access key" });
+    await user.click(within(dialog).getByLabelText("For an external user"));
+    await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
+    await user.type(within(dialog).getByPlaceholderText("name@example.org"), "partner@example.org");
+    await user.selectOptions(within(dialog).getByLabelText("Storage Space"), "research-data");
+    await user.click(within(dialog).getByLabelText("Read/write"));
+    await user.click(within(dialog).getByRole("button", { name: "Create key" }));
+
+    await waitFor(() =>
+      expect(mocks.createPortalAccessKey).toHaveBeenCalledWith("101", {
+        target_type: "external",
+        storage_space_id: "research-data",
+        external_email: "partner@example.org",
+        permission: "read_write",
+      })
+    );
+    expect(await screen.findByText("The secret is shown only once and is limited to the selected Storage Space.")).toBeInTheDocument();
+    expect(screen.getByText("AK-EXT")).toBeInTheDocument();
+    expect(screen.getByText("SK-EXT")).toBeInTheDocument();
   });
 
   it("updates and deletes external keys after structured confirmation", async () => {
