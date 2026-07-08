@@ -30,6 +30,7 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiPanelMutedClass } from "../../components/ui/styles";
@@ -928,9 +929,9 @@ export default function S3UsersPage() {
       {showCreateModal && (
         <Modal title="Create user" onClose={createCloseGuard.requestClose}>
           {createError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {createError}
-            </div>
+            </UiInlineMessage>
           )}
           <form onSubmit={submitCreate} className="space-y-4">
                 <UiInput
@@ -1054,14 +1055,14 @@ export default function S3UsersPage() {
         <Modal title="Import users" onClose={importCloseGuard.requestClose}>
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {importError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {importError}
-            </div>
+            </UiInlineMessage>
           )}
           {importMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <UiInlineMessage tone="success" className="mb-3">
               {importMessage}
-            </div>
+            </UiInlineMessage>
           )}
           <textarea
             className="ui-control min-h-32"
@@ -1129,9 +1130,9 @@ export default function S3UsersPage() {
           onClose={editCloseGuard.requestClose}
         >
           {editError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {editError}
-            </div>
+            </UiInlineMessage>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
             <AdminModalTabs<EditTab>
@@ -1556,9 +1557,9 @@ export default function S3UsersPage() {
               </span>
             </label>
             {deleteModalError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+              <UiInlineMessage tone="error">
                 {deleteModalError}
-              </div>
+              </UiInlineMessage>
             )}
           </div>
           <div className="mt-5 flex items-center justify-end gap-3">

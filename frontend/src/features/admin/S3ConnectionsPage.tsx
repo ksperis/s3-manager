@@ -14,6 +14,7 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
@@ -1130,9 +1131,9 @@ export default function S3ConnectionsPage() {
       {showCreateModal && (
         <Modal title="Add S3 Connection" onClose={createCloseGuard.requestClose}>
           {createError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {createError}
-            </div>
+            </UiInlineMessage>
           )}
           <form className="space-y-4" onSubmit={submitCreate}>
               <>
@@ -1262,9 +1263,9 @@ export default function S3ConnectionsPage() {
       {editing && (
         <Modal title={`Edit: ${editing.name}`} onClose={editCloseGuard.requestClose}>
           {editError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {editError}
-            </div>
+            </UiInlineMessage>
           )}
           <form className="space-y-4" onSubmit={submitEdit}>
             <AdminModalTabs<EditTab>
