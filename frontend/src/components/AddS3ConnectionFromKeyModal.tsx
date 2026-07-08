@@ -12,6 +12,7 @@ import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../fe
 import Modal from "./Modal";
 import UiButton from "./ui/UiButton";
 import UiCheckboxField from "./ui/UiCheckboxField";
+import UiInlineMessage from "./ui/UiInlineMessage";
 import UiInput from "./ui/UiInput";
 import { cx, uiMutedTextClass, uiPanelMutedClass, uiTitleTextClass } from "./ui/styles";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
@@ -277,9 +278,9 @@ export default function AddS3ConnectionFromKeyModal({
     <Modal title={title} onClose={closeGuard.requestClose} maxWidthClass="max-w-3xl" zIndexClass={zIndexClass}>
       <form className="space-y-4" onSubmit={submit}>
         {error && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+          <UiInlineMessage tone="error">
             {error}
-          </div>
+          </UiInlineMessage>
         )}
         <section className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
           <div>

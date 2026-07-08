@@ -102,6 +102,32 @@ describe("AddS3ConnectionFromKeyModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders local validation errors with the shared inline treatment", async () => {
+    const user = userEvent.setup();
+    listStorageEndpointsMock.mockResolvedValue([]);
+
+    render(
+      <AddS3ConnectionFromKeyModal
+        isOpen
+        lockEndpoint
+        accessKeyId="AKIA-EXAMPLE"
+        secretAccessKey="SECRET-EXAMPLE"
+        defaultName="private-connection"
+        defaultEndpointUrl="https://s3.example.test"
+        defaultAccessManager
+        defaultAccessBrowser
+        onClose={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByLabelText("Access manager"));
+    await user.click(screen.getByLabelText("Access browser"));
+    await user.click(screen.getByRole("button", { name: "Create private connection" }));
+
+    expect(screen.getByText("Enable access to manager and/or browser.")).toHaveClass("border-rose-200");
+    expect(createConnectionMock).not.toHaveBeenCalled();
+  });
+
   it("creates a custom endpoint connection through shared endpoint fields", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
