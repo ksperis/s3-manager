@@ -19,6 +19,7 @@ import {
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
@@ -313,31 +314,24 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
             </div>
           </div>
 
-          <label className="space-y-1 ui-caption">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Parallelism</span>
-            <input
-              type="number"
-              min={1}
-              max={64}
-              value={parallelism}
-              disabled={running}
-              onChange={(event) => setParallelism(Number(event.target.value))}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
+          <UiInput
+            label="Parallelism"
+            type="number"
+            min={1}
+            max={64}
+            value={parallelism}
+            disabled={running}
+            onChange={(event) => setParallelism(Number(event.target.value))}
+          />
 
-          <label className="space-y-1 ui-caption">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">
-              Type {expectedConfirmation}
-            </span>
-            <input
-              type="text"
-              value={confirmation}
-              disabled={running}
-              onChange={(event) => setConfirmation(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
+          <UiInput
+            label={`Type ${expectedConfirmation}`}
+            type="text"
+            value={confirmation}
+            disabled={running}
+            onChange={(event) => setConfirmation(event.target.value)}
+            className="font-mono"
+          />
         </div>
 
         {progress && (

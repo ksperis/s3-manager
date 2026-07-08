@@ -14,6 +14,7 @@ import {
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
@@ -166,18 +167,17 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
-              Parallelism
-              <input
-                type="number"
-                min={1}
-                max={32}
-                value={parallelism}
-                disabled={running}
-                onChange={(event) => setParallelism(Number(event.target.value))}
-                className="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </label>
+            <UiInput
+              label="Parallelism"
+              type="number"
+              min={1}
+              max={32}
+              value={parallelism}
+              disabled={running}
+              onChange={(event) => setParallelism(Number(event.target.value))}
+              fieldClassName="w-24"
+              size="compact"
+            />
             {running ? (
               <UiButton
                 type="button"
