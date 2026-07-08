@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -61,12 +62,8 @@ export default function BrowserCleanupModal({
           <p className="font-semibold text-slate-800 dark:text-slate-100">Context</p>
           <p className="break-all">{currentPath || "Select a bucket to get started."}</p>
         </div>
-        {cleanupError && (
-          <p className="font-semibold text-rose-600 dark:text-rose-200">{cleanupError}</p>
-        )}
-        {cleanupSummary && (
-          <p className="font-semibold text-emerald-600 dark:text-emerald-200">{cleanupSummary}</p>
-        )}
+        {cleanupError && <UiInlineMessage tone="error">{cleanupError}</UiInlineMessage>}
+        {cleanupSummary && <UiInlineMessage tone="success">{cleanupSummary}</UiInlineMessage>}
         <div className={browserPanelCardClasses}>
           <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
             Keep only the N most recent versions per object

@@ -6,6 +6,7 @@ import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { stableSignature } from "../../utils/stableSignature";
 import {
   aclOptions,
@@ -152,12 +153,8 @@ export default function BrowserBulkAttributesModal({
             {bulkActionFolderCount > 0 && " (folders expanded to files)"}
           </p>
         </div>
-        {bulkAttributesError && (
-          <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkAttributesError}</p>
-        )}
-        {bulkAttributesSummary && (
-          <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkAttributesSummary}</p>
-        )}
+        {bulkAttributesError && <UiInlineMessage tone="error">{bulkAttributesError}</UiInlineMessage>}
+        {bulkAttributesSummary && <UiInlineMessage tone="success">{bulkAttributesSummary}</UiInlineMessage>}
         <div className="space-y-3">
           <div className={browserPanelCardClasses}>
             <UiCheckboxField

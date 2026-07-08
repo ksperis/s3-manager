@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Modal from "../../components/Modal";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { browserPanelCardClasses, bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
 import { stableSignature } from "../../utils/stableSignature";
 
@@ -87,12 +88,8 @@ export default function BrowserBulkRestoreModal({
             </p>
           )}
         </div>
-        {bulkRestoreError && (
-          <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkRestoreError}</p>
-        )}
-        {bulkRestoreSummary && (
-          <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
-        )}
+        {bulkRestoreError && <UiInlineMessage tone="error">{bulkRestoreError}</UiInlineMessage>}
+        {bulkRestoreSummary && <UiInlineMessage tone="success">{bulkRestoreSummary}</UiInlineMessage>}
         <div className={browserPanelCardClasses}>
           <UiCheckboxField
             checked={bulkRestoreRestoreDeleted}
