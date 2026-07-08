@@ -196,6 +196,7 @@ export default function ProfilePage({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
+  const [preferencesMessageTone, setPreferencesMessageTone] = useState<"success" | "error">("success");
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
   const [preferencesLanguage, setPreferencesLanguage] = useState<UiLanguagePreference>(languagePreference);
   const [preferencesShowSelectorTags, setPreferencesShowSelectorTags] = useState<boolean>(() => readSelectorTagsPreference());
@@ -813,6 +814,8 @@ export default function ProfilePage({
 
   const handlePreferencesSave = async (event: FormEvent) => {
     event.preventDefault();
+    setPreferencesMessage(null);
+    setPreferencesMessageTone("success");
     setTheme(preferencesTheme);
     if (!isS3Session) {
       try {
@@ -827,8 +830,9 @@ export default function ProfilePage({
         persistStoredUser({ uiLanguage: updated.ui_language ?? null });
       } catch (error) {
         console.error(error);
-      setPreferencesMessage(getErrorMessage(error, "Unable to save language preference."));
-      return;
+        setPreferencesMessageTone("error");
+        setPreferencesMessage(getErrorMessage(error, "Unable to save language preference."));
+        return;
       }
     } else {
       setLanguagePreference(preferencesLanguage);
@@ -841,6 +845,7 @@ export default function ProfilePage({
     writeSelectorTagsPreference(preferencesShowSelectorTags);
     setPreferencesInitialSignature(preferencesCurrentSignature);
     setPreferencesTouched(false);
+    setPreferencesMessageTone("success");
     setPreferencesMessage("Preferences saved.");
   };
 
@@ -1247,9 +1252,7 @@ export default function ProfilePage({
                 Temporary S3 session: user profile is not editable.
               </p>
             )}
-            {profileMessage && (
-              <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-300">{profileMessage}</p>
-            )}
+            {profileMessage && <UiInlineMessage tone="success">{profileMessage}</UiInlineMessage>}
             <div>
               <button type="submit" disabled={profileSaving || isS3Session} className={primaryButtonClasses}>
                 {profileSaving ? "Saving..." : "Save profile"}
@@ -1428,9 +1431,7 @@ export default function ProfilePage({
                 )}
               </div>
             )}
-            {preferencesMessage && (
-              <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-300">{preferencesMessage}</p>
-            )}
+            {preferencesMessage && <UiInlineMessage tone={preferencesMessageTone}>{preferencesMessage}</UiInlineMessage>}
             <div>
               <button type="submit" className={primaryButtonClasses}>
                 Save preferences

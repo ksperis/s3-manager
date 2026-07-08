@@ -403,6 +403,25 @@ describe("ProfilePage live validation", () => {
     await waitFor(() => {
       expect(localStorage.getItem(SELECTOR_TAGS_PREFERENCE_KEY)).toBe("1");
     });
+    expect(screen.getByText("Preferences saved.")).toHaveClass("border-emerald-200");
+  });
+
+  it("shows preference save failures with the shared error message treatment", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    updateCurrentUserMock.mockRejectedValueOnce(new Error("Language save failed"));
+
+    try {
+      render(<ProfilePage showPageHeader={false} showConnectionsSection={false} />);
+
+      await screen.findByText("Preferences");
+      fireEvent.click(screen.getByRole("button", { name: "Save preferences" }));
+
+      const errorMessage = await screen.findByText("Unable to save language preference.");
+      expect(errorMessage).toHaveClass("border-rose-200");
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it("renders private connection tags and includes them in the filter", async () => {
