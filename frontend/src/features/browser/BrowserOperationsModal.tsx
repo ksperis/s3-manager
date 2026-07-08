@@ -14,6 +14,7 @@ import {
   operationStopClasses,
 } from "./browserConstants";
 import { DownloadIcon } from "./browserIcons";
+import { buildOperationStatusPill, operationCompletionLabel } from "./browserOperationStatus";
 import { formatBadgeCount } from "./browserUtils";
 import type {
   CopyDetailItem,
@@ -135,7 +136,6 @@ function OperationCard({ title, subtitle, summary, progress, statusPill, actions
 
 export default function BrowserOperationsModal(props: BrowserOperationsModalProps) {
   const {
-    totalOperationsCount,
     activeOperationsCount,
     queuedOperationsCount,
     completedOperationsCount,
@@ -185,29 +185,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleCopyGroups.length > 0 ||
     visibleOtherOperations.length > 0;
 
-  const statusClasses = (status: OperationItem["status"]) => {
-    if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-    if (status === "downloading") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-    if (status === "copying") return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
-    return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-  };
-
-  const completionLabel = (status?: OperationItem["completionStatus"]) => {
-    if (status === "failed") return "Failed";
-    if (status === "cancelled") return "Cancelled";
-    return "Completed";
-  };
-
-  const completionClasses = (status?: OperationItem["completionStatus"]) => {
-    if (status === "failed") {
-      return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-    }
-    if (status === "cancelled") {
-      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-    }
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-  };
-  const queuedPillClasses = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
   const failedFilterChipActiveClasses =
     "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/50 dark:bg-rose-900/30 dark:text-rose-100";
   const failedBadgeClasses = `${countBadgeClasses} ${showFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""}`;
@@ -234,28 +211,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
       Download details (JSON)
     </button>
   );
-
-  const buildStatusPill = (options: {
-    hasFailed: boolean;
-    isCompleted: boolean;
-    queuedOnly: boolean;
-    status: OperationItem["status"];
-    completionStatus?: OperationItem["completionStatus"];
-  }) => {
-    if (options.hasFailed) {
-      return { label: completionLabel("failed"), classes: completionClasses("failed") };
-    }
-    if (options.isCompleted) {
-      return {
-        label: completionLabel(options.completionStatus),
-        classes: completionClasses(options.completionStatus),
-      };
-    }
-    if (options.queuedOnly) {
-      return { label: "Queued", classes: queuedPillClasses };
-    }
-    return { label: "In progress", classes: statusClasses(options.status) };
-  };
 
   const timelineEntries = useMemo(() => {
     const entries = [
@@ -331,7 +286,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
     const isCompleted = Boolean(group.op.completedAt);
     const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
-    const statusPill = buildStatusPill({
+    const statusPill = buildOperationStatusPill({
       hasFailed,
       isCompleted,
       queuedOnly,
@@ -501,7 +456,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
     const isCompleted = Boolean(group.op.completedAt);
     const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
-    const statusPill = buildStatusPill({
+    const statusPill = buildOperationStatusPill({
       hasFailed,
       isCompleted,
       queuedOnly,
@@ -661,7 +616,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
     const isCompleted = Boolean(group.op.completedAt);
     const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
-    const statusPill = buildStatusPill({
+    const statusPill = buildOperationStatusPill({
       hasFailed,
       isCompleted,
       queuedOnly,
@@ -829,7 +784,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const hasFailed = failedCount > 0;
     const isCompleted = activeCount === 0 && queuedCount === 0 && group.completedItems.length > 0;
     const queuedOnly = activeCount === 0 && queuedCount > 0;
-    const statusPill = buildStatusPill({
+    const statusPill = buildOperationStatusPill({
       hasFailed,
       isCompleted,
       queuedOnly,
@@ -907,7 +862,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
                   {item.itemLabel ?? item.path}
                 </p>
                 <p className="ui-caption text-slate-400">
-                  {completionLabel(item.completionStatus)}
+                  {operationCompletionLabel(item.completionStatus)}
                   {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                 </p>
               </div>
@@ -978,7 +933,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const renderOtherOperation = (op: OperationItem) => {
     const isCompleted = Boolean(op.completedAt);
     const hasFailed = op.completionStatus === "failed";
-    const statusPill = buildStatusPill({
+    const statusPill = buildOperationStatusPill({
       hasFailed,
       isCompleted,
       queuedOnly: false,
@@ -986,7 +941,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
       completionStatus: op.completionStatus,
     });
     const summary = isCompleted
-      ? `${completionLabel(op.completionStatus)}${op.completedAt ? ` · ${op.completedAt}` : ""}`
+      ? `${operationCompletionLabel(op.completionStatus)}${op.completedAt ? ` · ${op.completedAt}` : ""}`
       : `${op.progress > 0 ? `${op.progress}%` : "In progress"}`;
     const actions = (
       <>

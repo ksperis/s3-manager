@@ -11,6 +11,7 @@ import {
   operationStopClasses,
 } from "./browserConstants";
 import { ChevronDownIcon, DownloadIcon, InfoIcon, XIcon } from "./browserIcons";
+import { buildOperationStatusPill, operationCompletionLabel } from "./browserOperationStatus";
 import { formatBadgeCount } from "./browserUtils";
 import type {
   CopyDetailItem,
@@ -95,50 +96,6 @@ type OperationRowProps = {
   actionLabel?: "Stop" | "Stop all";
   onAction?: () => void;
 };
-
-function statusClasses(status: OperationItem["status"]) {
-  if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-  if (status === "downloading") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-  if (status === "copying") return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
-  return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-}
-
-function completionLabel(status?: OperationItem["completionStatus"]) {
-  if (status === "failed") return "Failed";
-  if (status === "cancelled") return "Cancelled";
-  return "Completed";
-}
-
-function completionClasses(status?: OperationItem["completionStatus"]) {
-  if (status === "failed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-  if (status === "cancelled") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-  return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-}
-
-function buildStatus(options: {
-  hasFailed: boolean;
-  isCompleted: boolean;
-  queuedOnly: boolean;
-  status: OperationItem["status"];
-  completionStatus?: OperationItem["completionStatus"];
-}) {
-  if (options.hasFailed) {
-    return { label: "Failed", classes: completionClasses("failed") };
-  }
-  if (options.isCompleted) {
-    return {
-      label: completionLabel(options.completionStatus),
-      classes: completionClasses(options.completionStatus),
-    };
-  }
-  if (options.queuedOnly) {
-    return {
-      label: "Queued",
-      classes: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-    };
-  }
-  return { label: "In progress", classes: statusClasses(options.status) };
-}
 
 function OperationRow({
   title,
@@ -273,7 +230,7 @@ export default function BrowserOperationsPanel({
       const failedCount = group.completedItems.filter((item) => item.completionStatus === "failed").length;
       const completedCount = group.completedItems.length - failedCount;
       const isCompleted = activeCount === 0 && queuedCount === 0 && group.completedItems.length > 0;
-      const status = buildStatus({
+      const status = buildOperationStatusPill({
         hasFailed: failedCount > 0,
         isCompleted,
         queuedOnly: activeCount === 0 && queuedCount > 0,
@@ -297,7 +254,7 @@ export default function BrowserOperationsPanel({
     if (entry.type === "other") {
       const { op } = entry;
       const isCompleted = Boolean(op.completedAt);
-      const status = buildStatus({
+      const status = buildOperationStatusPill({
         hasFailed: op.completionStatus === "failed",
         isCompleted,
         queuedOnly: false,
@@ -308,7 +265,7 @@ export default function BrowserOperationsPanel({
         <OperationRow
           title={op.label}
           subtitle={op.path}
-          summary={isCompleted ? completionLabel(op.completionStatus) : `${op.progress}%`}
+          summary={isCompleted ? operationCompletionLabel(op.completionStatus) : `${op.progress}%`}
           progress={op.progress}
           statusLabel={status.label}
           statusClasses={status.classes}
@@ -329,7 +286,7 @@ export default function BrowserOperationsPanel({
     const completedCount = group.items.filter((item) => item.status === "done" || item.status === "cancelled").length;
     const failedCount = group.items.filter((item) => item.status === "failed").length;
     const isCompleted = Boolean(group.op.completedAt);
-    const status = buildStatus({
+    const status = buildOperationStatusPill({
       hasFailed: failedCount > 0 || group.op.completionStatus === "failed",
       isCompleted,
       queuedOnly: !isCompleted && activeCount === 0 && queuedCount > 0,
