@@ -55,5 +55,10 @@ describe("AuditLogsPage", () => {
     expect(within(table).getByText("users.update").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("admin@example.com").closest("td")).toHaveAttribute("data-label", "Actor");
     expect(within(table).getByText("Success").closest("td")).toHaveAttribute("data-label", "Status");
+    expect(screen.getByRole("searchbox", { name: "Search audit logs" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter by action" })).toHaveValue("all");
+    expect(screen.getByRole("combobox", { name: "Filter by status" })).toHaveValue("all");
+    expect(screen.getByRole("combobox", { name: "Filter by actor role" })).toHaveValue("all");
+    expect(screen.getByRole("combobox", { name: "Filter by workspace scope" })).toHaveValue("all");
   });
 });

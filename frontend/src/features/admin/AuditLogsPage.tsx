@@ -12,8 +12,9 @@ import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiBadge from "../../components/ui/UiBadge";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import { extractApiError } from "../../utils/apiError";
-import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
 type RoleFilter = "all" | "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
 type ScopeFilter = "all" | "admin" | "manager" | "portal";
@@ -209,17 +210,20 @@ export default function AuditLogsPage() {
   const filters = useMemo(
     () => (
       <div className="flex flex-wrap items-center gap-3">
-        <input
+        <UiInput
+          aria-label="Search audit logs"
           type="search"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search by actor, action, target, or message"
-          className={`${toolbarCompactInputClasses} min-w-[220px] flex-1`}
+          fieldClassName="min-w-[220px] flex-1"
+          size="compact"
         />
-        <select
+        <UiSelect
+          aria-label="Filter by action"
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className={toolbarCompactSelectClasses}
+          size="compact"
         >
           <option value="all">All actions</option>
           {actionOptions.map((action) => (
@@ -227,11 +231,12 @@ export default function AuditLogsPage() {
               {action}
             </option>
           ))}
-        </select>
-        <select
+        </UiSelect>
+        <UiSelect
+          aria-label="Filter by status"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className={toolbarCompactSelectClasses}
+          size="compact"
         >
           <option value="all">All statuses</option>
           {statusOptions.map((status) => (
@@ -239,29 +244,31 @@ export default function AuditLogsPage() {
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </option>
           ))}
-        </select>
-        <select
+        </UiSelect>
+        <UiSelect
+          aria-label="Filter by actor role"
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-          className={toolbarCompactSelectClasses}
+          size="compact"
         >
           {Object.entries(roleLabels).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
-        </select>
-        <select
+        </UiSelect>
+        <UiSelect
+          aria-label="Filter by workspace scope"
           value={scopeFilter}
           onChange={(e) => setScopeFilter(e.target.value as ScopeFilter)}
-          className={toolbarCompactSelectClasses}
+          size="compact"
         >
           {Object.entries(scopeLabels).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
-        </select>
+        </UiSelect>
       </div>
     ),
     [actionFilter, actionOptions, roleFilter, scopeFilter, searchTerm, statusFilter, statusOptions]
