@@ -48,6 +48,32 @@ export const adminAssociationAccountOptionRowClass = (selected: boolean) =>
     selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
   }`;
 
+type AdminAssociationAdminCheckboxProps = {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label?: ReactNode;
+  className?: string;
+};
+
+export function AdminAssociationAdminCheckbox({
+  checked,
+  onCheckedChange,
+  label = "Admin",
+  className = adminAssociationAdminLabelClass,
+}: AdminAssociationAdminCheckboxProps) {
+  return (
+    <label className={className}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onCheckedChange(event.target.checked)}
+        className={adminAssociationCheckboxClass}
+      />
+      {label}
+    </label>
+  );
+}
+
 type AdminAssociationSectionHeaderProps = {
   title: ReactNode;
   countLabel: ReactNode;

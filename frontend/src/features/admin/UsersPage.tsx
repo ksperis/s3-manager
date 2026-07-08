@@ -59,8 +59,8 @@ import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/w
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
+  AdminAssociationAdminCheckbox,
   adminAssociationAccountOptionRowClass,
-  adminAssociationAdminLabelClass,
   adminAssociationAddPanelClass,
   adminAssociationCheckboxClass,
   adminAssociationCompactInputClass,
@@ -287,21 +287,16 @@ const AssociationsTabs = ({
                             <tr key={entry.id}>
                               <td className={adminAssociationTableLabelCellClass}>{label}</td>
                               <td className={adminAssociationTableControlCellClass}>
-                                <label className={adminAssociationAdminLabelClass}>
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(entry.account_admin)}
-                                    onChange={(e) =>
-                                      accounts.setSelected((prev) =>
-                                        prev.map((item) =>
-                                          item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
-                                        )
+                                <AdminAssociationAdminCheckbox
+                                  checked={Boolean(entry.account_admin)}
+                                  onCheckedChange={(checked) =>
+                                    accounts.setSelected((prev) =>
+                                      prev.map((item) =>
+                                        item.id === entry.id ? { ...item, account_admin: checked } : item
                                       )
-                                    }
-                                    className={adminAssociationCheckboxClass}
-                                  />
-                                  Admin
-                                </label>
+                                    )
+                                  }
+                                />
                               </td>
                               {showPortalRole && (
                                 <td className={adminAssociationTableControlCellClass}>
@@ -392,20 +387,15 @@ const AssociationsTabs = ({
                               <span>{opt.label}</span>
                             </label>
                             <div className="flex items-center gap-2">
-                              <label className={adminAssociationAdminLabelClass}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(adminChecked)}
-                                  onChange={(e) =>
-                                    accounts.setAdminChoice((prev) => ({
-                                      ...prev,
-                                      [accountId]: e.target.checked,
-                                    }))
-                                  }
-                                  className={adminAssociationCheckboxClass}
-                                />
-                                Admin
-                              </label>
+                              <AdminAssociationAdminCheckbox
+                                checked={Boolean(adminChecked)}
+                                onCheckedChange={(checked) =>
+                                  accounts.setAdminChoice((prev) => ({
+                                    ...prev,
+                                    [accountId]: checked,
+                                  }))
+                                }
+                              />
                             </div>
                           </div>
                         );

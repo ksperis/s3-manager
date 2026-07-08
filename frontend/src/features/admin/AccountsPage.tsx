@@ -49,10 +49,10 @@ import AssociationSummary, {
 } from "./AssociationSummary";
 import AdminModalTabs from "./AdminModalTabs";
 import {
+  AdminAssociationAdminCheckbox,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   adminAssociationAccountOptionRowClass,
-  adminAssociationAdminLabelClass,
   adminAssociationCheckboxClass,
   adminAssociationOptionLabelClass,
   adminAssociationTableClass as associationTableClass,
@@ -1728,22 +1728,17 @@ export default function S3AccountsPage() {
                             <tr key={u.id}>
                               <td className={adminAssociationTableLabelCellClass}>{u.label}</td>
                               <td className={adminAssociationTableControlCellClass}>
-                                <label className={adminAssociationAdminLabelClass}>
-                                  <input
-                                    type="checkbox"
-                                    checked={u.account_admin}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        user_links: prev.user_links.map((link) =>
-                                          link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
-                                        ),
-                                      }))
-                                    }
-                                    className={adminAssociationCheckboxClass}
-                                  />
-                                  Admin
-                                </label>
+                                <AdminAssociationAdminCheckbox
+                                  checked={u.account_admin}
+                                  onCheckedChange={(checked) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      user_links: prev.user_links.map((link) =>
+                                        link.user_id === u.id ? { ...link, account_admin: checked } : link
+                                      ),
+                                    }))
+                                  }
+                                />
                               </td>
                               {portalEnabled && (
                                 <td className={adminAssociationTableControlCellClass}>
@@ -1843,20 +1838,15 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{u.label}</span>
                               </label>
-                              <label className={adminAssociationAdminLabelClass}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(adminChecked)}
-                                  onChange={(e) =>
-                                    setUserAdminChoice((prev) => ({
-                                      ...prev,
-                                      [u.id]: e.target.checked,
-                                    }))
-                                  }
-                                  className={adminAssociationCheckboxClass}
-                                />
-                                Admin
-                              </label>
+                              <AdminAssociationAdminCheckbox
+                                checked={Boolean(adminChecked)}
+                                onCheckedChange={(checked) =>
+                                  setUserAdminChoice((prev) => ({
+                                    ...prev,
+                                    [u.id]: checked,
+                                  }))
+                                }
+                              />
                             </div>
                           );
                         })}
@@ -1909,22 +1899,17 @@ export default function S3AccountsPage() {
                             <tr key={group.id}>
                               <td className={adminAssociationTableLabelCellClass}>{group.label}</td>
                               <td className={adminAssociationTableControlCellClass}>
-                                <label className={adminAssociationAdminLabelClass}>
-                                  <input
-                                    type="checkbox"
-                                    checked={group.account_admin}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        group_links: prev.group_links.map((link) =>
-                                          link.group_id === group.id ? { ...link, account_admin: e.target.checked } : link
-                                        ),
-                                      }))
-                                    }
-                                    className={adminAssociationCheckboxClass}
-                                  />
-                                  Admin
-                                </label>
+                                <AdminAssociationAdminCheckbox
+                                  checked={group.account_admin}
+                                  onCheckedChange={(checked) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      group_links: prev.group_links.map((link) =>
+                                        link.group_id === group.id ? { ...link, account_admin: checked } : link
+                                      ),
+                                    }))
+                                  }
+                                />
                               </td>
                               {portalEnabled && (
                                 <td className={adminAssociationTableControlCellClass}>
@@ -2024,20 +2009,15 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{group.name}</span>
                               </label>
-                              <label className={adminAssociationAdminLabelClass}>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(adminChecked)}
-                                  onChange={(e) =>
-                                    setGroupAdminChoice((prev) => ({
-                                      ...prev,
-                                      [group.id]: e.target.checked,
-                                    }))
-                                  }
-                                  className={adminAssociationCheckboxClass}
-                                />
-                                Admin
-                              </label>
+                              <AdminAssociationAdminCheckbox
+                                checked={Boolean(adminChecked)}
+                                onCheckedChange={(checked) =>
+                                  setGroupAdminChoice((prev) => ({
+                                    ...prev,
+                                    [group.id]: checked,
+                                  }))
+                                }
+                              />
                             </div>
                           );
                         })}
