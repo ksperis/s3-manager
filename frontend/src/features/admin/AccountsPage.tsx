@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass } from "../../components/ui/styles";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -2355,21 +2355,9 @@ export default function S3AccountsPage() {
               onChange={handleFilterChange}
               placeholder="Search by name, RGW ID, group, or tag"
               className="w-full sm:w-64 md:w-72"
-              inputClassName={cx(
-                "pr-9",
-                quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""
-              )}
-              trailingControl={
-                <button
-                  type="button"
-                  onClick={toggleQuickFilterMode}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                  title={`Filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
-                  aria-label="Toggle filter match mode"
-                >
-                  {quickFilterMode === "contains" ? "~" : "="}
-                </button>
-              }
+              active={quickFilterActive}
+              matchMode={quickFilterMode}
+              onToggleMatchMode={toggleQuickFilterMode}
             />
           }
           secondaryContent={
