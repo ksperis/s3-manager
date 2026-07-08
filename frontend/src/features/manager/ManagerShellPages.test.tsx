@@ -1235,6 +1235,12 @@ describe("manager shell pages", () => {
     );
 
     expect(await screen.findByText("bucket-responsive")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Search by name");
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "missing" } });
+    expect(screen.queryByText("bucket-responsive")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "responsive" } });
+    expect(screen.getByText("bucket-responsive")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("bucket-responsive").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("1.0 KB").closest("td")).toHaveAttribute("data-label", "Used");

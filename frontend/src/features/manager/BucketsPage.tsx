@@ -36,7 +36,7 @@ import ManagerTable, { type ManagerTableColumn } from "../../components/list/Man
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiMeterBar from "../../components/ui/UiMeterBar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { toolbarCompactButtonClasses } from "../../components/toolbarControlClasses";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
@@ -65,6 +65,7 @@ import {
   buildVersioningSummaryLines,
   buildWebsiteSummaryLines,
 } from "../shared/bucketFeatureSummaries";
+import ManagerToolbarSearch from "./ManagerToolbarSearch";
 
 type BucketForm = {
   name: string;
@@ -964,18 +965,12 @@ export default function BucketsPage() {
             showHeading={false}
             countLabel={`${filteredBuckets.length} bucket(s)`}
             search={
-              <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Search
-                </span>
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Search by name"
-                  className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
-                />
-              </div>
+              <ManagerToolbarSearch
+                value={filter}
+                onChange={setFilter}
+                placeholder="Search by name"
+                className="w-full sm:w-64 md:w-72"
+              />
             }
             columns={
               <>
