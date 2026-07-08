@@ -23,6 +23,7 @@ import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styl
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatCompactNumber, formatNumber } from "../../utils/format";
+import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
 
 export type BucketPurgeUiTarget = {
   bucketName: string;
@@ -379,31 +380,15 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
         {result && (
           <div className="space-y-3">
             <div className={`grid gap-2 ${isDeleteMode ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Objects deleted</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.deleted_objects)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Versions/delete markers deleted</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.deleted_versions)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Buckets completed</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
-                  {formatNumber(result.completed_buckets)} / {formatNumber(result.total_buckets)}
-                </p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Errors</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.failed_count)}</p>
-              </div>
+              <BucketOperationSummaryStat label="Objects deleted" value={formatNumber(result.deleted_objects)} />
+              <BucketOperationSummaryStat label="Versions/delete markers deleted" value={formatNumber(result.deleted_versions)} />
+              <BucketOperationSummaryStat
+                label="Buckets completed"
+                value={`${formatNumber(result.completed_buckets)} / ${formatNumber(result.total_buckets)}`}
+              />
+              <BucketOperationSummaryStat label="Errors" value={formatNumber(result.failed_count)} />
               {isDeleteMode && (
-                <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Bucket</p>
-                  <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
-                    {result.bucket_deleted ? "Deleted" : "Not deleted"}
-                  </p>
-                </div>
+                <BucketOperationSummaryStat label="Bucket" value={result.bucket_deleted ? "Deleted" : "Not deleted"} />
               )}
             </div>
 

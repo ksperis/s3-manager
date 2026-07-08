@@ -18,6 +18,15 @@ import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import {
+  BucketOperationSummaryStat,
+  bucketOperationTableBodyClass,
+  bucketOperationTableClass,
+  bucketOperationTableContainerClass,
+  bucketOperationTableHeadClass,
+  bucketOperationTableHeaderClass,
+  bucketOperationTableHeaderRightClass,
+} from "./bucketOperationRunUi";
 
 export type BucketUsageStatsUiTarget = {
   bucketName: string;
@@ -218,35 +227,23 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
         {result && (
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-4">
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Versions listed</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatCompactNumber(result.listed_versions)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Logical bytes</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatBytes(result.total_bytes)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Delete markers</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatCompactNumber(result.listed_delete_markers)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Failed buckets</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatCompactNumber(result.failed_buckets)}</p>
-              </div>
+              <BucketOperationSummaryStat label="Versions listed" value={formatCompactNumber(result.listed_versions)} />
+              <BucketOperationSummaryStat label="Logical bytes" value={formatBytes(result.total_bytes)} />
+              <BucketOperationSummaryStat label="Delete markers" value={formatCompactNumber(result.listed_delete_markers)} />
+              <BucketOperationSummaryStat label="Failed buckets" value={formatCompactNumber(result.failed_buckets)} />
             </div>
-            <div className="max-h-96 overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-              <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                <thead className="bg-slate-50 dark:bg-slate-900/60">
+            <div className={bucketOperationTableContainerClass}>
+              <table className={bucketOperationTableClass}>
+                <thead className={bucketOperationTableHeadClass}>
                   <tr>
-                    <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500">Bucket</th>
-                    <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                    <th className="px-4 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500">Bytes</th>
-                    <th className="px-4 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500">Versions</th>
-                    <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500">Notes</th>
+                    <th className={bucketOperationTableHeaderClass}>Bucket</th>
+                    <th className={bucketOperationTableHeaderClass}>Status</th>
+                    <th className={bucketOperationTableHeaderRightClass}>Bytes</th>
+                    <th className={bucketOperationTableHeaderRightClass}>Versions</th>
+                    <th className={bucketOperationTableHeaderClass}>Notes</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className={bucketOperationTableBodyClass}>
                   {result.buckets.map((bucket) => (
                     <tr key={`${bucket.context_id ?? ""}:${bucket.bucket_name}`}>
                       <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">{bucket.bucket_name}</td>

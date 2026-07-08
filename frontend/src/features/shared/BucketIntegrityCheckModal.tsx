@@ -22,6 +22,7 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
+import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
 
 export type BucketIntegrityUiTarget = {
   bucketName: string;
@@ -358,22 +359,10 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
         {result && (
           <div className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-4">
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Objects listed</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.listed_count)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Objects checked</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.checked_count)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Errors</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatNumber(result.failed_count)}</p>
-              </div>
-              <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Bytes read</p>
-                <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{formatBytes(result.bytes_read)}</p>
-              </div>
+              <BucketOperationSummaryStat label="Objects listed" value={formatNumber(result.listed_count)} />
+              <BucketOperationSummaryStat label="Objects checked" value={formatNumber(result.checked_count)} />
+              <BucketOperationSummaryStat label="Errors" value={formatNumber(result.failed_count)} />
+              <BucketOperationSummaryStat label="Bytes read" value={formatBytes(result.bytes_read)} />
             </div>
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
               <input
