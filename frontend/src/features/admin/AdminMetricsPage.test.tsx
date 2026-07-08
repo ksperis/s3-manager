@@ -206,6 +206,9 @@ describe("AdminMetricsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("No Ceph endpoint available for metrics")).toBeInTheDocument();
     });
+    expect(screen.getByRole("combobox", { name: "Ceph endpoint" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Ceph endpoint" })).toBeDisabled();
+    expect(screen.getByText("Only Ceph endpoints are eligible for this page.")).toBeInTheDocument();
   });
 
   it("keeps disabled storage metrics inside the storage snapshot card", async () => {
@@ -240,6 +243,7 @@ describe("AdminMetricsPage", () => {
 
     const storageCard = (await screen.findByText("Storage snapshot")).closest("section");
 
+    expect(screen.getByRole("combobox", { name: "Ceph endpoint" })).toHaveValue("7");
     expect(storageCard).not.toBeNull();
     expect(storageCard).toHaveClass("ui-surface-card");
     expect(storageCard).not.toHaveClass("rounded-2xl");
@@ -257,7 +261,7 @@ describe("AdminMetricsPage", () => {
 
     expect(await screen.findByText("Storage breakdown")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
-    const usageComposition = await screen.findByText("Managed accounts usage composition");
+    expect(await screen.findByText("Managed accounts usage composition")).toBeInTheDocument();
     expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
     expect(screen.getByText("2 / 3 buckets covered")).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.textContent?.startsWith("2 / 2 managed accounts listed") ?? false)).toBeInTheDocument();

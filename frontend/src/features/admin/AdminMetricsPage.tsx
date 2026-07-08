@@ -32,7 +32,7 @@ import PageTabs from "../../components/PageTabs";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
-import { toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
@@ -333,15 +333,14 @@ export default function AdminMetricsPage() {
         description="Choose the Ceph endpoint used for storage and traffic analytics."
         controls={
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Ceph endpoint</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">Only Ceph endpoints are eligible for this page.</p>
-            </div>
-            <select
-              className={toolbarCompactSelectClasses}
+            <UiSelect
+              label="Ceph endpoint"
+              hint="Only Ceph endpoints are eligible for this page."
               value={selectedEndpointId ?? ""}
               onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
               disabled={endpointLoading || endpoints.length === 0}
+              fieldClassName="md:min-w-72"
+              size="compact"
             >
               {endpointLoading && <option value="">Loading...</option>}
               {!endpointLoading && endpoints.length === 0 && <option value="">No Ceph endpoint</option>}
@@ -351,7 +350,7 @@ export default function AdminMetricsPage() {
                     {endpoint.is_default ? `${endpoint.name} (default)` : endpoint.name}
                   </option>
                 ))}
-            </select>
+            </UiSelect>
           </div>
         }
         items={[
