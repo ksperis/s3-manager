@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import Modal from "../../components/Modal";
+import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import type { CephAdminBucketConfigBackupFeature } from "../../api/cephAdmin";
@@ -108,22 +109,16 @@ export default function BucketConfigBackupModal({
         </div>
         {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-            disabled={loading}
-          >
+          <UiButton type="button" variant="secondary" onClick={onClose} disabled={loading}>
             Cancel
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             type="button"
             onClick={() => void submit()}
-            className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading || selectedFeatures.length === 0}
           >
             {loading ? "Preparing..." : "Download JSON"}
-          </button>
+          </UiButton>
         </div>
       </div>
     </Modal>
