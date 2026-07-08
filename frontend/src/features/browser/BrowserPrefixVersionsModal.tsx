@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import Modal from "../../components/Modal";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
@@ -149,7 +150,7 @@ export default function BrowserPrefixVersionsModal({
             </button>
           </div>
         </div>
-        {prefixVersionsError && <div className="ui-caption text-rose-600 dark:text-rose-200">{prefixVersionsError}</div>}
+        {prefixVersionsError && <UiInlineMessage tone="error">{prefixVersionsError}</UiInlineMessage>}
         <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
