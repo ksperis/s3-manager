@@ -118,7 +118,9 @@ describe("S3ConnectionsPage live validation", () => {
     await waitFor(() => {
       expect(validateAdminS3ConnectionCredentialsMock).toHaveBeenCalledTimes(1);
     }, { timeout: 3000 });
-    expect(await screen.findByText("Invalid S3 credentials.")).toBeInTheDocument();
+    const validationError = await screen.findByText("Invalid S3 credentials.");
+    expect(validationError).toBeInTheDocument();
+    expect(validationError).toHaveClass("border-rose-200");
     expect(createButton).toBeEnabled();
   });
 

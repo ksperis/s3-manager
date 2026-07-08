@@ -63,6 +63,7 @@ import {
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
+import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 
@@ -1227,24 +1228,7 @@ export default function S3ConnectionsPage() {
                 required
               />
             </div>
-            {createCredentialsValidation.status === "loading" && (
-              <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
-                Validating credentials...
-              </div>
-            )}
-            {createCredentialsValidation.status === "done" && createCredentialsValidation.result && (
-              <div
-                className={`rounded-md px-3 py-2 ui-caption ${
-                  createCredentialsValidation.result.severity === "success"
-                    ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
-                    : createCredentialsValidation.result.severity === "warning"
-                      ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
-                      : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
-                }`}
-              >
-                {createCredentialsValidation.result.message}
-              </div>
-            )}
+            <S3CredentialsValidationMessage validation={createCredentialsValidation} />
               </>
             <div className="flex items-center justify-end gap-3">
               <UiButton variant="secondary" onClick={createCloseGuard.requestClose} disabled={creating}>
