@@ -32,12 +32,12 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
+import ManagerToolbarSearch from "./ManagerToolbarSearch";
 
 const DEFAULT_ASSUME_ROLE_DOCUMENT = JSON.stringify(
   {
@@ -524,12 +524,10 @@ export default function ManagerRolesPage() {
             showHeading={false}
             countLabel={`${filteredRoles.length} result(s)`}
             search={
-              <input
-                type="text"
+              <ManagerToolbarSearch
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
+                onChange={setRoleFilter}
                 placeholder="Search by name, path, or ARN"
-                className={`${toolbarCompactInputClasses} w-full sm:w-72`}
               />
             }
           />

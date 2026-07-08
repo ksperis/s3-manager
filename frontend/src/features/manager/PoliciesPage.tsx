@@ -18,9 +18,9 @@ import ManagerTable, {
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
+import ManagerToolbarSearch from "./ManagerToolbarSearch";
 
 const DEFAULT_POLICY_DOCUMENT = JSON.stringify(
   {
@@ -181,12 +181,10 @@ export default function PoliciesPage() {
             showHeading={false}
             countLabel={`${filteredPolicies.length} result(s)`}
             search={
-              <input
-                type="text"
+              <ManagerToolbarSearch
                 value={policyFilter}
-                onChange={(e) => setPolicyFilter(e.target.value)}
+                onChange={setPolicyFilter}
                 placeholder="Search by name or ARN"
-                className={`${toolbarCompactInputClasses} w-full sm:w-72`}
               />
             }
           />

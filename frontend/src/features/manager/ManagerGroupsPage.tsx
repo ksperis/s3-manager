@@ -23,13 +23,13 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
+import ManagerToolbarSearch from "./ManagerToolbarSearch";
 
 const groupTableColumns: ManagerTableColumn[] = [
   { key: "name", label: "Name", mobileRole: "primary" },
@@ -363,12 +363,10 @@ export default function ManagerGroupsPage() {
             showHeading={false}
             countLabel={`${filteredGroups.length} result(s)`}
             search={
-              <input
-                type="text"
+              <ManagerToolbarSearch
                 value={groupFilter}
-                onChange={(e) => setGroupFilter(e.target.value)}
+                onChange={setGroupFilter}
                 placeholder="Search by name or ARN"
-                className={`${toolbarCompactInputClasses} w-full sm:w-72`}
               />
             }
           />

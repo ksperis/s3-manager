@@ -32,7 +32,6 @@ import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard"
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
@@ -42,6 +41,7 @@ import { compareByNullableField, type SortableField } from "../../utils/sortValu
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
+import ManagerToolbarSearch from "./ManagerToolbarSearch";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
@@ -495,12 +495,11 @@ export default function ManagerUsersPage() {
             showHeading={false}
             countLabel={`${filteredUsers.length} result(s)`}
             search={
-              <input
-                type="text"
+              <ManagerToolbarSearch
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                onChange={setFilter}
                 placeholder="Search by name or ARN"
-                className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
+                className="w-full sm:w-64 md:w-72"
               />
             }
           />

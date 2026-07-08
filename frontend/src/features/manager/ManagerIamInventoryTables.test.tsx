@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,6 +93,8 @@ describe("Manager IAM inventory tables", () => {
     renderManagerPage(<ManagerGroupsPage />);
 
     expect(await screen.findByText("operators")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Search by name or ARN");
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("operators").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("arn:aws:iam::acc-1:group/operators").closest("td")).toHaveAttribute("data-label", "ARN");
@@ -118,6 +120,8 @@ describe("Manager IAM inventory tables", () => {
     renderManagerPage(<ManagerRolesPage />);
 
     expect(await screen.findByText("app-reader")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Search by name, path, or ARN");
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("app-reader").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("/application/").closest("td")).toHaveAttribute("data-label", "Path");
@@ -143,6 +147,12 @@ describe("Manager IAM inventory tables", () => {
     renderManagerPage(<PoliciesPage />);
 
     expect(await screen.findByText("ReadOnlyAccess")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Search by name or ARN");
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "missing" } });
+    expect(screen.queryByText("ReadOnlyAccess")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "readonly" } });
+    expect(screen.getByText("ReadOnlyAccess")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("ReadOnlyAccess").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("arn:aws:iam::aws:policy/ReadOnlyAccess").closest("td")).toHaveAttribute("data-label", "ARN");

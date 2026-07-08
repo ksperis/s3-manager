@@ -122,6 +122,12 @@ describe("ManagerUsersPage", () => {
     );
 
     expect(await screen.findByText("alice")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Search by name or ARN");
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "missing" } });
+    expect(screen.queryByText("alice")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "alice" } });
+    expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute("aria-sort", "ascending");
     expect(screen.getByText("alice").closest("td")).toHaveAttribute("data-mobile-primary", "true");
