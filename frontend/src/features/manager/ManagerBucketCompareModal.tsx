@@ -26,6 +26,13 @@ import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
   CompareVisibleKeysCopyFeedback,
+  bucketCompareMappingSourceCellClass,
+  bucketCompareMappingTableBodyClass,
+  bucketCompareMappingTableClass,
+  bucketCompareMappingTableContainerClass,
+  bucketCompareMappingTableHeadClass,
+  bucketCompareMappingTableHeaderClass,
+  bucketCompareMappingTargetCellClass,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
@@ -1129,26 +1136,26 @@ export default function ManagerBucketCompareModal({
                 )}
               </div>
             </details>
-            <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-              <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                <thead className="bg-slate-100 dark:bg-slate-900/60">
+            <div className={bucketCompareMappingTableContainerClass}>
+              <table className={bucketCompareMappingTableClass}>
+                <thead className={bucketCompareMappingTableHeadClass}>
                   <tr>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <th className={bucketCompareMappingTableHeaderClass}>
                       Source
                     </th>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <th className={bucketCompareMappingTableHeaderClass}>
                       Target
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className={bucketCompareMappingTableBodyClass}>
                   {sortedSourceBuckets.map((sourceBucket) => {
                     const rawTarget = parsedRawMapping.mapping.get(sourceBucket);
                     const effectiveTarget = resolvedManualMapping.get(sourceBucket) ?? "";
                     return (
                       <tr key={sourceBucket} className="align-top">
-                        <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
-                        <td className="space-y-1 px-3 py-2">
+                        <td className={bucketCompareMappingSourceCellClass}>{sourceBucket}</td>
+                        <td className={bucketCompareMappingTargetCellClass}>
                           <input
                             type="text"
                             list="bucket-compare-target-options"

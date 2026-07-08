@@ -50,6 +50,16 @@ export const BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS = [
   { key: "tags", label: "Tags" },
 ] as const;
 
+export const bucketCompareMappingTableContainerClass =
+  "max-h-[240px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800";
+export const bucketCompareMappingTableClass = "min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800";
+export const bucketCompareMappingTableHeadClass = "bg-slate-100 dark:bg-slate-900/60";
+export const bucketCompareMappingTableBodyClass = "divide-y divide-slate-200 dark:divide-slate-800";
+export const bucketCompareMappingTableHeaderClass =
+  "px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+export const bucketCompareMappingSourceCellClass = "px-3 py-2 font-semibold text-slate-900 dark:text-slate-100";
+export const bucketCompareMappingTargetCellClass = "space-y-1 px-3 py-2";
+
 export const extractCompareError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
 };
