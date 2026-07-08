@@ -20,6 +20,7 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import AssociationSummary, {
   AccountAssociationChips,
@@ -56,7 +57,6 @@ import PageTabs from "../../components/PageTabs";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
 
@@ -718,21 +718,15 @@ export default function GroupsPage() {
           showHeading={false}
           countLabel={`${totalGroups} entr${totalGroups === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex items-center gap-2">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Search
-              </span>
-              <input
-                type="text"
-                value={filter}
-                onChange={(event) => {
-                  setFilter(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by group, member, account, user, or connection"
-                className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-80`}
-              />
-            </div>
+            <ToolbarSearchInput
+              value={filter}
+              onChange={(value) => {
+                setFilter(value);
+                setPage(1);
+              }}
+              placeholder="Search by group, member, account, user, or connection"
+              className="w-full sm:w-64 md:w-80"
+            />
           }
         />
         <DataTableShell

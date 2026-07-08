@@ -137,6 +137,20 @@ describe("GroupsPage", () => {
     render(<GroupsPage />);
 
     expect(await screen.findByText("production-account")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute(
+      "placeholder",
+      "Search by group, member, account, user, or connection"
+    );
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "ops" } });
+    await waitFor(() => {
+      expect(listGroupsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          search: "ops",
+        })
+      );
+    });
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
     expect(within(table).getByRole("button", { name: "ops-group" }).closest("td")).toHaveAttribute("data-mobile-primary", "true");

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import UiInput from "../../components/ui/UiInput";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 
 type ManagerToolbarSearchProps = {
   value: string;
@@ -18,14 +18,11 @@ export default function ManagerToolbarSearch({
   className = "w-full sm:w-72",
 }: ManagerToolbarSearchProps) {
   return (
-    <UiInput
-      label="Search"
-      type="search"
+    <ToolbarSearchInput
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       placeholder={placeholder}
-      fieldClassName={className}
-      size="compact"
+      className={className}
     />
   );
 }
