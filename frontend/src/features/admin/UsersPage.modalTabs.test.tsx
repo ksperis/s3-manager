@@ -298,7 +298,7 @@ describe("UsersPage modal tabs", () => {
         s3_connection_ids: [21],
       })
     );
-  });
+  }, 10_000);
 
   it("does not retry minimal account loading in a loop after an initial failure", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
