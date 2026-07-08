@@ -5,6 +5,13 @@ from __future__ import annotations
 from ._shared import *
 
 
+COLLABORATOR_TREND_WINDOWS: tuple[tuple[str, str, int], ...] = (
+    ("month", "last 30 days", 28),
+    ("week", "last week", 6),
+    ("day", "yesterday", 1),
+)
+
+
 class PortalSharingMixin:
     def _portal_access_source(self, sources: set[str]) -> str:
         if sources == {"direct"}:
@@ -12,6 +19,128 @@ class PortalSharingMixin:
         if sources == {"group"}:
             return "group"
         return "direct_and_group"
+
+    def _portal_collaborator_source_dates(
+        self,
+        account: S3Account,
+        user_ids: set[int],
+    ) -> dict[int, dict[str, datetime]]:
+        dates_by_user: dict[int, dict[str, datetime]] = {user_id: {} for user_id in user_ids}
+        if not user_ids:
+            return dates_by_user
+
+        direct_rows = (
+            self.db.query(UserS3Account.user_id, UserS3Account.created_at)
+            .filter(
+                UserS3Account.account_id == account.id,
+                UserS3Account.user_id.in_(user_ids),
+                UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
+            )
+            .all()
+        )
+        for user_id, created_at in direct_rows:
+            if created_at is not None:
+                dates_by_user.setdefault(user_id, {})["direct"] = created_at
+
+        group_rows = (
+            self.db.query(User.id, UserUiGroup.created_at, UiGroupS3Account.created_at)
+            .join(UserUiGroup, UserUiGroup.user_id == User.id)
+            .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
+            .filter(
+                User.id.in_(user_ids),
+                UiGroupS3Account.account_id == account.id,
+                UiGroupS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
+            )
+            .all()
+        )
+        for user_id, group_member_at, group_account_at in group_rows:
+            source_dates = [value for value in (group_member_at, group_account_at) if value is not None]
+            if not source_dates:
+                continue
+            effective_at = max(source_dates)
+            current = dates_by_user.setdefault(user_id, {}).get("group")
+            if current is None or effective_at < current:
+                dates_by_user[user_id]["group"] = effective_at
+
+        return dates_by_user
+
+    def _portal_collaborator_member_since(
+        self,
+        target: User,
+        sources: set[str],
+        source_dates: dict[str, datetime] | None,
+    ) -> datetime | None:
+        dated_sources = [source_dates[source] for source in sources if source_dates and source in source_dates]
+        if dated_sources:
+            return min(dated_sources)
+        return target.created_at
+
+    def _portal_collaborator_trend(self, collaborators: list[PortalCollaborator]) -> PortalCollaboratorTrend | None:
+        if not collaborators:
+            return None
+        today = utcnow().date()
+        for window, label, min_age_days in COLLABORATOR_TREND_WINDOWS:
+            cutoff = today - timedelta(days=min_age_days)
+            baseline_count = sum(
+                1
+                for collaborator in collaborators
+                if collaborator.member_since is not None and collaborator.member_since.date() <= cutoff
+            )
+            if baseline_count > 0 or window == "day":
+                return PortalCollaboratorTrend(
+                    window=window,
+                    label=label,
+                    period_start=cutoff.isoformat(),
+                    collaborator_count=baseline_count,
+                )
+        return None
+
+    def _portal_external_access_key_count(self, user: User, access: "AccountAccess") -> int:
+        visible_bucket_names = {
+            space.internal_bucket_name or space.id
+            for space in self.list_storage_spaces(user, access)
+            if space.internal_bucket_name or space.id
+        }
+        if not visible_bucket_names:
+            return 0
+        return (
+            self.db.query(PortalExternalAccessCredential)
+            .filter(
+                PortalExternalAccessCredential.account_id == access.account.id,
+                PortalExternalAccessCredential.bucket_name.in_(visible_bucket_names),
+                PortalExternalAccessCredential.status == "Active",
+                PortalExternalAccessCredential.revoked_at.is_(None),
+            )
+            .count()
+        )
+
+    def list_portal_collaborators(
+        self,
+        user: User,
+        access: "AccountAccess",
+    ) -> PortalCollaboratorsResponse:
+        member_map = self._portal_account_member_map(access.account)
+        source_dates = self._portal_collaborator_source_dates(access.account, set(member_map))
+        collaborators = [
+            PortalCollaborator(
+                user_id=user_id,
+                email=target.email,
+                display_name=target.display_name or target.full_name,
+                account_role=account_role,
+                access_source=self._portal_access_source(sources),
+                member_since=self._portal_collaborator_member_since(target, sources, source_dates.get(user_id)),
+            )
+            for user_id, (target, account_role, sources) in member_map.items()
+        ]
+        collaborators = sorted(collaborators, key=lambda item: item.email.lower())
+        return PortalCollaboratorsResponse(
+            summary=PortalCollaboratorSummary(
+                collaborator_count=len(collaborators),
+                external_access_key_count=self._portal_external_access_key_count(user, access),
+                trend=self._portal_collaborator_trend(collaborators),
+            ),
+            collaborators=collaborators,
+        )
 
     def _storage_space_share_card(
         self,

@@ -8,6 +8,7 @@ import { fetchPortalWorkspaceHealthOverview, type WorkspaceEndpointHealthOvervie
 import {
   fetchPortalActivity,
   fetchPortalAlerts,
+  fetchPortalCollaborators,
   fetchPortalState,
   fetchPortalTransfers,
   listPortalStorageSpaces,
@@ -16,6 +17,7 @@ import {
   fetchPortalUsageTrends,
   type PortalActivityItem,
   type PortalAlert,
+  type PortalCollaboratorsResponse,
   type PortalStorageSpaceSummary,
   type PortalState,
   type PortalTransfer,
@@ -68,6 +70,7 @@ function transferFromApi(item: PortalTransfer, locale: ReturnType<typeof useI18n
     progress: item.progress,
     sizeBytes: item.size_bytes,
     spaceName: item.storage_space_name ?? t({ en: "Workspace", fr: "Espace de travail", de: "Arbeitsbereich" }),
+    startedAt: item.started_at,
     startedLabel: portalTimeAgoLabel(item.started_at, locale, t),
     etaLabel: portalTransferEtaLabel(item.eta_label, t),
     speedLabel: item.speed_label,
@@ -111,6 +114,7 @@ export function usePortalWorkspaceData({
   const [usageTrends, setUsageTrends] = useState<ManagerUsageTrendsResponse | null>(null);
   const [health, setHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [activity, setActivity] = useState<PortalActivityItem[] | null>(null);
+  const [collaborators, setCollaborators] = useState<PortalCollaboratorsResponse | null>(null);
   const [transfers, setTransfers] = useState<PortalTransfer[] | null>(null);
   const [alerts, setAlerts] = useState<PortalAlert[] | null>(null);
   const [localTransfers, setLocalTransfers] = useState<PortalWorkspaceTransfer[]>([]);
@@ -121,6 +125,7 @@ export function usePortalWorkspaceData({
   const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
   const [healthLoading, setHealthLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
   const [transfersLoading, setTransfersLoading] = useState(false);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [stateError, setStateError] = useState<string | null>(null);
@@ -128,6 +133,7 @@ export function usePortalWorkspaceData({
   const [usageError, setUsageError] = useState<string | null>(null);
   const [usageTrendsError, setUsageTrendsError] = useState<string | null>(null);
   const [trafficError, setTrafficError] = useState<string | null>(null);
+  const [collaboratorsError, setCollaboratorsError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const refreshWorkspaceData = useCallback(() => {
     setRefreshToken((token) => token + 1);
@@ -416,6 +422,46 @@ export function usePortalWorkspaceData({
   useEffect(() => {
     let cancelled = false;
     if (!hasAccountContext || !accountIdForApi) {
+      setCollaborators(null);
+      setCollaboratorsLoading(false);
+      setCollaboratorsError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setCollaboratorsLoading(true);
+    setCollaboratorsError(null);
+    fetchPortalCollaborators(accountIdForApi)
+      .then((data) => {
+        if (!cancelled) setCollaborators(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setCollaborators(null);
+          setCollaboratorsError(
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load collaborators.",
+                fr: "Impossible de charger les collaborateurs.",
+                de: "Mitwirkende können nicht geladen werden.",
+              })
+            )
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCollaboratorsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasAccountContext, refreshToken, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!hasAccountContext || !accountIdForApi) {
       setTransfers(null);
       setTransfersLoading(false);
       return () => {
@@ -549,6 +595,7 @@ export function usePortalWorkspaceData({
     usageTrends,
     health,
     healthAlerts,
+    collaborators,
     workspace,
     loading: accountLoading || stateLoading || storageSpacesLoading,
     accountLoading,
@@ -559,6 +606,7 @@ export function usePortalWorkspaceData({
     usageTrendsLoading,
     healthLoading,
     activityLoading,
+    collaboratorsLoading,
     transfersLoading,
     alertsLoading,
     error: accountError ?? stateError ?? storageSpacesError,
@@ -568,6 +616,7 @@ export function usePortalWorkspaceData({
     usageError,
     usageTrendsError,
     trafficError,
+    collaboratorsError,
     refreshWorkspaceData,
   };
 }

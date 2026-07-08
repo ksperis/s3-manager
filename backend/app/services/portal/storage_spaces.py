@@ -315,6 +315,11 @@ class PortalStorageSpacesMixin:
         try:
             self.create_bucket(user, access, bucket_name, portal_settings=portal_settings)
             bucket_created = True
+            self.sync_storage_space_server_access_logging(
+                access.account,
+                bucket_name,
+                portal_settings=portal_settings,
+            )
             metadata = PortalStorageSpaceMetadata(
                 account_id=access.account.id,
                 bucket_name=bucket_name,

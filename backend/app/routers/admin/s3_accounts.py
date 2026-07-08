@@ -28,7 +28,7 @@ from app.services.audit_service import AuditService
 from app.services.portal_service import get_portal_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.tags_service import serialize_tag_summaries
-from app.routers.http_errors import sanitize_error_detail
+from app.routers.http_errors import raise_http_exception_from_exception, sanitize_error_detail
 
 router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
@@ -167,7 +167,10 @@ def update_account_portal_settings(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
     service = get_portal_service(db)
-    updated = service.update_admin_portal_settings_override(account, payload)
+    try:
+        updated = service.update_admin_portal_settings_override(account, payload)
+    except RuntimeError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     audit_service.record_action(
         user=current_user,
         scope="admin",

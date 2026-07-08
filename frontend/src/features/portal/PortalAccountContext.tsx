@@ -89,9 +89,9 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
             extractApiError(
               err,
               t({
-                en: "Unable to load S3 accounts.",
-                fr: "Impossible de charger les comptes S3.",
-                de: "S3-Konten konnen nicht geladen werden.",
+                en: "Unable to load projects.",
+                fr: "Impossible de charger les projets.",
+                de: "Projekte konnen nicht geladen werden.",
               })
             )
           );

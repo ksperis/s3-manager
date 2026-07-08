@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
@@ -16,10 +16,11 @@ import {
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
-import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -27,6 +28,7 @@ import UiInput from "../../components/ui/UiInput";
 import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { formatBytes } from "../../utils/format";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { storageSpacePath } from "./portalWorkspaceModel";
@@ -87,6 +89,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>{label}</dt>
+      <dd className={cx("mt-1 min-w-0 text-sm font-bold", uiTitleTextClass)}>{children}</dd>
+    </div>
+  );
+}
+
 function QuickAction({
   label,
   tone = "blue",
@@ -129,6 +140,7 @@ export default function PortalObjectDetailPage() {
   const [downloading, setDownloading] = useState(false);
   const [objectDetail, setObjectDetail] = useState<PortalStorageObjectDetail | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
+  const [publicLinkDialogOpen, setPublicLinkDialogOpen] = useState(false);
   const [linkExpiration, setLinkExpiration] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -169,7 +181,7 @@ export default function PortalObjectDetailPage() {
         if (!cancelled) {
           setObjectDetail(null);
           setPublicLinks([]);
-          setObjectError(extractApiError(err, t({ en: "Unable to load file metadata.", fr: "Impossible de charger les métadonnées du fichier.", de: "Dateimetadaten können nicht geladen werden." })));
+          setObjectError(extractApiError(err, t({ en: "Unable to load file details.", fr: "Impossible de charger les détails du fichier.", de: "Dateidetails können nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -203,7 +215,7 @@ export default function PortalObjectDetailPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading file...", fr: "Chargement du fichier...", de: "Datei wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this file.", fr: "Sélectionnez un compte pour voir ce fichier.", de: "Wählen Sie ein Konto aus, um diese Datei anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view this file.", fr: "Sélectionnez un projet pour voir ce fichier.", de: "Wählen Sie ein Projekt aus, um diese Datei anzuzeigen." }),
   });
   if (pageState) return pageState;
 
@@ -214,21 +226,47 @@ export default function PortalObjectDetailPage() {
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
   const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
+  const activePublicLinkCount = publicLinks.filter((link) => link.status === "Active").length;
   const publicLinkUnavailableReason = !accountIdForApi
-    ? t({ en: "Select a Portal account first.", fr: "Sélectionnez d'abord un compte Portal.", de: "Wählen Sie zuerst ein Portal-Konto aus." })
+    ? t({ en: "Select a project first.", fr: "Sélectionnez d'abord un projet.", de: "Wählen Sie zuerst ein Projekt aus." })
     : space.status === "Archived"
-      ? t({ en: "Archived Storage Spaces cannot create public links.", fr: "Les espaces de stockage archivés ne peuvent pas créer de liens publics.", de: "Archivierte Speicherbereiche können keine öffentlichen Links erstellen." })
+      ? t({ en: "Archived spaces cannot create public links.", fr: "Les espaces archivés ne peuvent pas créer de liens publics.", de: "Archivierte Bereiche können keine öffentlichen Links erstellen." })
       : space.role !== "Owner"
         ? t({ en: "Only Owners can create public links.", fr: "Seuls les Propriétaires peuvent créer des liens publics.", de: "Nur Eigentümer können öffentliche Links erstellen." })
         : space.visibility !== "shared"
-          ? t({ en: "Public links are available only for shared Storage Spaces.", fr: "Les liens publics sont disponibles uniquement pour les espaces de stockage partagés.", de: "Öffentliche Links sind nur für geteilte Speicherbereiche verfügbar." })
+          ? t({ en: "Public links are available only for shared spaces.", fr: "Les liens publics sont disponibles uniquement pour les espaces partagés.", de: "Öffentliche Links sind nur für geteilte Bereiche verfügbar." })
           : null;
+  const sharingSummary = publicLinkUnavailableReason
+    ? publicLinkUnavailableReason
+    : activePublicLinkCount > 0
+      ? t({
+          en: `${activePublicLinkCount} active public link${activePublicLinkCount > 1 ? "s" : ""}`,
+          fr: `${activePublicLinkCount} lien${activePublicLinkCount > 1 ? "s" : ""} public${activePublicLinkCount > 1 ? "s" : ""} actif${activePublicLinkCount > 1 ? "s" : ""}`,
+          de: `${activePublicLinkCount} aktive öffentliche Links`,
+        })
+      : t({ en: "Ready to create a public link", fr: "Prêt à créer un lien public", de: "Bereit für einen öffentlichen Link" });
+  const pageDescription = t({
+    en: `In ${space.name}. Preview, download, or share this file.`,
+    fr: `Dans ${space.name}. Prévisualisez, téléchargez ou partagez ce fichier.`,
+    de: `In ${space.name}. Vorschau anzeigen, herunterladen oder freigeben.`,
+  });
   const deleteUnavailableReason = !accountIdForApi
-    ? t({ en: "Select a Portal account first.", fr: "Sélectionnez d'abord un compte Portal.", de: "Wählen Sie zuerst ein Portal-Konto aus." })
+    ? t({ en: "Select a project first.", fr: "Sélectionnez d'abord un projet.", de: "Wählen Sie zuerst ein Projekt aus." })
     : space.role === "Viewer"
       ? t({ en: "Viewers cannot delete files.", fr: "Les Lecteurs ne peuvent pas supprimer de fichiers.", de: "Betrachter können keine Dateien löschen." })
       : null;
   const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
+  const openPublicLinkDialog = () => {
+    if (!canCreatePublicLink) return;
+    setActiveTab("preview");
+    setLinkExpiration("");
+    setPublicLinkDialogOpen(true);
+  };
+  const closePublicLinkDialog = () => {
+    if (linkBusy) return;
+    setPublicLinkDialogOpen(false);
+    setLinkExpiration("");
+  };
   const copyPath = async () => {
     if (!navigator.clipboard) {
       setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
@@ -236,7 +274,7 @@ export default function PortalObjectDetailPage() {
     }
     try {
       await navigator.clipboard.writeText(object.path);
-      setDownloadMessage(t({ en: "Path copied.", fr: "Chemin copié.", de: "Pfad kopiert." }));
+      setDownloadMessage(t({ en: "File location copied.", fr: "Emplacement du fichier copié.", de: "Dateispeicherort kopiert." }));
     } catch {
       setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
     }
@@ -252,6 +290,8 @@ export default function PortalObjectDetailPage() {
         expires_at: linkExpiration ? new Date(linkExpiration).toISOString() : null,
       });
       setPublicLinks((current) => [link, ...current.filter((item) => item.id !== link.id)]);
+      setPublicLinkDialogOpen(false);
+      setLinkExpiration("");
       setDownloadMessage(t({ en: "Public link created.", fr: "Lien public créé.", de: "Öffentlicher Link erstellt." }));
     } catch (err) {
       console.error(err);
@@ -263,6 +303,15 @@ export default function PortalObjectDetailPage() {
   const handleRevokePublicLink = (link: PortalPublicLink) => {
     if (!accountIdForApi || !space || linkBusy) return;
     setPendingAction({ type: "revoke-public-link", link });
+  };
+  const copyPublicLink = async (link: PortalPublicLink) => {
+    setDownloadMessage(null);
+    try {
+      await copyTextToClipboard(link.url);
+      setDownloadMessage(t({ en: "Public link copied.", fr: "Lien public copié.", de: "Öffentlicher Link kopiert." }));
+    } catch {
+      setDownloadMessage(t({ en: "Clipboard is unavailable in this browser.", fr: "Le presse-papiers est indisponible dans ce navigateur.", de: "Die Zwischenablage ist in diesem Browser nicht verfügbar." }));
+    }
   };
   const confirmRevokePublicLink = async (link: PortalPublicLink) => {
     if (!accountIdForApi || !space || linkBusy) return;
@@ -365,12 +414,20 @@ export default function PortalObjectDetailPage() {
       label: t({ en: "Action", fr: "Action", de: "Aktion" }),
       align: "right",
       mobileRole: "actions",
-      render: (link) =>
-        link.status === "Active" ? (
-          <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
-            {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-          </button>
-        ) : null,
+      render: (link) => (
+        <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
+          {link.status === "Active" ? (
+            <>
+              <button type="button" onClick={() => copyPublicLink(link)} className={tableActionButtonClasses}>
+                {t({ en: "Copy link", fr: "Copier le lien", de: "Link kopieren" })}
+              </button>
+              <button type="button" onClick={() => handleRevokePublicLink(link)} className={tableDeleteActionClasses}>
+                {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ),
     },
   ];
 
@@ -378,28 +435,47 @@ export default function PortalObjectDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={object.name || objectName(object.path)}
-        description={object.path}
+        description={pageDescription}
         breadcrumbs={portalBreadcrumbs(
-          { label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), to: "/portal/storage-spaces" },
+          { label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), to: "/portal/storage-spaces" },
           { label: space.name, to: storageSpacePath(space) },
           { label: object.name || objectName(object.path) },
         )}
         actions={[
           { label: downloading ? t({ en: "Downloading...", fr: "Téléchargement...", de: "Wird heruntergeladen..." }) : t({ en: "Download", fr: "Télécharger", de: "Herunterladen" }), onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
-          { label: linkBusy ? t({ en: "Sharing...", fr: "Partage...", de: "Wird freigegeben..." }) : t({ en: "Share", fr: "Partager", de: "Freigeben" }), onClick: handleCreatePublicLink, variant: "secondary", disabled: Boolean(publicLinkUnavailableReason) || linkBusy },
+          { label: t({ en: "Share", fr: "Partager", de: "Freigeben" }), onClick: openPublicLinkDialog, variant: "secondary", disabled: Boolean(publicLinkUnavailableReason) || linkBusy },
         ]}
       />
 
       <UiCard>
-        <div className="flex min-w-0 gap-4">
-          <FileIcon />
-          <div className="min-w-0">
-            <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{object.name || objectName(object.path)}</p>
-            <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
-              <span className="min-w-0 flex-1 truncate">{displayPath}</span>
-              <button type="button" onClick={copyPath} className="shrink-0 text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">{t({ en: "Copy", fr: "Copier", de: "Kopieren" })}</button>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)] lg:items-start">
+          <div className="flex min-w-0 gap-4">
+            <FileIcon />
+            <div className="min-w-0">
+              <p className={cx("ui-body font-semibold", uiTitleTextClass)}>{object.name || objectName(object.path)}</p>
+              <p className={cx("mt-1 text-xs font-medium", uiMutedTextClass)}>
+                {t({ en: `In ${space.name}`, fr: `Dans ${space.name}`, de: `In ${space.name}` })}
+              </p>
+              <div className={cx(uiCardMutedClass, "mt-3 flex max-w-2xl items-center gap-2 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
+                <span className="min-w-0 flex-1 truncate">{displayPath}</span>
+                <button type="button" onClick={copyPath} className="shrink-0 text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100">{t({ en: "Copy location", fr: "Copier l'emplacement", de: "Speicherort kopieren" })}</button>
+              </div>
             </div>
           </div>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <SummaryItem label={t({ en: "Space", fr: "Espace", de: "Bereich" })}>
+              <Link to={storageSpacePath(space)} className="hover:text-primary hover:underline">
+                {space.name}
+              </Link>
+            </SummaryItem>
+            <SummaryItem label={t({ en: "Sharing", fr: "Partage", de: "Freigabe" })}>
+              <span className={cx("block truncate", publicLinkUnavailableReason ? uiMutedTextClass : undefined)}>
+                {sharingSummary}
+              </span>
+            </SummaryItem>
+            <SummaryItem label={t({ en: "Size", fr: "Taille", de: "Größe" })}>{formatBytes(object.sizeBytes)}</SummaryItem>
+            <SummaryItem label={t({ en: "Updated", fr: "Modifié", de: "Aktualisiert" })}>{object.lastModified}</SummaryItem>
+          </dl>
         </div>
       </UiCard>
 
@@ -440,32 +516,36 @@ export default function PortalObjectDetailPage() {
             <UiCard title={t({ en: "Quick actions", fr: "Actions rapides", de: "Schnellaktionen" })}>
               <div className="grid gap-4">
                 <QuickAction label={t({ en: "Download", fr: "Télécharger", de: "Herunterladen" })} onClick={handleDownload} />
-                <QuickAction label={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })} onClick={handleCreatePublicLink} disabled={Boolean(publicLinkUnavailableReason) || linkBusy} reason={publicLinkUnavailableReason} />
-                <QuickAction label={t({ en: "Copy path", fr: "Copier le chemin", de: "Pfad kopieren" })} onClick={copyPath} />
+                <QuickAction
+                  label={t({ en: "Set up public link", fr: "Préparer un lien public", de: "Öffentlichen Link vorbereiten" })}
+                  onClick={openPublicLinkDialog}
+                  disabled={Boolean(publicLinkUnavailableReason) || linkBusy}
+                  reason={publicLinkUnavailableReason}
+                />
+                <QuickAction label={t({ en: "Copy file location", fr: "Copier l'emplacement du fichier", de: "Dateispeicherort kopieren" })} onClick={copyPath} />
                 <QuickAction label={deleteBusy ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })} tone="rose" onClick={handleDelete} disabled={Boolean(deleteUnavailableReason) || deleteBusy} reason={deleteUnavailableReason} />
               </div>
             </UiCard>
           </section>
 
           {space.role === "Owner" ? (
-            <UiCard title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}>
-              <div className="mb-3 grid gap-2 sm:grid-cols-[220px_auto] sm:items-end">
-                <UiInput
-                  type="datetime-local"
-                  label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
-                  size="compact"
-                  className="h-9"
-                  value={linkExpiration}
-                  onChange={(event) => setLinkExpiration(event.target.value)}
-                  aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
-                />
-                <UiButton onClick={handleCreatePublicLink} disabled={!canCreatePublicLink || linkBusy} className="h-9 px-3 py-1.5">
-                  {linkBusy ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
+            <UiCard
+              title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
+              description={t({
+                en: "Share this file outside the workspace only when anyone with the link should have access.",
+                fr: "Partagez ce fichier hors de l'espace uniquement lorsque toute personne avec le lien peut y accéder.",
+                de: "Geben Sie diese Datei außerhalb des Workspace nur frei, wenn alle mit dem Link Zugriff haben dürfen.",
+              })}
+              actions={
+                <UiButton size="sm" variant="secondary" onClick={openPublicLinkDialog} disabled={!canCreatePublicLink || linkBusy}>
+                  {t({ en: "Create link", fr: "Créer un lien", de: "Link erstellen" })}
                 </UiButton>
-              </div>
+              }
+            >
+              <div id="portal-file-public-links" className="scroll-mt-24" />
               {publicLinkUnavailableReason ? (
                 <div className={cx("mb-3 text-[11px] font-semibold", uiMutedTextClass)}>
-                  {t({ en: `Create public link unavailable: ${publicLinkUnavailableReason}`, fr: `Création de lien public indisponible : ${publicLinkUnavailableReason}`, de: `Öffentlichen Link erstellen nicht verfügbar: ${publicLinkUnavailableReason}` })}
+                  {t({ en: `Sharing note: ${publicLinkUnavailableReason}`, fr: `Note de partage : ${publicLinkUnavailableReason}`, de: `Freigabehinweis: ${publicLinkUnavailableReason}` })}
                 </div>
               ) : null}
               <DataTableShell
@@ -531,13 +611,59 @@ export default function PortalObjectDetailPage() {
             { label: t({ en: "Path", fr: "Chemin", de: "Pfad" }), value: object.path, mono: true },
           ]}
           impacts={[
-            t({ en: "The file is permanently removed from this Storage Space.", fr: "Le fichier est supprimé définitivement de cet espace de stockage.", de: "Die Datei wird dauerhaft aus diesem Speicherbereich entfernt." }),
+            t({ en: "The file is permanently removed from this space.", fr: "Le fichier est supprimé définitivement de cet espace.", de: "Die Datei wird dauerhaft aus diesem Bereich entfernt." }),
             t({ en: "Existing public links for this file will stop working once the file is deleted.", fr: "Les liens publics existants de ce fichier cesseront de fonctionner après suppression du fichier.", de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr, sobald die Datei gelöscht wurde." }),
             t({ en: "This action cannot be undone from the Portal.", fr: "Cette action ne peut pas être annulée depuis le Portal.", de: "Diese Aktion kann im Portal nicht rückgängig gemacht werden." }),
           ]}
           onCancel={() => setPendingAction(null)}
           onConfirm={confirmDelete}
         />
+      ) : null}
+
+      {publicLinkDialogOpen ? (
+        <Modal
+          title={t({ en: "Create public link", fr: "Créer un lien public", de: "Öffentlichen Link erstellen" })}
+          onClose={closePublicLinkDialog}
+          closeOnBackdropClick={!linkBusy}
+          closeOnEscape={!linkBusy}
+        >
+          <div className="space-y-4">
+            <dl className="grid gap-3 text-xs">
+              <div className="grid grid-cols-[110px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File", fr: "Fichier", de: "Datei" })}</dt>
+                <dd className={cx("min-w-0 break-all font-bold", uiTitleTextClass)}>{object.name || objectName(object.path)}</dd>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
+                <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-3">
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Path", fr: "Chemin", de: "Pfad" })}</dt>
+                <dd className="min-w-0 break-all font-mono text-[11px]">{object.path}</dd>
+              </div>
+            </dl>
+            <UiInput
+              type="datetime-local"
+              label={t({ en: "Expiration", fr: "Expiration", de: "Ablauf" })}
+              size="compact"
+              className="h-9"
+              value={linkExpiration}
+              disabled={linkBusy}
+              onChange={(event) => setLinkExpiration(event.target.value)}
+              aria-label={t({ en: "Public link expiration", fr: "Expiration du lien public", de: "Ablauf des öffentlichen Links" })}
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton variant="secondary" onClick={closePublicLinkDialog} disabled={linkBusy}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton onClick={handleCreatePublicLink} loading={linkBusy} disabled={!canCreatePublicLink || linkBusy}>
+                {linkBusy
+                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
+                  : t({ en: "Create link", fr: "Créer le lien", de: "Link erstellen" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (
@@ -552,7 +678,7 @@ export default function PortalObjectDetailPage() {
           ]}
           impacts={[
             t({ en: "Anyone using this URL loses access immediately.", fr: "Toute personne utilisant cette URL perd immédiatement l'accès.", de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff." }),
-            t({ en: "The file remains in the Storage Space.", fr: "Le fichier reste dans l'espace de stockage.", de: "Die Datei bleibt im Speicherbereich." }),
+            t({ en: "The file remains in the space.", fr: "Le fichier reste dans l'espace.", de: "Die Datei bleibt im Bereich." }),
             t({ en: "You can create a new public link later if sharing is still allowed.", fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.", de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind." }),
           ]}
           onCancel={() => setPendingAction(null)}

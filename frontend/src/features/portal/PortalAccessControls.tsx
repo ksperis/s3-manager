@@ -2,6 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { useEffect, useState } from "react";
 import {
   type PortalStorageSpaceCreate,
   type PortalStorageSpaceAccountMemberRole,
@@ -10,7 +11,9 @@ import {
   type PortalStorageSpaceShareScope,
   type PortalStorageSpaceVisibility,
 } from "../../api/portal";
+import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -153,6 +156,7 @@ export function PortalShareCandidatePicker({
   includeAlreadyShared = false,
   onQueryChange,
   onRoleChange,
+  onRequestPerson,
 }: {
   candidates: PortalStorageSpaceShareCandidate[];
   selectedRolesByUserId: Record<number, PortalStorageSpaceRole>;
@@ -162,9 +166,16 @@ export function PortalShareCandidatePicker({
   includeAlreadyShared?: boolean;
   onQueryChange: (value: string) => void;
   onRoleChange: (userId: number, role: PortalStorageSpaceRole | null) => void;
+  onRequestPerson?: (payload: { targetName: string; targetEmail: string }) => Promise<void>;
 }) {
   const { t } = useI18n();
   const term = query.trim().toLowerCase();
+  const queryLooksLikeEmail = /\S+@\S+\.\S+/.test(query.trim());
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestName, setRequestName] = useState("");
+  const [requestEmail, setRequestEmail] = useState("");
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const visibleCandidates = candidates.filter((candidate) => {
     if (!includeAlreadyShared && candidate.already_shared) return false;
     if (!term) return true;
@@ -173,6 +184,59 @@ export function PortalShareCandidatePicker({
       .some((value) => String(value).toLowerCase().includes(term));
   });
   const selectedCount = Object.keys(selectedRolesByUserId).length;
+  useEffect(() => {
+    if (!requestOpen) return;
+    const trimmed = query.trim();
+    if (queryLooksLikeEmail && !requestEmail) {
+      setRequestEmail(trimmed);
+    } else if (!queryLooksLikeEmail && !requestName) {
+      setRequestName(trimmed);
+    }
+  }, [query, queryLooksLikeEmail, requestEmail, requestName, requestOpen]);
+  const openRequestForm = () => {
+    const trimmed = query.trim();
+    setRequestOpen(true);
+    setRequestError(null);
+    if (queryLooksLikeEmail) {
+      setRequestEmail((current) => current || trimmed);
+    } else {
+      setRequestName((current) => current || trimmed);
+    }
+  };
+  const closeRequestForm = () => {
+    if (requestBusy) return;
+    setRequestOpen(false);
+    setRequestError(null);
+  };
+  const submitRequest = async () => {
+    if (!onRequestPerson || !requestName.trim() || !requestEmail.trim()) return;
+    setRequestBusy(true);
+    setRequestError(null);
+    try {
+      await onRequestPerson({ targetName: requestName.trim(), targetEmail: requestEmail.trim() });
+      setRequestOpen(false);
+      setRequestName("");
+      setRequestEmail("");
+    } catch (err) {
+      setRequestError(err instanceof Error ? err.message : t({ en: "Unable to send the request.", fr: "Impossible d'envoyer la demande.", de: "Anfrage kann nicht gesendet werden." }));
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+  const requestCta = onRequestPerson ? (
+    <div className="space-y-3 rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] p-3">
+      <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
+        {t({
+          en: "Need someone who is not listed? Ask an admin to add them to this project, then you can invite them to the space.",
+          fr: "Besoin d'une personne absente de la liste ? Demandez à un admin de l'ajouter au projet, puis vous pourrez l'inviter dans l'espace.",
+          de: "Fehlt eine Person in der Liste? Bitten Sie einen Admin, sie zum Projekt hinzuzufügen; danach können Sie sie in den Bereich einladen.",
+        })}
+      </div>
+      <UiButton size="sm" variant="secondary" onClick={openRequestForm}>
+        {t({ en: "Request collaborator access", fr: "Demander l'ajout d'un collaborateur", de: "Mitwirkenden-Zugriff anfragen" })}
+      </UiButton>
+    </div>
+  ) : null;
   return (
     <div className="space-y-2">
       <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto]">
@@ -236,20 +300,66 @@ export function PortalShareCandidatePicker({
           })}
         </div>
       ) : (
-        <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
-          {term
-            ? t({
-                en: "No person matches this search. Ask an admin to add external collaborators to the account first.",
-                fr: "Aucune personne ne correspond à cette recherche. Demandez d'abord à un administrateur d'ajouter les collaborateurs externes au compte.",
-                de: "Keine Person passt zu dieser Suche. Bitten Sie zuerst einen Admin, externe Mitwirkende zum Konto hinzuzufügen.",
-              })
-            : t({
-                en: "Only people already added to this account can be invited here. Ask an admin to add external collaborators first.",
-                fr: "Seules les personnes déjà ajoutées à ce compte peuvent être invitées ici. Demandez d'abord à un administrateur d'ajouter les collaborateurs externes.",
-                de: "Nur bereits zu diesem Konto hinzugefügte Personen können hier eingeladen werden. Bitten Sie zuerst einen Admin, externe Mitwirkende hinzuzufügen.",
-              })}
+        <div className="space-y-3">
+          <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
+            {term
+              ? t({
+                  en: "No person matches this search.",
+                  fr: "Aucune personne ne correspond à cette recherche.",
+                  de: "Keine Person passt zu dieser Suche.",
+                })
+              : t({
+                  en: "Only people already added to this project can be invited here.",
+                  fr: "Seules les personnes déjà ajoutées à ce projet peuvent être invitées ici.",
+                  de: "Nur bereits zu diesem Projekt hinzugefügte Personen können hier eingeladen werden.",
+                })}
+          </div>
+          {requestCta}
         </div>
       )}
+      {requestOpen ? (
+        <Modal
+          title={t({ en: "Request collaborator access", fr: "Demander l'ajout d'un collaborateur", de: "Mitwirkenden-Zugriff anfragen" })}
+          onClose={closeRequestForm}
+          closeOnBackdropClick={!requestBusy}
+          closeOnEscape={!requestBusy}
+        >
+          <div className="space-y-4">
+            <p className={cx("text-xs font-semibold leading-5", uiMutedTextClass)}>
+              {t({
+                en: "Ask an admin to add this person to the project. Once they are added, you can invite them to the space.",
+                fr: "Demandez à un admin d'ajouter cette personne au projet. Une fois ajoutée, vous pourrez l'inviter dans l'espace.",
+                de: "Bitten Sie einen Admin, diese Person zum Projekt hinzuzufügen. Danach können Sie sie in den Bereich einladen.",
+              })}
+            </p>
+            {requestError ? <UiInlineMessage tone="error">{requestError}</UiInlineMessage> : null}
+            <UiInput
+              label={t({ en: "Name", fr: "Nom", de: "Name" })}
+              size="compact"
+              className="h-9"
+              value={requestName}
+              onChange={(event) => setRequestName(event.target.value)}
+              placeholder={t({ en: "Collaborator name", fr: "Nom du collaborateur", de: "Name des Mitwirkenden" })}
+            />
+            <UiInput
+              label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
+              size="compact"
+              className="h-9"
+              value={requestEmail}
+              onChange={(event) => setRequestEmail(event.target.value)}
+              placeholder="name@example.org"
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton variant="secondary" onClick={closeRequestForm} disabled={requestBusy}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton disabled={!requestName.trim() || !requestEmail.trim() || requestBusy} loading={requestBusy} onClick={submitRequest}>
+                {requestBusy ? t({ en: "Sending...", fr: "Envoi...", de: "Wird gesendet..." }) : t({ en: "Send request", fr: "Envoyer la demande", de: "Anfrage senden" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

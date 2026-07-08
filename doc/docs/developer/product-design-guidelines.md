@@ -100,7 +100,7 @@ workspace-specific visual themes when a shared product pattern fits.
 | Bucket-like end-user area | Storage Space | Bucket | Account or storage resource, depending on governance context |
 | Access level | Viewer, Editor, Owner | IAM policy, group, role, access key, bucket policy | UI user, UI group, feature access, account binding |
 | File operations | Files, folders, uploads, downloads, shares | Objects, prefixes, metadata, versions, storage class | Usually out of scope unless auditing or governance requires it |
-| Usage | Usage & Analytics, storage, transfers, billing source | Traffic, usage history, bucket usage, metrics | Usage history, billing, quota monitoring, platform health |
+| Usage | Storage health, storage, transfers, billing source | Traffic, usage history, bucket usage, metrics | Usage history, billing, quota monitoring, platform health |
 | Advanced configuration | Hidden from Portal | Lifecycle, replication, CORS, website, notification, policy, encryption | Feature flags, endpoint settings, governance and audit |
 
 When in doubt, keep Portal copy user-facing and keep Manager/Browser copy

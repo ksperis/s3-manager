@@ -200,12 +200,12 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
     </div>
     <figcaption><strong>Object detail.</strong> File details focus on safe user-facing metadata, quick actions, and recent events.</figcaption>
   </figure>
-  <figure data-thumb-label="Usage">
+  <figure data-thumb-label="Storage Health">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Storage Health page with room left, file counts, space breakdown, and Costs tab available" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Storage Health page with room left, file counts, space breakdown, and Costs tab available" loading="lazy">
     </div>
-    <figcaption><strong>Usage.</strong> Usage & Analytics consolidates storage, traffic, requests, and billing source signals in end-user language.</figcaption>
+    <figcaption><strong>Storage health.</strong> The page shows room left, space growth, file movement, and monthly cost signals in end-user language.</figcaption>
   </figure>
   <figure data-thumb-label="External tools">
     <div class="docs-themed-shot" data-docs-themed-shot>

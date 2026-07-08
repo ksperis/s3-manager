@@ -99,6 +99,7 @@ class PortalSettingsOverride(BaseModel):
     allow_portal_user_bucket_create: Optional[bool] = None
     allow_portal_named_bucket_create: Optional[bool] = None
     allow_portal_user_access_key_create: Optional[bool] = None
+    server_access_logging_enabled: Optional[bool] = None
     storage_space_version_cleanup_enabled: Optional[bool] = None
     iam_group_manager_policy: Optional[PortalIAMPolicyOverride] = None
     iam_group_user_policy: Optional[PortalIAMPolicyOverride] = None
@@ -210,6 +211,7 @@ class PortalSettings(BaseModel):
     allow_portal_user_bucket_create: bool = True
     allow_portal_named_bucket_create: bool = False
     allow_portal_user_access_key_create: bool = True
+    server_access_logging_enabled: bool = True
     storage_space_version_cleanup_enabled: bool = True
     max_portal_user_access_keys: int = Field(default=2, ge=1)
     iam_group_manager_policy: PortalIAMPolicySettings = Field(

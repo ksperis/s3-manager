@@ -80,8 +80,8 @@ nav:
           - "Portal: Files": user/portal-files.md
           - "Portal: Sharing": user/portal-sharing.md
           - "Portal: Access Keys": user/portal-access-keys.md
-          - "Portal: Usage and Alerts": user/portal-usage-alerts.md
-          - "Portal: Requests": user/portal-requests.md
+          - "Portal: Storage Health": user/portal-usage-alerts.md
+          - "Portal: Help Requests": user/portal-requests.md
           - "Portal: Activity": user/portal-activity.md
           - "Portal: Transfers": user/portal-transfers.md
           - "Portal: Settings": user/portal-settings.md

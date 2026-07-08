@@ -84,6 +84,7 @@ type PortalOverrideFormSnapshot = {
   bucketCreate: TriState;
   namedBucketCreate: TriState;
   accessKeyCreate: TriState;
+  serverAccessLogging: TriState;
   versionCleanup: TriState;
   versioning: TriState;
   lifecycle: TriState;
@@ -198,6 +199,7 @@ export default function S3AccountsPage() {
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalNamedBucketCreateOverride, setAdminPortalNamedBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
+  const [adminPortalServerAccessLoggingOverride, setAdminPortalServerAccessLoggingOverride] = useState<TriState>("inherit");
   const [adminPortalVersionCleanupOverride, setAdminPortalVersionCleanupOverride] = useState<TriState>("inherit");
   const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
   const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
@@ -470,6 +472,7 @@ export default function S3AccountsPage() {
       setAdminPortalBucketCreateOverride("inherit");
       setAdminPortalNamedBucketCreateOverride("inherit");
       setAdminPortalAccessKeyCreateOverride("inherit");
+      setAdminPortalServerAccessLoggingOverride("inherit");
       setAdminPortalVersionCleanupOverride("inherit");
       setAdminBucketVersioningOverride("inherit");
       setAdminBucketLifecycleOverride("inherit");
@@ -487,6 +490,7 @@ export default function S3AccountsPage() {
     const bucketCreate = resolveTriState(override.allow_portal_user_bucket_create);
     const namedBucketCreate = resolveTriState(override.allow_portal_named_bucket_create);
     const accessKeyCreate = resolveTriState(override.allow_portal_user_access_key_create);
+    const serverAccessLogging = resolveTriState(override.server_access_logging_enabled);
     const versionCleanup = resolveTriState(override.storage_space_version_cleanup_enabled);
     const bucketDefaultsOverride = override.bucket_defaults;
     const versioning = resolveTriState(bucketDefaultsOverride?.versioning);
@@ -512,6 +516,7 @@ export default function S3AccountsPage() {
     setAdminPortalBucketCreateOverride(bucketCreate);
     setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
     setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
+    setAdminPortalServerAccessLoggingOverride(serverAccessLogging);
     setAdminPortalVersionCleanupOverride(versionCleanup);
     setAdminBucketVersioningOverride(versioning);
     setAdminBucketLifecycleOverride(lifecycle);
@@ -527,6 +532,7 @@ export default function S3AccountsPage() {
         bucketCreate,
         namedBucketCreate,
         accessKeyCreate,
+        serverAccessLogging,
         versionCleanup,
         versioning,
         lifecycle,
@@ -974,6 +980,7 @@ export default function S3AccountsPage() {
         bucketCreate: adminPortalBucketCreateOverride,
         namedBucketCreate: adminPortalNamedBucketCreateOverride,
         accessKeyCreate: adminPortalAccessKeyCreateOverride,
+        serverAccessLogging: adminPortalServerAccessLoggingOverride,
         versionCleanup: adminPortalVersionCleanupOverride,
         versioning: adminBucketVersioningOverride,
         lifecycle: adminBucketLifecycleOverride,
@@ -995,8 +1002,9 @@ export default function S3AccountsPage() {
       adminManagerPolicyActionsText,
       adminManagerPolicyMode,
       adminPortalAccessKeyCreateOverride,
-      adminPortalVersionCleanupOverride,
       adminPortalBucketCreateOverride,
+      adminPortalServerAccessLoggingOverride,
+      adminPortalVersionCleanupOverride,
       adminUserPolicyActionsText,
       adminUserPolicyMode,
     ]
@@ -1102,6 +1110,10 @@ export default function S3AccountsPage() {
     const allowAccessKeyCreateValue = toOverrideValue(adminPortalAccessKeyCreateOverride);
     if (allowAccessKeyCreateValue !== undefined) {
       payload.allow_portal_user_access_key_create = allowAccessKeyCreateValue;
+    }
+    const serverAccessLoggingValue = toOverrideValue(adminPortalServerAccessLoggingOverride);
+    if (serverAccessLoggingValue !== undefined) {
+      payload.server_access_logging_enabled = serverAccessLoggingValue;
     }
     const versionCleanupValue = toOverrideValue(adminPortalVersionCleanupOverride);
     if (versionCleanupValue !== undefined) {
@@ -2119,6 +2131,24 @@ export default function S3AccountsPage() {
                               <select
                                 value={adminPortalAccessKeyCreateOverride}
                                 onChange={(e) => setAdminPortalAccessKeyCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Server access logging"
+                            description={`Effective for storage spaces: ${
+                              effectivePortalSettings.server_access_logging_enabled ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalServerAccessLoggingOverride}
+                                onChange={(e) => setAdminPortalServerAccessLoggingOverride(e.target.value as TriState)}
                                 className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 disabled={portalSettingsLoading || portalSettingsSaving}
                               >

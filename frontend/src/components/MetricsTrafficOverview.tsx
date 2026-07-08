@@ -92,6 +92,25 @@ type MetricsTrafficOverviewProps = {
   description?: string;
   bucketRankingTitle?: string;
   userRankingTitle?: string;
+  labels?: {
+    egress?: string;
+    egressHint?: string;
+    ingress?: string;
+    ingressHint?: string;
+    successRate?: string;
+    summaryActivityUnit?: string;
+    trafficChartTitle?: string;
+    trafficChartSubtitle?: string;
+    callVolumeTitle?: string;
+    callVolumeSubtitle?: string;
+    requestBreakdownTitle?: string;
+    emptyMessage?: string;
+    rankingActivityUnit?: string;
+    successText?: string;
+    inboundLabel?: string;
+    outboundLabel?: string;
+    callVolumeBarName?: string;
+  };
 };
 
 export default function MetricsTrafficOverview({
@@ -105,6 +124,7 @@ export default function MetricsTrafficOverview({
   description,
   bucketRankingTitle = "Most active buckets",
   userRankingTitle = "Most active accounts",
+  labels,
 }: MetricsTrafficOverviewProps) {
   const timeline = useMemo<TimelinePoint[]>(
     () => {
@@ -204,27 +224,27 @@ export default function MetricsTrafficOverview({
 
       {!hideMetrics && (
         <div className="grid gap-4 md:grid-cols-3">
-          <MetricsSnapshotCard label="Egress" value={formatBytes(totals?.bytes_out ?? 0)} hint="Outgoing bytes" loading={loading} />
-          <MetricsSnapshotCard label="Ingress" value={formatBytes(totals?.bytes_in ?? 0)} hint="Incoming bytes" loading={loading} />
+          <MetricsSnapshotCard label={labels?.egress ?? "Egress"} value={formatBytes(totals?.bytes_out ?? 0)} hint={labels?.egressHint ?? "Outgoing bytes"} loading={loading} />
+          <MetricsSnapshotCard label={labels?.ingress ?? "Ingress"} value={formatBytes(totals?.bytes_in ?? 0)} hint={labels?.ingressHint ?? "Incoming bytes"} loading={loading} />
           <MetricsSnapshotCard
-            label="Success rate"
+            label={labels?.successRate ?? "Success rate"}
             value={totals?.success_rate != null ? formatPercentage(totals.success_rate * 100) : "—"}
-            hint={`${formatCompactNumber(totals?.ops ?? 0)} requests`}
+            hint={`${formatCompactNumber(totals?.ops ?? 0)} ${labels?.summaryActivityUnit ?? "requests"}`}
             loading={loading}
           />
         </div>
       )}
 
       {showEmpty && !hideMetrics && (
-        <MetricsEmptyState>No traffic data available for this window.</MetricsEmptyState>
+        <MetricsEmptyState>{labels?.emptyMessage ?? "No traffic data available for this window."}</MetricsEmptyState>
       )}
 
       {!showEmpty && !hideMetrics && (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <ChartCard
-              title={window === "week" || window === "month" ? "Daily traffic" : "Hourly traffic"}
-              subtitle="Ingress vs egress comparison"
+              title={labels?.trafficChartTitle ?? (window === "week" || window === "month" ? "Daily traffic" : "Hourly traffic")}
+              subtitle={labels?.trafficChartSubtitle ?? "Ingress vs egress comparison"}
               loading={loading}
               hasData={hasData}
             >
@@ -238,7 +258,7 @@ export default function MetricsTrafficOverview({
             </ChartCard>
           </div>
           <div>
-            <ChartCard title="Call volume" subtitle="Ops per slot" loading={loading} hasData={hasData}>
+            <ChartCard title={labels?.callVolumeTitle ?? "Call volume"} subtitle={labels?.callVolumeSubtitle ?? "Ops per slot"} loading={loading} hasData={hasData}>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={timeline} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
@@ -253,7 +273,7 @@ export default function MetricsTrafficOverview({
                   />
                   <YAxis tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} stroke="#94A3B8" />
                   <Tooltip content={<OpsTooltip window={window} />} />
-                  <Bar dataKey="ops" name="Ops" fill="#14B8A6" />
+                  <Bar dataKey="ops" name={labels?.callVolumeBarName ?? "Ops"} fill="#14B8A6" />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -263,14 +283,20 @@ export default function MetricsTrafficOverview({
 
       {!showEmpty && !hideMetrics && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <RankingCard title={bucketRankingTitle} items={(traffic?.bucket_rankings ?? []).slice(0, 5)} loading={loading} />
+          <RankingCard
+            title={bucketRankingTitle}
+            items={(traffic?.bucket_rankings ?? []).slice(0, 5)}
+            loading={loading}
+            labels={labels}
+          />
           <RankingCard
             title={userRankingTitle}
             items={(traffic?.user_rankings ?? []).slice(0, 5)}
             loading={loading}
             type="user"
+            labels={labels}
           />
-          <RequestBreakdown items={traffic?.request_breakdown ?? []} loading={loading} />
+          <RequestBreakdown items={traffic?.request_breakdown ?? []} loading={loading} labels={labels} />
         </div>
       )}
     </MetricsCard>
@@ -341,9 +367,10 @@ type RankingCardProps = {
   items: TrafficBucketRanking[] | TrafficUserRanking[];
   loading?: boolean;
   type?: "bucket" | "user";
+  labels?: MetricsTrafficOverviewProps["labels"];
 };
 
-function RankingCard({ title, items, loading, type = "bucket" }: RankingCardProps) {
+function RankingCard({ title, items, loading, type = "bucket", labels }: RankingCardProps) {
   if (loading) {
     return <MetricsChartPanel title={title} loading />;
   }
@@ -361,10 +388,10 @@ function RankingCard({ title, items, loading, type = "bucket" }: RankingCardProp
             title: label,
             detail: (
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>{formatCompactNumber(entry.ops)} ops</span>
-                <span>{entry.success_ratio != null ? formatPercentage(entry.success_ratio * 100) : "n/a"} success</span>
-                <span>In {formatBytes(entry.bytes_in)}</span>
-                <span>Out {formatBytes(entry.bytes_out)}</span>
+                <span>{formatCompactNumber(entry.ops)} {labels?.rankingActivityUnit ?? "ops"}</span>
+                <span>{entry.success_ratio != null ? formatPercentage(entry.success_ratio * 100) : "n/a"} {labels?.successText ?? "success"}</span>
+                <span>{labels?.inboundLabel ?? "In"} {formatBytes(entry.bytes_in)}</span>
+                <span>{labels?.outboundLabel ?? "Out"} {formatBytes(entry.bytes_out)}</span>
               </span>
             ),
             value: formatBytes(entry.bytes_total),
@@ -378,23 +405,25 @@ function RankingCard({ title, items, loading, type = "bucket" }: RankingCardProp
 type RequestBreakdownProps = {
   items: TrafficRequestBreakdown[];
   loading?: boolean;
+  labels?: MetricsTrafficOverviewProps["labels"];
 };
 
-function RequestBreakdown({ items, loading }: RequestBreakdownProps) {
+function RequestBreakdown({ items, loading, labels }: RequestBreakdownProps) {
+  const title = labels?.requestBreakdownTitle ?? "Request breakdown";
   if (loading) {
-    return <MetricsChartPanel title="Request breakdown" loading />;
+    return <MetricsChartPanel title={title} loading />;
   }
   if (!items || items.length === 0) {
-    return <MetricsChartPanel title="Request breakdown" hasData={false} />;
+    return <MetricsChartPanel title={title} hasData={false} />;
   }
   return (
-    <MetricsChartPanel title="Request breakdown">
+    <MetricsChartPanel title={title}>
       <MetricsLegendList
         items={items.map((entry) => ({
           key: entry.group,
           label: entry.group,
           color: "#94A3B8",
-          detail: `${formatCompactNumber(entry.ops)} ops`,
+          detail: `${formatCompactNumber(entry.ops)} ${labels?.rankingActivityUnit ?? "ops"}`,
           value: formatBytes(entry.bytes_in + entry.bytes_out),
         }))}
       />

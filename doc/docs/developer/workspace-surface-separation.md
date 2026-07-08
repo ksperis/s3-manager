@@ -78,7 +78,7 @@ placeholder.
 ## Portal Rules
 
 - Keep Portal labels user-oriented: `Storage Spaces`, `Shares`, `Activity`,
-  `Transfers`, `Storage health`, `Requests`, and `Settings`.
+  `Transfers`, `Storage health`, `Help requests`, and `Settings`.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   `portal-basic` action profile and `X-S3-Workspace: portal`. Portal users may

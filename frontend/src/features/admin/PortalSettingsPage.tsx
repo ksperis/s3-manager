@@ -72,6 +72,12 @@ export default function PortalSettingsPage() {
     );
   };
 
+  const handleToggleServerAccessLogging = (value: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, portal: { ...prev.portal, server_access_logging_enabled: value } } : prev
+    );
+  };
+
   const handleToggleStorageSpaceVersionCleanup = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, storage_space_version_cleanup_enabled: value } } : prev
@@ -223,6 +229,7 @@ export default function PortalSettingsPage() {
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
   const portalNamedBucketCreateEnabled = Boolean(settings?.portal.allow_portal_named_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
+  const portalServerAccessLoggingEnabled = Boolean(settings?.portal.server_access_logging_enabled);
   const portalStorageSpaceVersionCleanupEnabled = Boolean(settings?.portal.storage_space_version_cleanup_enabled);
   const portalMaxAccessKeys = settings?.portal.max_portal_user_access_keys ?? 2;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
@@ -293,6 +300,18 @@ export default function PortalSettingsPage() {
                   onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
                   disabled={!settings}
                   ariaLabel="Portal user access key management"
+                />
+              }
+            />
+            <SettingsItem
+              title="Server access logging"
+              description="Enable S3 Server Access Logging on Portal Storage Spaces and retain logs in the account technical bucket."
+              action={
+                <SettingsToggleAction
+                  checked={portalServerAccessLoggingEnabled}
+                  onChange={(value) => handleToggleServerAccessLogging(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal Server Access Logging"
                 />
               }
             />

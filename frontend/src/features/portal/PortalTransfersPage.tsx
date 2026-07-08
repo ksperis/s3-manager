@@ -2,15 +2,28 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import Modal from "../../components/Modal";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
+import PageBanner from "../../components/PageBanner";
+import UiButton from "../../components/ui/UiButton";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import UiProgressBar from "../../components/ui/UiProgressBar";
-import { cx, uiDividerClass, uiMutedTextClass } from "../../components/ui/styles";
+import { cx, type UiTone, uiDividerClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useI18n } from "../../i18n";
+import {
+  downloadPortalServerAccessRawLogs,
+  fetchPortalServerAccessLogPage,
+  type PortalServerAccessLogEntry,
+  type PortalServerAccessRequesterIdentity,
+} from "../../api/portal";
+import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import {
   portalTransferStatusTone,
@@ -20,35 +33,366 @@ import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import {
+  advancedFilterBackdropClass,
+  advancedFilterBodyClass,
+  advancedFilterControlClass,
+  advancedFilterDrawerClass,
+  advancedFilterFieldCardClass,
+  advancedFilterFooterClass,
+  advancedFilterHeaderClass,
+  advancedFilterMatchModeButtonClass,
+  advancedFilterRootClass,
+  advancedFilterSectionClass,
+  advancedFilterSyncBadgeClass,
+  advancedFilterToolbarButtonClass,
+  buildTextFieldRules,
+  formatAdvancedFilterSyncLabel,
+  formatTextFilterSummary,
+  parseExactListInput,
+  renderAdvancedFilterDraftSummary,
+  renderAdvancedFilterRuleCountBadge,
+  type TextMatchMode,
+} from "../cephAdmin/filtering/advancedFilterShared";
 
-type TransferTab = "all" | "uploads" | "downloads";
+type LogsTab = "server" | "live";
+type LiveTransferTab = "all" | "uploads" | "downloads";
+type ServerLogActionFilter = "" | "upload" | "download" | "delete" | "list" | "metadata" | "other";
+type ServerLogAdvancedFilterState = {
+  action: ServerLogActionFilter;
+  path: string;
+  pathMatchMode: TextMatchMode;
+  identity: string;
+  identityMatchMode: TextMatchMode;
+};
+type ServerLogAdvancedFilterField = "action" | "path" | "identity";
+type ActiveServerLogFilterRemoveAction = { type: "advanced"; field: ServerLogAdvancedFilterField };
+
+type ServerLogRow = {
+  id: string;
+  timestampLabel: string;
+  timestampSort: number;
+  operationLabel: string;
+  operationDetail: string;
+  rawOperation: string;
+  targetLabel: string;
+  targetDetail: string;
+  statusLabel: string;
+  statusDetail: string;
+  statusTone: UiTone;
+  identityLabel: string;
+  identityDetail: string;
+  identityKeyLabel: string;
+  identityKindLabel: string;
+  identityTone: UiTone;
+  sourceDetail: string;
+};
+
+const defaultServerLogAdvancedFilter: ServerLogAdvancedFilterState = {
+  action: "",
+  path: "",
+  pathMatchMode: "contains",
+  identity: "",
+  identityMatchMode: "contains",
+};
+
+function hasServerLogAdvancedFilters(advanced: ServerLogAdvancedFilterState | null): boolean {
+  if (!advanced) return false;
+  return Boolean(advanced.action || advanced.path.trim() || advanced.identity.trim());
+}
+
+function buildServerLogAdvancedFilterPayload(advanced: ServerLogAdvancedFilterState | null): string | undefined {
+  if (!advanced) return undefined;
+  const rules: Array<Record<string, unknown>> = [];
+  if (advanced.action) {
+    rules.push({ field: "action", op: "eq", value: advanced.action });
+  }
+  rules.push(...buildTextFieldRules("path", advanced.path, advanced.pathMatchMode));
+  rules.push(...buildTextFieldRules("identity", advanced.identity, advanced.identityMatchMode));
+  if (rules.length === 0) return undefined;
+  return JSON.stringify({ match: "all", rules });
+}
+
+function todayDateInputValue(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function shiftDateInputValue(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return todayDateInputValue();
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function formatServerLogTimestamp(value: string, locale: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function timestampSortValue(value?: string | null): number {
+  if (!value) return 0;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function serverLogStatusTone(statusCode?: number | null): UiTone {
+  if (statusCode == null) return "neutral";
+  if (statusCode >= 400) return "danger";
+  if (statusCode >= 300) return "warning";
+  return "success";
+}
+
+function serverLogSizeBytes(entry: PortalServerAccessLogEntry): number | null {
+  return entry.object_size ?? entry.bytes_sent ?? null;
+}
+
+function serverLogObjectLabel(entry: PortalServerAccessLogEntry): string {
+  return entry.object_name || entry.object_key || "-";
+}
+
+function compactServerLogRequester(value?: string | null): string {
+  if (!value) return "-";
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function compactUserAgent(value?: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized || normalized === "-") return null;
+  return normalized.length > 56 ? `${normalized.slice(0, 53)}...` : normalized;
+}
+
+function serverLogIdentityKindLabel(kind: PortalServerAccessRequesterIdentity["kind"], t: ReturnType<typeof useI18n>["t"]): string {
+  switch (kind) {
+    case "portal_user":
+      return t({ en: "Portal user", fr: "Utilisateur portail", de: "Portal-Benutzer" });
+    case "external_access":
+      return t({ en: "External access", fr: "Accès externe", de: "Externer Zugriff" });
+    case "rgw_user":
+      return t({ en: "S3 user", fr: "Utilisateur S3", de: "S3-Benutzer" });
+    case "rgw_account":
+      return t({ en: "S3 account", fr: "Compte S3", de: "S3-Konto" });
+    default:
+      return t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" });
+  }
+}
+
+function serverLogIdentityTone(kind: PortalServerAccessRequesterIdentity["kind"], resolved: boolean): UiTone {
+  if (!resolved || kind === "unknown") return "neutral";
+  if (kind === "portal_user") return "primary";
+  if (kind === "external_access") return "info";
+  return "success";
+}
+
+function serverLogOperationLabel(entry: PortalServerAccessLogEntry, t: ReturnType<typeof useI18n>["t"]): string {
+  switch (entry.operation_category) {
+    case "upload":
+      return t({ en: "Added an object", fr: "Objet ajouté", de: "Objekt hinzugefügt" });
+    case "download":
+      return t({ en: "Downloaded an object", fr: "Objet téléchargé", de: "Objekt heruntergeladen" });
+    case "delete":
+      return t({ en: "Deleted an object", fr: "Objet supprimé", de: "Objekt gelöscht" });
+    case "list":
+      return t({ en: "Listed content", fr: "Contenu listé", de: "Inhalt aufgelistet" });
+    case "metadata":
+      return t({ en: "Read or changed settings", fr: "Paramètres consultés ou modifiés", de: "Einstellungen gelesen oder geändert" });
+    default:
+      return t({ en: "Performed an S3 operation", fr: "Opération S3 effectuée", de: "S3-Vorgang ausgeführt" });
+  }
+}
+
+function serverLogOperationDetail(entry: PortalServerAccessLogEntry, objectLabel: string, t: ReturnType<typeof useI18n>["t"]): string {
+  if (entry.operation_category === "list") {
+    return t({
+      en: `Listed ${entry.storage_space_name || entry.bucket_name}`,
+      fr: `Consultation de ${entry.storage_space_name || entry.bucket_name}`,
+      de: `${entry.storage_space_name || entry.bucket_name} aufgelistet`,
+    });
+  }
+  if (objectLabel === "-") {
+    return entry.operation;
+  }
+  switch (entry.operation_category) {
+    case "upload":
+      return t({ en: `Added ${objectLabel}`, fr: `Ajout de ${objectLabel}`, de: `${objectLabel} hinzugefügt` });
+    case "download":
+      return t({ en: `Downloaded ${objectLabel}`, fr: `Téléchargement de ${objectLabel}`, de: `${objectLabel} heruntergeladen` });
+    case "delete":
+      return t({ en: `Deleted ${objectLabel}`, fr: `Suppression de ${objectLabel}`, de: `${objectLabel} gelöscht` });
+    case "metadata":
+      return t({ en: `Checked or changed ${objectLabel}`, fr: `Consultation ou modification de ${objectLabel}`, de: `${objectLabel} geprüft oder geändert` });
+    default:
+      return t({ en: `S3 operation on ${objectLabel}`, fr: `Opération S3 sur ${objectLabel}`, de: `S3-Vorgang auf ${objectLabel}` });
+  }
+}
+
+function serverLogStatusLabel(entry: PortalServerAccessLogEntry, t: ReturnType<typeof useI18n>["t"]): string {
+  if (entry.status_code == null) return entry.error_code || "-";
+  if (entry.status_code >= 400) {
+    return t({ en: `Failed (${entry.status_code})`, fr: `Échec (${entry.status_code})`, de: `Fehlgeschlagen (${entry.status_code})` });
+  }
+  if (entry.status_code >= 300) {
+    return t({ en: `Redirected (${entry.status_code})`, fr: `Redirection (${entry.status_code})`, de: `Weitergeleitet (${entry.status_code})` });
+  }
+  return t({ en: `Succeeded (${entry.status_code})`, fr: `Réussi (${entry.status_code})`, de: `Erfolgreich (${entry.status_code})` });
+}
 
 export default function PortalTransfersPage() {
-  const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<TransferTab>("all");
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData();
+  const { t, locale } = useI18n();
+  const [activeLogsTab, setActiveLogsTab] = useState<LogsTab>("server");
+  const [activeLiveTab, setActiveLiveTab] = useState<LiveTransferTab>("all");
+  const [serverLogDate, setServerLogDate] = useState(todayDateInputValue);
+  const [serverLogSpaceId, setServerLogSpaceId] = useState("");
+  const [showServerLogAdvancedFilter, setShowServerLogAdvancedFilter] = useState(false);
+  const [serverLogAdvancedDraft, setServerLogAdvancedDraft] = useState<ServerLogAdvancedFilterState>(defaultServerLogAdvancedFilter);
+  const [serverLogAdvancedApplied, setServerLogAdvancedApplied] = useState<ServerLogAdvancedFilterState | null>(null);
+  const [serverLogs, setServerLogs] = useState<PortalServerAccessLogEntry[]>([]);
+  const [serverLogsTotal, setServerLogsTotal] = useState(0);
+  const [serverLogsLoading, setServerLogsLoading] = useState(false);
+  const [serverLogsLoaded, setServerLogsLoaded] = useState(false);
+  const [serverLogsError, setServerLogsError] = useState<string | null>(null);
+  const [serverLogPage, setServerLogPage] = useState(1);
+  const [serverLogPageSize, setServerLogPageSize] = useState(25);
+  const [rawLogsModalOpen, setRawLogsModalOpen] = useState(false);
+  const [rawLogsDateFrom, setRawLogsDateFrom] = useState(todayDateInputValue);
+  const [rawLogsDateTo, setRawLogsDateTo] = useState(todayDateInputValue);
+  const [rawLogsSpaceId, setRawLogsSpaceId] = useState("");
+  const [rawLogsLoading, setRawLogsLoading] = useState(false);
+  const [rawLogsError, setRawLogsError] = useState<string | null>(null);
+  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const storageSpaces = workspace.spaces ?? [];
+
+  const serverLogAdvancedFilterParam = useMemo(
+    () => buildServerLogAdvancedFilterPayload(serverLogAdvancedApplied),
+    [serverLogAdvancedApplied]
+  );
+  const serverLogAdvancedDraftPayload = useMemo(
+    () => buildServerLogAdvancedFilterPayload(serverLogAdvancedDraft),
+    [serverLogAdvancedDraft]
+  );
+  const serverLogAdvancedAppliedPayload = useMemo(
+    () => buildServerLogAdvancedFilterPayload(serverLogAdvancedApplied),
+    [serverLogAdvancedApplied]
+  );
+  const serverLogAdvancedFilterActive = hasServerLogAdvancedFilters(serverLogAdvancedApplied);
+  const hasPendingServerLogAdvancedChanges = serverLogAdvancedDraftPayload !== serverLogAdvancedAppliedPayload;
+  const hasAnyServerLogAdvancedToClear = Boolean(serverLogAdvancedDraftPayload || serverLogAdvancedAppliedPayload);
+  const serverLogAdvancedFilterCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: showServerLogAdvancedFilter && hasPendingServerLogAdvancedChanges,
+    onClose: () => setShowServerLogAdvancedFilter(false),
+    zIndexClass: "z-[70]",
+  });
+
   const transfers = useMemo(() => {
-    if (activeTab === "uploads") return workspace.transfers.filter((transfer) => transfer.direction === "Upload");
-    if (activeTab === "downloads") return workspace.transfers.filter((transfer) => transfer.direction === "Download");
+    if (activeLiveTab === "uploads") return workspace.transfers.filter((transfer) => transfer.direction === "Upload");
+    if (activeLiveTab === "downloads") return workspace.transfers.filter((transfer) => transfer.direction === "Download");
     return workspace.transfers;
-  }, [activeTab, workspace.transfers]);
+  }, [activeLiveTab, workspace.transfers]);
   const transfersTableStatus = transfers.length === 0 ? "empty" : "ready";
   const visibleSizeBytes = useMemo(
     () => transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0),
     [transfers]
   );
+  const transferSummary = useMemo(() => {
+    const allTransfers = workspace.transfers;
+    return {
+      active: allTransfers.filter((transfer) => transfer.status === "Uploading" || transfer.status === "Queued").length,
+      completed: allTransfers.filter((transfer) => transfer.status === "Completed").length,
+      failed: allTransfers.filter((transfer) => transfer.status === "Failed").length,
+      totalSizeBytes: allTransfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0),
+    };
+  }, [workspace.transfers]);
+  const emptyTransferMessage =
+    activeLiveTab === "uploads"
+      ? t({
+          en: "No uploads yet. Add files from a space to follow them here.",
+          fr: "Aucun envoi pour le moment. Ajoutez des fichiers depuis un espace pour les suivre ici.",
+          de: "Noch keine Uploads. Fügen Sie Dateien aus einem Bereich hinzu, um sie hier zu verfolgen.",
+        })
+      : activeLiveTab === "downloads"
+        ? t({
+            en: "No downloads yet. Download a file from a space to follow it here.",
+            fr: "Aucun téléchargement pour le moment. Téléchargez un fichier depuis un espace pour le suivre ici.",
+            de: "Noch keine Downloads. Laden Sie eine Datei aus einem Bereich herunter, um sie hier zu verfolgen.",
+          })
+        : t({
+            en: "No file movement to show yet. Upload or download from a space to see progress here.",
+            fr: "Aucun mouvement de fichier à afficher. Envoyez ou téléchargez depuis un espace pour voir la progression ici.",
+            de: "Noch keine Dateibewegung. Laden Sie aus einem Bereich hoch oder herunter, um den Fortschritt hier zu sehen.",
+          });
+  const transferNote = useCallback((transfer: PortalWorkspaceTransfer) => {
+    if (transfer.errorMessage) return transfer.errorMessage;
+    if (transfer.status === "Failed") {
+      return t({
+        en: "Open the space and retry when you are ready.",
+        fr: "Ouvrez l'espace et réessayez quand vous êtes prêt.",
+        de: "Öffnen Sie den Bereich und versuchen Sie es erneut, wenn Sie bereit sind.",
+      });
+    }
+    if (transfer.status === "Queued") {
+      return t({
+        en: "Waiting to start.",
+        fr: "En attente de démarrage.",
+        de: "Wartet auf den Start.",
+      });
+    }
+    if (transfer.status === "Uploading") {
+      return transfer.direction === "Upload"
+        ? t({
+            en: "Keep the space open until the upload finishes.",
+            fr: "Gardez l'espace ouvert jusqu'à la fin de l'envoi.",
+            de: "Lassen Sie den Bereich offen, bis der Upload abgeschlossen ist.",
+          })
+        : t({
+            en: "Preparing the download.",
+            fr: "Préparation du téléchargement.",
+            de: "Download wird vorbereitet.",
+          });
+    }
+    return transfer.direction === "Upload"
+      ? t({
+          en: "Available in the space.",
+          fr: "Disponible dans l'espace.",
+          de: "Im Bereich verfügbar.",
+        })
+      : t({
+          en: "Saved by your browser.",
+          fr: "Enregistré par votre navigateur.",
+          de: "Vom Browser gespeichert.",
+        });
+  }, [t]);
+
   const transferColumns = useMemo<DataTableColumn<PortalWorkspaceTransfer>[]>(
     () => [
       {
         id: "name",
-        label: t({ en: "Name", fr: "Nom", de: "Name" }),
+        label: t({ en: "File", fr: "Fichier", de: "Datei" }),
         primary: true,
         cellClassName: "break-words",
         render: (transfer) => transfer.name,
       },
       {
-        id: "type",
-        label: t({ en: "Type", fr: "Type", de: "Typ" }),
+        id: "space",
+        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
+        cellClassName: "break-words",
+        render: (transfer) => transfer.spaceName,
+      },
+      {
+        id: "direction",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
         render: (transfer) => portalTransferDirectionLabel(transfer.direction, t),
       },
       {
@@ -69,9 +413,9 @@ export default function PortalTransfersPage() {
         ),
       },
       {
-        id: "speed",
-        label: t({ en: "Speed", fr: "Débit", de: "Geschwindigkeit" }),
-        render: (transfer) => transfer.speedLabel,
+        id: "size",
+        label: t({ en: "Size", fr: "Taille", de: "Größe" }),
+        render: (transfer) => formatBytes(transfer.sizeBytes ?? 0),
       },
       {
         id: "started",
@@ -80,22 +424,374 @@ export default function PortalTransfersPage() {
       },
       {
         id: "eta",
-        label: t({ en: "ETA", fr: "ETA", de: "ETA" }),
+        label: t({ en: "Time left", fr: "Temps restant", de: "Verbleibende Zeit" }),
         render: (transfer) => transfer.etaLabel,
       },
       {
-        id: "details",
-        label: t({ en: "Details", fr: "Détails", de: "Details" }),
+        id: "note",
+        label: t({ en: "Note", fr: "Note", de: "Hinweis" }),
         cellClassName: "break-words text-xs",
-        render: (transfer) =>
-          transfer.errorMessage ??
-          (transfer.status === "Failed"
-            ? t({ en: "Failure details unavailable.", fr: "Détails de l'échec indisponibles.", de: "Fehlerdetails nicht verfügbar." })
-            : "-"),
+        render: (transfer) => transferNote(transfer),
+      },
+    ],
+    [t, transferNote]
+  );
+
+  const resetServerLogResults = useCallback(() => {
+    setServerLogs([]);
+    setServerLogsTotal(0);
+    setServerLogsLoaded(false);
+    setServerLogsError(null);
+    setServerLogPage(1);
+  }, []);
+
+  const setServerDateAndReset = useCallback((value: string) => {
+    setServerLogDate(value);
+    resetServerLogResults();
+  }, [resetServerLogResults]);
+
+  const serverLogActionOptions = useMemo(
+    () => [
+      { value: "", label: t({ en: "Any action", fr: "Toutes les actions", de: "Jede Aktion" }) },
+      { value: "upload", label: t({ en: "Uploads", fr: "Envois", de: "Uploads" }) },
+      { value: "download", label: t({ en: "Downloads", fr: "Téléchargements", de: "Downloads" }) },
+      { value: "delete", label: t({ en: "Deletes", fr: "Suppressions", de: "Löschungen" }) },
+      { value: "list", label: t({ en: "Listings", fr: "Listages", de: "Auflistungen" }) },
+      { value: "metadata", label: t({ en: "Metadata/settings", fr: "Métadonnées/paramètres", de: "Metadaten/Einstellungen" }) },
+      { value: "other", label: t({ en: "Other S3 operations", fr: "Autres opérations S3", de: "Andere S3-Vorgänge" }) },
+    ],
+    [t]
+  ) as Array<{ value: ServerLogActionFilter; label: string }>;
+  const serverLogActionLabel = useCallback(
+    (value: ServerLogActionFilter) => serverLogActionOptions.find((option) => option.value === value)?.label ?? value,
+    [serverLogActionOptions]
+  );
+
+  const updateServerLogAdvancedField = useCallback((field: keyof ServerLogAdvancedFilterState, value: string) => {
+    setServerLogAdvancedDraft((prev) => ({ ...prev, [field]: value }));
+  }, []);
+  const updateServerLogAdvancedMatchMode = useCallback((field: "pathMatchMode" | "identityMatchMode", value: TextMatchMode) => {
+    setServerLogAdvancedDraft((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const activeFieldClass =
+    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
+  const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
+  const pendingFieldClass =
+    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25";
+  const pendingLabelClass = "text-amber-700 dark:text-amber-300";
+  const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
+    if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
+    if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
+    return { labelClass: "", fieldClass: "" };
+  };
+
+  const pathAppliedValue = (serverLogAdvancedApplied?.path ?? "").trim();
+  const identityAppliedValue = (serverLogAdvancedApplied?.identity ?? "").trim();
+  const pathDraftValue = serverLogAdvancedDraft.path.trim();
+  const identityDraftValue = serverLogAdvancedDraft.identity.trim();
+  const pathAppliedParsed = useMemo(() => parseExactListInput(serverLogAdvancedApplied?.path ?? ""), [serverLogAdvancedApplied]);
+  const pathDraftParsed = useMemo(() => parseExactListInput(serverLogAdvancedDraft.path), [serverLogAdvancedDraft.path]);
+  const identityAppliedParsed = useMemo(() => parseExactListInput(serverLogAdvancedApplied?.identity ?? ""), [serverLogAdvancedApplied]);
+  const identityDraftParsed = useMemo(() => parseExactListInput(serverLogAdvancedDraft.identity), [serverLogAdvancedDraft.identity]);
+  const pathAppliedMode: TextMatchMode =
+    pathAppliedParsed.listProvided && pathAppliedParsed.values.length > 0 ? "exact" : (serverLogAdvancedApplied?.pathMatchMode ?? "contains");
+  const identityAppliedMode: TextMatchMode =
+    identityAppliedParsed.listProvided && identityAppliedParsed.values.length > 0 ? "exact" : (serverLogAdvancedApplied?.identityMatchMode ?? "contains");
+  const pathDraftForcesExact = pathDraftParsed.listProvided && pathDraftParsed.values.length > 0;
+  const identityDraftForcesExact = identityDraftParsed.listProvided && identityDraftParsed.values.length > 0;
+  const pathDraftMode: TextMatchMode = pathDraftForcesExact ? "exact" : serverLogAdvancedDraft.pathMatchMode;
+  const identityDraftMode: TextMatchMode = identityDraftForcesExact ? "exact" : serverLogAdvancedDraft.identityMatchMode;
+  const pathPending = pathDraftValue !== pathAppliedValue || (pathDraftValue.length > 0 && pathDraftMode !== pathAppliedMode);
+  const identityPending = identityDraftValue !== identityAppliedValue || (identityDraftValue.length > 0 && identityDraftMode !== identityAppliedMode);
+  const actionPending = serverLogAdvancedDraft.action !== (serverLogAdvancedApplied?.action ?? "");
+  const actionFieldState = fieldHighlight(Boolean(serverLogAdvancedApplied?.action), actionPending);
+  const pathFieldState = fieldHighlight(Boolean(pathAppliedValue), pathPending);
+  const identityFieldState = fieldHighlight(Boolean(identityAppliedValue), identityPending);
+
+  const applyServerLogAdvancedFilter = useCallback(() => {
+    setServerLogAdvancedApplied(serverLogAdvancedDraft);
+    setShowServerLogAdvancedFilter(false);
+    resetServerLogResults();
+  }, [resetServerLogResults, serverLogAdvancedDraft]);
+  const resetServerLogAdvancedFilter = useCallback(() => {
+    setServerLogAdvancedDraft(defaultServerLogAdvancedFilter);
+    setServerLogAdvancedApplied(null);
+    resetServerLogResults();
+  }, [resetServerLogResults]);
+  const clearServerLogAdvancedField = useCallback((field: ServerLogAdvancedFilterField) => {
+    setServerLogAdvancedDraft((prev) => {
+      if (field === "action") return { ...prev, action: "" };
+      if (field === "path") return { ...prev, path: "" };
+      return { ...prev, identity: "" };
+    });
+    setServerLogAdvancedApplied((prev) => {
+      if (!prev) return prev;
+      if (field === "action") return { ...prev, action: "" };
+      if (field === "path") return { ...prev, path: "" };
+      return { ...prev, identity: "" };
+    });
+    resetServerLogResults();
+  }, [resetServerLogResults]);
+  const removeServerLogActiveFilterItem = useCallback((action: ActiveServerLogFilterRemoveAction) => {
+    clearServerLogAdvancedField(action.field);
+  }, [clearServerLogAdvancedField]);
+
+  const activeServerLogFilterSummaryItems = useMemo(() => {
+    const items: Array<{ id: string; label: string; remove: ActiveServerLogFilterRemoveAction }> = [];
+    if (serverLogAdvancedApplied?.action) {
+      items.push({
+        id: "action",
+        label: `${t({ en: "Action", fr: "Action", de: "Aktion" })}: ${serverLogActionLabel(serverLogAdvancedApplied.action)}`,
+        remove: { type: "advanced", field: "action" },
+      });
+    }
+    const pathLabel = serverLogAdvancedApplied
+      ? formatTextFilterSummary(t({ en: "Path", fr: "Chemin", de: "Pfad" }), serverLogAdvancedApplied.path, pathAppliedMode)
+      : null;
+    if (pathLabel) items.push({ id: "path", label: pathLabel, remove: { type: "advanced", field: "path" } });
+    const identityLabel = serverLogAdvancedApplied
+      ? formatTextFilterSummary(t({ en: "Identity", fr: "Identité", de: "Identität" }), serverLogAdvancedApplied.identity, identityAppliedMode)
+      : null;
+    if (identityLabel) items.push({ id: "identity", label: identityLabel, remove: { type: "advanced", field: "identity" } });
+    return items;
+  }, [identityAppliedMode, pathAppliedMode, serverLogActionLabel, serverLogAdvancedApplied, t]);
+
+  const serverLogAdvancedDraftSummaryItems = useMemo(() => {
+    const items: Array<{ id: string; label: string }> = [];
+    if (serverLogAdvancedDraft.action) {
+      items.push({
+        id: "action",
+        label: `${t({ en: "Action", fr: "Action", de: "Aktion" })}: ${serverLogActionLabel(serverLogAdvancedDraft.action)}`,
+      });
+    }
+    const pathLabel = formatTextFilterSummary(t({ en: "Path", fr: "Chemin", de: "Pfad" }), serverLogAdvancedDraft.path, pathDraftMode);
+    if (pathLabel) items.push({ id: "path", label: pathLabel });
+    const identityLabel = formatTextFilterSummary(t({ en: "Identity", fr: "Identité", de: "Identität" }), serverLogAdvancedDraft.identity, identityDraftMode);
+    if (identityLabel) items.push({ id: "identity", label: identityLabel });
+    return items;
+  }, [identityDraftMode, pathDraftMode, serverLogActionLabel, serverLogAdvancedDraft, t]);
+  const serverLogAdvancedDraftActiveCount = serverLogAdvancedDraftSummaryItems.length;
+
+  useEffect(() => {
+    if (activeLogsTab !== "server" || !accountIdForApi || !serverLogDate) return;
+    let cancelled = false;
+    setServerLogsLoading(true);
+    setServerLogsError(null);
+    setServerLogsLoaded(false);
+    void fetchPortalServerAccessLogPage(accountIdForApi, {
+        date: serverLogDate,
+        mode: "operations",
+        spaceId: serverLogSpaceId || undefined,
+        limit: serverLogPageSize,
+        offset: (serverLogPage - 1) * serverLogPageSize,
+        timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+        advancedFilter: serverLogAdvancedFilterParam,
+      })
+      .then((page) => {
+        if (cancelled) return;
+        setServerLogs(page.entries);
+        setServerLogsTotal(page.total);
+        setServerLogsLoaded(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(err);
+        setServerLogs([]);
+        setServerLogsTotal(0);
+        setServerLogsLoaded(true);
+        setServerLogsError(
+          extractApiError(
+            err,
+            t({
+              en: "Unable to retrieve server operation logs.",
+              fr: "Impossible de récupérer les logs d'opérations serveur.",
+              de: "Server-Vorgangslogs können nicht abgerufen werden.",
+            })
+          )
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setServerLogsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, activeLogsTab, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
+
+  const openRawLogsModal = useCallback(() => {
+    setRawLogsDateFrom(serverLogDate);
+    setRawLogsDateTo(serverLogDate);
+    setRawLogsSpaceId(serverLogSpaceId);
+    setRawLogsError(null);
+    setRawLogsModalOpen(true);
+  }, [serverLogDate, serverLogSpaceId]);
+
+  const handleDownloadRawLogs = useCallback(async () => {
+    if (!accountIdForApi) return;
+    if (!rawLogsDateFrom || !rawLogsDateTo) {
+      setRawLogsError(t({ en: "Select a start and end date.", fr: "Sélectionnez une date de début et de fin.", de: "Wählen Sie ein Start- und Enddatum." }));
+      return;
+    }
+    if (rawLogsDateTo < rawLogsDateFrom) {
+      setRawLogsError(t({ en: "The end date must be after the start date.", fr: "La date de fin doit être après la date de début.", de: "Das Enddatum muss nach dem Startdatum liegen." }));
+      return;
+    }
+    setRawLogsLoading(true);
+    setRawLogsError(null);
+    try {
+      const result = await downloadPortalServerAccessRawLogs(accountIdForApi, {
+        dateFrom: rawLogsDateFrom,
+        dateTo: rawLogsDateTo,
+        spaceId: rawLogsSpaceId || undefined,
+        timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+      });
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setRawLogsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      setRawLogsError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to retrieve raw server logs.",
+            fr: "Impossible de récupérer les logs serveur bruts.",
+            de: "Rohe Serverlogs können nicht abgerufen werden.",
+          })
+        )
+      );
+    } finally {
+      setRawLogsLoading(false);
+    }
+  }, [accountIdForApi, rawLogsDateFrom, rawLogsDateTo, rawLogsSpaceId, t]);
+
+  const serverLogRows = useMemo<ServerLogRow[]>(() => {
+    return serverLogs
+      .map((entry) => {
+        const objectLabel = serverLogObjectLabel(entry);
+        const storageSpace = entry.storage_space_name || entry.storage_space_id || entry.bucket_name;
+        const identity = entry.requester_identity;
+        const identityKind = identity?.kind ?? "unknown";
+        const sizeBytes = serverLogSizeBytes(entry);
+        const userAgent = compactUserAgent(entry.user_agent);
+        const statusDetailParts = [
+          entry.error_code,
+          sizeBytes == null ? null : formatBytes(sizeBytes),
+        ].filter(Boolean);
+        const sourceDetailParts = [
+          entry.client_ip ? `IP ${entry.client_ip}` : null,
+          userAgent,
+        ].filter(Boolean);
+        const identityKeyParts = [
+          entry.requester ? `UID ${compactServerLogRequester(entry.requester)}` : null,
+          identity?.access_key_id ? `key ${compactServerLogRequester(identity.access_key_id)}` : null,
+        ].filter(Boolean);
+        return {
+          id: entry.id,
+          timestampLabel: formatServerLogTimestamp(entry.timestamp, locale),
+          timestampSort: timestampSortValue(entry.timestamp),
+          operationLabel: serverLogOperationLabel(entry, t),
+          operationDetail: serverLogOperationDetail(entry, objectLabel, t),
+          rawOperation: entry.operation,
+          targetLabel: storageSpace,
+          targetDetail: entry.object_key || objectLabel,
+          statusLabel: serverLogStatusLabel(entry, t),
+          statusDetail: statusDetailParts.join(" · ") || "-",
+          statusTone: serverLogStatusTone(entry.status_code),
+          identityLabel: identity?.label || t({ en: "Unknown S3 identity", fr: "Identité S3 inconnue", de: "Unbekannte S3-Identität" }),
+          identityDetail: identity?.detail || t({ en: "Requester was not resolved", fr: "Le demandeur n'a pas été résolu", de: "Requester wurde nicht aufgelöst" }),
+          identityKeyLabel: identityKeyParts.join(" · ") || "-",
+          identityKindLabel: serverLogIdentityKindLabel(identityKind, t),
+          identityTone: serverLogIdentityTone(identityKind, Boolean(identity?.resolved)),
+          sourceDetail: sourceDetailParts.join(" · ") || "-",
+        };
+      })
+      .sort((left, right) => right.timestampSort - left.timestampSort);
+  }, [locale, serverLogs, t]);
+
+  const safeServerLogPage = Math.min(Math.max(serverLogPage, 1), Math.max(1, Math.ceil(serverLogsTotal / serverLogPageSize)));
+
+  const serverLogColumns = useMemo<DataTableColumn<ServerLogRow>[]>(
+    () => [
+      {
+        id: "operation",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+        primary: true,
+        cellClassName: "min-w-[16rem] break-words",
+        render: (entry) => (
+          <div className="min-w-0">
+            <div>{entry.operationLabel}</div>
+            <div className={cx("mt-1 text-xs font-normal", uiMutedTextClass)}>{entry.operationDetail}</div>
+            <div className={cx("mt-1 text-[11px] font-normal", uiMutedTextClass)}>{entry.rawOperation}</div>
+          </div>
+        ),
+      },
+      {
+        id: "target",
+        label: t({ en: "Space / object", fr: "Espace / objet", de: "Bereich / Objekt" }),
+        cellClassName: "min-w-[14rem] break-words",
+        render: (entry) => (
+          <div className="min-w-0">
+            <div>{entry.targetLabel}</div>
+            <div className={cx("mt-1 text-xs font-normal", uiMutedTextClass)}>{entry.targetDetail}</div>
+          </div>
+        ),
+      },
+      {
+        id: "identity",
+        label: t({ en: "Identity", fr: "Identité", de: "Identität" }),
+        cellClassName: "min-w-[14rem] break-words",
+        render: (entry) => (
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>{entry.identityLabel}</span>
+              <UiBadge tone={entry.identityTone}>{entry.identityKindLabel}</UiBadge>
+            </div>
+            <div className={cx("mt-1 text-xs font-normal", uiMutedTextClass)}>{entry.identityDetail}</div>
+            <div className={cx("mt-1 text-[11px] font-normal", uiMutedTextClass)}>{entry.identityKeyLabel}</div>
+          </div>
+        ),
+      },
+      {
+        id: "status",
+        label: t({ en: "Result", fr: "Résultat", de: "Ergebnis" }),
+        render: (entry) => (
+          <div className="min-w-0">
+            <UiBadge tone={entry.statusTone}>{entry.statusLabel}</UiBadge>
+            <div className={cx("mt-1 text-xs font-normal", uiMutedTextClass)}>{entry.statusDetail}</div>
+          </div>
+        ),
+      },
+      {
+        id: "source",
+        label: t({ en: "Date / source", fr: "Date / source", de: "Datum / Quelle" }),
+        cellClassName: "min-w-[14rem] break-words",
+        render: (entry) => (
+          <div className="min-w-0">
+            <div>{entry.timestampLabel}</div>
+            <div className={cx("mt-1 text-xs font-normal", uiMutedTextClass)}>{entry.sourceDetail}</div>
+          </div>
+        ),
       },
     ],
     [t]
   );
+  const serverLogsTableStatus = serverLogsLoading
+    ? "loading"
+    : serverLogsError
+      ? "error"
+      : !serverLogsLoaded && serverLogRows.length === 0
+        ? "empty"
+        : serverLogRows.length === 0
+          ? "empty"
+          : "ready";
 
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
@@ -103,19 +799,75 @@ export default function PortalTransfersPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Übertragungen werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view transfers.", fr: "Sélectionnez un compte pour voir les transferts.", de: "Wählen Sie ein Konto aus, um Übertragungen anzuzeigen." }),
+    loadingMessage: t({ en: "Loading logs...", fr: "Chargement des logs...", de: "Logs werden geladen..." }),
+    noAccountMessage: t({ en: "Select a project to view logs.", fr: "Sélectionnez un projet pour voir les logs.", de: "Wählen Sie ein Projekt aus, um Logs anzuzeigen." }),
   });
   if (pageState) return pageState;
 
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title={t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" })}
-        description={t({ en: "Monitor ongoing and completed transfers.", fr: "Suivez les transferts en cours et terminés.", de: "Überwachen Sie laufende und abgeschlossene Übertragungen." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }) })}
-      />
-      <UiCard>
+  const liveTransfersContent = workspace.transfers.length === 0 ? (
+    <PageEmptyState
+      eyebrow={t({ en: "Nothing moving", fr: "Aucun mouvement", de: "Keine Bewegung" })}
+      title={t({ en: "No browser transfer yet", fr: "Aucun transfert navigateur", de: "Noch keine Browser-Übertragung" })}
+      description={t({
+        en: "Browser-side operations appear automatically after you add files to a space or download files from one.",
+        fr: "Les opérations côté navigateur apparaissent automatiquement après l'ajout de fichiers à un espace ou le téléchargement depuis un espace.",
+        de: "Browserseitige Vorgänge erscheinen automatisch, nachdem Sie Dateien zu einem Bereich hinzufügen oder daraus herunterladen.",
+      })}
+      primaryAction={{ label: t({ en: "Start from spaces", fr: "Commencer depuis les espaces", de: "In Bereichen starten" }), to: "/portal/storage-spaces" }}
+    />
+  ) : (
+    <>
+      <UiCard
+        muted
+        title={t({ en: "Recent browser transfers", fr: "Transferts navigateur récents", de: "Letzte Browser-Übertragungen" })}
+        description={t({
+          en: "These operations come from the Portal browser session and stay useful for immediate progress feedback.",
+          fr: "Ces opérations viennent de la session navigateur du portail et restent utiles pour suivre la progression immédiate.",
+          de: "Diese Vorgänge stammen aus der Portal-Browsersitzung und bleiben für unmittelbares Fortschrittsfeedback nützlich.",
+        })}
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="min-w-0">
+            <div className={uiLabelClass}>{t({ en: "In progress", fr: "En cours", de: "In Bearbeitung" })}</div>
+            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.active}</div>
+            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+              {t({ en: "Uploads or downloads still moving", fr: "Envois ou téléchargements encore en cours", de: "Uploads oder Downloads laufen noch" })}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <div className={uiLabelClass}>{t({ en: "Completed", fr: "Terminés", de: "Abgeschlossen" })}</div>
+            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.completed}</div>
+            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+              {t({ en: "Files confirmed by Portal", fr: "Fichiers confirmés par le portail", de: "Vom Portal bestätigte Dateien" })}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <div className={uiLabelClass}>{t({ en: "Needs attention", fr: "À vérifier", de: "Zu prüfen" })}</div>
+            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.failed}</div>
+            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+              {transferSummary.failed > 0
+                ? t({ en: "Retry from the related space", fr: "À relancer depuis l'espace lié", de: "Aus dem zugehörigen Bereich erneut versuchen" })
+                : t({ en: "No failed transfers", fr: "Aucun transfert en échec", de: "Keine fehlgeschlagenen Übertragungen" })}
+            </p>
+          </div>
+        </div>
+        <div className={cx("mt-4 border-t pt-3 text-xs", uiDividerClass, uiMutedTextClass)}>
+          {t({
+            en: `Tracked file size: ${formatBytes(transferSummary.totalSizeBytes)}`,
+            fr: `Taille des fichiers suivis : ${formatBytes(transferSummary.totalSizeBytes)}`,
+            de: `Verfolgte Dateigröße: ${formatBytes(transferSummary.totalSizeBytes)}`,
+          })}
+        </div>
+      </UiCard>
+
+      <UiCard
+        title={t({ en: "Live transfer history", fr: "Historique live des transferts", de: "Live-Übertragungsverlauf" })}
+        description={t({
+          en: "Filter browser-side uploads and downloads.",
+          fr: "Filtrez les envois et téléchargements côté navigateur.",
+          de: "Filtern Sie browserseitige Uploads und Downloads.",
+        })}
+      >
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
             tabs={[
@@ -123,8 +875,8 @@ export default function PortalTransfersPage() {
               { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Hochladen" }) },
               { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Herunterladen" }) },
             ]}
-            activeTab={activeTab}
-            onChange={(tab) => setActiveTab(tab as TransferTab)}
+            activeTab={activeLiveTab}
+            onChange={(tab) => setActiveLiveTab(tab as LiveTransferTab)}
             variant="bar"
           />
         </div>
@@ -135,13 +887,352 @@ export default function PortalTransfersPage() {
           status={transfersTableStatus}
           loadingMessage={t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Übertragungen werden geladen..." })}
           errorMessage={t({ en: "Unable to load transfers.", fr: "Impossible de charger les transferts.", de: "Übertragungen können nicht geladen werden." })}
-          emptyMessage={t({ en: "No transfers to display.", fr: "Aucun transfert à afficher.", de: "Keine Übertragungen zum Anzeigen." })}
+          emptyMessage={emptyTransferMessage}
           responsiveCards
         />
         <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
-          {t({ en: `Total visible size: ${formatBytes(visibleSizeBytes)}`, fr: `Taille visible totale : ${formatBytes(visibleSizeBytes)}`, de: `Gesamte sichtbare Größe: ${formatBytes(visibleSizeBytes)}` })}
+          {t({ en: `Visible file size: ${formatBytes(visibleSizeBytes)}`, fr: `Taille visible des fichiers : ${formatBytes(visibleSizeBytes)}`, de: `Sichtbare Dateigröße: ${formatBytes(visibleSizeBytes)}` })}
         </div>
       </UiCard>
+    </>
+  );
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={t({ en: "Operation logs", fr: "Logs des opérations", de: "Vorgangslogs" })}
+        description={t({
+          en: "Review server-side S3 operations first, with browser live transfers kept aside for immediate Portal feedback.",
+          fr: "Consultez d'abord les opérations S3 côté serveur, avec les transferts live du navigateur conservés à part pour le suivi immédiat du portail.",
+          de: "Prüfen Sie zuerst serverseitige S3-Vorgänge; Browser-Live-Übertragungen bleiben separat für unmittelbares Portal-Feedback.",
+        })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Logs", fr: "Logs", de: "Logs" }) })}
+        actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
+      />
+
+      <PageTabs
+        tabs={[
+          { id: "server", label: t({ en: "Server logs", fr: "Logs serveur", de: "Serverlogs" }) },
+          { id: "live", label: t({ en: "Live browser", fr: "Live navigateur", de: "Live-Browser" }) },
+        ]}
+        activeTab={activeLogsTab}
+        onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
+        variant="bar"
+      />
+
+      {activeLogsTab === "server" ? (
+        <UiCard
+          title={t({ en: "Server-side operations", fr: "Opérations côté serveur", de: "Serverseitige Vorgänge" })}
+          description={t({
+            en: "Server Access Logging entries load automatically for the selected date and page.",
+            fr: "Les entrées Server Access Logging se chargent automatiquement pour la date et la page sélectionnées.",
+            de: "Server-Access-Logging-Einträge werden automatisch für das ausgewählte Datum und die Seite geladen.",
+          })}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,14rem)_minmax(0,18rem)]">
+              <label className="block">
+                <span className={uiLabelClass}>{t({ en: "Go to date", fr: "Aller à la date", de: "Zum Datum" })}</span>
+                <input
+                  type="date"
+                  value={serverLogDate}
+                  onChange={(event) => setServerDateAndReset(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className={uiLabelClass}>{t({ en: "Storage space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                <select
+                  value={serverLogSpaceId}
+                  onChange={(event) => {
+                    setServerLogSpaceId(event.target.value);
+                    resetServerLogResults();
+                  }}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="">{t({ en: "All visible spaces", fr: "Tous les espaces visibles", de: "Alle sichtbaren Bereiche" })}</option>
+                  {storageSpaces.map((space) => (
+                    <option key={space.id} value={space.id}>{space.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <UiButton variant="secondary" size="sm" onClick={() => setServerDateAndReset(shiftDateInputValue(serverLogDate, -1))}>
+                {t({ en: "Previous day", fr: "Jour précédent", de: "Vortag" })}
+              </UiButton>
+              <UiButton variant="secondary" size="sm" onClick={() => setServerDateAndReset(todayDateInputValue())}>
+                {t({ en: "Today", fr: "Aujourd'hui", de: "Heute" })}
+              </UiButton>
+              <UiButton variant="secondary" size="sm" onClick={() => setServerDateAndReset(shiftDateInputValue(serverLogDate, 1))}>
+                {t({ en: "Next day", fr: "Jour suivant", de: "Nächster Tag" })}
+              </UiButton>
+              <UiButton variant="secondary" onClick={openRawLogsModal} disabled={!accountIdForApi}>
+                {t({ en: "Raw logs", fr: "Logs bruts", de: "Rohe Logs" })}
+              </UiButton>
+              <UiButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowServerLogAdvancedFilter(true)}
+                className={advancedFilterToolbarButtonClass(showServerLogAdvancedFilter || serverLogAdvancedFilterActive)}
+              >
+                {t({ en: "Advanced filter", fr: "Filtre avancé", de: "Erweiterter Filter" })}
+                {serverLogAdvancedFilterActive ? " · Active" : ""}
+              </UiButton>
+            </div>
+          </div>
+          {activeServerLogFilterSummaryItems.length > 0 ? (
+            <ActiveFiltersBar
+              className="mt-3"
+              label={t({ en: "Active filters:", fr: "Filtres actifs :", de: "Aktive Filter:" })}
+              clearLabel={t({ en: "Clear all", fr: "Tout effacer", de: "Alle löschen" })}
+              items={activeServerLogFilterSummaryItems.map((item) => ({
+                id: item.id,
+                label: item.label,
+                onRemove: () => removeServerLogActiveFilterItem(item.remove),
+                removeLabel: t({ en: "Remove filter", fr: "Retirer le filtre", de: "Filter entfernen" }),
+              }))}
+              onClearAll={resetServerLogAdvancedFilter}
+            />
+          ) : null}
+          {showServerLogAdvancedFilter ? (
+            <div className={advancedFilterRootClass}>
+              <button
+                type="button"
+                onClick={serverLogAdvancedFilterCloseGuard.requestClose}
+                className={advancedFilterBackdropClass}
+                aria-label={t({ en: "Close advanced filter drawer", fr: "Fermer le panneau de filtre avancé", de: "Erweiterten Filter schließen" })}
+              />
+              <div className={advancedFilterDrawerClass}>
+                <div className={advancedFilterHeaderClass}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                        {t({ en: "Advanced filter", fr: "Filtre avancé", de: "Erweiterter Filter" })}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {renderAdvancedFilterRuleCountBadge(serverLogAdvancedDraftActiveCount)}
+                        <span className={advancedFilterSyncBadgeClass(hasPendingServerLogAdvancedChanges)}>
+                          {formatAdvancedFilterSyncLabel(hasPendingServerLogAdvancedChanges)}
+                        </span>
+                      </div>
+                    </div>
+                    <UiButton variant="secondary" size="sm" onClick={serverLogAdvancedFilterCloseGuard.requestClose}>
+                      {t({ en: "Close", fr: "Fermer", de: "Schließen" })}
+                    </UiButton>
+                  </div>
+                </div>
+                <div className={advancedFilterBodyClass}>
+                  <div className="space-y-3">
+                    {renderAdvancedFilterDraftSummary(serverLogAdvancedDraftSummaryItems)}
+                    <section className={advancedFilterSectionClass}>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className={advancedFilterFieldCardClass()}>
+                          <label className={cx(uiLabelClass, actionFieldState.labelClass)} htmlFor="portal-server-log-action-filter">
+                            {t({ en: "Action", fr: "Action", de: "Aktion" })}
+                          </label>
+                          <select
+                            id="portal-server-log-action-filter"
+                            value={serverLogAdvancedDraft.action}
+                            onChange={(event) => updateServerLogAdvancedField("action", event.target.value as ServerLogActionFilter)}
+                            className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 ${actionFieldState.fieldClass}`)}
+                          >
+                            {serverLogActionOptions.map((option) => (
+                              <option key={option.value || "any"} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className={advancedFilterFieldCardClass("md:col-span-2")}>
+                          <div className="flex items-center justify-between gap-2">
+                            <label className={cx(uiLabelClass, pathFieldState.labelClass)} htmlFor="portal-server-log-path-filter">
+                              {t({ en: "Path", fr: "Chemin", de: "Pfad" })}
+                            </label>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateServerLogAdvancedMatchMode("pathMatchMode", "contains")}
+                                className={advancedFilterMatchModeButtonClass(pathDraftMode === "contains", pathDraftForcesExact)}
+                                disabled={pathDraftForcesExact}
+                              >
+                                ~
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateServerLogAdvancedMatchMode("pathMatchMode", "exact")}
+                                className={advancedFilterMatchModeButtonClass(pathDraftMode === "exact", pathDraftForcesExact)}
+                                disabled={pathDraftForcesExact}
+                              >
+                                =
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            id="portal-server-log-path-filter"
+                            value={serverLogAdvancedDraft.path}
+                            onChange={(event) => updateServerLogAdvancedField("path", event.target.value)}
+                            rows={3}
+                            className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${pathFieldState.fieldClass}`)}
+                          />
+                        </div>
+                        <div className={advancedFilterFieldCardClass("md:col-span-3")}>
+                          <div className="flex items-center justify-between gap-2">
+                            <label className={cx(uiLabelClass, identityFieldState.labelClass)} htmlFor="portal-server-log-identity-filter">
+                              {t({ en: "Identity", fr: "Identité", de: "Identität" })}
+                            </label>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateServerLogAdvancedMatchMode("identityMatchMode", "contains")}
+                                className={advancedFilterMatchModeButtonClass(identityDraftMode === "contains", identityDraftForcesExact)}
+                                disabled={identityDraftForcesExact}
+                              >
+                                ~
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateServerLogAdvancedMatchMode("identityMatchMode", "exact")}
+                                className={advancedFilterMatchModeButtonClass(identityDraftMode === "exact", identityDraftForcesExact)}
+                                disabled={identityDraftForcesExact}
+                              >
+                                =
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            id="portal-server-log-identity-filter"
+                            value={serverLogAdvancedDraft.identity}
+                            onChange={(event) => updateServerLogAdvancedField("identity", event.target.value)}
+                            rows={3}
+                            className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${identityFieldState.fieldClass}`)}
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+                <div className={advancedFilterFooterClass}>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <UiButton variant="secondary" size="sm" onClick={resetServerLogAdvancedFilter} disabled={!hasAnyServerLogAdvancedToClear}>
+                      {t({ en: "Reset", fr: "Réinitialiser", de: "Zurücksetzen" })}
+                    </UiButton>
+                    <UiButton size="sm" onClick={applyServerLogAdvancedFilter}>
+                      {t({ en: "Apply filter", fr: "Appliquer le filtre", de: "Filter anwenden" })}
+                    </UiButton>
+                  </div>
+                </div>
+              </div>
+              {serverLogAdvancedFilterCloseGuard.confirmationDialog}
+            </div>
+          ) : null}
+          {serverLogsError && <PageBanner tone="error" className="mt-3">{serverLogsError}</PageBanner>}
+          <div className={cx("mt-4 border-t pt-4", uiDividerClass)}>
+            <DataTableShell
+              columns={serverLogColumns}
+              rows={serverLogRows}
+              rowKey={(entry) => entry.id}
+              status={serverLogsTableStatus}
+              loadingMessage={t({ en: "Retrieving server logs...", fr: "Récupération des logs serveur...", de: "Serverlogs werden abgerufen..." })}
+              errorMessage={serverLogsError ?? t({ en: "Unable to retrieve server logs.", fr: "Impossible de récupérer les logs serveur.", de: "Serverlogs können nicht abgerufen werden." })}
+              emptyMessage={
+                serverLogsLoaded
+                  ? t({ en: "No server operation log for this selection.", fr: "Aucun log d'opération serveur pour cette sélection.", de: "Kein Server-Vorgangslog für diese Auswahl." })
+                  : t({ en: "Logs load automatically for the selected date.", fr: "Les logs se chargent automatiquement pour la date sélectionnée.", de: "Logs werden automatisch für das ausgewählte Datum geladen." })
+              }
+              pagination={{
+                page: safeServerLogPage,
+                pageSize: serverLogPageSize,
+                total: serverLogsTotal,
+                onPageChange: setServerLogPage,
+                onPageSizeChange: (size) => {
+                  setServerLogPageSize(size);
+                  setServerLogPage(1);
+                },
+                pageSizeOptions: [10, 25, 50, 100],
+                disabled: serverLogsLoading,
+              }}
+              responsiveCards
+            />
+            <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
+              {serverLogsLoaded
+                ? t({
+                    en: `${serverLogRows.length} of ${serverLogsTotal} server operations shown`,
+                    fr: `${serverLogRows.length} sur ${serverLogsTotal} opérations serveur affichées`,
+                    de: `${serverLogRows.length} von ${serverLogsTotal} Servervorgängen angezeigt`,
+                  })
+                : t({
+                    en: "Server logs may arrive a few minutes after the S3 operation.",
+                    fr: "Les logs serveur peuvent arriver quelques minutes après l'opération S3.",
+                    de: "Serverlogs können einige Minuten nach dem S3-Vorgang eintreffen.",
+                  })}
+            </div>
+          </div>
+        </UiCard>
+      ) : liveTransfersContent}
+
+      {rawLogsModalOpen ? (
+        <Modal
+          title={t({ en: "Retrieve raw server logs", fr: "Récupérer les logs serveur bruts", de: "Rohe Serverlogs abrufen" })}
+          onClose={() => {
+            if (!rawLogsLoading) setRawLogsModalOpen(false);
+          }}
+          maxWidthClass="max-w-xl"
+        >
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleDownloadRawLogs();
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className={uiLabelClass}>{t({ en: "From", fr: "Du", de: "Von" })}</span>
+                <input
+                  type="date"
+                  value={rawLogsDateFrom}
+                  onChange={(event) => setRawLogsDateFrom(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className={uiLabelClass}>{t({ en: "To", fr: "Au", de: "Bis" })}</span>
+                <input
+                  type="date"
+                  value={rawLogsDateTo}
+                  onChange={(event) => setRawLogsDateTo(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className={uiLabelClass}>{t({ en: "Storage space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+              <select
+                value={rawLogsSpaceId}
+                onChange={(event) => setRawLogsSpaceId(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              >
+                <option value="">{t({ en: "All visible spaces", fr: "Tous les espaces visibles", de: "Alle sichtbaren Bereiche" })}</option>
+                {storageSpaces.map((space) => (
+                  <option key={space.id} value={space.id}>{space.name}</option>
+                ))}
+              </select>
+            </label>
+            {rawLogsError ? <PageBanner tone="error">{rawLogsError}</PageBanner> : null}
+            <div className={cx("flex flex-wrap justify-end gap-2 border-t pt-4", uiDividerClass)}>
+              <UiButton type="button" variant="secondary" onClick={() => setRawLogsModalOpen(false)} disabled={rawLogsLoading}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton type="submit" loading={rawLogsLoading}>
+                {rawLogsLoading
+                  ? t({ en: "Retrieving...", fr: "Récupération...", de: "Wird abgerufen..." })
+                  : t({ en: "Download raw logs", fr: "Télécharger les logs bruts", de: "Rohe Logs herunterladen" })}
+              </UiButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   );
 }

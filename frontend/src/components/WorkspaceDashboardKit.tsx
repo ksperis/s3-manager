@@ -328,19 +328,21 @@ export function WorkspaceDashboardMetricTrendLine({ trend }: { trend: WorkspaceD
 export function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDashboardMetric }) {
   const content = (
     <div
-      className={cx(uiCardClass, "flex h-full min-h-[152px] items-center gap-4 px-5 py-3.5 sm:gap-5")}
+      className={cx(uiCardClass, "flex h-full min-h-[164px] items-center gap-3 overflow-hidden px-4 py-3.5 sm:gap-4 sm:px-5")}
       data-kpi-card={metric.label}
     >
-      <WorkspaceDashboardIconBubble tone={metric.tone} className="h-14 w-14 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
+      <WorkspaceDashboardIconBubble tone={metric.tone} className="h-12 w-12 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)] sm:h-14 sm:w-14">
         {metric.icon}
       </WorkspaceDashboardIconBubble>
-      <div className="grid min-h-[108px] min-w-0 flex-1 content-center grid-rows-[1rem_2rem_1rem_0.375rem_minmax(1rem,auto)] gap-y-1">
-        <div className="flex items-center gap-1.5">
-          <p className="whitespace-nowrap text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">{metric.label}</p>
+      <div className="grid min-h-[120px] min-w-0 flex-1 content-center grid-rows-[auto_2rem_minmax(1rem,auto)_0.375rem_minmax(1rem,auto)] gap-y-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="min-w-0 whitespace-normal break-words text-[11px] font-bold uppercase leading-4 text-[var(--ui-text-muted)]">
+            {metric.label}
+          </p>
         </div>
         <p
           className={cx(
-            "font-semibold text-[var(--ui-text)]",
+            "min-w-0 font-semibold text-[var(--ui-text)]",
             metric.compactValue ? "whitespace-nowrap text-[22px] leading-6" : "text-2xl leading-7"
           )}
           data-kpi-value={metric.label}
@@ -348,7 +350,13 @@ export function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDash
           {metric.value}
         </p>
         <div className="min-w-0">
-          {metric.detail ? <p className={cx("text-[13px] leading-4", uiMutedTextClass)}>{metric.detail}</p> : <span className="block h-4" aria-hidden="true" />}
+          {metric.detail ? (
+            <p className={cx("min-w-0 whitespace-normal break-words text-[13px] leading-4", uiMutedTextClass)}>
+              {metric.detail}
+            </p>
+          ) : (
+            <span className="block h-4" aria-hidden="true" />
+          )}
         </div>
         <div className="flex items-center">
           {metric.progress != null ? (

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
   fetchPortalStorageSpaceAccessSummary,
@@ -28,14 +28,23 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
-import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiMeterBar from "../../components/ui/UiMeterBar";
+import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSelect from "../../components/ui/UiSelect";
-import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiDividerClass,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
@@ -91,6 +100,8 @@ type PublicLinkTarget = {
   name: string;
 };
 
+type SpaceDetailTab = "files" | "collaborators" | "settings";
+
 function ObjectMetricCard({
   label,
   value,
@@ -115,6 +126,7 @@ function ObjectMetricCard({
     </UiCard>
   );
 }
+
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
 }
@@ -123,11 +135,21 @@ export default function PortalStorageSpaceDetailPage() {
   const { t } = useI18n();
   const { spaceId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { generalSettings } = useGeneralSettings();
   const [message, setMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<SpaceDetailTab>("files");
   const [metadataName, setMetadataName] = useState("");
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataBusy, setMetadataBusy] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
+  const [historyCleanupConfirmation, setHistoryCleanupConfirmation] = useState("");
+  const [historyCleanupRunning, setHistoryCleanupRunning] = useState(false);
+  const [historyCleanupProgress, setHistoryCleanupProgress] = useState<PortalStorageSpaceVersionCleanupProgress | null>(null);
+  const [historyCleanupResult, setHistoryCleanupResult] = useState<PortalStorageSpaceVersionCleanupResult | null>(null);
+  const [historyCleanupError, setHistoryCleanupError] = useState<string | null>(null);
+  const historyCleanupAbortRef = useRef<AbortController | null>(null);
   const [accessSummary, setAccessSummary] = useState<PortalStorageSpaceAccessSummary | null>(null);
   const [accessSummaryLoading, setAccessSummaryLoading] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
@@ -147,27 +169,24 @@ export default function PortalStorageSpaceDetailPage() {
   const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
   const [createdPublicLink, setCreatedPublicLink] = useState<PortalPublicLink | null>(null);
   const [publicLinkCopyMessage, setPublicLinkCopyMessage] = useState<string | null>(null);
-  const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
-  const [historyCleanupConfirmation, setHistoryCleanupConfirmation] = useState("");
-  const [historyCleanupRunning, setHistoryCleanupRunning] = useState(false);
-  const [historyCleanupProgress, setHistoryCleanupProgress] = useState<PortalStorageSpaceVersionCleanupProgress | null>(null);
-  const [historyCleanupResult, setHistoryCleanupResult] = useState<PortalStorageSpaceVersionCleanupResult | null>(null);
-  const [historyCleanupError, setHistoryCleanupError] = useState<string | null>(null);
-  const historyCleanupAbortRef = useRef<AbortController | null>(null);
   const {
     workspace,
+    state,
     loading,
     error,
     hasAccountContext,
     accountError,
     accountLoading,
     accountIdForApi,
-    state,
     selectedAccount,
     refreshWorkspaceData = () => undefined,
   } = usePortalWorkspaceData({ includeArchived: true });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+  const startGuideStorageKey = space
+    ? `portal.storage-space-detail.start-guide.dismissed.${accountIdForApi ?? "default"}.${space.id}`
+    : null;
+  const [startGuideDismissed, setStartGuideDismissed] = useState(false);
   const spaceAccessMode: PortalAccessMode = space ? portalAccessModeFromParts(space.visibility, space.shareScope) : "private";
   const savedAccessMode: PortalAccessMode = accessSummary
     ? accessSummary.mode === "all"
@@ -177,6 +196,8 @@ export default function PortalStorageSpaceDetailPage() {
   const savedAccountMemberRole = accessSummary?.default_account_member_role ?? space?.accountMemberRole ?? "Editor";
   const accessChanged = accessMode !== savedAccessMode || (accessMode === "account" && accessAccountMemberRole !== savedAccountMemberRole);
   const selectedAccessShareEntries = selectedPortalShares(accessRolesByUserId);
+  const onboardingState = (location.state as { portalSpaceCreated?: boolean; portalSpaceImported?: boolean } | null) ?? null;
+  const showSpaceReadyBanner = Boolean(onboardingState?.portalSpaceCreated || onboardingState?.portalSpaceImported);
 
   useEffect(() => {
     if (!space) return;
@@ -185,6 +206,18 @@ export default function PortalStorageSpaceDetailPage() {
     setAccessMode(spaceAccessMode);
     setAccessAccountMemberRole(space.accountMemberRole ?? "Editor");
   }, [space, spaceAccessMode]);
+
+  useEffect(() => {
+    if (!startGuideStorageKey) {
+      setStartGuideDismissed(false);
+      return;
+    }
+    try {
+      setStartGuideDismissed(window.localStorage.getItem(startGuideStorageKey) === "true");
+    } catch {
+      setStartGuideDismissed(false);
+    }
+  }, [startGuideStorageKey]);
 
   const loadAccessSummary = useCallback(async () => {
     if (!space || !accountIdForApi) {
@@ -249,6 +282,7 @@ export default function PortalStorageSpaceDetailPage() {
         description: metadataDescription.trim() || null,
       });
       refreshWorkspaceData();
+      setSettingsDialogOpen(false);
       setMessage(t({ en: "Space updated.", fr: "Espace mis à jour.", de: "Bereich aktualisiert." }));
     } catch (err) {
       console.error(err);
@@ -386,7 +420,7 @@ export default function PortalStorageSpaceDetailPage() {
     error,
     hasAccountContext,
     loadingMessage: t({ en: "Loading space...", fr: "Chargement de l'espace...", de: "Bereich wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this space.", fr: "Sélectionnez un compte pour voir cet espace.", de: "Wählen Sie ein Konto aus, um diesen Bereich anzuzeigen." }),
+    noAccountMessage: t({ en: "Select a project to view this space.", fr: "Sélectionnez un projet pour voir cet espace.", de: "Wählen Sie ein Projekt aus, um diesen Bereich anzuzeigen." }),
   });
   if (pageState) return pageState;
 
@@ -412,6 +446,9 @@ export default function PortalStorageSpaceDetailPage() {
       : null;
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
   const accessKeysPath = `/portal/access-keys?space_id=${encodeURIComponent(lockedBucketName)}&create=external`;
+  const canInvitePeople = !isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access);
+  const spaceHasStarted = (space.objectCount ?? 0) > 0 || (space.shareCount ?? 0) > 0;
+  const showStartSpacePanel = canModifyObjects && !startGuideDismissed && !spaceHasStarted && (showSpaceReadyBanner || space.objectCount === 0);
   const canCreatePublicLinks = Boolean(
     canBrowse &&
     space.role === "Owner" &&
@@ -448,6 +485,16 @@ export default function PortalStorageSpaceDetailPage() {
         fr: `Créé le ${space.createdLabel}. Région : ${space.region ?? "-"}.`,
         de: `Erstellt am ${space.createdLabel}. Region: ${space.region ?? "-"}.`,
       });
+
+  const dismissStartGuide = () => {
+    setStartGuideDismissed(true);
+    if (!startGuideStorageKey) return;
+    try {
+      window.localStorage.setItem(startGuideStorageKey, "true");
+    } catch {
+      // Ignore storage failures; the guide can still be dismissed for this render.
+    }
+  };
 
   const openPublicLinkDialog = (target: PublicLinkTarget) => {
     if (target.bucketName !== lockedBucketName || !canCreatePublicLinks) return;
@@ -582,76 +629,60 @@ export default function PortalStorageSpaceDetailPage() {
   };
 
   const storageSpaceSettingsCard = space.role === "Owner" ? (
-    <UiCard title={t({ en: "Space settings", fr: "Paramètres de l'espace", de: "Bereichseinstellungen" })}>
-      <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto] lg:items-end">
-        <UiInput
-          label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
-          size="compact"
-          className="h-9 disabled:opacity-70"
-          value={metadataName}
-          onChange={(event) => setMetadataName(event.target.value)}
-          aria-label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
-          disabled={!canRename || metadataBusy}
-          title={canRename ? t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" }) : t({ en: "Name locked for this space", fr: "Nom verrouillé pour cet espace", de: "Name für diesen Bereich gesperrt" })}
-        />
-        <UiInput
-          label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
-          size="compact"
-          className="h-9"
-          value={metadataDescription}
-          onChange={(event) => setMetadataDescription(event.target.value)}
-          aria-label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
-        />
-        <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
-          {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
-        </UiButton>
-        {isArchived ? (
-          <UiButton variant="secondary" disabled={metadataBusy} onClick={handleRestore} className="h-9 px-3 py-1.5">
-            {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
+    <UiCard
+      title={t({ en: "Space settings", fr: "Paramètres de l'espace", de: "Bereichseinstellungen" })}
+      description={t({
+        en: "Review the space identity and archive state. Edit only when these details need to change.",
+        fr: "Consultez l'identité de l'espace et son état d'archivage. Modifiez uniquement lorsque ces détails doivent changer.",
+        de: "Prüfen Sie Identität und Archivstatus des Bereichs. Bearbeiten Sie sie nur, wenn sich diese Details ändern sollen.",
+      })}
+      actions={
+        <div className="flex flex-wrap justify-end gap-2">
+          <UiButton size="sm" variant="secondary" disabled={metadataBusy} onClick={() => setSettingsDialogOpen(true)}>
+            {t({ en: "Edit details", fr: "Modifier", de: "Details bearbeiten" })}
           </UiButton>
-        ) : (
-          <UiButton variant="warning" disabled={metadataBusy} onClick={handleArchive} className="h-9 px-3 py-1.5">
-            {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
-          </UiButton>
-        )}
-      </div>
-    </UiCard>
-  ) : null;
-
-  const historyCleanupCard = space.role === "Owner" ? (
-    <UiCard title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}>
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className={cx("max-w-3xl text-xs font-medium leading-5", uiMutedTextClass)}>
-            {t({
-              en: "Current files stay available. The cleanup removes older object versions and orphan delete markers to reclaim storage.",
-              fr: "Les fichiers courants restent disponibles. Le nettoyage retire les anciennes versions d'objets et les delete markers orphelins pour récupérer du stockage.",
-              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt ältere Objektversionen und verwaiste Delete Marker, um Speicher zurückzugewinnen.",
-            })}
-          </p>
-          <UiButton
-            size="sm"
-            variant="danger"
-            disabled={!canCleanHistory || historyCleanupRunning}
-            onClick={openHistoryCleanupDialog}
-          >
-            {t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
-          </UiButton>
+          {isArchived ? (
+            <UiButton size="sm" variant="secondary" disabled={metadataBusy} onClick={handleRestore}>
+              {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
+            </UiButton>
+          ) : (
+            <UiButton size="sm" variant="warning" disabled={metadataBusy} onClick={handleArchive}>
+              {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
+            </UiButton>
+          )}
         </div>
-        {!historyCleanupEnabled ? (
-          <PageBanner tone="info">
-            {t({ en: "History cleanup is disabled for this project.", fr: "Le nettoyage de l'historique est désactivé pour ce projet.", de: "Die Historienbereinigung ist für dieses Projekt deaktiviert." })}
-          </PageBanner>
-        ) : isArchived ? (
-          <PageBanner tone="warning">
-            {t({ en: "Restore this space before running history cleanup.", fr: "Restaurez cet espace avant de nettoyer son historique.", de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen." })}
-          </PageBanner>
-        ) : contentRole !== "Owner" ? (
-          <PageBanner tone="warning">
-            {t({ en: "Only the content owner can clean up this space history.", fr: "Seul le propriétaire du contenu peut nettoyer l'historique de cet espace.", de: "Nur der Inhaltseigentümer kann die Historie dieses Bereichs bereinigen." })}
-          </PageBanner>
-        ) : null}
-      </div>
+      }
+    >
+      <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
+          </dt>
+          <dd className={cx("mt-1 text-sm font-bold", uiTitleTextClass)}>{space.name}</dd>
+        </div>
+        <div>
+          <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Description", fr: "Description", de: "Beschreibung" })}
+          </dt>
+          <dd className={cx("mt-1 text-sm font-medium", space.description ? uiTitleTextClass : uiMutedTextClass)}>
+            {space.description || t({ en: "No description", fr: "Aucune description", de: "Keine Beschreibung" })}
+          </dd>
+        </div>
+        <div>
+          <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Status", fr: "Statut", de: "Status" })}
+          </dt>
+          <dd className="mt-1">
+            <UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>
+          </dd>
+        </div>
+        <div>
+          <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Created", fr: "Créé", de: "Erstellt" })}
+          </dt>
+          <dd className={cx("mt-1 text-sm font-bold", uiTitleTextClass)}>{space.createdLabel}</dd>
+        </div>
+      </dl>
     </UiCard>
   ) : null;
 
@@ -668,7 +699,7 @@ export default function PortalStorageSpaceDetailPage() {
               : t({ en: "Browse and download the files available to you in this space.", fr: "Parcourez et téléchargez les fichiers disponibles dans cet espace.", de: "Durchsuchen und laden Sie die für Sie verfügbaren Dateien in diesem Bereich herunter." })}
           </p>
         </div>
-        {!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access) ? (
+        {canInvitePeople ? (
           <Link
             to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
             className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
@@ -728,6 +759,111 @@ export default function PortalStorageSpaceDetailPage() {
     </section>
   );
 
+  const startSpacePanel = showStartSpacePanel ? (
+    <section className={cx(uiPanelMutedClass, "p-4")} aria-labelledby="space-start-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="space-start-title" className={cx("text-[15px] font-bold", uiTitleTextClass)}>
+            {t({ en: "Start this space", fr: "Démarrer cet espace", de: "Diesen Bereich starten" })}
+          </h2>
+          <p className={cx("mt-1 max-w-3xl text-xs leading-5", uiMutedTextClass)}>
+            {t({
+              en: "Keep the first steps focused: add the files people need, then invite collaborators when the space is ready.",
+              fr: "Gardez les premières étapes simples : ajoutez les fichiers utiles, puis invitez les collaborateurs quand l'espace est prêt.",
+              de: "Halten Sie die ersten Schritte fokussiert: Fügen Sie die benötigten Dateien hinzu und laden Sie danach Mitwirkende ein.",
+            })}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {space.objectCount === 0 ? (
+            <UiBadge tone="warning">{t({ en: "No files yet", fr: "Aucun fichier", de: "Noch keine Dateien" })}</UiBadge>
+          ) : null}
+          <UiButton size="xs" variant="secondary" onClick={dismissStartGuide}>
+            {t({ en: "Dismiss guide", fr: "Masquer le guide", de: "Anleitung ausblenden" })}
+          </UiButton>
+        </div>
+      </div>
+      <ol className="mt-4 grid gap-3 md:grid-cols-2">
+        <li className="flex min-h-[112px] flex-col justify-between rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] p-3">
+          <div>
+            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+              {t({ en: "Step 1", fr: "Étape 1", de: "Schritt 1" })}
+            </div>
+            <h3 className={cx("mt-1 text-sm font-bold", uiTitleTextClass)}>
+              {t({ en: "Add files or folders", fr: "Ajouter des fichiers ou dossiers", de: "Dateien oder Ordner hinzufügen" })}
+            </h3>
+            <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
+              {t({
+                en: "Use the file area below as the working place for this project or dataset.",
+                fr: "Utilisez la zone de fichiers ci-dessous comme espace de travail du projet ou du jeu de données.",
+                de: "Nutzen Sie den Dateibereich unten als Arbeitsbereich für dieses Projekt oder diesen Datensatz.",
+              })}
+            </p>
+          </div>
+          <div className="mt-3">
+            <Link
+              to={`${storageSpacePath(space)}#space-files`}
+              className={cx(uiButtonBaseClass, uiButtonVariants.primary, "h-8 px-3 py-1.5 text-xs")}
+            >
+              {t({ en: "Add files", fr: "Ajouter des fichiers", de: "Dateien hinzufügen" })}
+            </Link>
+          </div>
+        </li>
+        <li className="flex min-h-[112px] flex-col justify-between rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] p-3">
+          <div>
+            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+              {t({ en: "Step 2", fr: "Étape 2", de: "Schritt 2" })}
+            </div>
+            <h3 className={cx("mt-1 text-sm font-bold", uiTitleTextClass)}>
+              {t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
+            </h3>
+            <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
+              {canInvitePeople
+                ? t({
+                    en: "Bring people in once the file structure is ready for them.",
+                    fr: "Invitez les personnes concernées lorsque l'organisation des fichiers est prête.",
+                    de: "Laden Sie Personen ein, sobald die Dateistruktur für sie bereit ist.",
+                  })
+                : t({
+                    en: "This space is private for now. Access can be opened from the Collaborators section when allowed.",
+                    fr: "Cet espace est privé pour l'instant. L'accès pourra être ouvert depuis la section Collaborateurs si vous y êtes autorisé.",
+                    de: "Dieser Bereich ist vorerst privat. Der Zugriff kann bei entsprechender Berechtigung im Bereich Mitwirkende geöffnet werden.",
+                  })}
+            </p>
+          </div>
+          <div className="mt-3">
+            {canInvitePeople ? (
+              <Link
+                to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
+                className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 px-3 py-1.5 text-xs")}
+              >
+                {t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
+              </Link>
+            ) : (
+              <span className={cx("text-xs font-semibold", uiMutedTextClass)}>
+                {t({ en: "Private for now", fr: "Privé pour l'instant", de: "Vorerst privat" })}
+              </span>
+            )}
+          </div>
+        </li>
+      </ol>
+    </section>
+  ) : null;
+
+  const spaceMetricsSection = (
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label={t({ en: "Space summary", fr: "Résumé de l'espace", de: "Bereichszusammenfassung" })}>
+      <ObjectMetricCard
+        label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
+        value={formatBytes(space.usedBytes)}
+        detail={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`, fr: `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)`, de: `von ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)` })}
+        progress={quotaPercent ?? undefined}
+      />
+      <ObjectMetricCard label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
+      <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per file", fr: "par fichier", de: "pro Datei" })} />
+      <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
+    </section>
+  );
+
   const externalToolsCard = (
     <UiCard title={t({ en: "Connect external tools", fr: "Connecter des outils externes", de: "Externe Werkzeuge verbinden" })}>
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
@@ -768,6 +904,63 @@ export default function PortalStorageSpaceDetailPage() {
     </UiCard>
   );
 
+  const historyCleanupCard = space.role === "Owner" ? (
+    <UiCard
+      title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}
+      description={t({
+        en: "Remove historical object versions and orphan delete markers when a space needs to reclaim storage.",
+        fr: "Supprimez les versions historiques des objets et les delete markers orphelins lorsqu'un espace doit récupérer du stockage.",
+        de: "Entfernen Sie historische Objektversionen und verwaiste Delete Marker, wenn Speicher zurückgewonnen werden soll.",
+      })}
+      actions={
+        <UiButton
+          size="sm"
+          variant="danger"
+          disabled={!canCleanHistory || historyCleanupRunning}
+          onClick={openHistoryCleanupDialog}
+        >
+          {t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
+        </UiButton>
+      }
+    >
+      <div className="space-y-3">
+        {!historyCleanupEnabled ? (
+          <PageBanner tone="info">
+            {t({
+              en: "History cleanup is disabled for this project.",
+              fr: "Le nettoyage de l'historique est désactivé pour ce projet.",
+              de: "Die Historienbereinigung ist für dieses Projekt deaktiviert.",
+            })}
+          </PageBanner>
+        ) : isArchived ? (
+          <PageBanner tone="warning">
+            {t({
+              en: "Restore this space before running history cleanup.",
+              fr: "Restaurez cet espace avant de nettoyer son historique.",
+              de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen.",
+            })}
+          </PageBanner>
+        ) : contentRole !== "Owner" ? (
+          <PageBanner tone="warning">
+            {t({
+              en: "Only the content owner can clean up this space history.",
+              fr: "Seul le propriétaire du contenu peut nettoyer l'historique de cet espace.",
+              de: "Nur der Inhaltseigentümer kann die Historie dieses Bereichs bereinigen.",
+            })}
+          </PageBanner>
+        ) : (
+          <p className={cx("ui-caption", uiMutedTextClass)}>
+            {t({
+              en: "Current files stay available. The cleanup only removes older object versions and orphan delete markers.",
+              fr: "Les fichiers courants restent disponibles. Le nettoyage retire uniquement les anciennes versions d'objets et les delete markers orphelins.",
+              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt nur ältere Objektversionen und verwaiste Delete Marker.",
+            })}
+          </p>
+        )}
+      </div>
+    </UiCard>
+  ) : null;
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -782,7 +975,7 @@ export default function PortalStorageSpaceDetailPage() {
                 to: `${storageSpacePath(space)}#space-files`,
               }]
             : []),
-          ...(!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access)
+          ...(canInvitePeople
             ? [{
                 label: t({ en: "Invite people", fr: "Inviter", de: "Einladen" }),
                 to: `/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`,
@@ -793,22 +986,50 @@ export default function PortalStorageSpaceDetailPage() {
       />
 
       {message ? <PageBanner tone="info">{message}</PageBanner> : null}
+      {showSpaceReadyBanner ? (
+        <PageBanner tone="success">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-bold">
+                {onboardingState?.portalSpaceImported
+                  ? t({ en: "Space added.", fr: "Espace ajouté.", de: "Bereich hinzugefügt." })
+                  : t({ en: "Space created.", fr: "Espace créé.", de: "Bereich erstellt." })}
+              </div>
+              <div className="mt-1">
+                {t({
+                  en: "Use the start guide below to add files and bring collaborators in at the right time.",
+                  fr: "Utilisez le guide de démarrage ci-dessous pour ajouter des fichiers et inviter les collaborateurs au bon moment.",
+                  de: "Nutzen Sie die Starthilfe unten, um Dateien hinzuzufügen und Mitwirkende zum richtigen Zeitpunkt einzuladen.",
+                })}
+              </div>
+            </div>
+          </div>
+        </PageBanner>
+      ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ObjectMetricCard
-          label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
-          value={formatBytes(space.usedBytes)}
-          detail={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`, fr: `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)`, de: `von ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)` })}
-          progress={quotaPercent ?? undefined}
+      <div className={cx("border-b pb-3", uiDividerClass)}>
+        <PageTabs
+          tabs={[
+            { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
+            { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
+            { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
+          ]}
+          activeTab={activeTab}
+          onChange={(tab) => setActiveTab(tab as SpaceDetailTab)}
+          variant="bar"
         />
-        <ObjectMetricCard label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
-        <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per file", fr: "par fichier", de: "pro Datei" })} />
-        <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
-      </section>
+      </div>
 
-      {filesSection}
+      {activeTab === "files" ? (
+        <>
+          {startSpacePanel}
+          {filesSection}
+          {spaceMetricsSection}
+        </>
+      ) : null}
 
-      <UiCard title={t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" })}>
+      {activeTab === "collaborators" ? (
+        <UiCard title={t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" })}>
         {accessSummaryLoading ? (
           <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
             {t({ en: "Loading access...", fr: "Chargement des accès...", de: "Zugriff wird geladen..." })}
@@ -996,13 +1217,16 @@ export default function PortalStorageSpaceDetailPage() {
             ) : null}
           </div>
         ) : null}
-      </UiCard>
+        </UiCard>
+      ) : null}
 
-      {storageSpaceSettingsCard}
-
-      {historyCleanupCard}
-
-      {externalToolsCard}
+      {activeTab === "settings" ? (
+        <>
+          {storageSpaceSettingsCard}
+          {historyCleanupCard}
+          {externalToolsCard}
+        </>
+      ) : null}
 
       {publicLinkTarget ? (
         <Modal
@@ -1118,11 +1342,12 @@ export default function PortalStorageSpaceDetailPage() {
             {historyCleanupProgress ? (
               <div className="rounded-md border border-[color:var(--ui-border)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className={cx("text-xs font-semibold", uiTitleTextClass)}>
+                  <p className={cx("ui-caption font-semibold", uiTitleTextClass)}>
                     {historyCleanupProgress.message ?? historyCleanupProgress.stage}
                   </p>
-                  <p className={cx("text-xs font-medium", uiMutedTextClass)}>
-                    {formatCompactNumber(historyCleanupDeletedEntries)} / {historyCleanupProgress.total_candidates_final
+                  <p className={cx("ui-caption", uiMutedTextClass)}>
+                    {formatCompactNumber(historyCleanupDeletedEntries)} /{" "}
+                    {historyCleanupProgress.total_candidates_final
                       ? formatCompactNumber(historyCleanupProgress.delete_candidates)
                       : historyCleanupProgress.delete_candidates > 0
                       ? t({
@@ -1157,7 +1382,7 @@ export default function PortalStorageSpaceDetailPage() {
                     barClassName="bg-rose-600 transition-[width] duration-150 ease-out"
                   />
                 )}
-                <p className={cx("mt-2 text-xs font-medium", uiMutedTextClass)}>
+                <p className={cx("mt-2 ui-caption", uiMutedTextClass)}>
                   {t({
                     en: `${formatCompactNumber(historyCleanupProgress.scanned_versions)} versions scanned, ${formatCompactNumber(historyCleanupProgress.scanned_delete_markers)} delete markers scanned, ${formatBytes(historyCleanupProgress.bytes_freed)} gained so far.`,
                     fr: `${formatCompactNumber(historyCleanupProgress.scanned_versions)} versions scannées, ${formatCompactNumber(historyCleanupProgress.scanned_delete_markers)} delete markers scannés, ${formatBytes(historyCleanupProgress.bytes_freed)} gagnés pour l'instant.`,
@@ -1210,6 +1435,60 @@ export default function PortalStorageSpaceDetailPage() {
                   {t({ en: "Start cleanup", fr: "Démarrer le nettoyage", de: "Bereinigung starten" })}
                 </UiButton>
               )}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {settingsDialogOpen && space.role === "Owner" ? (
+        <Modal
+          title={t({ en: "Edit space details", fr: "Modifier les détails de l'espace", de: "Bereichsdetails bearbeiten" })}
+          onClose={() => {
+            if (metadataBusy) return;
+            setSettingsDialogOpen(false);
+            setMetadataName(space.name);
+            setMetadataDescription(space.description);
+          }}
+          closeOnBackdropClick={!metadataBusy}
+          closeOnEscape={!metadataBusy}
+        >
+          <div className="space-y-4">
+            <UiInput
+              label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
+              size="compact"
+              className="h-9 disabled:opacity-70"
+              value={metadataName}
+              onChange={(event) => setMetadataName(event.target.value)}
+              aria-label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
+              disabled={!canRename || metadataBusy}
+              title={canRename ? t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" }) : t({ en: "Name locked for this space", fr: "Nom verrouillé pour cet espace", de: "Name für diesen Bereich gesperrt" })}
+            />
+            <UiInput
+              label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
+              size="compact"
+              className="h-9"
+              value={metadataDescription}
+              onChange={(event) => setMetadataDescription(event.target.value)}
+              aria-label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
+              disabled={metadataBusy}
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton
+                variant="secondary"
+                disabled={metadataBusy}
+                onClick={() => {
+                  setSettingsDialogOpen(false);
+                  setMetadataName(space.name);
+                  setMetadataDescription(space.description);
+                }}
+              >
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton loading={metadataBusy} disabled={metadataBusy} onClick={handleSaveMetadata}>
+                {metadataBusy
+                  ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
+                  : t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
+              </UiButton>
             </div>
           </div>
         </Modal>

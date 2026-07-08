@@ -208,6 +208,11 @@ export type PortalStorageSpaceVersionCleanupStreamOptions = {
   onProgress?: (event: PortalStorageSpaceVersionCleanupProgress) => void;
 };
 
+export type PortalServerAccessRawLogsDownload = {
+  blob: Blob;
+  filename: string;
+};
+
 export type PortalStorageSpaceShareDirection = "with_me" | "by_me";
 
 export type PortalStorageSpaceShare = {
@@ -250,6 +255,33 @@ export type PortalStorageSpaceShareCandidate = {
   already_shared?: boolean;
 };
 
+export type PortalCollaborator = {
+  user_id: number;
+  email: string;
+  display_name?: string | null;
+  account_role: string;
+  access_source: "direct" | "group" | "direct_and_group";
+  member_since?: string | null;
+};
+
+export type PortalCollaboratorTrend = {
+  window: "month" | "week" | "day";
+  label: string;
+  period_start: string;
+  collaborator_count: number;
+};
+
+export type PortalCollaboratorSummary = {
+  collaborator_count: number;
+  external_access_key_count: number;
+  trend?: PortalCollaboratorTrend | null;
+};
+
+export type PortalCollaboratorsResponse = {
+  summary: PortalCollaboratorSummary;
+  collaborators: PortalCollaborator[];
+};
+
 export type PortalPublicLink = {
   id: number;
   storage_space_id: string;
@@ -290,6 +322,52 @@ export type PortalTransfer = {
   eta_label: string;
   speed_label: string;
   error_message?: string | null;
+};
+
+export type PortalServerAccessLogMode = "transfers" | "operations";
+
+export type PortalServerAccessRequesterIdentity = {
+  label: string;
+  kind: "portal_user" | "external_access" | "rgw_user" | "rgw_account" | "unknown";
+  detail?: string | null;
+  access_key_id?: string | null;
+  iam_username?: string | null;
+  user_id?: number | null;
+  email?: string | null;
+  resolved: boolean;
+};
+
+export type PortalServerAccessLogEntry = {
+  id: string;
+  source: "server_access_logging";
+  timestamp: string;
+  storage_space_id?: string | null;
+  storage_space_name?: string | null;
+  bucket_name: string;
+  operation: string;
+  operation_category: "upload" | "download" | "delete" | "metadata" | "list" | "other";
+  object_key?: string | null;
+  object_name?: string | null;
+  direction?: "Upload" | "Download" | null;
+  status_code?: number | null;
+  error_code?: string | null;
+  bytes_sent?: number | null;
+  object_size?: number | null;
+  requester?: string | null;
+  requester_identity?: PortalServerAccessRequesterIdentity | null;
+  client_ip?: string | null;
+  auth_type?: string | null;
+  request_id?: string | null;
+  request_uri?: string | null;
+  user_agent?: string | null;
+  log_object_key: string;
+};
+
+export type PortalServerAccessLogPage = {
+  entries: PortalServerAccessLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type PortalAlert = {
@@ -399,6 +477,13 @@ export async function fetchPortalActivity(
   return data;
 }
 
+export async function fetchPortalCollaborators(accountId: S3AccountSelector): Promise<PortalCollaboratorsResponse> {
+  const { data } = await client.get<PortalCollaboratorsResponse>("/portal/collaborators", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
 export async function fetchPortalTransfers(
   accountId: S3AccountSelector,
   options?: { spaceId?: string; limit?: number }
@@ -410,6 +495,89 @@ export async function fetchPortalTransfers(
     params: withS3AccountParam(baseParams, accountId),
   });
   return data;
+}
+
+export async function fetchPortalServerAccessLogs(
+  accountId: S3AccountSelector,
+  options: {
+    date: string;
+    mode?: PortalServerAccessLogMode;
+    spaceId?: string;
+    limit?: number;
+    offset?: number;
+    timezoneOffsetMinutes?: number;
+    advancedFilter?: string;
+  }
+): Promise<PortalServerAccessLogEntry[]> {
+  const baseParams: Record<string, string | number> = {
+    date: options.date,
+    mode: options.mode ?? "transfers",
+    timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
+  };
+  if (options.spaceId) baseParams.space_id = options.spaceId;
+  if (options.limit) baseParams.limit = options.limit;
+  if (options.offset) baseParams.offset = options.offset;
+  if (options.advancedFilter) baseParams.advanced_filter = options.advancedFilter;
+  const { data } = await client.get<PortalServerAccessLogEntry[]>("/portal/transfers/server-access-logs", {
+    params: withS3AccountParam(baseParams, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalServerAccessLogPage(
+  accountId: S3AccountSelector,
+  options: {
+    date: string;
+    mode?: PortalServerAccessLogMode;
+    spaceId?: string;
+    limit?: number;
+    offset?: number;
+    timezoneOffsetMinutes?: number;
+    advancedFilter?: string;
+  }
+): Promise<PortalServerAccessLogPage> {
+  const baseParams: Record<string, string | number> = {
+    date: options.date,
+    mode: options.mode ?? "transfers",
+    limit: options.limit ?? 200,
+    offset: options.offset ?? 0,
+    timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
+  };
+  if (options.spaceId) baseParams.space_id = options.spaceId;
+  if (options.advancedFilter) baseParams.advanced_filter = options.advancedFilter;
+  const { data } = await client.get<PortalServerAccessLogPage>("/portal/transfers/server-access-logs/page", {
+    params: withS3AccountParam(baseParams, accountId),
+  });
+  return data;
+}
+
+export async function downloadPortalServerAccessRawLogs(
+  accountId: S3AccountSelector,
+  options: {
+    dateFrom: string;
+    dateTo: string;
+    spaceId?: string;
+    timezoneOffsetMinutes?: number;
+  }
+): Promise<PortalServerAccessRawLogsDownload> {
+  const baseParams: Record<string, string | number> = {
+    date_from: options.dateFrom,
+    date_to: options.dateTo,
+    timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
+  };
+  if (options.spaceId) baseParams.space_id = options.spaceId;
+  const response = await client.get<Blob>("/portal/transfers/server-access-logs/raw", {
+    params: withS3AccountParam(baseParams, accountId),
+    responseType: "blob",
+  });
+  const fallback =
+    options.dateFrom === options.dateTo
+      ? `portal-server-access-logs-${options.dateFrom}.log`
+      : `portal-server-access-logs-${options.dateFrom}-${options.dateTo}.log`;
+  return {
+    blob: response.data,
+    filename: filenameFromContentDisposition(response.headers?.["content-disposition"], fallback),
+  };
 }
 
 export async function fetchPortalAlerts(accountId: S3AccountSelector, limit = 50): Promise<PortalAlert[]> {
@@ -521,6 +689,47 @@ export async function deletePortalStorageSpaceObject(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects`,
     { params: withS3AccountParam({ key }, accountId) }
   );
+}
+
+export function portalStorageSpaceVersionCleanupConfirmationPhrase(spaceName: string): string {
+  return `CLEAN HISTORY ${spaceName}`;
+}
+
+function buildPortalVersionCleanupPostInit(payload: { confirmation: string }): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  };
+}
+
+export function streamPortalStorageSpaceVersionCleanup(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  payload: { confirmation: string },
+  options?: PortalStorageSpaceVersionCleanupStreamOptions
+): Promise<PortalStorageSpaceVersionCleanupResult> {
+  const baseUrl = resolveApiBaseUrl();
+  const queryParams = withS3AccountParam(undefined, accountId) ?? {};
+  const query = new URLSearchParams();
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return streamBucketsWithSse<
+    PortalStorageSpaceVersionCleanupProgress,
+    PortalStorageSpaceVersionCleanupResult
+  >({
+    url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/versions/cleanup/stream${suffix}`,
+    options,
+    requestInit: buildPortalVersionCleanupPostInit(payload),
+    streamFailedLabel: "Storage Space history cleanup stream failed",
+    missingResultMessage: "Storage Space history cleanup stream ended without a result payload",
+  });
 }
 
 function filenameFromContentDisposition(value: unknown, fallback: string): string {
@@ -684,45 +893,4 @@ export async function fetchPortalTraffic(
   const params = withS3AccountParam(baseParams, accountId);
   const { data } = await client.get<import("./stats").ManagerTrafficStats>("/portal/traffic", { params });
   return data;
-}
-
-export function portalStorageSpaceVersionCleanupConfirmationPhrase(spaceName: string): string {
-  return `CLEAN HISTORY ${spaceName}`;
-}
-
-function buildPortalVersionCleanupPostInit(payload: { confirmation: string }): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  };
-}
-
-export function streamPortalStorageSpaceVersionCleanup(
-  accountId: S3AccountSelector,
-  spaceId: string,
-  payload: { confirmation: string },
-  options?: PortalStorageSpaceVersionCleanupStreamOptions
-): Promise<PortalStorageSpaceVersionCleanupResult> {
-  const baseUrl = resolveApiBaseUrl();
-  const queryParams = withS3AccountParam(undefined, accountId) ?? {};
-  const query = new URLSearchParams();
-  Object.entries(queryParams).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      query.set(key, String(value));
-    }
-  });
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return streamBucketsWithSse<
-    PortalStorageSpaceVersionCleanupProgress,
-    PortalStorageSpaceVersionCleanupResult
-  >({
-    url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/versions/cleanup/stream${suffix}`,
-    options,
-    requestInit: buildPortalVersionCleanupPostInit(payload),
-    streamFailedLabel: "Storage Space history cleanup stream failed",
-    missingResultMessage: "Storage Space history cleanup stream ended without a result payload",
-  });
 }

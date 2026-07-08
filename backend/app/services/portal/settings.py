@@ -103,6 +103,8 @@ class PortalSettingsMixin:
             portal_settings.allow_portal_named_bucket_create = override.allow_portal_named_bucket_create
         if override.allow_portal_user_access_key_create is not None:
             portal_settings.allow_portal_user_access_key_create = override.allow_portal_user_access_key_create
+        if override.server_access_logging_enabled is not None:
+            portal_settings.server_access_logging_enabled = override.server_access_logging_enabled
         if override.storage_space_version_cleanup_enabled is not None:
             portal_settings.storage_space_version_cleanup_enabled = override.storage_space_version_cleanup_enabled
         self._apply_policy_override(
@@ -162,5 +164,8 @@ class PortalSettingsMixin:
     ) -> PortalAccountSettings:
         payload = override.model_dump(exclude_unset=True, exclude_none=False)
         admin_override = PortalSettingsOverride.model_validate(payload)
+        effective = self._portal_settings().model_copy(deep=True)
+        self._apply_admin_overrides(effective, admin_override)
+        self.reconcile_portal_server_access_logging(account, portal_settings=effective)
         self._persist_portal_settings_overrides(account, admin_override)
         return self.get_portal_account_settings(account)

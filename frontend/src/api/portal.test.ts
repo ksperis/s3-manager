@@ -27,6 +27,10 @@ import {
   deletePortalAccessKey,
   fetchPortalAlerts,
   fetchPortalAccessKeysState,
+  fetchPortalCollaborators,
+  downloadPortalServerAccessRawLogs,
+  fetchPortalServerAccessLogPage,
+  fetchPortalServerAccessLogs,
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
@@ -234,14 +238,80 @@ describe("portal storage spaces api", () => {
 
   it("fetches portal activity transfers and alerts", async () => {
     await fetchPortalActivity("101", { spaceId: "research data", limit: 25 });
+    await fetchPortalCollaborators("101");
     await fetchPortalTransfers("101", { limit: 10 });
+    await fetchPortalServerAccessLogs("101", {
+      date: "2026-07-08",
+      mode: "operations",
+      spaceId: "research data",
+      limit: 25,
+      offset: 50,
+      timezoneOffsetMinutes: -120,
+      advancedFilter: '{"match":"all","rules":[{"field":"identity","op":"contains","value":"portal-6-1"}]}',
+    });
+    await fetchPortalServerAccessLogPage("101", {
+      date: "2026-07-08",
+      mode: "operations",
+      spaceId: "research data",
+      limit: 25,
+      offset: 50,
+      timezoneOffsetMinutes: -120,
+      advancedFilter: '{"match":"all","rules":[{"field":"path","op":"contains","value":"captures/"}]}',
+    });
+    clientMock.get.mockResolvedValueOnce({
+      data: new Blob(["raw"]),
+      headers: { "content-disposition": 'attachment; filename="portal-server-access-logs-2026-07-08.log"' },
+    });
+    await downloadPortalServerAccessRawLogs("101", {
+      dateFrom: "2026-07-08",
+      dateTo: "2026-07-08",
+      spaceId: "research data",
+      timezoneOffsetMinutes: -120,
+    });
     await fetchPortalAlerts("101", 5);
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/activity", {
       params: { account_id: "101", space_id: "research data", limit: 25 },
     });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/collaborators", {
+      params: { account_id: "101" },
+    });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers", {
       params: { account_id: "101", limit: 10 },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs", {
+      params: {
+        account_id: "101",
+        date: "2026-07-08",
+        mode: "operations",
+        space_id: "research data",
+        limit: 25,
+        offset: 50,
+        timezone_offset_minutes: -120,
+        advanced_filter: '{"match":"all","rules":[{"field":"identity","op":"contains","value":"portal-6-1"}]}',
+      },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs/page", {
+      params: {
+        account_id: "101",
+        date: "2026-07-08",
+        mode: "operations",
+        space_id: "research data",
+        limit: 25,
+        offset: 50,
+        timezone_offset_minutes: -120,
+        advanced_filter: '{"match":"all","rules":[{"field":"path","op":"contains","value":"captures/"}]}',
+      },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs/raw", {
+      params: {
+        account_id: "101",
+        date_from: "2026-07-08",
+        date_to: "2026-07-08",
+        space_id: "research data",
+        timezone_offset_minutes: -120,
+      },
+      responseType: "blob",
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },

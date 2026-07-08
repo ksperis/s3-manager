@@ -20,6 +20,7 @@ type UsageBreakdownProps = {
   loading?: boolean;
   maxItems?: number;
   metric?: "bytes" | "objects";
+  objectUnitLabel?: string;
 };
 
 const palette = ["#6366F1", "#22C55E", "#F97316", "#14B8A6", "#EF4444", "#A855F7", "#0EA5E9", "#F59E0B"];
@@ -32,6 +33,7 @@ export default function UsageBreakdown({
   loading,
   maxItems = 7,
   metric = "bytes",
+  objectUnitLabel = "objects",
 }: UsageBreakdownProps) {
   const normalized = (items ?? []).map((item) => ({
     ...item,
@@ -41,7 +43,7 @@ export default function UsageBreakdown({
 
   const valueKey = metric === "objects" ? "objectCount" : "usedBytes";
   const formatValue = metric === "objects" ? formatCompactNumber : formatBytes;
-  const totalSuffix = metric === "objects" ? "objects" : undefined;
+  const totalSuffix = metric === "objects" ? objectUnitLabel : undefined;
 
   const ranked = [...normalized].sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0));
   const positives = ranked.filter((item) => (item[valueKey] ?? 0) > 0);
@@ -128,7 +130,7 @@ export default function UsageBreakdown({
                       >
                         <title>
                           {item.label} ·{" "}
-                          {metric === "objects" ? `${formatCompactNumber(value)} objects` : formatBytes(value)}
+                          {metric === "objects" ? `${formatCompactNumber(value)} ${objectUnitLabel}` : formatBytes(value)}
                         </title>
                       </circle>
                     );
@@ -161,7 +163,7 @@ export default function UsageBreakdown({
                 meta:
                   metric === "objects"
                     ? formatBytes(item.usedBytes ?? 0)
-                    : `${formatCompactNumber(item.objectCount ?? 0)} objects`,
+                    : `${formatCompactNumber(item.objectCount ?? 0)} ${objectUnitLabel}`,
               }))}
             />
           </div>

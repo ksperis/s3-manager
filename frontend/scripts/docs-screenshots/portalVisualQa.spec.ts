@@ -13,26 +13,80 @@ const portalUser = {
   account_links: [
     { account_id: 101, account_role: "portal_user", account_admin: false },
   ],
-  capabilities: { can_manage_buckets: true, can_manage_iam: false, access_browser: false },
+  capabilities: {
+    can_manage_buckets: true,
+    can_manage_iam: false,
+    access_browser: false,
+  },
 };
 
 type PortalVisualLocale = "en" | "fr" | "de";
 
 const portalRoutes = [
-  { path: "/portal", expected: { en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" } },
-  { path: "/portal/storage-spaces", expected: { en: "Spaces", fr: "Espaces", de: "Bereiche" } },
-  { path: "/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F", expected: { en: "sample_001.fastq.gz", fr: "sample_001.fastq.gz", de: "sample_001.fastq.gz" } },
+  {
+    path: "/portal",
+    expected: { en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" },
+  },
+  {
+    path: "/portal/storage-spaces",
+    expected: { en: "Spaces", fr: "Espaces", de: "Bereiche" },
+  },
+  {
+    path: "/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F",
+    expected: {
+      en: "sample_001.fastq.gz",
+      fr: "sample_001.fastq.gz",
+      de: "sample_001.fastq.gz",
+    },
+  },
   {
     path: "/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz",
-    expected: { en: "Quick preview", fr: "Aperçu rapide", de: "Schnellvorschau" },
+    expected: {
+      en: "Quick preview",
+      fr: "Aperçu rapide",
+      de: "Schnellvorschau",
+    },
   },
-  { path: "/portal/shares", expected: { en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" } },
-  { path: "/portal/activity", expected: { en: "Activity", fr: "Activité", de: "Aktivität" } },
-  { path: "/portal/transfers", expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" } },
-  { path: "/portal/usage", expected: { en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" } },
-  { path: "/portal/access-keys", expected: { en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" } },
-  { path: "/portal/requests", expected: { en: "Requests", fr: "Demandes", de: "Anfragen" } },
-  { path: "/portal/settings", expected: { en: "Settings", fr: "Paramètres", de: "Einstellungen" } },
+  {
+    path: "/portal/shares",
+    expected: { en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" },
+  },
+  {
+    path: "/portal/activity",
+    expected: { en: "Activity", fr: "Activité", de: "Aktivität" },
+  },
+  {
+    path: "/portal/transfers",
+    expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" },
+  },
+  {
+    path: "/portal/usage",
+    expected: {
+      en: "Storage health",
+      fr: "État du stockage",
+      de: "Speicherstatus",
+    },
+  },
+  {
+    path: "/portal/access-keys",
+    expected: {
+      en: "External tools",
+      fr: "Outils externes",
+      de: "Externe Werkzeuge",
+    },
+  },
+  {
+    path: "/portal/requests",
+    expected: {
+      en: "Help requests",
+      fr: "Demandes d'aide",
+      de: "Hilfeanfragen",
+    },
+  },
+  {
+    path: "/portal/settings",
+    expected: { en: "Settings", fr: "Paramètres", de: "Einstellungen" },
+  },
 ];
 
 const viewports = [
@@ -48,19 +102,32 @@ function buildPortalUser(language: PortalVisualLocale) {
   return { ...portalUser, ui_language: language };
 }
 
-async function seedPortalSession(page: Page, theme: (typeof themes)[number], language: PortalVisualLocale) {
+async function seedPortalSession(
+  page: Page,
+  theme: (typeof themes)[number],
+  language: PortalVisualLocale,
+) {
   const user = buildPortalUser(language);
-  await page.addInitScript((storage) => {
-    localStorage.clear();
-    localStorage.setItem("token", "docs-token");
-    localStorage.setItem("user", JSON.stringify(storage.user));
-    localStorage.setItem("selectedWorkspace", "portal");
-    localStorage.setItem("selectedPortalAccountId", "101");
-    localStorage.setItem("theme", storage.theme);
-  }, { user, theme });
+  await page.addInitScript(
+    (storage) => {
+      localStorage.clear();
+      localStorage.setItem("token", "docs-token");
+      localStorage.setItem("user", JSON.stringify(storage.user));
+      localStorage.setItem("selectedWorkspace", "portal");
+      localStorage.setItem("selectedPortalAccountId", "101");
+      localStorage.setItem("theme", storage.theme);
+    },
+    { user, theme },
+  );
 }
 
-async function openPortalRoute(page: Page, routePath: string, scenarioId: string, theme: (typeof themes)[number], language: PortalVisualLocale) {
+async function openPortalRoute(
+  page: Page,
+  routePath: string,
+  scenarioId: string,
+  theme: (typeof themes)[number],
+  language: PortalVisualLocale,
+) {
   const user = buildPortalUser(language);
   const mockRegistry = await registerApiMocks(
     page,
@@ -72,7 +139,7 @@ async function openPortalRoute(page: Page, routePath: string, scenarioId: string
       },
       ...buildBaseRules(),
     ],
-    scenarioId
+    scenarioId,
   );
   await page.emulateMedia({ colorScheme: theme });
   await seedPortalSession(page, theme, language);
@@ -85,27 +152,49 @@ test.describe("Portal visual QA", () => {
     for (const theme of themes) {
       for (const language of locales) {
         for (const route of portalRoutes) {
-          test(`${viewport.name} ${theme} ${language} ${route.path}`, async ({ page }) => {
-            await page.setViewportSize({ width: viewport.width, height: viewport.height });
+          test(`${viewport.name} ${theme} ${language} ${route.path}`, async ({
+            page,
+          }) => {
+            await page.setViewportSize({
+              width: viewport.width,
+              height: viewport.height,
+            });
             const mockRegistry = await openPortalRoute(
               page,
               route.path,
               `portal-visual-qa-${viewport.name}-${theme}-${language}-${route.path}`,
               theme,
-              language
+              language,
             );
 
             const main = page.locator("main");
-            await expect(main.getByText(route.expected[language], { exact: false }).first()).toBeVisible();
-            await expect(main.getByText("/portal/browser", { exact: false })).toHaveCount(0);
-            if (route.path.startsWith("/portal/storage-spaces/") && !route.path.includes("/objects/")) {
-              await expect(main.getByRole("button", { name: "Selected storage space" })).toBeVisible();
-              await expect(main.getByRole("button", { name: "Search options" })).toHaveCount(0);
+            await expect(
+              main
+                .getByText(route.expected[language], { exact: false })
+                .first(),
+            ).toBeVisible();
+            await expect(
+              main.getByText("/portal/browser", { exact: false }),
+            ).toHaveCount(0);
+            if (
+              route.path.startsWith("/portal/storage-spaces/") &&
+              !route.path.includes("/objects/")
+            ) {
+              await expect(
+                main.getByRole("button", { name: "Selected storage space" }),
+              ).toBeVisible();
+              await expect(
+                main.getByRole("button", { name: "Search options" }),
+              ).toHaveCount(0);
             }
 
-            const horizontalOverflow = await page.evaluate(() => (
-              Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
-            ));
+            const horizontalOverflow = await page.evaluate(
+              () =>
+                Math.max(
+                  document.documentElement.scrollWidth,
+                  document.body.scrollWidth,
+                ) - window.innerWidth,
+            );
             expect(horizontalOverflow).toBeLessThanOrEqual(2);
 
             await page.keyboard.press("Tab");

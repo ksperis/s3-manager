@@ -1,54 +1,62 @@
 # Portal: External Tools
 
-Use this page when you need S3 credentials for yourself or for a limited
-external user.
+Use this page when an app, script, desktop client, or external partner cannot
+work through the Portal directly.
+
+When a collaborator can sign in to the Portal, share the space from the Portal
+instead. Create tool access only when a direct storage client is the right
+workflow.
 
 ## Before you start
 
-- Portal access-key creation is enabled for the selected account.
-- You know whether the credential is for you or for another user.
+- The External tools page is enabled for the selected project.
+- You know which space the tool needs to reach.
+- You know whether the tool is for you or for an external user.
 - For an external user, you own the target space.
 - You are ready to copy the secret when it is shown.
 
 ## Steps
 
 1. Open **Portal > External tools**.
-2. Review the endpoint guidance shown on the page.
-3. Start **New key**.
+2. Read **Before connecting a tool** and confirm that Portal sharing is not a
+   better fit.
+3. Start **New tool access**.
 4. Choose **For myself** or **For an external user**.
-5. For an external user, choose the space and select **Read only** or
-   **Read/write**.
-6. Copy the secret immediately. It is shown only once.
-7. In **Connect an external tool**, choose the key and space.
-8. Download either:
+5. Choose the space the tool should reach.
+6. Select **Read only** unless the tool must upload, replace, or delete files.
+   Use **Read/write** only for tools that need those changes.
+7. Copy the secret immediately. It is shown only once.
+8. In **Connect an external tool**, choose the access entry and space.
+9. Download either:
    - **Cyberduck bookmark** to open the space directly in Cyberduck;
    - **Connection details** for another S3-compatible client.
-9. If you need a one-time file that also includes the secret, use the explicit
-   **Details with secret** action immediately after creating the key, then delete
-   the file after configuring the tool.
-10. Disable or delete unused keys when they are no longer needed.
+10. If you need a one-time file that also includes the secret, use the explicit
+   **Details with secret** action immediately after creating the access, then
+   delete the file after configuring the tool.
+11. Disable or delete unused access when it is no longer needed.
 
 ## Important limits
 
-- The Portal runtime key used by the application is intentionally hidden.
-- User-managed keys may have a maximum count set by admins.
-- Personal keys follow your current Portal space grants.
-- External credentials are limited to one space and to the selected
+- The Portal runtime access used by the application is intentionally hidden.
+- Tool access entries may have a maximum count set by admins.
+- Personal tool access follows your current Portal space grants.
+- External tool access is limited to one space and to the selected
   permission level.
-- Access keys do not grant access outside the underlying storage policies.
-- The bucket name is shown only as the name an external S3 tool asks for. Use
-  the space name everywhere else in Portal.
+- Tool access does not grant access outside the underlying storage policies.
+- The bucket name is shown only because some S3-compatible tools ask for it.
+  Use the space name everywhere else in Portal.
 - Cyberduck bookmark files do not include the secret. Cyberduck asks for it
   when connecting.
 
 ## You are done when
 
-The external client can connect to the documented endpoint and access only the
+The external tool can connect with the downloaded details and access only the
 intended space with the selected permission level.
 
-## If key creation is unavailable
+## If tool access creation is unavailable
 
-Ask an admin whether Portal user access-key creation is enabled and whether your account reached the maximum number of user-managed keys.
+Ask an admin whether External tools is enabled and whether your project reached
+the maximum number of tool access entries.
 
 ## Related pages
 
@@ -60,6 +68,6 @@ Ask an admin whether Portal user access-key creation is enabled and whether your
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal External tools page with guidance for connecting a tool, one-time secret warning, and external access actions" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal External tools page with guidance for connecting a tool, one-time secret warning, and external access actions" loading="lazy">
 </div>

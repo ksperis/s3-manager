@@ -8,6 +8,7 @@ from .portal.activity import PortalActivityMixin
 from .portal.buckets_users import PortalBucketsUsersMixin
 from .portal.iam import PortalIamMixin
 from .portal.objects import PortalObjectsMixin
+from .portal.server_access_logging import PortalServerAccessLoggingMixin
 from .portal.settings import PortalSettingsMixin
 from .portal.sharing import PortalSharingMixin
 from .portal.state_usage import PortalStateUsageMixin
@@ -18,6 +19,7 @@ from .portal.version_cleanup import PortalStorageSpaceVersionCleanupMixin
 class PortalService(
     PortalSettingsMixin,
     PortalIamMixin,
+    PortalServerAccessLoggingMixin,
     PortalStorageSpaceVersionCleanupMixin,
     PortalStorageSpacesMixin,
     PortalObjectsMixin,

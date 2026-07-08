@@ -1,24 +1,26 @@
-# Portal: Usage and Alerts
+# Portal: Storage Health
 
-Use this page when you need to understand storage consumption, traffic, quota, billing source, or simple alerts in Portal.
+Use this page when you need to know whether there is room for more files, which
+spaces are growing, how files moved in or out, or what the current month may
+cost.
 
 ## Before you start
 
-- Select the right Portal account.
-- Usage, quota, traffic, or billing collection must be enabled by the platform for the matching tab to appear.
+- Select the right project.
+- Usage, quota, transfer-activity, or cost collection must be enabled by the platform for the matching tab to appear.
 - Some metrics may be unavailable even when file access works.
 
 ## What Portal can show
 
 | Signal | Meaning |
 |---|---|
-| Storage used | Account consumption reported by the backend. For regular Portal users, this total may include storage outside the spaces listed by name. |
-| Quota | Account quota when configured and available. |
-| Usage by Storage Space | Per-space storage and object counts only for Storage Spaces you can access. |
-| Other | Anonymous storage used elsewhere in the account. It is not a Storage Space you can open and does not reveal hidden names or identifiers. |
-| Usage history | Stored trend snapshots for the selected Portal account. |
-| Traffic and requests | Traffic metrics or billing-derived values when collection is available. |
-| Billing source | Optional billing data for the selected account and month. The Billing tab is hidden when billing is disabled. |
+| Overview | Storage used, room left, file count, and visible spaces for the selected workspace. |
+| By space | Per-space storage and file counts only for spaces you can access. |
+| File types | Optional breakdown of visible files by type, size, and storage class. |
+| Trends | Stored readings that show whether storage and file counts are growing. |
+| Uploads & downloads | File movement and activity when traffic collection is available. |
+| Costs | Optional monthly estimate for storage and transfer activity. |
+| Other | Anonymous storage used elsewhere in the project. It is not a Storage Space you can open and does not reveal hidden names or identifiers. |
 | Alerts | Deduplicated warnings such as quota near limit, public links, failed transfer, or degraded endpoint. |
 
 Activity and transfer details are shown only for Storage Spaces you can access.
@@ -27,12 +29,14 @@ it must not expose the names of other users' private spaces.
 
 ## You are done when
 
-You can tell whether the selected Portal account is healthy, near quota, missing metrics, or affected by an alert.
+You can tell whether the selected project has room left, which spaces need attention, whether file movement looks normal, and whether cost data is available.
 
 ## If a metric is unavailable
 
-Unavailable metrics do not always mean the Storage Space is broken. Ask an admin to check feature flags, collection jobs, endpoint capability, and the latest backend snapshots.
-If the Billing tab is visible but empty, the page shows the billing source error returned by the backend.
+Unavailable metrics do not always mean the space is broken. Ask an admin to check
+feature flags, collection jobs, endpoint capability, and the latest backend
+readings. If the **Costs** tab is visible but empty, the page shows the billing
+source error returned by the backend.
 
 ## Related pages
 
@@ -45,6 +49,6 @@ If the Billing tab is visible but empty, the page shows the billing source error
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Usage and Analytics page with per-space usage breakdown and Billing tab available" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Storage Health page with room left, file counts, space breakdown, and Costs tab available" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Storage Health page with room left, file counts, space breakdown, and Costs tab available" loading="lazy">
 </div>

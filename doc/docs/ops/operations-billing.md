@@ -9,7 +9,7 @@ Billing requires both:
 1. Global runtime switch: `BILLING_ENABLED=true`.
 2. UI app setting: `billing_enabled=true`.
 
-The Portal Billing tab is shown only when the UI app setting is enabled. When it is disabled, Portal does not call the billing source endpoint.
+The Portal **Costs** tab is shown only when the UI app setting is enabled. When it is disabled, Portal does not call the billing source endpoint.
 
 ## Rate cards
 

@@ -1,10 +1,13 @@
 # Portal: Transfers
 
-Use this page when you need to follow upload, download, or background transfer progress in Portal.
+Use this page to check whether files you added to a space or downloaded from a space are still moving, finished, or need another try.
 
 ## When to use
 
-Use **Portal > Transfers** after starting uploads, downloads, folder operations, or large file actions from a Storage Space.
+Use **Portal > Transfers** after adding files, downloading files, or starting a large file operation from a Storage Space.
+
+The page is a progress view. Start the work from **Portal > Spaces**, then use
+**Transfers** to confirm what happened.
 
 ## Prerequisites
 
@@ -14,28 +17,29 @@ Use **Portal > Transfers** after starting uploads, downloads, folder operations,
 
 ## Steps
 
-1. Start an upload, download, or file operation from a Portal Storage Space.
-2. Open **Portal > Transfers**.
-3. Check queued, running, completed, and failed transfer rows.
-4. For failures, capture the Storage Space, object path, action, and error text.
-5. Retry only after checking role, quota, endpoint status, and network conditions.
+1. Start from **Portal > Spaces** and open the space that contains your files.
+2. Add files to the space or download files from it.
+3. Open **Portal > Transfers**.
+4. Use the summary to see what is still in progress, completed, or needs attention.
+5. Use the table to find the file, the related space, the action, and the note.
+6. For a failed transfer, reopen the related space and retry when the cause is clear.
 
 ## Expected result
 
-You can tell whether a file operation is still running, completed, failed, or waiting.
+You can tell whether a file is still moving, available in the space, saved by your browser, or waiting for a retry.
 
 ## You are done when
 
-The transfer row reaches the expected state and the object list matches the intended result.
+The transfer row reaches the expected state and the file list matches the intended result.
 
 ## If you do not see this action
 
-Transfer visibility depends on Portal Browser access and the current user session. Use Admin audit or backend logs for platform-wide transfer investigation.
+Transfer visibility depends on Portal file access and the current user session. If the page is empty, start from a Storage Space and upload or download a file first.
 
 ## Limits / feature flags
 
 !!! note
-    Portal transfers are scoped to self-service file work. Advanced cross-context migrations belong in Manager.
+    Portal transfers are scoped to self-service file work. External tools and public links have their own delivery flows.
 
 ## Related pages
 

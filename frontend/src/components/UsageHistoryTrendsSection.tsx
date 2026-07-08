@@ -44,6 +44,25 @@ type UsageHistoryTrendsSectionProps = {
   error?: string | null;
   title?: string;
   description?: string;
+  labels?: {
+    unavailableDescription?: string;
+    latestStorage?: string;
+    latestStorageHint?: string;
+    latestObjects?: string;
+    latestObjectsHint?: string;
+    maxQuotaRatio?: string;
+    maxQuotaHint?: string;
+    snapshots?: string;
+    snapshotsHint?: string;
+    storageChartTitle?: string;
+    storageChartSubtitle?: string;
+    inventoryChartTitle?: string;
+    inventoryChartSubtitle?: string;
+    storageLineName?: string;
+    objectLineName?: string;
+    bucketLineName?: string;
+    emptyMessage?: string;
+  };
 };
 
 export default function UsageHistoryTrendsSection({
@@ -54,6 +73,7 @@ export default function UsageHistoryTrendsSection({
   error,
   title = "Usage history",
   description,
+  labels,
 }: UsageHistoryTrendsSectionProps) {
   const chartData = useMemo<TrendPoint[]>(
     () =>
@@ -85,7 +105,7 @@ export default function UsageHistoryTrendsSection({
     return (
       <MetricsUnavailableCard
         title={title}
-        description="Stored quota snapshots over time."
+        description={labels?.unavailableDescription ?? "Stored quota snapshots over time."}
         message={error}
         tone="error"
       />
@@ -96,7 +116,7 @@ export default function UsageHistoryTrendsSection({
     return (
       <MetricsUnavailableCard
         title={title}
-        description="Stored quota snapshots over time."
+        description={labels?.unavailableDescription ?? "Stored quota snapshots over time."}
         message={trends.unavailable_reason || "Usage history trends are unavailable for this context."}
       />
     );
@@ -118,33 +138,39 @@ export default function UsageHistoryTrendsSection({
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricsSnapshotCard
-          label="Latest storage"
+          label={labels?.latestStorage ?? "Latest storage"}
           value={formatBytes(summary?.latest_used_bytes ?? 0)}
-          hint={`${formatCompactNumber(summary?.subjects_count ?? 0)} subjects`}
+          hint={labels?.latestStorageHint ?? `${formatCompactNumber(summary?.subjects_count ?? 0)} subjects`}
           loading={loading}
         />
         <MetricsSnapshotCard
-          label="Latest objects"
+          label={labels?.latestObjects ?? "Latest objects"}
           value={formatCompactNumber(summary?.latest_used_objects ?? 0)}
-          hint={`${formatCompactNumber(summary?.latest_bucket_count ?? 0)} buckets`}
+          hint={labels?.latestObjectsHint ?? `${formatCompactNumber(summary?.latest_bucket_count ?? 0)} buckets`}
           loading={loading}
         />
         <MetricsSnapshotCard
-          label="Max quota ratio"
+          label={labels?.maxQuotaRatio ?? "Max quota ratio"}
           value={formatPercentage(summary?.max_usage_ratio_pct)}
-          hint="Highest point"
+          hint={labels?.maxQuotaHint ?? "Highest point"}
           loading={loading}
         />
         <MetricsSnapshotCard
-          label="Snapshots"
+          label={labels?.snapshots ?? "Snapshots"}
           value={formatCompactNumber(summary?.total_records ?? 0)}
-          hint={`${formatCompactNumber(summary?.points_count ?? 0)} periods`}
+          hint={labels?.snapshotsHint ?? `${formatCompactNumber(summary?.points_count ?? 0)} periods`}
           loading={loading}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Storage evolution" subtitle="Used bytes over time" loading={loading} hasData={hasData}>
+        <ChartCard
+          title={labels?.storageChartTitle ?? "Storage evolution"}
+          subtitle={labels?.storageChartSubtitle ?? "Used bytes over time"}
+          loading={loading}
+          hasData={hasData}
+          emptyMessage={labels?.emptyMessage}
+        >
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
@@ -159,12 +185,18 @@ export default function UsageHistoryTrendsSection({
               />
               <YAxis tickFormatter={(value) => formatBytesAxis(Number(value) || 0)} stroke="#94A3B8" />
               <Tooltip content={<UsageHistoryTooltip window={window} metric="storage" />} />
-              <Area type="monotone" dataKey="used_bytes" name="Storage" stroke="#4F46E5" fill="#4F46E5" fillOpacity={0.16} />
+              <Area type="monotone" dataKey="used_bytes" name={labels?.storageLineName ?? "Storage"} stroke="#4F46E5" fill="#4F46E5" fillOpacity={0.16} />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Objects & buckets" subtitle="Inventory snapshots over time" loading={loading} hasData={hasData}>
+        <ChartCard
+          title={labels?.inventoryChartTitle ?? "Objects & buckets"}
+          subtitle={labels?.inventoryChartSubtitle ?? "Inventory snapshots over time"}
+          loading={loading}
+          hasData={hasData}
+          emptyMessage={labels?.emptyMessage}
+        >
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
@@ -180,8 +212,8 @@ export default function UsageHistoryTrendsSection({
               <YAxis tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} stroke="#94A3B8" />
               <Tooltip content={<UsageHistoryTooltip window={window} metric="inventory" />} />
               <Legend />
-              <Line type="monotone" dataKey="used_objects" name="Objects" stroke="#0EA5E9" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="bucket_count" name="Buckets" stroke="#14B8A6" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="used_objects" name={labels?.objectLineName ?? "Objects"} stroke="#0EA5E9" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="bucket_count" name={labels?.bucketLineName ?? "Buckets"} stroke="#14B8A6" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -196,16 +228,17 @@ type ChartCardProps = {
   children: ReactNode;
   loading?: boolean;
   hasData?: boolean;
+  emptyMessage?: string;
 };
 
-function ChartCard({ title, subtitle, children, loading, hasData }: ChartCardProps) {
+function ChartCard({ title, subtitle, children, loading, hasData, emptyMessage }: ChartCardProps) {
   return (
     <MetricsChartPanel
       title={title}
       description={subtitle}
       loading={loading}
       hasData={hasData}
-      emptyMessage="No usage history snapshots for this window yet."
+      emptyMessage={emptyMessage ?? "No usage history snapshots for this window yet."}
     >
       {children}
     </MetricsChartPanel>

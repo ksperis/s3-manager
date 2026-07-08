@@ -4,8 +4,10 @@
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { fetchCurrentUser, updateCurrentUser, type User, type UiPreferences } from "../../api/users";
+import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import { UiLanguagePreference, useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiBadge from "../../components/ui/UiBadge";
@@ -25,6 +27,7 @@ import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 type SaveTarget = "profile" | "preferences" | "password" | null;
+type SettingsTab = "profile" | "preferences" | "security" | "project";
 
 const labelClasses = "ui-caption font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]";
 
@@ -74,6 +77,8 @@ export default function PortalSettingsPage() {
   const [saving, setSaving] = useState<SaveTarget>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [fullName, setFullName] = useState("");
   const [languageDraft, setLanguageDraft] = useState<UiLanguagePreference>(languagePreference);
   const [themeDraft, setThemeDraft] = useState<"light" | "dark">(theme);
@@ -205,6 +210,7 @@ export default function PortalSettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setPasswordDialogOpen(false);
       setMessage(t({ en: "Password updated.", fr: "Mot de passe mis à jour.", de: "Passwort aktualisiert." }));
     } catch (err) {
       console.error(err);
@@ -212,6 +218,14 @@ export default function PortalSettingsPage() {
     } finally {
       setSaving(null);
     }
+  };
+
+  const closePasswordDialog = () => {
+    if (saving === "password") return;
+    setPasswordDialogOpen(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -226,176 +240,249 @@ export default function PortalSettingsPage() {
       {message ? <PageBanner tone="success">{message}</PageBanner> : null}
       {error ? <PageBanner tone="warning">{error}</PageBanner> : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
-          <form onSubmit={saveProfile}>
-            <UiCard title={t({ en: "Profile", fr: "Profil", de: "Profil" })}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <UiInput
-                  label={t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}
-                  className="h-9"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  disabled={loading}
-                  autoComplete="name"
-                />
-                <UiInput
-                  label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
-                  className="h-9"
-                  value={user?.email ?? storedUser?.email ?? ""}
-                  readOnly
-                />
-              </div>
-              <div className="mt-4">
-                <UiButton type="submit" disabled={saving === "profile" || loading} className="h-9 px-3 py-1.5">
-                  {saving === "profile" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save profile", fr: "Enregistrer le profil", de: "Profil speichern" })}
-                </UiButton>
-              </div>
-            </UiCard>
-          </form>
+      <PageTabs
+        tabs={[
+          { id: "profile", label: t({ en: "Profile", fr: "Profil", de: "Profil" }) },
+          { id: "preferences", label: t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" }) },
+          { id: "security", label: t({ en: "Security", fr: "Sécurité", de: "Sicherheit" }) },
+          { id: "project", label: t({ en: "Project", fr: "Projet", de: "Projekt" }) },
+        ]}
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId as SettingsTab)}
+        variant="bar"
+      />
 
-          <form onSubmit={savePreferences}>
-            <UiCard title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <UiSelect
-                  label={t({ en: "Language", fr: "Langue", de: "Sprache" })}
-                  className="h-9"
-                  value={languageDraft}
-                  onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
-                >
-                  <option value="en">English</option>
-                  <option value="fr">Français</option>
-                  <option value="de">Deutsch</option>
-                  <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
-                </UiSelect>
-                <UiSelect
-                  label={t({ en: "Theme", fr: "Thème", de: "Design" })}
-                  className="h-9"
-                  value={themeDraft}
-                  onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
-                >
-                  <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
-                  <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
-                </UiSelect>
-                <UiSelect
-                  label={t({ en: "Default portal account", fr: "Compte Portal par défaut", de: "Standard-Portal-Konto" })}
-                  fieldClassName="md:col-span-2"
-                  className="h-9"
-                  value={defaultPortalAccountId}
-                  onChange={(event) => setDefaultPortalAccountId(event.target.value)}
-                  disabled={accounts.length === 0}
-                >
-                  {accounts.length === 0 ? <option value="">{t({ en: "No portal account", fr: "Aucun compte Portal", de: "Kein Portal-Konto" })}</option> : null}
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </UiSelect>
-              </div>
-              <UiCheckboxField
-                className="mt-4 flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
-                checked={quotaAlertsEnabled}
-                onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
-              >
-                <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
-              </UiCheckboxField>
-              <div className="mt-4">
-                <UiButton type="submit" disabled={saving === "preferences" || loading} className="h-9 px-3 py-1.5">
-                  {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
-                </UiButton>
-              </div>
-            </UiCard>
-          </form>
-
-          <form onSubmit={savePassword}>
-            <UiCard title={t({ en: "Security", fr: "Sécurité", de: "Sicherheit" })}>
-              {!canChangePassword ? (
-                <div className={cx(uiCardMutedClass, "p-3 text-xs font-semibold", uiMutedTextClass)}>
-                  {t({ en: "Password changes are managed by your sign-in provider.", fr: "Les changements de mot de passe sont gérés par votre fournisseur de connexion.", de: "Passwortänderungen werden von Ihrem Anmeldeanbieter verwaltet." })}
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-3">
-                  <UiInput
-                    label={t({ en: "Current password", fr: "Mot de passe actuel", de: "Aktuelles Passwort" })}
-                    className="h-9"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                    autoComplete="current-password"
-                  />
-                  <UiInput
-                    label={t({ en: "New password", fr: "Nouveau mot de passe", de: "Neues Passwort" })}
-                    className="h-9"
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    autoComplete="new-password"
-                  />
-                  <UiInput
-                    label={t({ en: "Confirm password", fr: "Confirmer le mot de passe", de: "Passwort bestätigen" })}
-                    className="h-9"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    autoComplete="new-password"
-                  />
-                </div>
-              )}
-              <div className="mt-4">
-                <UiButton
-                  type="submit"
-                  disabled={!canChangePassword || saving === "password" || loading}
-                  className="h-9 px-3 py-1.5"
-                >
-                  {saving === "password" ? t({ en: "Updating...", fr: "Mise à jour...", de: "Wird aktualisiert..." }) : t({ en: "Change password", fr: "Changer le mot de passe", de: "Passwort ändern" })}
-                </UiButton>
-              </div>
-            </UiCard>
-          </form>
-        </div>
-
-        <aside className="space-y-4">
-          <UiCard title={t({ en: "Portal account", fr: "Compte Portal", de: "Portal-Konto" })}>
-            <dl className="space-y-3 text-xs">
-              <div>
-                <dt className={labelClasses}>{t({ en: "Selected account", fr: "Compte sélectionné", de: "Ausgewähltes Konto" })}</dt>
-                <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
-              </div>
-              <div>
-                <dt className={labelClasses}>{t({ en: "Workspace access", fr: "Accès à l'espace de travail", de: "Arbeitsbereichszugriff" })}</dt>
-                <dd className="mt-1">
-                  <UiBadge tone="primary">
-                    {selectedWorkspaceAccess === "manager"
-                      ? t({ en: "Manager", fr: "Gestionnaire", de: "Manager" })
-                      : selectedWorkspaceAccess === "user"
-                        ? t({ en: "User", fr: "Utilisateur", de: "Benutzer" })
-                        : t({ en: "Limited access", fr: "Accès limité", de: "Eingeschränkter Zugriff" })}
-                  </UiBadge>
-                </dd>
-              </div>
-              <div>
-                <dt className={labelClasses}>{t({ en: "Storage service", fr: "Service de stockage", de: "Speicherdienst" })}</dt>
-                <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
-                  {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
-                </dd>
-              </div>
-              <div>
-                <dt className={labelClasses}>{t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}</dt>
-                <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>
-                  {workspaceLoading
-                    ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
-                    : t({ en: `${activeSpaces.length} active / ${workspace.spaces.length} total`, fr: `${activeSpaces.length} actifs / ${workspace.spaces.length} au total`, de: `${activeSpaces.length} aktiv / ${workspace.spaces.length} gesamt` })}
-                </dd>
-              </div>
-              <div>
-                <dt className={labelClasses}>{t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}</dt>
-                <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{formatBytes(workspace.usedBytes)}</dd>
-              </div>
-            </dl>
+      {activeTab === "profile" ? (
+        <form onSubmit={saveProfile}>
+          <UiCard
+            title={t({ en: "Profile", fr: "Profil", de: "Profil" })}
+            description={t({
+              en: "Choose the name collaborators see in this workspace.",
+              fr: "Choisissez le nom que les collaborateurs voient dans cet espace de travail.",
+              de: "Wählen Sie den Namen, den Mitwirkende in diesem Arbeitsbereich sehen.",
+            })}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <UiInput
+                label={t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}
+                className="h-9"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                disabled={loading}
+                autoComplete="name"
+              />
+              <UiInput
+                label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
+                className="h-9"
+                value={user?.email ?? storedUser?.email ?? ""}
+                readOnly
+              />
+            </div>
+            <div className="mt-4">
+              <UiButton type="submit" disabled={saving === "profile" || loading} className="h-9 px-3 py-1.5">
+                {saving === "profile" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save profile", fr: "Enregistrer le profil", de: "Profil speichern" })}
+              </UiButton>
+            </div>
           </UiCard>
-        </aside>
-      </section>
+        </form>
+      ) : null}
+
+      {activeTab === "preferences" ? (
+        <form onSubmit={savePreferences}>
+          <UiCard
+            title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}
+            description={t({
+              en: "Set the language, theme and default project used when you open the Portal.",
+              fr: "Définissez la langue, le thème et le projet par défaut utilisés à l'ouverture du Portal.",
+              de: "Legen Sie Sprache, Design und Standardprojekt beim Öffnen des Portals fest.",
+            })}
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <UiSelect
+                label={t({ en: "Language", fr: "Langue", de: "Sprache" })}
+                className="h-9"
+                value={languageDraft}
+                onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
+              >
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
+              </UiSelect>
+              <UiSelect
+                label={t({ en: "Theme", fr: "Thème", de: "Design" })}
+                className="h-9"
+                value={themeDraft}
+                onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
+              >
+                <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
+                <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
+              </UiSelect>
+              <UiSelect
+                label={t({ en: "Default project", fr: "Projet par défaut", de: "Standardprojekt" })}
+                fieldClassName="md:col-span-2"
+                className="h-9"
+                value={defaultPortalAccountId}
+                onChange={(event) => setDefaultPortalAccountId(event.target.value)}
+                disabled={accounts.length === 0}
+              >
+                {accounts.length === 0 ? <option value="">{t({ en: "No project", fr: "Aucun projet", de: "Kein Projekt" })}</option> : null}
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </UiSelect>
+            </div>
+            <UiCheckboxField
+              className="mt-4 flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
+              checked={quotaAlertsEnabled}
+              onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
+            >
+              <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
+            </UiCheckboxField>
+            <div className="mt-4">
+              <UiButton type="submit" disabled={saving === "preferences" || loading} className="h-9 px-3 py-1.5">
+                {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
+              </UiButton>
+            </div>
+          </UiCard>
+        </form>
+      ) : null}
+
+      {activeTab === "security" ? (
+        <UiCard
+          title={t({ en: "Security", fr: "Sécurité", de: "Sicherheit" })}
+          description={t({
+            en: "Keep sign-in changes focused and separate from the rest of your settings.",
+            fr: "Gardez les changements de connexion séparés du reste de vos paramètres.",
+            de: "Halten Sie Anmeldeänderungen vom Rest Ihrer Einstellungen getrennt.",
+          })}
+          actions={
+            <UiButton
+              type="button"
+              disabled={!canChangePassword || saving === "password" || loading}
+              onClick={() => {
+                setError(null);
+                setPasswordDialogOpen(true);
+              }}
+              className="h-9 px-3 py-1.5"
+            >
+              {t({ en: "Change password", fr: "Changer le mot de passe", de: "Passwort ändern" })}
+            </UiButton>
+          }
+        >
+          {!canChangePassword ? (
+            <div className={cx(uiCardMutedClass, "p-3 text-xs font-semibold", uiMutedTextClass)}>
+              {t({ en: "Password changes are managed by your sign-in provider.", fr: "Les changements de mot de passe sont gérés par votre fournisseur de connexion.", de: "Passwortänderungen werden von Ihrem Anmeldeanbieter verwaltet." })}
+            </div>
+          ) : (
+            <p className={cx("ui-body", uiMutedTextClass)}>
+              {t({
+                en: "Open the password form only when you need it. Your current page stays clear while the change is in progress.",
+                fr: "Ouvrez le formulaire de mot de passe uniquement quand vous en avez besoin. La page reste claire pendant le changement.",
+                de: "Öffnen Sie das Passwortformular nur bei Bedarf. Die Seite bleibt während der Änderung übersichtlich.",
+              })}
+            </p>
+          )}
+        </UiCard>
+      ) : null}
+
+      {activeTab === "project" ? (
+        <UiCard
+          title={t({ en: "Project", fr: "Projet", de: "Projekt" })}
+          description={t({
+            en: "Read-only context for the project currently selected in the Portal.",
+            fr: "Contexte en lecture seule pour le projet actuellement sélectionné dans le Portal.",
+            de: "Schreibgeschützter Kontext für das aktuell im Portal ausgewählte Projekt.",
+          })}
+        >
+          <dl className="grid gap-4 text-xs md:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <dt className={labelClasses}>{t({ en: "Selected project", fr: "Projet sélectionné", de: "Ausgewähltes Projekt" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{selectedAccount?.name ?? "-"}</dd>
+            </div>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Workspace access", fr: "Accès à l'espace de travail", de: "Arbeitsbereichszugriff" })}</dt>
+              <dd className="mt-1">
+                <UiBadge tone="primary">
+                  {selectedWorkspaceAccess === "manager"
+                    ? t({ en: "Manager", fr: "Gestionnaire", de: "Manager" })
+                    : selectedWorkspaceAccess === "user"
+                      ? t({ en: "User", fr: "Utilisateur", de: "Benutzer" })
+                      : t({ en: "Limited access", fr: "Accès limité", de: "Eingeschränkter Zugriff" })}
+                </UiBadge>
+              </dd>
+            </div>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Storage service", fr: "Service de stockage", de: "Speicherdienst" })}</dt>
+              <dd className={cx("mt-1 break-words font-semibold", uiTitleTextClass)}>
+                {selectedAccount?.storage_endpoint_name ?? selectedAccount?.storage_endpoint_url ?? "-"}
+              </dd>
+            </div>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>
+                {workspaceLoading
+                  ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
+                  : t({ en: `${activeSpaces.length} active / ${workspace.spaces.length} total`, fr: `${activeSpaces.length} actifs / ${workspace.spaces.length} au total`, de: `${activeSpaces.length} aktiv / ${workspace.spaces.length} gesamt` })}
+              </dd>
+            </div>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{formatBytes(workspace.usedBytes)}</dd>
+            </div>
+          </dl>
+        </UiCard>
+      ) : null}
+
+      {passwordDialogOpen ? (
+        <Modal
+          title={t({ en: "Change password", fr: "Changer le mot de passe", de: "Passwort ändern" })}
+          onClose={closePasswordDialog}
+          closeOnBackdropClick={saving !== "password"}
+          closeOnEscape={saving !== "password"}
+        >
+          <form onSubmit={savePassword} className="space-y-4">
+            <UiInput
+              label={t({ en: "Current password", fr: "Mot de passe actuel", de: "Aktuelles Passwort" })}
+              className="h-9"
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+            <UiInput
+              label={t({ en: "New password", fr: "Nouveau mot de passe", de: "Neues Passwort" })}
+              className="h-9"
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+            <UiInput
+              label={t({ en: "Confirm password", fr: "Confirmer le mot de passe", de: "Passwort bestätigen" })}
+              className="h-9"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton type="button" variant="secondary" onClick={closePasswordDialog} disabled={saving === "password"}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton
+                type="submit"
+                disabled={!canChangePassword || saving === "password" || loading}
+                loading={saving === "password"}
+              >
+                {saving === "password" ? t({ en: "Updating...", fr: "Mise à jour...", de: "Wird aktualisiert..." }) : t({ en: "Update password", fr: "Mettre à jour le mot de passe", de: "Passwort aktualisieren" })}
+              </UiButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   );
 }

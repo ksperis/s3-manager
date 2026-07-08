@@ -32,6 +32,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     allow_portal_user_bucket_create: true,
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
+    server_access_logging_enabled: true,
     storage_space_version_cleanup_enabled: true,
     max_portal_user_access_keys: 2,
     iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"], advanced_policy: null },
@@ -481,6 +482,7 @@ describe("AccountsPage modal tabs", () => {
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
     expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.getByText("Server access logging")).toBeInTheDocument();
     expect(screen.getByText("Storage Space history cleanup")).toBeInTheDocument();
     expect(screen.queryByText("Portal manager overrides are active for this account.")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();

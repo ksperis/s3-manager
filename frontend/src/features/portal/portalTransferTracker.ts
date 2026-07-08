@@ -67,6 +67,7 @@ export function startPortalTransfer(input: TransferStartInput): string {
     progress: input.direction === "Upload" ? 10 : 0,
     sizeBytes: input.sizeBytes,
     spaceName: input.spaceName,
+    startedAt: now,
     startedLabel: "Now",
     etaLabel: input.direction === "Upload" ? "In progress" : "Queued",
     speedLabel: "-",

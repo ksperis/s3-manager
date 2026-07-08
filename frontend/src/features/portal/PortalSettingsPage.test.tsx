@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSettingsPage from "./PortalSettingsPage";
 
@@ -81,7 +82,8 @@ describe("PortalSettingsPage", () => {
     });
   });
 
-  it("renders real profile, preference and account settings without mock-only fields", async () => {
+  it("splits real settings into tabs and opens password changes in a modal", async () => {
+    const user = userEvent.setup();
     render(<PortalSettingsPage />);
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
@@ -89,13 +91,29 @@ describe("PortalSettingsPage", () => {
     expect(screen.getByDisplayValue("portal@example.com")).toBeInTheDocument();
     expect(screen.getByLabelText("Display name")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Email")).toHaveClass("ui-control");
+    expect(screen.queryByLabelText("Language")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preferences" }));
     expect(screen.getByLabelText("Language")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Theme")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Default portal account")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Default project")).toHaveClass("ui-control");
     expect(screen.getByRole("checkbox", { name: "Receive quota alert emails" })).toHaveClass("text-primary");
+
+    await user.click(screen.getByRole("button", { name: "Security" }));
+    expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    const dialog = screen.getByRole("dialog", { name: "Change password" });
+    expect(dialog).toBeInTheDocument();
     expect(screen.getByLabelText("Current password")).toHaveClass("ui-control");
-    expect(screen.getByRole("heading", { name: "Preferences" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Portal account" })).toBeInTheDocument();
+    expect(screen.getByLabelText("New password")).toHaveClass("ui-control");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Change password" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Project" }));
+    expect(screen.getByRole("heading", { name: "Project" })).toBeInTheDocument();
     expect(screen.getByText("Workspace access")).toBeInTheDocument();
     expect(screen.getByText("User")).toBeInTheDocument();
     expect(screen.getByText("Storage service")).toBeInTheDocument();

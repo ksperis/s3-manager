@@ -36,7 +36,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./PortalAccountContext", () => ({
-  PortalAccountProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+  PortalAccountProvider: ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  ),
   usePortalAccountContext: () => ({
     accounts: [
       { id: "101", name: "Helios Retail", tags: [] },
@@ -74,7 +76,7 @@ describe("PortalLayout", () => {
     vi.clearAllMocks();
   });
 
-  it("uses the shared shell with workspace and portal account selectors in the topbar", async () => {
+  it("uses the shared shell with workspace and project selectors in the topbar", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
@@ -84,13 +86,19 @@ describe("PortalLayout", () => {
         display_name: "Laurent",
         role: "ui_admin",
         authType: "password",
-        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
-      })
+        account_links: [
+          {
+            account_id: 101,
+            account_admin: true,
+            account_role: "portal_manager",
+          },
+        ],
+      }),
     );
     const { container } = render(
       <MemoryRouter initialEntries={["/portal"]}>
         <PortalLayout />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     expect(screen.getAllByText("S3 Manager").length).toBeGreaterThan(0);
@@ -101,15 +109,19 @@ describe("PortalLayout", () => {
     expect(main?.className).not.toMatch(/portal/);
 
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual([
       "Dashboard",
       "Spaces",
       "Collaborators",
       "External tools",
       "Activity",
       "Transfers",
-      "Usage & Analytics",
-      "Requests",
+      "Storage health",
+      "Help requests",
       "Settings",
     ]);
     expect(nav).not.toHaveTextContent("Administration");
@@ -117,21 +129,39 @@ describe("PortalLayout", () => {
     expect(nav).not.toHaveTextContent("Buckets");
     expect(nav).not.toHaveTextContent("Billing");
 
-    const desktopSidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
+    const desktopSidebar = container.querySelector(
+      '[data-sidebar-variant="desktop"]',
+    ) as HTMLElement;
     expect(desktopSidebar).not.toBeNull();
     await waitFor(() => {
-      expect(within(topbar).getByRole("button", { name: "Switch workspace" })).toHaveTextContent("Portal");
+      expect(
+        within(topbar).getByRole("button", { name: "Switch workspace" }),
+      ).toHaveTextContent("Portal");
     });
-    expect(within(desktopSidebar).queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
-    expect(within(desktopSidebar).queryByRole("button", { name: "Select portal account" })).not.toBeInTheDocument();
-    expect(within(desktopSidebar).queryByText("Helios Retail")).not.toBeInTheDocument();
+    expect(
+      within(desktopSidebar).queryByRole("button", {
+        name: "Switch workspace",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(desktopSidebar).queryByRole("button", { name: "Select project" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(desktopSidebar).queryByText("Helios Retail"),
+    ).not.toBeInTheDocument();
 
-    const accountSelector = within(topbar).getByRole("button", { name: "Select portal account" });
-    expect(accountSelector).toHaveTextContent("Account");
+    const accountSelector = within(topbar).getByRole("button", {
+      name: "Select project",
+    });
+    expect(accountSelector).toHaveTextContent("Project");
     expect(accountSelector).toHaveTextContent("Helios Retail");
-    expect(accountSelector.parentElement).toHaveClass(...TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS.split(" "));
+    expect(accountSelector.parentElement).toHaveClass(
+      ...TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS.split(" "),
+    );
     await user.click(accountSelector);
-    await user.click(await screen.findByRole("option", { name: "Northwind Ops" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Northwind Ops" }),
+    );
     expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
   });
 
@@ -145,8 +175,14 @@ describe("PortalLayout", () => {
         role: "ui_admin",
         authType: "password",
         ui_language: "fr",
-        account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
-      })
+        account_links: [
+          {
+            account_id: 101,
+            account_admin: true,
+            account_role: "portal_manager",
+          },
+        ],
+      }),
     );
 
     render(
@@ -154,19 +190,23 @@ describe("PortalLayout", () => {
         <MemoryRouter initialEntries={["/portal"]}>
           <PortalLayout />
         </MemoryRouter>
-      </LanguageProvider>
+      </LanguageProvider>,
     );
 
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual([
       "Tableau de bord",
       "Espaces",
       "Collaborateurs",
       "Outils externes",
       "Activité",
       "Transferts",
-      "Utilisation et analyses",
-      "Demandes",
+      "État du stockage",
+      "Demandes d'aide",
       "Paramètres",
     ]);
   });

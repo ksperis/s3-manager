@@ -6,6 +6,7 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 const mocks = vi.hoisted(() => ({
   fetchPortalActivityMock: vi.fn(),
   fetchPortalAlertsMock: vi.fn(),
+  fetchPortalCollaboratorsMock: vi.fn(),
   fetchPortalStateMock: vi.fn(),
   fetchPortalTransfersMock: vi.fn(),
   fetchPortalUsageMock: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("./PortalAccountContext", () => ({
 vi.mock("../../api/portal", () => ({
   fetchPortalActivity: (...args: unknown[]) => mocks.fetchPortalActivityMock(...args),
   fetchPortalAlerts: (...args: unknown[]) => mocks.fetchPortalAlertsMock(...args),
+  fetchPortalCollaborators: (...args: unknown[]) => mocks.fetchPortalCollaboratorsMock(...args),
   fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
   fetchPortalTransfers: (...args: unknown[]) => mocks.fetchPortalTransfersMock(...args),
   fetchPortalUsage: (...args: unknown[]) => mocks.fetchPortalUsageMock(...args),
@@ -47,6 +49,10 @@ describe("usePortalWorkspaceData", () => {
     vi.clearAllMocks();
     mocks.fetchPortalActivityMock.mockResolvedValue([]);
     mocks.fetchPortalAlertsMock.mockResolvedValue([]);
+    mocks.fetchPortalCollaboratorsMock.mockResolvedValue({
+      summary: { collaborator_count: 0, external_access_key_count: 0, trend: null },
+      collaborators: [],
+    });
     mocks.fetchPortalStateMock.mockResolvedValue({});
     mocks.fetchPortalTransfersMock.mockResolvedValue([]);
     mocks.fetchPortalUsageMock.mockResolvedValue(null);

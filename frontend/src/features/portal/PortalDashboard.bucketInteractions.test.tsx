@@ -113,6 +113,15 @@ const mocks = vi.hoisted(() => {
       month: monthTraffic,
     },
     usage: null,
+    collaborators: {
+      summary: {
+        collaborator_count: 3,
+        external_access_key_count: 2,
+        trend: { window: "month", label: "last 30 days", period_start: "2026-05-10", collaborator_count: 2 },
+      },
+      collaborators: [],
+    },
+    collaboratorsError: null,
     usageTrends: {
       storage: { window: "month", label: "last 30 days", period_start: "2026-05-10", used_bytes: 256 },
       buckets: { window: "month", label: "last 30 days", period_start: "2026-05-10", bucket_count: 0 },
@@ -180,6 +189,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.getByText("Alerts & service status")).toBeInTheDocument();
     expect(screen.getByText("Quick links")).toBeInTheDocument();
+    expect(screen.getByText("Collaborators")).toBeInTheDocument();
     expect(screen.getByText("Storage services operational")).toBeInTheDocument();
     expect(screen.getByText(/manager@example.com uploaded report.pdf/i)).toBeInTheDocument();
     expect(screen.getAllByText("report.pdf").length).toBeGreaterThan(0);
@@ -243,10 +253,16 @@ describe("PortalDashboard storage workspace UX", () => {
     );
 
     expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).toHaveClass("2xl:grid-cols-5");
     expect(screen.getByText(trendText("256 B vs last 30 days"))).toBeInTheDocument();
-    expect(screen.getByText(trendText("1 vs last 30 days"))).toBeInTheDocument();
+    expect(screen.getAllByText(trendText("1 vs last 30 days")).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(trendText("4 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByText(trendText("2.0 KB vs last 30 days"))).toBeInTheDocument();
+    const collaboratorsCard = document.querySelector('[data-kpi-card="Collaborators"]');
+    expect(collaboratorsCard).toBeInTheDocument();
+    expect(kpiValue("Collaborators")).toBe("3");
+    expect(within(collaboratorsCard as HTMLElement).getByText("2 active external tool accesses")).toBeInTheDocument();
+    expect(within(collaboratorsCard as HTMLElement).getByText(trendText("1 vs last 30 days"))).toBeInTheDocument();
     expect(screen.getByText("1 / 4 spaces (25%)")).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Storage spaces quota usage" })).toHaveAttribute("aria-valuenow", "25");
     expect(screen.getByText("Last 24h")).toBeInTheDocument();
@@ -322,6 +338,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByRole("link", { name: /Storage spaces 1 1 \/ 4 spaces/ })).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.getByRole("link", { name: /Files/ })).toHaveAttribute("href", "/portal/usage");
     expect(screen.getByRole("link", { name: /^Transfer\s+384 B/ })).toHaveAttribute("href", "/portal/usage");
+    expect(screen.getByRole("link", { name: /Collaborators\s+3/i })).toHaveAttribute("href", "/portal/shares");
     expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data"
@@ -466,6 +483,7 @@ describe("PortalDashboard storage workspace UX", () => {
     mocks.hookResult.usageTrends = null;
     mocks.hookResult.health = null;
     mocks.hookResult.healthAlerts = [];
+    mocks.hookResult.collaborators = null;
 
     render(
       <MemoryRouter>

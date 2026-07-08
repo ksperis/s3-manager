@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import importlib.util as import_util
+import hashlib
 import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -40,6 +41,8 @@ from app.models.portal import (
     PortalAccessKeyStatusChange,
     PortalAlert,
     PortalIAMUser,
+    PortalServerAccessLogFilterQuery,
+    PortalServerAccessLogFilterRule,
     PortalState,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
@@ -1554,6 +1557,48 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     assert metadata.name_editable is True
     assert storage_space.id == bucket_name
 
+
+def test_create_storage_space_configures_server_access_logging(monkeypatch, db_session):
+    account = S3Account(name="portal-storage-logging", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-storage-logging@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    service = PortalService(db_session)
+    portal_settings = PortalSettings(server_access_logging_enabled=True)
+    logging_calls = []
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+    monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "create_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "sync_storage_space_server_access_logging",
+        lambda account_arg, bucket_name, **kwargs: logging_calls.append(
+            (account_arg.id, bucket_name, kwargs.get("portal_settings"))
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "get_storage_space",
+        lambda _user, _access, bucket_name: PortalStorageSpace(
+            id=bucket_name,
+            name="Research Data",
+            role="Owner",
+            internal_bucket_name=bucket_name,
+            origin="portal_generic",
+            name_editable=True,
+        ),
+    )
+
+    storage_space = service.create_storage_space(user, access, name="Research Data")
+
+    assert storage_space.name == "Research Data"
+    assert len(logging_calls) == 1
+    assert logging_calls[0][0] == account.id
+    assert logging_calls[0][2] is portal_settings
+
+
 def test_storage_space_version_cleanup_deletes_noncurrent_versions_and_orphan_markers(db_session):
     class _FakeVersionClient:
         def __init__(self):
@@ -2234,6 +2279,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     assert effective.allow_portal_user_bucket_create is False
     assert effective.allow_portal_named_bucket_create is False
     assert effective.allow_portal_user_access_key_create is True
+    assert effective.server_access_logging_enabled is True
     assert effective.storage_space_version_cleanup_enabled is True
     assert effective.bucket_defaults.enable_cors is True
 
@@ -2246,6 +2292,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
         account,
         PortalSettingsOverride(
             allow_portal_user_bucket_create=True,
+            server_access_logging_enabled=False,
             storage_space_version_cleanup_enabled=False,
             bucket_defaults={"enable_cors": False},
         ),
@@ -2255,12 +2302,329 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     assert stored == {
         "admin": {
             "allow_portal_user_bucket_create": True,
-            "bucket_defaults": {"enable_cors": False},
+            "server_access_logging_enabled": False,
             "storage_space_version_cleanup_enabled": False,
+            "bucket_defaults": {"enable_cors": False},
         }
     }
-    assert service.get_effective_portal_settings(account).storage_space_version_cleanup_enabled is False
     assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
+    assert service.get_effective_portal_settings(account).server_access_logging_enabled is False
+    assert service.get_effective_portal_settings(account).storage_space_version_cleanup_enabled is False
+
+
+def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db_session):
+    account = S3Account(
+        name="portal-log-policy",
+        rgw_account_id="rgw-policy-account",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    db_session.add(account)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    bucket_name = service._portal_server_access_log_bucket_name(account)
+    policy = service._portal_server_access_log_policy(
+        account,
+        bucket_name,
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {"Sid": "KeepMe", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "*"},
+                {"Sid": "S3ManagerPortalServerAccessLogging", "Effect": "Deny", "Principal": "*", "Action": "s3:*"},
+            ],
+        },
+    )
+
+    assert bucket_name.startswith(f"s3m-portal-access-logs-{account.id}-")
+    expected_hash = hashlib.sha256(f"{account.rgw_account_id}{account.name}".encode("utf-8")).hexdigest()[:8]
+    assert bucket_name == f"s3m-portal-access-logs-{account.id}-{expected_hash}"
+    statements = {statement["Sid"]: statement for statement in policy["Statement"]}
+    assert "KeepMe" in statements
+    managed = statements["S3ManagerPortalServerAccessLogging"]
+    assert managed["Principal"] == {"Service": "logging.s3.amazonaws.com"}
+    assert managed["Action"] == "s3:PutObject"
+    assert managed["Resource"] == f"arn:aws:s3:::{bucket_name}/portal-server-access/*"
+    assert managed["Condition"]["StringEquals"] == {"aws:SourceAccount": "rgw-policy-account"}
+    assert managed["Condition"]["ArnLike"] == {"aws:SourceArn": "arn:aws:s3:::*"}
+
+
+def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-log-read",
+        rgw_account_id="rgw-log-read",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    user = User(email="portal-log-read@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="research-data",
+        display_name="Research Data",
+        owner_user_id=user.id,
+        visibility="private",
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    log_key = "portal-server-access/research-data/2026-07-08-10-30-00-0000000001 ABCDEF"
+    log_body = "\n".join(
+        [
+            'owner research-data [08/Jul/2026:10:30:00 +0000] 10.0.0.5 external req-1 REST.PUT.OBJECT reports/external.csv "PUT /research-data/reports/external.csv HTTP/1.1" 200 - 512 512 - 3 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:35:00 +0000] 10.0.0.6 external req-2 REST.DELETE.OBJECT reports/old.csv "DELETE /research-data/reports/old.csv HTTP/1.1" 204 - - 128 - 4 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:40:00 +0000] 10.0.0.7 external req-3 REST.POST.OBJECT captures s3-manager/maquette/manager_dashboard.png "POST /research-data HTTP/1.1" 204 - 1254754 1252241 - 101ms http://localhost:5173/ "Safari" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [09/Jul/2026:00:10:00 +0000] 10.0.0.8 external req-4 REST.GET.OBJECT reports/tomorrow.csv "GET /research-data/reports/tomorrow.csv HTTP/1.1" 200 - 64 64 - 3 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+        ]
+    )
+
+    class _Body:
+        def read(self):
+            return log_body.encode("utf-8")
+
+    class _Client:
+        def __init__(self):
+            self.prefixes = []
+
+        def list_objects_v2(self, **kwargs):
+            self.prefixes.append(kwargs["Prefix"])
+            return {"Contents": [{"Key": log_key}]}
+
+        def get_object(self, **kwargs):
+            assert kwargs["Bucket"] == service._portal_server_access_log_bucket_name(account)
+            assert kwargs["Key"] == log_key
+            return {"Body": _Body()}
+
+    service = PortalService(db_session)
+    client = _Client()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: client)
+
+    transfers = service.list_portal_server_access_logs(user, access, date="2026-07-08", mode="transfers")
+    operations = service.list_portal_server_access_logs(user, access, date="2026-07-08", mode="operations")
+    page = service.list_portal_server_access_log_page(
+        user,
+        access,
+        date="2026-07-08",
+        mode="operations",
+        limit=1,
+        offset=1,
+    )
+    filtered_page = service.list_portal_server_access_log_page(
+        user,
+        access,
+        date="2026-07-08",
+        mode="operations",
+        limit=10,
+        offset=0,
+        advanced_filter=PortalServerAccessLogFilterQuery(
+            rules=[
+                PortalServerAccessLogFilterRule(field="action", op="eq", value="upload"),
+                PortalServerAccessLogFilterRule(field="path", op="contains", value="maquette"),
+            ]
+        ),
+    )
+    raw_logs = service.get_portal_server_access_logs_raw(
+        user,
+        access,
+        date_from="2026-07-08",
+        date_to="2026-07-08",
+    )
+
+    assert client.prefixes
+    assert [entry.operation for entry in transfers] == ["REST.POST.OBJECT", "REST.PUT.OBJECT"]
+    assert len(operations) == 3
+    assert transfers[0].direction == "Upload"
+    assert transfers[0].object_key == "captures/s3-manager/maquette/manager_dashboard.png"
+    assert transfers[0].request_uri == "POST /research-data HTTP/1.1"
+    assert transfers[1].operation == "REST.PUT.OBJECT"
+    assert transfers[1].object_key == "reports/external.csv"
+    assert transfers[1].object_size == 512
+    assert transfers[1].requester == "external"
+    assert transfers[1].client_ip == "10.0.0.5"
+    assert transfers[1].auth_type == "AuthHeader"
+    assert operations[1].operation_category == "delete"
+    assert page.total == 3
+    assert page.limit == 1
+    assert page.offset == 1
+    assert len(page.entries) == 1
+    assert page.entries[0].operation_category == "delete"
+    assert filtered_page.total == 1
+    assert filtered_page.entries[0].operation == "REST.POST.OBJECT"
+    assert "REST.POST.OBJECT captures s3-manager/maquette/manager_dashboard.png" in raw_logs
+    assert "reports/tomorrow.csv" not in raw_logs
+
+
+def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-log-identities",
+        rgw_account_id="rgw-log-identities",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    actor = User(email="actor-log-identities@example.com", hashed_password="x", role="ui_user")
+    portal_user = User(
+        email="portal.identity@example.com",
+        display_name="Portal Identity",
+        hashed_password="x",
+        role="ui_user",
+    )
+    db_session.add_all([account, actor, portal_user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="research-data",
+        display_name="Research Data",
+        owner_user_id=actor.id,
+        visibility="private",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add_all(
+        [
+            AccountIAMUser(
+                user_id=portal_user.id,
+                account_id=account.id,
+                iam_user_id="portal-iam-id",
+                iam_username="portal-user-iam",
+                active_access_key="PORTALKEY123456",
+            ),
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=metadata.id,
+                bucket_name="research-data",
+                created_by_user_id=actor.id,
+                external_email="partner@example.org",
+                permission="read_write",
+                iam_user_id="external-iam-id",
+                iam_username="portal-ext-partner",
+                access_key_id="EXTKEY123456",
+                status="Active",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    log_key = "portal-server-access/research-data/2026-07-08-10-30-00-0000000001 ABCDEF"
+    log_body = "\n".join(
+        [
+            'owner research-data [08/Jul/2026:10:30:00 +0000] 10.0.0.5 external-iam-id req-1 REST.PUT.OBJECT reports/external.csv "PUT /research-data/reports/external.csv HTTP/1.1" 200 - 512 512 - 3 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:31:00 +0000] 10.0.0.6 portal-iam-id req-2 REST.GET.OBJECT reports/portal.csv "GET /research-data/reports/portal.csv HTTP/1.1" 200 - 64 64 - 4 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:32:00 +0000] 10.0.0.7 cfb56965-6240-4335-85c4-0850c8e7ab23 req-3 REST.DELETE.OBJECT reports/rgw.csv "DELETE /research-data/reports/rgw.csv HTTP/1.1" 204 - - 32 - 5 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:33:00 +0000] 10.0.0.8 cfb56965-6240-4335-85c4-0850c8e7ab23 req-4 REST.HEAD.OBJECT reports/rgw.csv "HEAD /research-data/reports/rgw.csv HTTP/1.1" 200 - - 32 - 5 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+            'owner research-data [08/Jul/2026:10:34:00 +0000] 10.0.0.9 unknown-rgw-uid req-5 REST.GET.OBJECT reports/unknown.csv "GET /research-data/reports/unknown.csv HTTP/1.1" 200 - 64 64 - 6 - "aws-cli/2" - - SigV4 TLS_AES AuthHeader s3.example TLSv1.3 - -',
+        ]
+    )
+
+    class _Body:
+        def read(self):
+            return log_body.encode("utf-8")
+
+    class _Client:
+        def list_objects_v2(self, **_kwargs):
+            return {"Contents": [{"Key": log_key}]}
+
+        def get_object(self, **_kwargs):
+            return {"Body": _Body()}
+
+    class _Admin:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def get_user(self, uid, allow_not_found=False):
+            self.calls.append(uid)
+            assert allow_not_found is True
+            if uid == "cfb56965-6240-4335-85c4-0850c8e7ab23":
+                return {"user_id": uid, "account_id": account.rgw_account_id, "display_name": "portal-6-1"}
+            return None
+
+    service = PortalService(db_session)
+    admin = _Admin()
+    access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: _Client())
+    monkeypatch.setattr(service, "_portal_server_access_rgw_admin_client", lambda _account: admin)
+
+    page = service.list_portal_server_access_log_page(actor, access, date="2026-07-08", mode="operations", limit=10)
+    identities = {entry.requester: entry.requester_identity for entry in page.entries}
+
+    assert identities["external-iam-id"].kind == "external_access"
+    assert identities["external-iam-id"].label == "partner@example.org"
+    assert identities["external-iam-id"].iam_username == "portal-ext-partner"
+    assert identities["external-iam-id"].access_key_id == "EXTKEY123456"
+    assert identities["portal-iam-id"].kind == "portal_user"
+    assert identities["portal-iam-id"].label == "portal-user-iam"
+    assert identities["portal-iam-id"].email == "portal.identity@example.com"
+    assert identities["cfb56965-6240-4335-85c4-0850c8e7ab23"].kind == "rgw_user"
+    assert identities["cfb56965-6240-4335-85c4-0850c8e7ab23"].label == "portal-6-1"
+    assert identities["cfb56965-6240-4335-85c4-0850c8e7ab23"].access_key_id is None
+    assert identities["unknown-rgw-uid"].kind == "unknown"
+    assert identities["unknown-rgw-uid"].resolved is False
+    assert admin.calls.count("cfb56965-6240-4335-85c4-0850c8e7ab23") == 1
+    assert admin.calls.count("unknown-rgw-uid") == 1
+    assert "external-iam-id" not in admin.calls
+    assert "portal-iam-id" not in admin.calls
+    identity_filtered_page = service.list_portal_server_access_log_page(
+        actor,
+        access,
+        date="2026-07-08",
+        mode="operations",
+        limit=10,
+        advanced_filter=PortalServerAccessLogFilterQuery(
+            rules=[PortalServerAccessLogFilterRule(field="identity", op="contains", value="portal-6-1")]
+        ),
+    )
+    assert identity_filtered_page.total == 2
+    assert {entry.requester for entry in identity_filtered_page.entries} == {"cfb56965-6240-4335-85c4-0850c8e7ab23"}
+
+
+def test_reconcile_portal_server_access_logging_enables_and_disables_managed_buckets(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-log-reconcile",
+        rgw_account_id="rgw-log-reconcile",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    db_session.add(account)
+    db_session.commit()
+    db_session.add_all(
+        [
+            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-a", display_name="Space A"),
+            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-b", display_name="Space B"),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    enabled_calls = []
+    disabled_calls = []
+    monkeypatch.setattr(service, "_portal_server_access_logging_account_ready", lambda _account: True)
+    monkeypatch.setattr(service, "_ensure_portal_server_access_log_bucket", lambda _account: "technical-logs")
+    monkeypatch.setattr(service, "_ensure_portal_server_access_log_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_put_portal_server_access_logging",
+        lambda _account, source_bucket, log_bucket: enabled_calls.append((source_bucket, log_bucket)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_delete_managed_portal_server_access_logging",
+        lambda _account, source_bucket: disabled_calls.append(source_bucket) or True,
+    )
+
+    enabled = service.reconcile_portal_server_access_logging(
+        account,
+        portal_settings=PortalSettings(server_access_logging_enabled=True),
+    )
+    disabled = service.reconcile_portal_server_access_logging(
+        account,
+        portal_settings=PortalSettings(server_access_logging_enabled=False),
+    )
+
+    assert enabled == {"enabled": 2, "disabled": 0, "skipped": 0}
+    assert sorted(enabled_calls) == [("space-a", "technical-logs"), ("space-b", "technical-logs")]
+    assert disabled == {"enabled": 0, "disabled": 2, "skipped": 0}
+    assert sorted(disabled_calls) == ["space-a", "space-b"]
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):
@@ -2747,6 +3111,160 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
         ("grouped-candidates@example.com", "portal_manager", "group", False),
     ]
     assert all(candidate.email != outsider.email for candidate in candidates)
+
+
+def test_portal_collaborators_summarize_effective_members_and_visible_external_access(monkeypatch, db_session):
+    now = utcnow()
+    account = S3Account(name="portal-collaborators", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    actor = User(email="actor-collab@example.com", display_name="Actor", hashed_password="x", role="ui_user")
+    direct = User(email="direct-collab@example.com", display_name="Direct", hashed_password="x", role="ui_user")
+    grouped = User(email="grouped-collab@example.com", display_name="Grouped", hashed_password="x", role="ui_user")
+    promoted = User(email="promoted-collab@example.com", display_name="Promoted", hashed_password="x", role="ui_user")
+    inactive = User(email="inactive-collab@example.com", hashed_password="x", role="ui_user", is_active=False)
+    group = UiGroup(name="Portal collaborator group")
+    manager_group = UiGroup(name="Portal collaborator managers")
+    db_session.add_all([account, actor, direct, grouped, promoted, inactive, group, manager_group])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=actor.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_MANAGER.value,
+                created_at=now - timedelta(days=40),
+            ),
+            UserS3Account(
+                user_id=direct.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_USER.value,
+                created_at=now - timedelta(days=35),
+            ),
+            UserS3Account(
+                user_id=promoted.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_USER.value,
+                created_at=now - timedelta(days=35),
+            ),
+            UserS3Account(
+                user_id=inactive.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_USER.value,
+                created_at=now - timedelta(days=35),
+            ),
+            UiGroupS3Account(
+                group_id=group.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_USER.value,
+                created_at=now - timedelta(days=20),
+            ),
+            UiGroupS3Account(
+                group_id=manager_group.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_MANAGER.value,
+                created_at=now - timedelta(days=40),
+            ),
+            UserUiGroup(user_id=grouped.id, group_id=group.id, created_at=now - timedelta(days=10)),
+            UserUiGroup(user_id=promoted.id, group_id=manager_group.id, created_at=now - timedelta(days=34)),
+        ]
+    )
+    visible_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="visible-data",
+        display_name="Visible Data",
+        owner_user_id=actor.id,
+        visibility="shared",
+    )
+    hidden_metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="hidden-data",
+        display_name="Hidden Data",
+        owner_user_id=actor.id,
+        visibility="shared",
+    )
+    db_session.add_all([visible_metadata, hidden_metadata])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=visible_metadata.id,
+                bucket_name="visible-data",
+                created_by_user_id=actor.id,
+                external_email="partner@example.org",
+                permission="read_only",
+                iam_username="portal-ext-visible",
+                access_key_id="AK-VISIBLE",
+                status="Active",
+            ),
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=hidden_metadata.id,
+                bucket_name="hidden-data",
+                created_by_user_id=actor.id,
+                external_email="hidden@example.org",
+                permission="read_only",
+                iam_username="portal-ext-hidden",
+                access_key_id="AK-HIDDEN",
+                status="Active",
+            ),
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=visible_metadata.id,
+                bucket_name="visible-data",
+                created_by_user_id=actor.id,
+                external_email="revoked@example.org",
+                permission="read_only",
+                iam_username="portal-ext-revoked",
+                access_key_id="AK-REVOKED",
+                status="Active",
+                revoked_at=now,
+            ),
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=visible_metadata.id,
+                bucket_name="visible-data",
+                created_by_user_id=actor.id,
+                external_email="inactive-key@example.org",
+                permission="read_only",
+                iam_username="portal-ext-inactive",
+                access_key_id="AK-INACTIVE",
+                status="Inactive",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="visible-data",
+                name="Visible Data",
+                role="Owner",
+                internal_bucket_name="visible-data",
+            )
+        ],
+    )
+    access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+
+    result = service.list_portal_collaborators(actor, access)
+
+    assert result.summary.collaborator_count == 4
+    assert result.summary.external_access_key_count == 1
+    assert result.summary.trend is not None
+    assert result.summary.trend.window == "month"
+    assert result.summary.trend.collaborator_count == 3
+    assert [(item.email, item.account_role, item.access_source) for item in result.collaborators] == [
+        ("actor-collab@example.com", "portal_manager", "direct"),
+        ("direct-collab@example.com", "portal_user", "direct"),
+        ("grouped-collab@example.com", "portal_user", "group"),
+        ("promoted-collab@example.com", "portal_manager", "direct_and_group"),
+    ]
+    grouped_row = next(item for item in result.collaborators if item.email == "grouped-collab@example.com")
+    assert grouped_row.member_since is not None
+    assert grouped_row.member_since.date() == (now - timedelta(days=10)).date()
 
 
 def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(monkeypatch, db_session):

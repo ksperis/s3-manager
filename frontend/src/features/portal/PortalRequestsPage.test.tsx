@@ -53,7 +53,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/portal/requests"]}>
       <PortalRequestsPage />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -71,19 +71,35 @@ describe("PortalRequestsPage", () => {
     });
   });
 
-  it("lists requests first and submits a collaborator access request", async () => {
+  it("separates request options from history and submits a collaborator access request from a modal", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Requests" })).toBeInTheDocument();
-    expect(screen.getByText("Raise to 20 GiB")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Help requests" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request help" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add a collaborator" })).toBeInTheDocument();
+    expect(screen.queryByText("Raise to 20 GiB")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "History (1)" }));
+    expect(await screen.findByText("Raise to 20 GiB")).toBeInTheDocument();
     expect(screen.getByText("New project")).toBeInTheDocument();
 
-    const section = screen.getByRole("heading", { name: "Add someone to this project" }).closest("section");
-    expect(section).not.toBeNull();
-    await user.type(within(section as HTMLElement).getByLabelText("Name"), "Jane Viewer");
-    await user.type(within(section as HTMLElement).getByLabelText("Email"), "jane@example.org");
-    await user.click(within(section as HTMLElement).getByRole("button", { name: "Send request" }));
+    await user.click(screen.getByRole("button", { name: "Request help" }));
+    expect(
+      screen.queryByRole("heading", { name: "Add someone to this project" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add someone" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Add someone to this project",
+    });
+    await user.type(within(dialog).getByLabelText("Name"), "Jane Viewer");
+    await user.type(within(dialog).getByLabelText("Email"), "jane@example.org");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send request" }),
+    );
 
     await waitFor(() => {
       expect(mocks.createPortalRequest).toHaveBeenCalledWith("101", {
@@ -92,18 +108,33 @@ describe("PortalRequestsPage", () => {
         target_email: "jane@example.org",
       });
     });
+    expect(await screen.findByText("Raise to 20 GiB")).toBeInTheDocument();
   });
 
   it("submits a Portal user removal request", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    const section = await screen.findByRole("heading", { name: "Remove someone from this project" });
-    const removalSection = section.closest("section") as HTMLElement;
-    await user.type(within(removalSection).getByLabelText("Email"), "old@example.org");
-    await user.type(within(removalSection).getByLabelText("Name (optional)"), "Old User");
-    await user.type(within(removalSection).getByLabelText("Reason (optional)"), "Left the project");
-    await user.click(within(removalSection).getByRole("button", { name: "Send removal request" }));
+    expect(
+      await screen.findByRole("heading", { name: "Help requests" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove someone" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Remove someone from this project",
+    });
+    await user.type(within(dialog).getByLabelText("Email"), "old@example.org");
+    await user.type(
+      within(dialog).getByLabelText("Name (optional)"),
+      "Old User",
+    );
+    await user.type(
+      within(dialog).getByLabelText("Reason (optional)"),
+      "Left the project",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send removal request" }),
+    );
 
     await waitFor(() => {
       expect(mocks.createPortalRequest).toHaveBeenCalledWith("101", {
@@ -119,14 +150,27 @@ describe("PortalRequestsPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    const section = await screen.findByRole("heading", { name: "Change project storage limit" });
-    const quotaSection = section.closest("section") as HTMLElement;
-    expect(await within(quotaSection).findByText("Used now")).toBeInTheDocument();
-    expect(within(quotaSection).getByText("Current quota")).toBeInTheDocument();
-    await user.selectOptions(within(quotaSection).getByLabelText("Change"), "decrease");
-    await user.type(within(quotaSection).getByLabelText("New limit"), "18");
-    await user.type(within(quotaSection).getByLabelText("Reason"), "Dataset cleanup");
-    await user.click(within(quotaSection).getByRole("button", { name: "Send request" }));
+    expect(
+      await screen.findByRole("heading", { name: "Help requests" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Change limit" }),
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Change project storage limit",
+    });
+    expect(await within(dialog).findByText("Used now")).toBeInTheDocument();
+    expect(within(dialog).getByText("Current limit")).toBeInTheDocument();
+    await user.selectOptions(
+      within(dialog).getByLabelText("Change"),
+      "decrease",
+    );
+    await user.type(within(dialog).getByLabelText("New limit"), "18");
+    await user.type(within(dialog).getByLabelText("Reason"), "Dataset cleanup");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send request" }),
+    );
 
     await waitFor(() => {
       expect(mocks.createPortalRequest).toHaveBeenCalledWith("101", {
@@ -139,17 +183,34 @@ describe("PortalRequestsPage", () => {
     });
   });
 
-  it("blocks quota requests below current usage", async () => {
+  it("blocks storage-limit requests below current usage", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    const section = await screen.findByRole("heading", { name: "Change project storage limit" });
-    const quotaSection = section.closest("section") as HTMLElement;
-    await user.selectOptions(within(quotaSection).getByLabelText("Change"), "decrease");
-    await user.type(within(quotaSection).getByLabelText("New limit"), "10");
-    await user.type(within(quotaSection).getByLabelText("Reason"), "Too small");
+    expect(
+      await screen.findByRole("heading", { name: "Help requests" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Change limit" }),
+    );
 
-    expect(await within(quotaSection).findByText("The new limit must stay above the space already used.")).toBeInTheDocument();
-    expect(within(quotaSection).getByRole("button", { name: "Send request" })).toBeDisabled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Change project storage limit",
+    });
+    await user.selectOptions(
+      within(dialog).getByLabelText("Change"),
+      "decrease",
+    );
+    await user.type(within(dialog).getByLabelText("New limit"), "10");
+    await user.type(within(dialog).getByLabelText("Reason"), "Too small");
+
+    expect(
+      await within(dialog).findByText(
+        "The new limit must stay above the space already used.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Send request" }),
+    ).toBeDisabled();
   });
 });

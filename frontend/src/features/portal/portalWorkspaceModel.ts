@@ -82,6 +82,7 @@ export type PortalWorkspaceTransfer = {
   progress: number;
   sizeBytes?: number | null;
   spaceName: string;
+  startedAt?: string | null;
   startedLabel: string;
   etaLabel: string;
   speedLabel: string;

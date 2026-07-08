@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalUsagePage from "./PortalUsagePage";
 
@@ -114,6 +115,14 @@ vi.mock("recharts", () => {
     YAxis: () => null,
   };
 });
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <PortalUsagePage />
+    </MemoryRouter>
+  );
+}
 
 function mockBilling() {
   mocks.billingMock.mockResolvedValue({
@@ -267,49 +276,59 @@ describe("PortalUsagePage", () => {
     mockUsageHistory();
   });
 
-  it("renders storage, Storage Spaces, usage composition, history, traffic and visible billing analytics", async () => {
-    render(<PortalUsagePage />);
+  it("renders storage health, space breakdown, file types, trends, activity and visible costs", async () => {
+    renderPage();
 
-    expect(screen.getByRole("heading", { name: "Usage & Analytics" })).toBeInTheDocument();
-    expect(screen.getByText("Storage snapshot")).toBeInTheDocument();
-    expect(screen.getByText("Stored volume")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Storage health" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
+    expect(screen.getByText("Room and files")).toBeInTheDocument();
+    expect(screen.getByText("Storage used")).toBeInTheDocument();
+    expect(screen.getByText("Room left")).toBeInTheDocument();
     expect(screen.getByText("50% of quota")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
+    fireEvent.click(screen.getByRole("button", { name: "By space" }));
 
-    expect(screen.getByText("Storage Spaces (volume)")).toBeInTheDocument();
-    expect(screen.getByText("Storage Spaces (files)")).toBeInTheDocument();
+    expect(screen.getByText("Space breakdown")).toBeInTheDocument();
+    expect(screen.getByText("Spaces by stored data")).toBeInTheDocument();
+    expect(screen.getByText("Spaces by files")).toBeInTheDocument();
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("12 files").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/objects/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
+    fireEvent.click(screen.getByRole("button", { name: "File types" }));
 
     expect(await screen.findByText("Logical bytes")).toBeInTheDocument();
-    expect(screen.getByText("1 / 1 Storage Spaces covered")).toBeInTheDocument();
+    expect(screen.getByText("1 / 1 spaces covered")).toBeInTheDocument();
     expect(mocks.usageStatsMock).toHaveBeenCalledWith("101");
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trends" }));
 
-    expect(await screen.findByText("Storage evolution")).toBeInTheDocument();
+    expect(await screen.findByText("Storage growth")).toBeInTheDocument();
     expect(screen.getByText("Latest storage")).toBeInTheDocument();
+    expect(screen.getByText("Latest files")).toBeInTheDocument();
+    expect(screen.getByText("Files & spaces")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "7d" }));
     await waitFor(() => {
       expect(mocks.usageHistoryMock).toHaveBeenLastCalledWith("101", "week");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Uploads & downloads" }));
 
-    expect(screen.getByRole("heading", { name: "Traffic" })).toBeInTheDocument();
-    expect(screen.getByText("Egress")).toBeInTheDocument();
-    expect(screen.getByText("Ingress")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Uploads & downloads" })).toBeInTheDocument();
+    expect(screen.getByText("Downloaded")).toBeInTheDocument();
+    expect(screen.getByText("Uploaded")).toBeInTheDocument();
+    expect(screen.getByText("Action types")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "30d" }));
     await waitFor(() => {
       const lastHookArgs = mocks.hookArgs[mocks.hookArgs.length - 1] as { trafficWindow?: string };
       expect(lastHookArgs.trafficWindow).toBe("month");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Billing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Costs" }));
 
+    expect(screen.getByText("Monthly cost")).toBeInTheDocument();
     expect(await screen.findByText("€1.25")).toBeInTheDocument();
+    expect(screen.getByText("File actions")).toBeInTheDocument();
     expect(screen.getByText("default")).toBeInTheDocument();
     expect(screen.getByText("2/31 days")).toBeInTheDocument();
     expect(mocks.billingMock).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}$/), "101");
@@ -349,25 +368,25 @@ describe("PortalUsagePage", () => {
       },
     });
 
-    render(<PortalUsagePage />);
+    renderPage();
 
     expect(screen.getAllByText("Quota unavailable").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
-    expect(screen.getByText("No Storage Space volume metrics available.")).toBeInTheDocument();
-    expect(screen.getByText("No Storage Space file metrics available.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "By space" }));
+    expect(screen.getByText("No per-space storage data yet.")).toBeInTheDocument();
+    expect(screen.getByText("No per-space file counts yet.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
+    fireEvent.click(screen.getByRole("button", { name: "File types" }));
     expect(await screen.findByText("usage stats disabled")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
+    fireEvent.click(screen.getByRole("button", { name: "Trends" }));
     expect(await screen.findByText("Usage history is disabled.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Uploads & downloads" }));
     expect(screen.getByText("Traffic data is unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("Egress")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Billing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Costs" }));
     await waitFor(() => {
       expect(screen.getByText("billing disabled")).toBeInTheDocument();
     });
@@ -376,9 +395,9 @@ describe("PortalUsagePage", () => {
   it("hides billing analytics when the billing feature is disabled", async () => {
     mocks.generalSettings.billing_enabled = false;
 
-    render(<PortalUsagePage />);
+    renderPage();
 
-    expect(screen.queryByRole("button", { name: "Billing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Costs" })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.usageStatsMock).toHaveBeenCalled();
       expect(mocks.usageHistoryMock).toHaveBeenCalled();
@@ -400,7 +419,7 @@ describe("PortalUsagePage", () => {
       other_storage_space: { id: "__other__", name: "Other", used_bytes: 512, object_count: 10 },
     };
 
-    render(<PortalUsagePage />);
+    renderPage();
 
     await waitFor(() => {
       expect(mocks.billingMock).toHaveBeenCalled();
@@ -409,7 +428,7 @@ describe("PortalUsagePage", () => {
     });
     expect(screen.getByText("50% of quota")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Storage Spaces" }));
+    fireEvent.click(screen.getByRole("button", { name: "By space" }));
 
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
     expect(screen.queryByText("Other")).not.toBeInTheDocument();

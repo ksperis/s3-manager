@@ -3,33 +3,37 @@
 ## When to use
 
 Use **Portal** for an end-user workspace focused on spaces, files,
-collaborators, activity, transfers, usage, alerts, and simple preferences.
+collaborators, activity, transfers, usage, alerts, storage-admin requests, and
+simple preferences.
 
 ## Prerequisites
 
 - The global `portal_enabled` setting is enabled.
 - The global `browser_enabled` and `browser_portal_enabled` settings are
   enabled to browse files inside a space.
-- Your UI user is explicitly linked to the account with Portal access.
-- The account is backed by a storage endpoint configured by the platform team.
+- Your UI user is explicitly linked to a Portal project.
+- The project is backed by a storage service configured by the platform team.
 
 ## Steps
 
 1. Open `/portal`.
-2. Select the portal account context in the top bar.
-3. Use **Home** for the dashboard, quota, usage by space, recent
-   activity, shared spaces, transfers, and simple alerts.
+2. Select the project in the top bar.
+3. Use **Home** for the dashboard, quota, usage by space, collaborators,
+   active external tool access, recent activity, shared spaces, transfers, and
+   simple alerts.
 4. Use **Spaces** to create or open a space, browse files when content access
    is available, upload, download, and invite collaborators.
-   You can also open `/browser` with the selected Portal account context for a
+   You can also open `/browser` with the selected project context for a
    Dropbox-like spaces sidebar; internal bucket names stay hidden.
 5. Use **External tools** to generate S3 credentials for external tools. The
    Portal runtime key is not shown in this list.
-6. Use **Collaborators** to review spaces shared with you, people you invited,
-   and public links when enabled.
-7. Use **Activity**, **Transfers**, and **Usage & Analytics** for collaboration
-   history, usage composition, usage history, and consumption tracking.
-8. Use **Settings** for simple account and preference changes.
+6. Use **Collaborators** to review workspace members, spaces shared with you,
+   people you invited, and public links when enabled.
+7. Use **Activity**, **Transfers**, and **Storage health** for collaboration
+   history, storage health, file movement, and cost checks.
+8. Use **Help requests** to follow requests for missing collaborators, user
+   removal, or storage-limit changes.
+9. Use **Settings** for simple project and preference changes.
 
 ## Main workflows
 
@@ -39,10 +43,11 @@ collaborators, activity, transfers, usage, alerts, and simple preferences.
 | Browse, upload, download, or inspect files | [Portal: Files](portal-files.md) | Object list, folders, safe details, and Portal-specific limits. |
 | Share with collaborators or understand roles | [Portal: Collaborators](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
 | Create credentials for external S3 tools | [Portal: External tools](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
-| Understand quota, usage, traffic, and alerts | [Portal: Usage and Alerts](portal-usage-alerts.md) | Storage used, per-space usage, history, billing source, and unavailable metrics. |
+| Understand room left, growth, movement, and alerts | [Portal: Storage Health](portal-usage-alerts.md) | Storage used, per-space usage, trends, costs, and unavailable metrics. |
+| Follow admin-help requests | [Portal: Help Requests](portal-requests.md) | Missing collaborators, user removal, storage-limit changes, statuses, and admin messages. |
 | Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible space and file events. |
 | Follow file operations | [Portal: Transfers](portal-transfers.md) | Queued, running, completed, and failed transfers. |
-| Adjust preferences | [Portal: Settings](portal-settings.md) | Simple account, security, and preference cards. |
+| Adjust preferences | [Portal: Settings](portal-settings.md) | Simple project, security, and preference cards. |
 
 ## Portal model in one minute
 
@@ -53,20 +58,26 @@ collaborators, activity, transfers, usage, alerts, and simple preferences.
   managers can administer private-space metadata, visibility, and archive state,
   but they cannot browse files in a private space owned by someone else.
 - **Team** spaces are shared with current and future Portal members of the
-  selected account. **Selected people** spaces are shared only with selected
+  selected project. **Selected people** spaces are shared only with selected
   collaborators with Viewer, Editor, and Owner grants.
 - Regular `portal_user` members can create only private spaces, and only when
-  Portal user space creation is enabled for the account.
+  Portal user space creation is enabled for the project.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
-- **Usage** can show the global account total and quota. For regular Portal
+- **Storage health** can show the project total and quota. For regular Portal
   users, space details, activity, and transfers are limited to spaces
   they can access; undisclosed usage can appear only as the anonymous `Other`
   aggregate.
 - File browsing inside a space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
-- `/browser` can also run with a Portal account context when Portal Browser is enabled. It still uses Portal wording and permissions instead of account-management controls.
+- `/browser` can also run with a Portal project context when Portal Browser is enabled. It still uses Portal wording and permissions instead of management controls.
 - Portal roles come from the owner, the space access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.
+- The dashboard **Collaborators** KPI counts active workspace members for the
+  selected project and shows how many active external tool accesses exist for
+  the storage spaces visible to you.
+- Help requests let Portal users ask admins for project membership, user
+  removal, or storage-limit changes. They do not change access or limits until
+  an admin approves them.
 
 ## Expected result
 
@@ -77,11 +88,11 @@ collaborator grants as their source of truth.
 
 !!! note
     Portal roles are independent from Manager access. Portal access does not
-    grant `/manager`; `/manager` still requires the appropriate account
+    grant `/manager`; `/manager` still requires the appropriate project
     administration rights.
 
 !!! note
-    Portal requires `portal_enabled` and an explicit account link. File browsing
+    Portal requires `portal_enabled` and an explicit project link. File browsing
     inside spaces also requires `browser_enabled` and
     `browser_portal_enabled`. Advanced object inspection belongs in `/browser`,
     not inside Portal.
@@ -92,7 +103,8 @@ collaborator grants as their source of truth.
 - [Portal: Files](portal-files.md)
 - [Portal: Collaborators](portal-sharing.md)
 - [Portal: External tools](portal-access-keys.md)
-- [Portal: Usage and Alerts](portal-usage-alerts.md)
+- [Portal: Storage Health](portal-usage-alerts.md)
+- [Portal: Help Requests](portal-requests.md)
 - [Portal: Activity](portal-activity.md)
 - [Portal: Transfers](portal-transfers.md)
 - [Portal: Settings](portal-settings.md)

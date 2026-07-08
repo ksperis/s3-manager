@@ -79,12 +79,12 @@ export default function PortalUsagePage() {
   const tabs = useMemo(
     () =>
       [
-        { id: "storage" as const, label: t({ en: "Storage", fr: "Stockage", de: "Speicher" }) },
-        { id: "storage-spaces" as const, label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }) },
-        ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" }) }] : []),
-        ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: t({ en: "Usage history", fr: "Historique d'utilisation", de: "Nutzungsverlauf" }) }] : []),
-        { id: "traffic" as const, label: t({ en: "Traffic", fr: "Trafic", de: "Traffic" }) },
-        ...(generalSettings.billing_enabled ? [{ id: "billing" as const, label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }] : []),
+        { id: "storage" as const, label: t({ en: "Overview", fr: "Vue d'ensemble", de: "Überblick" }) },
+        { id: "storage-spaces" as const, label: t({ en: "By space", fr: "Par espace", de: "Nach Bereich" }) },
+        ...(generalSettings.bucket_usage_stats_enabled ? [{ id: "usage-composition" as const, label: t({ en: "File types", fr: "Types de fichiers", de: "Dateitypen" }) }] : []),
+        ...(generalSettings.usage_history_enabled ? [{ id: "usage-history" as const, label: t({ en: "Trends", fr: "Tendances", de: "Trends" }) }] : []),
+        { id: "traffic" as const, label: t({ en: "Uploads & downloads", fr: "Envois et téléchargements", de: "Uploads & Downloads" }) },
+        ...(generalSettings.billing_enabled ? [{ id: "billing" as const, label: t({ en: "Costs", fr: "Coûts", de: "Kosten" }) }] : []),
       ],
     [generalSettings.billing_enabled, generalSettings.bucket_usage_stats_enabled, generalSettings.usage_history_enabled, t]
   );
@@ -241,6 +241,10 @@ export default function PortalUsagePage() {
   const quotaObjects = usage?.quota_max_objects ?? state?.quota_max_objects ?? workspace.quotaObjects ?? null;
   const quotaPercent = percent(totalUsedBytes, quotaBytes);
   const objectQuotaPercent = percent(totalObjects, quotaObjects);
+  const remainingBytes =
+    totalUsedBytes != null && quotaBytes != null && quotaBytes >= 0
+      ? Math.max(0, quotaBytes - totalUsedBytes)
+      : null;
   const storageSpaceCount = workspace.spaces.length || storageSpaces?.length || 0;
   const billingUsage = billing?.usage ?? null;
   const cost = billing?.cost ?? null;
@@ -260,7 +264,7 @@ export default function PortalUsagePage() {
   );
 
   if (accountLoading || loading) {
-    return <PortalPageState>{t({ en: "Loading analytics...", fr: "Chargement des analyses...", de: "Analysen werden geladen..." })}</PortalPageState>;
+    return <PortalPageState>{t({ en: "Loading storage health...", fr: "Chargement de l'état du stockage...", de: "Speicherstatus wird geladen..." })}</PortalPageState>;
   }
 
   if (accountError || error) {
@@ -271,8 +275,8 @@ export default function PortalUsagePage() {
     return (
       <div className="space-y-4">
         <PageEmptyState
-          title={t({ en: "Select an account to view analytics", fr: "Sélectionnez un compte pour voir les analyses", de: "Wählen Sie ein Konto aus, um Analysen anzuzeigen" })}
-          description={t({ en: "Usage, traffic and billing analytics are attached to your selected portal account.", fr: "Les analyses d'utilisation, de trafic et de facturation sont liées au compte Portal sélectionné.", de: "Nutzungs-, Traffic- und Abrechnungsanalysen sind mit Ihrem ausgewählten Portal-Konto verknüpft." })}
+          title={t({ en: "Select a project to view storage health", fr: "Sélectionnez un projet pour voir l'état du stockage", de: "Wählen Sie ein Projekt aus, um den Speicherstatus anzuzeigen" })}
+          description={t({ en: "Storage room, space usage, transfer activity, and costs belong to the selected project.", fr: "L'espace disponible, l'utilisation par espace, l'activité de transfert et les coûts dépendent du projet sélectionné.", de: "Speicherplatz, Bereichsnutzung, Transferaktivität und Kosten gehören zum ausgewählten Projekt." })}
           tone="warning"
         />
       </div>
@@ -282,9 +286,12 @@ export default function PortalUsagePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" })}
-        description={t({ en: "Track storage, traffic, requests and billing for this portal workspace.", fr: "Suivez le stockage, le trafic, les requêtes et la facturation de cet espace de travail Portal.", de: "Verfolgen Sie Speicher, Traffic, Anfragen und Abrechnung für diesen Portal-Arbeitsbereich." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }) })}
+        title={t({ en: "Storage health", fr: "État du stockage", de: "Speicherstatus" })}
+        description={t({ en: "See how much room is left, which spaces are growing, and how files move in this workspace.", fr: "Voyez l'espace restant, les espaces qui grandissent et la façon dont les fichiers circulent dans ce workspace.", de: "Sehen Sie, wie viel Platz bleibt, welche Bereiche wachsen und wie Dateien in diesem Workspace bewegt werden." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage health", fr: "État du stockage", de: "Speicherstatus" }) })}
+        actions={[
+          { label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" },
+        ]}
       />
 
       <div className={cx("border-b pb-3", uiDividerClass)}>
@@ -298,17 +305,23 @@ export default function PortalUsagePage() {
 
       {activeTab === "storage" ? (
         <MetricsSummaryCard
-          title={t({ en: "Storage snapshot", fr: "Instantané du stockage", de: "Speichermomentaufnahme" })}
-          description={t({ en: "Current storage, file and quota usage for this portal account.", fr: "Utilisation actuelle du stockage, des fichiers et des quotas pour ce compte Portal.", de: "Aktuelle Speicher-, Datei- und Quotennutzung für dieses Portal-Konto." })}
+          title={t({ en: "Room and files", fr: "Espace et fichiers", de: "Platz und Dateien" })}
+          description={t({ en: "Current storage, file count, and remaining room for this workspace.", fr: "Stockage actuel, nombre de fichiers et espace restant pour ce workspace.", de: "Aktueller Speicher, Dateianzahl und verbleibender Platz für diesen Workspace." })}
         >
           {usageError ? (
             <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles de l'espace de travail restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricsSnapshotCard
-              label={t({ en: "Stored volume", fr: "Volume stocké", de: "Gespeichertes Volumen" })}
+              label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
               value={formatBytes(totalUsedBytes)}
               hint={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatPercentage(quotaPercent)} of quota`, fr: `${formatPercentage(quotaPercent)} du quota`, de: `${formatPercentage(quotaPercent)} der Quote` })}
+              loading={usageLoading}
+            />
+            <MetricsSnapshotCard
+              label={t({ en: "Room left", fr: "Espace restant", de: "Verbleibender Platz" })}
+              value={formatBytes(remainingBytes)}
+              hint={quotaBytes == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatBytes(quotaBytes)} total`, fr: `${formatBytes(quotaBytes)} au total`, de: `${formatBytes(quotaBytes)} insgesamt` })}
               loading={usageLoading}
             />
             <MetricsSnapshotCard
@@ -318,15 +331,9 @@ export default function PortalUsagePage() {
               loading={usageLoading}
             />
             <MetricsSnapshotCard
-              label={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
+              label={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
               value={formatCompactNumber(storageSpaceCount)}
-              hint={t({ en: "Visible in this workspace", fr: "Visibles dans cet espace de travail", de: "In diesem Arbeitsbereich sichtbar" })}
-              loading={usageLoading}
-            />
-            <MetricsSnapshotCard
-              label={t({ en: "Storage quota", fr: "Quota de stockage", de: "Speicherquote" })}
-              value={formatBytes(quotaBytes)}
-              hint={quotaBytes == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: `${formatBytes(totalUsedBytes)} used`, fr: `${formatBytes(totalUsedBytes)} utilisés`, de: `${formatBytes(totalUsedBytes)} genutzt` })}
+              hint={t({ en: "Visible here", fr: "Visibles ici", de: "Hier sichtbar" })}
               loading={usageLoading}
             />
           </div>
@@ -335,26 +342,28 @@ export default function PortalUsagePage() {
 
       {activeTab === "storage-spaces" ? (
         <MetricsCard
-          title={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
-          description={t({ en: "Storage and file composition across the Storage Spaces you can access.", fr: "Composition du stockage et des fichiers pour les espaces de stockage auxquels vous avez accès.", de: "Speicher- und Dateizusammensetzung der Speicherbereiche, auf die Sie zugreifen können." })}
+          title={t({ en: "Space breakdown", fr: "Répartition par espace", de: "Bereichsaufteilung" })}
+          description={t({ en: "See which spaces use the most room or contain the most files.", fr: "Voyez les espaces qui utilisent le plus d'espace ou contiennent le plus de fichiers.", de: "Sehen Sie, welche Bereiche den meisten Platz nutzen oder die meisten Dateien enthalten." })}
         >
           {usageError ? (
             <PageBanner tone="warning">{t({ en: "Per-space usage metrics are unavailable. Stored Storage Space metadata is still shown when present.", fr: "Les métriques par espace sont indisponibles. Les métadonnées d'espace stockées restent affichées si elles existent.", de: "Nutzungsmetriken pro Bereich sind nicht verfügbar. Gespeicherte Metadaten werden weiterhin angezeigt, wenn vorhanden." })}</PageBanner>
           ) : null}
           <div className="grid gap-6 xl:grid-cols-2">
             <UsageBreakdown
-              title={t({ en: "Storage Spaces (volume)", fr: "Espaces de stockage (volume)", de: "Speicherbereiche (Volumen)" })}
+              title={t({ en: "Spaces by stored data", fr: "Espaces par données stockées", de: "Bereiche nach gespeicherten Daten" })}
               loading={usageLoading}
               metric="bytes"
               items={storageSpaceItems}
-              emptyMessage={t({ en: "No Storage Space volume metrics available.", fr: "Aucune métrique de volume disponible par espace de stockage.", de: "Keine Volumenmetriken für Speicherbereiche verfügbar." })}
+              emptyMessage={t({ en: "No per-space storage data yet.", fr: "Aucune donnée de stockage par espace pour le moment.", de: "Noch keine Speicherdaten pro Bereich." })}
+              objectUnitLabel={t({ en: "files", fr: "fichiers", de: "Dateien" })}
             />
             <UsageBreakdown
-              title={t({ en: "Storage Spaces (files)", fr: "Espaces de stockage (fichiers)", de: "Speicherbereiche (Dateien)" })}
+              title={t({ en: "Spaces by files", fr: "Espaces par fichiers", de: "Bereiche nach Dateien" })}
               loading={usageLoading}
               metric="objects"
               items={storageSpaceItems}
-              emptyMessage={t({ en: "No Storage Space file metrics available.", fr: "Aucune métrique de fichiers disponible par espace de stockage.", de: "Keine Dateimetriken für Speicherbereiche verfügbar." })}
+              emptyMessage={t({ en: "No per-space file counts yet.", fr: "Aucun nombre de fichiers par espace pour le moment.", de: "Noch keine Dateizahlen pro Bereich." })}
+              objectUnitLabel={t({ en: "files", fr: "fichiers", de: "Dateien" })}
             />
           </div>
         </MetricsCard>
@@ -362,15 +371,15 @@ export default function PortalUsagePage() {
 
       {activeTab === "usage-composition" ? (
         <BucketUsageStatsAggregateCard
-          title={t({ en: "Usage composition", fr: "Composition de l'utilisation", de: "Nutzungszusammensetzung" })}
-          description={t({ en: "Latest calculated usage composition for the Storage Spaces visible in this portal account.", fr: "Dernière composition d'utilisation calculée pour les espaces de stockage visibles dans ce compte Portal.", de: "Zuletzt berechnete Nutzungszusammensetzung für die in diesem Portal-Konto sichtbaren Speicherbereiche." })}
+          title={t({ en: "File types and size mix", fr: "Types et tailles de fichiers", de: "Dateitypen und Größenmix" })}
+          description={t({ en: "Latest breakdown of visible files by type, size, and storage class when collection is available.", fr: "Dernière répartition des fichiers visibles par type, taille et classe de stockage lorsque la collecte est disponible.", de: "Aktuelle Aufteilung sichtbarer Dateien nach Typ, Größe und Speicherklasse, wenn die Erfassung verfügbar ist." })}
           aggregate={usageStatsAggregate}
           loading={usageStatsLoading}
           error={usageStatsError}
           recalculateLabel={t({ en: "Recalculate", fr: "Recalculer", de: "Neu berechnen" })}
-          coverageItemLabel={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
-          emptyTitle={t({ en: "No usage composition snapshots yet.", fr: "Aucun instantané de composition d'utilisation pour le moment.", de: "Noch keine Momentaufnahmen der Nutzungszusammensetzung." })}
-          emptyDescription={t({ en: "Snapshots are produced by the platform usage collection; no portal action is required.", fr: "Les instantanés sont produits par la collecte d'utilisation de la plateforme; aucune action Portal n'est requise.", de: "Momentaufnahmen werden von der Plattformnutzungserfassung erzeugt; keine Portal-Aktion ist erforderlich." })}
+          coverageItemLabel={t({ en: "spaces", fr: "espaces", de: "Bereiche" })}
+          emptyTitle={t({ en: "No file-type breakdown yet.", fr: "Aucune répartition par type pour le moment.", de: "Noch keine Dateityp-Aufteilung." })}
+          emptyDescription={t({ en: "The platform prepares this view automatically when file composition collection is available.", fr: "La plateforme prépare cette vue automatiquement lorsque la collecte de composition est disponible.", de: "Die Plattform erstellt diese Ansicht automatisch, wenn die Dateizusammensetzung erfasst wird." })}
         />
       ) : null}
 
@@ -381,36 +390,75 @@ export default function PortalUsagePage() {
           onWindowChange={setUsageHistoryWindow}
           loading={usageHistoryLoading}
           error={usageHistoryError}
-          description={t({ en: "Stored usage snapshots for the selected portal account.", fr: "Instantanés d'utilisation stockés pour le compte Portal sélectionné.", de: "Gespeicherte Nutzungsmomentaufnahmen für das ausgewählte Portal-Konto." })}
+          title={t({ en: "Growth over time", fr: "Évolution dans le temps", de: "Entwicklung im Zeitverlauf" })}
+          description={t({ en: "Stored snapshots that show whether files and storage are growing.", fr: "Instantanés stockés qui montrent si les fichiers et le stockage augmentent.", de: "Gespeicherte Momentaufnahmen, die zeigen, ob Dateien und Speicher wachsen." })}
+          labels={{
+            unavailableDescription: t({ en: "Storage trend snapshots over time.", fr: "Instantanés d'évolution du stockage dans le temps.", de: "Speichertrend-Momentaufnahmen im Zeitverlauf." }),
+            latestStorage: t({ en: "Latest storage", fr: "Dernier stockage", de: "Neuester Speicher" }),
+            latestStorageHint: t({ en: "Latest reading", fr: "Dernière mesure", de: "Neuester Messwert" }),
+            latestObjects: t({ en: "Latest files", fr: "Derniers fichiers", de: "Neueste Dateien" }),
+            latestObjectsHint: t({ en: "Visible spaces", fr: "Espaces visibles", de: "Sichtbare Bereiche" }),
+            maxQuotaRatio: t({ en: "Highest quota use", fr: "Plus forte utilisation du quota", de: "Höchste Quotennutzung" }),
+            maxQuotaHint: t({ en: "Peak point", fr: "Point le plus haut", de: "Höchstwert" }),
+            snapshots: t({ en: "Readings", fr: "Mesures", de: "Messwerte" }),
+            snapshotsHint: t({ en: "Collected periods", fr: "Périodes collectées", de: "Erfasste Zeiträume" }),
+            storageChartTitle: t({ en: "Storage growth", fr: "Croissance du stockage", de: "Speicherwachstum" }),
+            storageChartSubtitle: t({ en: "Stored data over time", fr: "Données stockées dans le temps", de: "Gespeicherte Daten im Zeitverlauf" }),
+            inventoryChartTitle: t({ en: "Files & spaces", fr: "Fichiers et espaces", de: "Dateien & Bereiche" }),
+            inventoryChartSubtitle: t({ en: "File counts over time", fr: "Nombre de fichiers dans le temps", de: "Dateizahlen im Zeitverlauf" }),
+            storageLineName: t({ en: "Storage", fr: "Stockage", de: "Speicher" }),
+            objectLineName: t({ en: "Files", fr: "Fichiers", de: "Dateien" }),
+            bucketLineName: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
+            emptyMessage: t({ en: "No storage trend readings for this window yet.", fr: "Aucune mesure d'évolution du stockage pour cette période.", de: "Noch keine Speichertrend-Messwerte für dieses Fenster." }),
+          }}
         />
       ) : null}
 
       {activeTab === "traffic" ? (
         <MetricsTrafficOverview
-          title={t({ en: "Traffic", fr: "Trafic", de: "Traffic" })}
+          title={t({ en: "Uploads & downloads", fr: "Envois et téléchargements", de: "Uploads & Downloads" })}
           traffic={traffic}
           window={trafficWindow}
           onWindowChange={setTrafficWindow}
           loading={trafficLoading}
           error={trafficError}
           showEmpty={trafficMissing}
-          description={t({ en: "Uploads, downloads and requests for this portal account.", fr: "Envois, téléchargements et requêtes de ce compte Portal.", de: "Hochladen, Herunterladen und Anfragen für dieses Portal-Konto." })}
+          description={t({ en: "How files moved in and out of this workspace.", fr: "Comment les fichiers sont entrés et sortis de ce workspace.", de: "Wie Dateien in diesen Workspace hinein- und hinausbewegt wurden." })}
           bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
           userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
+          labels={{
+            egress: t({ en: "Downloaded", fr: "Téléchargé", de: "Heruntergeladen" }),
+            egressHint: t({ en: "Sent out", fr: "Sorti", de: "Ausgehend" }),
+            ingress: t({ en: "Uploaded", fr: "Envoyé", de: "Hochgeladen" }),
+            ingressHint: t({ en: "Sent in", fr: "Entré", de: "Eingehend" }),
+            successRate: t({ en: "Completed activity", fr: "Activité réussie", de: "Abgeschlossene Aktivität" }),
+            summaryActivityUnit: t({ en: "actions", fr: "actions", de: "Aktionen" }),
+            trafficChartTitle: t({ en: "Movement over time", fr: "Mouvements dans le temps", de: "Bewegung im Zeitverlauf" }),
+            trafficChartSubtitle: t({ en: "Uploads compared with downloads", fr: "Envois comparés aux téléchargements", de: "Uploads im Vergleich zu Downloads" }),
+            callVolumeTitle: t({ en: "File activity", fr: "Activité fichier", de: "Dateiaktivität" }),
+            callVolumeSubtitle: t({ en: "Actions per period", fr: "Actions par période", de: "Aktionen pro Zeitraum" }),
+            requestBreakdownTitle: t({ en: "Action types", fr: "Types d'actions", de: "Aktionstypen" }),
+            emptyMessage: t({ en: "No upload or download activity for this window.", fr: "Aucun envoi ou téléchargement sur cette période.", de: "Keine Upload- oder Download-Aktivität in diesem Fenster." }),
+            rankingActivityUnit: t({ en: "actions", fr: "actions", de: "Aktionen" }),
+            successText: t({ en: "completed", fr: "réussies", de: "abgeschlossen" }),
+            inboundLabel: t({ en: "Uploaded", fr: "Envoyé", de: "Hochgeladen" }),
+            outboundLabel: t({ en: "Downloaded", fr: "Téléchargé", de: "Heruntergeladen" }),
+            callVolumeBarName: t({ en: "Actions", fr: "Actions", de: "Aktionen" }),
+          }}
         />
       ) : null}
 
       {activeTab === "billing" ? (
         <MetricsCard
-          title={t({ en: "Billing", fr: "Facturation", de: "Abrechnung" })}
-          description={t({ en: "Estimated monthly usage and cost for this portal account.", fr: "Utilisation et coût mensuels estimés pour ce compte Portal.", de: "Geschätzte monatliche Nutzung und Kosten für dieses Portal-Konto." })}
+          title={t({ en: "Monthly cost", fr: "Coût mensuel", de: "Monatliche Kosten" })}
+          description={t({ en: "Estimated storage and transfer cost for the selected month.", fr: "Coût estimé du stockage et des transferts pour le mois sélectionné.", de: "Geschätzte Speicher- und Transferkosten für den ausgewählten Monat." })}
           actions={billingMonthControl}
         >
           {billingLoading && !billing ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricsSnapshotCard label={t({ en: "Estimated cost", fr: "Coût estimé", de: "Geschätzte Kosten" })} value="-" loading />
               <MetricsSnapshotCard label={t({ en: "Average storage", fr: "Stockage moyen", de: "Durchschnittlicher Speicher" })} value="-" loading />
-              <MetricsSnapshotCard label={t({ en: "Requests", fr: "Requêtes", de: "Anfragen" })} value="-" loading />
+              <MetricsSnapshotCard label={t({ en: "File actions", fr: "Actions fichier", de: "Dateiaktionen" })} value="-" loading />
               <MetricsSnapshotCard label={t({ en: "Coverage", fr: "Couverture", de: "Abdeckung" })} value="-" loading />
             </div>
           ) : billing ? (
@@ -429,9 +477,9 @@ export default function PortalUsagePage() {
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard
-                  label={t({ en: "Requests", fr: "Requêtes", de: "Anfragen" })}
+                  label={t({ en: "File actions", fr: "Actions fichier", de: "Dateiaktionen" })}
                   value={formatCompactNumber(billingUsage?.ops_total)}
-                  hint={t({ en: `${formatBytes(billingUsage?.bytes_out)} out, ${formatBytes(billingUsage?.bytes_in)} in`, fr: `${formatBytes(billingUsage?.bytes_out)} sortants, ${formatBytes(billingUsage?.bytes_in)} entrants`, de: `${formatBytes(billingUsage?.bytes_out)} ausgehend, ${formatBytes(billingUsage?.bytes_in)} eingehend` })}
+                  hint={t({ en: `${formatBytes(billingUsage?.bytes_out)} downloaded, ${formatBytes(billingUsage?.bytes_in)} uploaded`, fr: `${formatBytes(billingUsage?.bytes_out)} téléchargés, ${formatBytes(billingUsage?.bytes_in)} envoyés`, de: `${formatBytes(billingUsage?.bytes_out)} heruntergeladen, ${formatBytes(billingUsage?.bytes_in)} hochgeladen` })}
                   loading={billingLoading}
                 />
                 <MetricsSnapshotCard

@@ -18,12 +18,15 @@ import {
   WorkspaceDashboardProgressBar as ProgressBar,
   WorkspaceDashboardStorageEvolutionChart,
   WorkspaceStatusDot,
+  type WorkspaceDashboardMetric,
   type WorkspaceDashboardTone,
 } from "../../components/WorkspaceDashboardKit";
 import {
   buildWorkspaceDashboardKpis,
+  formatWorkspaceDashboardNumber,
   formatWorkspaceProjectedFull,
   formatWorkspaceSignedBytesDelta,
+  formatWorkspaceSignedTrend,
   selectWorkspaceTrafficTrend,
   workspaceStorageGrowthDelta,
   workspaceTrafficTotalBytes,
@@ -147,6 +150,15 @@ function localizeTrendBaseline<T extends ManagerUsageTrendBaseline | null | unde
     ...baseline,
     label: portalTrendPeriodLabel(baseline.label, t),
   } as T;
+}
+
+function externalToolAccessDetail(count: number | null | undefined, t: TFunction): string {
+  if (count == null) return "";
+  return t({
+    en: `${count} active external tool access${count === 1 ? "" : "es"}`,
+    fr: `${count} accès outil externe actif${count > 1 ? "s" : ""}`,
+    de: `${count} aktive${count === 1 ? "r" : ""} externe${count === 1 ? "r" : ""} Werkzeugzugriff${count === 1 ? "" : "e"}`,
+  });
 }
 
 function hasOtherUsage(other?: PortalUsageStorageSpace | null): other is PortalUsageStorageSpace {
@@ -560,6 +572,8 @@ export default function PortalDashboard() {
     trafficLoading,
     trafficError,
     usage,
+    collaborators,
+    collaboratorsError,
   } = usePortalWorkspaceData({
     includeTraffic: true,
     includeTrafficTrend: true,
@@ -578,13 +592,16 @@ export default function PortalDashboard() {
   const storageTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.storage ?? null, t), [t, usageTrends?.storage]);
   const bucketsTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.buckets ?? null, t), [t, usageTrends?.buckets]);
   const objectsTrendBaseline = useMemo(() => localizeTrendBaseline(usageTrends?.objects ?? null, t), [t, usageTrends?.objects]);
+  const collaboratorTrendBaseline = collaborators?.summary.trend
+    ? { ...collaborators.summary.trend, label: portalTrendPeriodLabel(collaborators.summary.trend.label, t) }
+    : null;
   const healthStatus = workspaceHealthStatus(health);
   const alerts = (workspace.alerts.length > 0 ? workspace.alerts : healthAlerts).slice(0, 4);
   const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived").length;
   const transferBytes = currentTraffic ? workspaceTrafficTotalBytes(currentTraffic) : null;
   const quotaOfLabel = t({ en: "of", fr: "sur", de: "von" });
   const trendComparisonLabel = t({ en: "vs", fr: "par rapport à", de: "gegenüber" });
-  const metrics = buildWorkspaceDashboardKpis({
+  const baseMetrics = buildWorkspaceDashboardKpis({
     storage: {
       label: t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" }),
       usedBytes: workspace.usedBytes,
@@ -640,6 +657,25 @@ export default function PortalDashboard() {
       unavailableReason: trafficError,
     },
   });
+  const collaboratorsMetric: WorkspaceDashboardMetric = {
+    label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }),
+    value: formatWorkspaceDashboardNumber(collaborators?.summary.collaborator_count),
+    detail: externalToolAccessDetail(collaborators?.summary.external_access_key_count, t),
+    trend: collaboratorsError
+      ? undefined
+      : formatWorkspaceSignedTrend(
+          collaborators?.summary.collaborator_count,
+          collaboratorTrendBaseline?.collaborator_count,
+          collaboratorTrendBaseline?.label ?? "",
+          formatWorkspaceDashboardNumber,
+          trendComparisonLabel
+        ),
+    tone: "violet",
+    icon: <LinkIcon className="h-7 w-7" />,
+    to: "/portal/shares",
+    unavailableReason: collaboratorsError,
+  };
+  const metrics = [...baseMetrics, collaboratorsMetric];
   const quickLinks: QuickLink[] = [
     {
       label: t({ en: "Storage spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }),
@@ -699,7 +735,7 @@ export default function PortalDashboard() {
         }
       />
 
-      <KpiRow metrics={metrics} />
+      <KpiRow metrics={metrics} className="2xl:grid-cols-5" />
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-4">

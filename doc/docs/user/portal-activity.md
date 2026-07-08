@@ -1,24 +1,28 @@
 # Portal: Activity
 
-Use this page when you need to review recent activity in Portal.
+Use this page to understand what recently changed in the spaces you can access.
 
 ## When to use
 
-Use **Portal > Activity** to understand recent Storage Space and file events visible to your Portal account.
+Use **Portal > Activity** when you want to answer simple collaboration questions:
+who changed something, which space was affected, and which file or sharing item
+was involved.
 
 ## Prerequisites
 
 - Portal is enabled.
-- You are linked to the selected Portal account.
+- You are linked to the selected project.
 - You have access to at least one active Storage Space.
 
 ## Steps
 
 1. Open **Portal > Activity**.
-2. Confirm the selected Portal account in the topbar.
-3. Filter or scan entries by Storage Space, actor, action, or time.
-4. Open the related Storage Space or file when you need more context.
-5. If an expected event is missing, compare your access with the Storage Space owner or ask an admin to check audit logs.
+2. Use the summary to see how many recent changes, people, and spaces are involved.
+3. Filter the timeline by action or space when you need a narrower view.
+4. Scan the **Change** column to understand who acted and what changed.
+5. Use **Open space** on a row when you need to inspect the related files or
+   collaborators.
+6. Open details only when you need the technical IP address for support.
 
 ## Expected result
 
@@ -26,16 +30,16 @@ You can explain recent Portal-visible changes without leaving the self-service w
 
 ## You are done when
 
-You have the action, Storage Space, actor, timestamp, and next page to inspect.
+You know who acted, what changed, which space was affected, and whether you need to open the space for more context.
 
 ## If you do not see this action
 
-Check Portal access, selected account, Storage Space grants, and whether the event belongs to a Storage Space you can see.
+If the page is empty, start from a space and add files, create folders, or invite collaborators. If an expected change is still missing, check that you can access the related space.
 
 ## Limits / feature flags
 
 !!! note
-    Portal activity is scoped to visible Portal resources. Admin audit remains the source for platform-wide investigation.
+    Portal activity is scoped to spaces visible to you. Admin audit remains the source for platform-wide investigation.
 
 ## Related pages
 

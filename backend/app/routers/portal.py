@@ -22,9 +22,13 @@ from app.models.portal import (
     PortalAccessKeyStatusChange,
     PortalActivityItem,
     PortalAlert,
+    PortalCollaboratorsResponse,
     PortalEligibility,
     PortalPublicLink,
     PortalPublicLinkCreate,
+    PortalServerAccessLogEntry,
+    PortalServerAccessLogFilterQuery,
+    PortalServerAccessLogPage,
     PortalState,
     PortalTransfer,
     PortalStorageObjectDeleteResponse,
@@ -35,6 +39,7 @@ from app.models.portal import (
     PortalStorageSpaceImport,
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupRequest,
+    PortalStorageSpaceVersionCleanupResult,
     PortalStorageSpaceShare,
     PortalStorageSpaceShareCandidate,
     PortalStorageSpaceSharePayload,
@@ -44,6 +49,7 @@ from app.models.portal import (
     PortalUsage,
 )
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
+from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.models.s3_account import S3Account as S3AccountSchema
@@ -62,7 +68,6 @@ from app.routers.http_errors import (
     sanitized_error_log_detail,
 )
 from app.services.audit_service import AuditService
-from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -84,6 +89,7 @@ from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.services.billing_service import BillingService
+from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.bucket_usage_stats_service import BucketUsageStatsAggregateTarget, BucketUsageStatsService
 from app.services.app_settings_service import load_app_settings
 from app.services.effective_access_service import EffectiveAccessService
@@ -92,6 +98,10 @@ from app.models.billing import BillingSubjectDetail
 from app.utils.http_headers import build_attachment_content_disposition
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
+
+
+def _parse_server_access_log_filter(raw: Optional[str]) -> Optional[PortalServerAccessLogFilterQuery]:
+    return parse_advanced_filter_query(raw, query_cls=PortalServerAccessLogFilterQuery)
 settings = get_settings()
 
 
@@ -150,7 +160,6 @@ def _portal_usage_stats_source_scope_id(account: S3Account) -> str:
 def _ensure_portal_bucket_usage_stats_enabled() -> None:
     if not bool(load_app_settings().general.bucket_usage_stats_enabled):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket usage stats feature is disabled")
-
 
 
 def _stream_portal_storage_space_version_cleanup(
@@ -286,6 +295,7 @@ def _stream_portal_storage_space_version_cleanup(
             "X-Accel-Buffering": "no",
         },
     )
+
 
 @router.get("/accounts", response_model=list[S3AccountSchema])
 def list_portal_accounts(
@@ -485,6 +495,20 @@ def portal_activity(
         _raise_portal_storage_runtime(exc)
 
 
+@router.get("/collaborators", response_model=PortalCollaboratorsResponse)
+def portal_collaborators(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalCollaboratorsResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_portal_collaborators(actor, access)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
 @router.get("/transfers", response_model=list[PortalTransfer])
 def portal_transfers(
     space_id: Optional[str] = Query(None),
@@ -499,6 +523,111 @@ def portal_transfers(
         return service.list_portal_transfers(actor, access, space_id=space_id, limit=limit)
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
+
+
+@router.get("/transfers/server-access-logs", response_model=list[PortalServerAccessLogEntry])
+def portal_server_access_logs(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    mode: str = Query("transfers", pattern=r"^(transfers|operations)$"),
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
+    advanced_filter: Optional[str] = Query(None),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalServerAccessLogEntry]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        parsed_filter = _parse_server_access_log_filter(advanced_filter)
+        return service.list_portal_server_access_logs(
+            actor,
+            access,
+            date=date,
+            mode=mode,
+            space_id=space_id,
+            timezone_offset_minutes=timezone_offset_minutes,
+            limit=limit,
+            offset=offset,
+            advanced_filter=parsed_filter,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/transfers/server-access-logs/page", response_model=PortalServerAccessLogPage)
+def portal_server_access_logs_page(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    mode: str = Query("transfers", pattern=r"^(transfers|operations)$"),
+    space_id: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
+    advanced_filter: Optional[str] = Query(None),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalServerAccessLogPage:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        parsed_filter = _parse_server_access_log_filter(advanced_filter)
+        return service.list_portal_server_access_log_page(
+            actor,
+            access,
+            date=date,
+            mode=mode,
+            space_id=space_id,
+            timezone_offset_minutes=timezone_offset_minutes,
+            limit=limit,
+            offset=offset,
+            advanced_filter=parsed_filter,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/transfers/server-access-logs/raw")
+def portal_server_access_logs_raw(
+    date_from: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    space_id: Optional[str] = Query(None),
+    timezone_offset_minutes: int = Query(0, ge=-840, le=840),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> Response:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        content = service.get_portal_server_access_logs_raw(
+            actor,
+            access,
+            date_from=date_from,
+            date_to=date_to,
+            space_id=space_id,
+            timezone_offset_minutes=timezone_offset_minutes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    filename = (
+        f"portal-server-access-logs-{date_from}.log"
+        if date_from == date_to
+        else f"portal-server-access-logs-{date_from}-{date_to}.log"
+    )
+    return Response(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": build_attachment_content_disposition(filename)},
+    )
 
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
@@ -902,7 +1031,6 @@ def portal_storage_space_access_summary(
         _raise_portal_storage_runtime(exc)
 
 
-
 @router.post("/storage-spaces/{space_id}/versions/cleanup/stream")
 def portal_storage_space_version_cleanup_stream(
     request: Request,
@@ -934,6 +1062,7 @@ def portal_storage_space_version_cleanup_stream(
         audit_service=audit_service,
         target=target,
     )
+
 
 @router.get("/storage-spaces/{space_id}/objects/detail", response_model=PortalStorageObjectDetail)
 def portal_storage_space_object_detail(

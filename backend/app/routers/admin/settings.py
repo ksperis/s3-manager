@@ -36,6 +36,7 @@ from app.services.oidc_provider_settings_service import (
     update_oidc_provider,
 )
 from app.services.quota_monitoring_service import QuotaMonitoringService
+from app.services.portal_service import get_portal_service
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
@@ -59,8 +60,13 @@ def get_general_feature_locks_route(_: None = Depends(get_current_ui_superadmin)
 def update_settings(
     payload: AppSettings,
     current_user: User = Depends(get_current_ui_superadmin),
+    db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_logger),
 ) -> AppSettings:
+    try:
+        server_access_logging_summary = get_portal_service(db).reconcile_all_portal_server_access_logging(payload.portal)
+    except RuntimeError as exc:
+        raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     saved = save_app_settings(payload)
     audit.record_action(
         user=current_user,
@@ -68,7 +74,10 @@ def update_settings(
         action="settings.update",
         entity_type="app_settings",
         entity_id="global",
-        metadata={"sections": sorted(saved.model_dump().keys())},
+        metadata={
+            "sections": sorted(saved.model_dump().keys()),
+            "portal_server_access_logging": server_access_logging_summary,
+        },
     )
     return saved
 

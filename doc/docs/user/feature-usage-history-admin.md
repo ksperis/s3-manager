@@ -40,15 +40,15 @@ Check the Admin role, `usage_history_enabled`, endpoint capability, and whether 
 ## Related pages
 
 - [Feature: Admin Usage and Metrics](feature-admin-metrics.md)
-- [Portal: Usage and Alerts](portal-usage-alerts.md)
+- [Portal: Storage Health](portal-usage-alerts.md)
 - [Ops / Quota monitoring and history](../ops/operations-quota-monitoring.md)
 - [Ops / Observability](../ops/operations-observability.md)
 
 ## Visual example
 
-This page reuses the Portal usage screenshot because it shows the end-user side of the same usage-history data family.
+This page reuses the Portal storage-health screenshot because it shows the end-user side of the same usage-history data family.
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal usage and alerts page with storage totals and usage history" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal usage and alerts page with storage totals and usage history" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-usage.light.png" alt="Portal Storage Health page with storage totals and growth trends" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-usage.dark.png" alt="Portal Storage Health page with storage totals and growth trends" loading="lazy">
 </div>

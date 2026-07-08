@@ -1004,12 +1004,12 @@ export const scenarios: DocScreenshotScenario[] = [
     docPage: "user/screenshots-gallery.md",
     route: "/portal/usage",
     outputBasename: "portal-usage",
-    waitFor: "h1:has-text('Usage & Analytics')",
+    waitFor: "h1:has-text('Storage health')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
     actions: [
-      { type: "click", selector: "button:has-text('Storage Spaces')" },
-      { type: "wait", selector: "text=Storage Spaces (volume)" },
-      { type: "wait", selector: "text=Storage Spaces (objects)" },
+      { type: "click", selector: "button:has-text('By space')" },
+      { type: "wait", selector: "text=Spaces by stored data" },
+      { type: "wait", selector: "text=Spaces by files" },
     ],
     mockRules: withBaseRules(
       billingEnabledGeneralSettingsRule,
@@ -1024,8 +1024,8 @@ export const scenarios: DocScreenshotScenario[] = [
     waitFor: "h1:has-text('External tools')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
     actions: [
-      { type: "wait", selector: "text=AKIAHELIOSPORTAL001" },
-      { type: "wait", selector: "text=Use endpoint https://s3-default.docs.example.com" },
+      { type: "wait", selector: "text=Before connecting a tool" },
+      { type: "wait", selector: "text=Connection downloads include the service address" },
       { type: "wait", selector: "text=Connect an external tool" },
     ],
     mockRules: withBaseRules(),
