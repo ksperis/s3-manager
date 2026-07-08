@@ -196,6 +196,20 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
 
     const table = await screen.findByRole("table");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute(
+      "placeholder",
+      "Search by email, role, group, account, user, or connection"
+    );
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "responsive" } });
+    await waitFor(() => {
+      expect(listUsersMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          search: "responsive",
+        })
+      );
+    });
     expect(table).toHaveClass("responsive-data-table");
     expect(screen.getByText("responsive.user@example.com").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(screen.getByText("Superadmin").closest("td")).toHaveAttribute("data-label", "Role");

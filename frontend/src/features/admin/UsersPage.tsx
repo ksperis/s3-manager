@@ -48,9 +48,9 @@ import PageTabs from "../../components/PageTabs";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
@@ -1989,18 +1989,12 @@ export default function UsersPage() {
           showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex min-w-0 flex-1 items-center gap-2 max-sm:w-full">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Search
-              </span>
-              <input
-                type="text"
-                value={filter}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                placeholder={filterPlaceholder}
-                className={`${toolbarCompactInputClasses} min-w-0 flex-1 sm:w-64 md:w-72`}
-              />
-            </div>
+            <ToolbarSearchInput
+              value={filter}
+              onChange={handleFilterChange}
+              placeholder={filterPlaceholder}
+              className="min-w-0 flex-1 sm:w-64 md:w-72"
+            />
           }
         />
         <DataTableShell
