@@ -8,10 +8,10 @@ import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
 import { extractApiError } from "../utils/apiError";
 import { stableSignature } from "../utils/stableSignature";
+import S3ConnectionAccessFields from "../features/shared/S3ConnectionAccessFields";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../features/shared/S3ConnectionEndpointFields";
 import Modal from "./Modal";
 import UiButton from "./ui/UiButton";
-import UiCheckboxField from "./ui/UiCheckboxField";
 import UiInlineMessage from "./ui/UiInlineMessage";
 import UiInput from "./ui/UiInput";
 import { cx, uiMutedTextClass, uiPanelMutedClass, uiTitleTextClass } from "./ui/styles";
@@ -322,25 +322,15 @@ export default function AddS3ConnectionFromKeyModal({
           />
         )}
 
-        <section className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
-          <div className={cx("ui-body font-semibold", uiTitleTextClass)}>Access</div>
-          <UiCheckboxField
-            checked={form.access_manager}
-            onChange={(event) => setForm((prev) => ({ ...prev, access_manager: event.target.checked }))}
-            className={cx("ui-body font-medium", uiTitleTextClass)}
-          >
-            Access manager
-          </UiCheckboxField>
-          <UiCheckboxField
-            checked={form.access_browser}
-            onChange={(event) => setForm((prev) => ({ ...prev, access_browser: event.target.checked }))}
-            className={cx("ui-body font-medium", uiTitleTextClass)}
-          >
-            Access browser
-          </UiCheckboxField>
-          <p className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</p>
-          {ownerSummary ? <p className={cx("ui-caption", uiMutedTextClass)}>Owner metadata: {ownerSummary}</p> : null}
-        </section>
+        <S3ConnectionAccessFields
+          accessManager={form.access_manager}
+          accessBrowser={form.access_browser}
+          onAccessManagerChange={(checked) => setForm((prev) => ({ ...prev, access_manager: checked }))}
+          onAccessBrowserChange={(checked) => setForm((prev) => ({ ...prev, access_browser: checked }))}
+          title="Access"
+          ownerSummary={ownerSummary}
+          variant="panel"
+        />
 
         <div className="flex items-center justify-end gap-3">
           <UiButton

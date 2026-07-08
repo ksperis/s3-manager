@@ -13,7 +13,6 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
-import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -63,6 +62,7 @@ import {
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
+import S3ConnectionAccessFields from "../shared/S3ConnectionAccessFields";
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -1193,26 +1193,13 @@ export default function S3ConnectionsPage() {
                   Admin connections are always shared with linked UI users.
                 </p>
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <div className={cx("ui-body", uiTitleTextClass)}>Workspace access</div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <UiCheckboxField
-                    checked={createForm.access_manager}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, access_manager: e.target.checked }))}
-                    className="ui-body text-[var(--ui-text)]"
-                  >
-                    Access manager
-                  </UiCheckboxField>
-                  <UiCheckboxField
-                    checked={createForm.access_browser}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, access_browser: e.target.checked }))}
-                    className="ui-body text-[var(--ui-text)]"
-                  >
-                    Access browser
-                  </UiCheckboxField>
-                </div>
-                <div className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</div>
-              </div>
+              <S3ConnectionAccessFields
+                accessManager={createForm.access_manager}
+                accessBrowser={createForm.access_browser}
+                onAccessManagerChange={(checked) => setCreateForm((p) => ({ ...p, access_manager: checked }))}
+                onAccessBrowserChange={(checked) => setCreateForm((p) => ({ ...p, access_browser: checked }))}
+                className="sm:col-span-2"
+              />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <UiInput
@@ -1345,23 +1332,12 @@ export default function S3ConnectionsPage() {
                       Store owner context for keys imported from manager/ceph-admin flows.
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <UiCheckboxField
-                      checked={editForm.access_manager}
-                      onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
-                      className="ui-body text-[var(--ui-text)]"
-                    >
-                      Access manager
-                    </UiCheckboxField>
-                    <UiCheckboxField
-                      checked={editForm.access_browser}
-                      onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
-                      className="ui-body text-[var(--ui-text)]"
-                    >
-                      Access browser
-                    </UiCheckboxField>
-                  </div>
-                  <div className={cx("ui-caption", uiMutedTextClass)}>At least one access must be enabled.</div>
+                  <S3ConnectionAccessFields
+                    accessManager={editForm.access_manager}
+                    accessBrowser={editForm.access_browser}
+                    onAccessManagerChange={(checked) => setEditForm((p) => ({ ...p, access_manager: checked }))}
+                    onAccessBrowserChange={(checked) => setEditForm((p) => ({ ...p, access_browser: checked }))}
+                  />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <UiSelect
                       label="Owner type"

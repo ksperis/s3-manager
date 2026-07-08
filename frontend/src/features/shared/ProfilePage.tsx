@@ -48,6 +48,7 @@ import {
 } from "../../utils/selectorTagsPreference";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
+import S3ConnectionAccessFields from "./S3ConnectionAccessFields";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "./S3ConnectionEndpointFields";
 import S3CredentialsValidationMessage from "./S3CredentialsValidationMessage";
 
@@ -1795,34 +1796,18 @@ export default function ProfilePage({
                 <div className="sm:col-span-2">
                   <S3CredentialsValidationMessage validation={createConnectionValidation} />
                 </div>
-                <div className="sm:col-span-2 space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={createConnectionForm.access_manager}
-                        onChange={(event) =>
-                          setCreateConnectionForm((prev) => ({ ...prev, access_manager: event.target.checked }))
-                        }
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Access manager
-                    </label>
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={createConnectionForm.access_browser}
-                        onChange={(event) =>
-                          setCreateConnectionForm((prev) => ({ ...prev, access_browser: event.target.checked }))
-                        }
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Access browser
-                    </label>
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
-                </div>
+                <S3ConnectionAccessFields
+                  accessManager={createConnectionForm.access_manager}
+                  accessBrowser={createConnectionForm.access_browser}
+                  onAccessManagerChange={(checked) =>
+                    setCreateConnectionForm((prev) => ({ ...prev, access_manager: checked }))
+                  }
+                  onAccessBrowserChange={(checked) =>
+                    setCreateConnectionForm((prev) => ({ ...prev, access_browser: checked }))
+                  }
+                  className="sm:col-span-2"
+                  variant="panel"
+                />
               </div>
             <div className="flex justify-end gap-2">
               <button
@@ -1961,34 +1946,17 @@ export default function ProfilePage({
                         <S3CredentialsValidationMessage validation={editConnectionValidation} />
                       </div>
 
-                      <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
-                        <div className="flex flex-wrap items-center gap-4">
-                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(draft.access_manager)}
-                              onChange={(event) =>
-                                handleUpdateConnectionDraft(editingConnection.id, "access_manager", event.target.checked)
-                              }
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                            Access manager
-                          </label>
-                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(draft.access_browser)}
-                              onChange={(event) =>
-                                handleUpdateConnectionDraft(editingConnection.id, "access_browser", event.target.checked)
-                              }
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                            Access browser
-                          </label>
-                        </div>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
-                      </div>
+                      <S3ConnectionAccessFields
+                        accessManager={Boolean(draft.access_manager)}
+                        accessBrowser={Boolean(draft.access_browser)}
+                        onAccessManagerChange={(checked) =>
+                          handleUpdateConnectionDraft(editingConnection.id, "access_manager", checked)
+                        }
+                        onAccessBrowserChange={(checked) =>
+                          handleUpdateConnectionDraft(editingConnection.id, "access_browser", checked)
+                        }
+                        variant="panel"
+                      />
                 </>
               );
             })()}
