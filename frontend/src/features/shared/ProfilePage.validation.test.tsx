@@ -150,8 +150,10 @@ describe("ProfilePage live validation", () => {
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "private-connection" } });
     fireEvent.change(screen.getByLabelText("Endpoint URL"), { target: { value: "https://s3.private.example.test" } });
-    fireEvent.change(screen.getByLabelText("Access Key"), { target: { value: "AKIA-INVALID" } });
-    fireEvent.change(screen.getByLabelText("Secret Key"), { target: { value: "SECRET-INVALID" } });
+    fireEvent.change(screen.getByLabelText("Access key ID"), { target: { value: "AKIA-INVALID" } });
+    const createSecretInput = screen.getByLabelText("Secret access key");
+    expect(createSecretInput).toHaveAttribute("type", "password");
+    fireEvent.change(createSecretInput, { target: { value: "SECRET-INVALID" } });
 
     await waitFor(() => {
       expect(validateConnectionCredentialsMock).toHaveBeenCalledTimes(1);

@@ -49,6 +49,7 @@ import {
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import S3ConnectionAccessFields from "./S3ConnectionAccessFields";
+import S3ConnectionCredentialFields from "./S3ConnectionCredentialFields";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "./S3ConnectionEndpointFields";
 import S3CredentialsValidationMessage from "./S3CredentialsValidationMessage";
 
@@ -1765,34 +1766,17 @@ export default function ProfilePage({
                     }
                   />
                 </div>
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Access Key
-                  </span>
-                  <input
-                    type="text"
-                    value={createConnectionForm.access_key_id}
-                    onChange={(event) =>
-                      setCreateConnectionForm((prev) => ({ ...prev, access_key_id: event.target.value }))
-                    }
-                    className={inputClasses}
-                    placeholder="AKIA..."
-                  />
-                </label>
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Secret Key
-                  </span>
-                  <input
-                    type="password"
-                    value={createConnectionForm.secret_access_key}
-                    onChange={(event) =>
-                      setCreateConnectionForm((prev) => ({ ...prev, secret_access_key: event.target.value }))
-                    }
-                    className={inputClasses}
-                    placeholder="********"
-                  />
-                </label>
+                <S3ConnectionCredentialFields
+                  accessKeyId={createConnectionForm.access_key_id}
+                  secretAccessKey={createConnectionForm.secret_access_key}
+                  onAccessKeyIdChange={(value) =>
+                    setCreateConnectionForm((prev) => ({ ...prev, access_key_id: value }))
+                  }
+                  onSecretAccessKeyChange={(value) =>
+                    setCreateConnectionForm((prev) => ({ ...prev, secret_access_key: value }))
+                  }
+                  className="sm:col-span-2"
+                />
                 <div className="sm:col-span-2">
                   <S3CredentialsValidationMessage validation={createConnectionValidation} />
                 </div>
@@ -1909,40 +1893,16 @@ export default function ProfilePage({
                         <p className="ui-caption text-slate-500 dark:text-slate-400">
                           Leave blank to keep current credentials.
                         </p>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <label className="block">
-                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Access key ID
-                            </span>
-                            <input
-                              type="text"
-                              value={credentialDraft.access_key_id}
-                              onChange={(event) =>
-                                handleUpdateConnectionCredentialDraft(editingConnection.id, "access_key_id", event.target.value)
-                              }
-                              className={inputClasses}
-                              placeholder="AKIA..."
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Secret access key
-                            </span>
-                            <input
-                              type="password"
-                              value={credentialDraft.secret_access_key}
-                              onChange={(event) =>
-                                handleUpdateConnectionCredentialDraft(
-                                  editingConnection.id,
-                                  "secret_access_key",
-                                  event.target.value
-                                )
-                              }
-                              className={inputClasses}
-                              placeholder="********"
-                            />
-                          </label>
-                        </div>
+                        <S3ConnectionCredentialFields
+                          accessKeyId={credentialDraft.access_key_id}
+                          secretAccessKey={credentialDraft.secret_access_key}
+                          onAccessKeyIdChange={(value) =>
+                            handleUpdateConnectionCredentialDraft(editingConnection.id, "access_key_id", value)
+                          }
+                          onSecretAccessKeyChange={(value) =>
+                            handleUpdateConnectionCredentialDraft(editingConnection.id, "secret_access_key", value)
+                          }
+                        />
                         <S3CredentialsValidationMessage validation={editConnectionValidation} />
                       </div>
 

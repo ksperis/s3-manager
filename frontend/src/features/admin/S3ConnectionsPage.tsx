@@ -63,6 +63,7 @@ import {
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
 import S3ConnectionAccessFields from "../shared/S3ConnectionAccessFields";
+import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields";
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -1201,20 +1202,13 @@ export default function S3ConnectionsPage() {
                 className="sm:col-span-2"
               />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <UiInput
-                label="Access key ID *"
-                value={createForm.access_key_id}
-                onChange={(e) => setCreateForm((p) => ({ ...p, access_key_id: e.target.value }))}
-                required
-              />
-              <UiInput
-                label="Secret access key *"
-                value={createForm.secret_access_key}
-                onChange={(e) => setCreateForm((p) => ({ ...p, secret_access_key: e.target.value }))}
-                required
-              />
-            </div>
+            <S3ConnectionCredentialFields
+              accessKeyId={createForm.access_key_id}
+              secretAccessKey={createForm.secret_access_key}
+              onAccessKeyIdChange={(value) => setCreateForm((p) => ({ ...p, access_key_id: value }))}
+              onSecretAccessKeyChange={(value) => setCreateForm((p) => ({ ...p, secret_access_key: value }))}
+              required
+            />
             <S3CredentialsValidationMessage validation={createCredentialsValidation} />
               </>
             <div className="flex items-center justify-end gap-3">
@@ -1309,20 +1303,12 @@ export default function S3ConnectionsPage() {
                     <div className={cx("ui-body", uiTitleTextClass)}>Credentials</div>
                     <div className={cx("ui-caption", uiMutedTextClass)}>Leave blank to keep the current keys.</div>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <UiInput
-                      label="Access key ID"
-                      value={editCredentials.access_key_id}
-                      onChange={(e) => setEditCredentials((p) => ({ ...p, access_key_id: e.target.value }))}
-                      placeholder="AKIA..."
-                    />
-                    <UiInput
-                      label="Secret access key"
-                      value={editCredentials.secret_access_key}
-                      onChange={(e) => setEditCredentials((p) => ({ ...p, secret_access_key: e.target.value }))}
-                      placeholder="********"
-                    />
-                  </div>
+                  <S3ConnectionCredentialFields
+                    accessKeyId={editCredentials.access_key_id}
+                    secretAccessKey={editCredentials.secret_access_key}
+                    onAccessKeyIdChange={(value) => setEditCredentials((p) => ({ ...p, access_key_id: value }))}
+                    onSecretAccessKeyChange={(value) => setEditCredentials((p) => ({ ...p, secret_access_key: value }))}
+                  />
                 </div>
 
                 <div className={cx("space-y-3 px-3 py-3", uiPanelMutedClass)}>
