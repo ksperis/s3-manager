@@ -499,10 +499,6 @@ export default function PortalSharesPage() {
     [activeOwnerSpaces],
   );
 
-  const spaceIds = useMemo(
-    () => workspace.spaces.map((space) => space.id).join("|"),
-    [workspace.spaces],
-  );
   const activeCollaboratorSpaceIds = useMemo(
     () => activeCollaboratorSpaces.map((space) => space.id).join("|"),
     [activeCollaboratorSpaces],
@@ -610,7 +606,7 @@ export default function PortalSharesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!accountIdForApi || workspace.spaces.length === 0) {
+    if (!accountIdForApi || activeOwnerSpaces.length === 0) {
       setPublicLinks([]);
       return () => {
         cancelled = true;
@@ -633,7 +629,7 @@ export default function PortalSharesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeOwnerSpaces, spaceIds]);
+  }, [accountIdForApi, activeOwnerSpaces]);
 
   useEffect(() => {
     let cancelled = false;
