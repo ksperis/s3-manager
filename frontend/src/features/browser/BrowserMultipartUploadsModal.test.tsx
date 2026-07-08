@@ -46,6 +46,12 @@ describe("BrowserMultipartUploadsModal", () => {
     expect(screen.getByText("No multipart uploads in progress.")).toBeInTheDocument();
   });
 
+  it("renders load errors with the shared inline treatment", () => {
+    renderModal({ error: "Unable to list uploads" });
+
+    expect(screen.getByText("Unable to list uploads")).toHaveClass("border-rose-200");
+  });
+
   it("renders upload rows and triggers abort action", async () => {
     const user = userEvent.setup();
     const { props } = renderModal({ uploads: [uploadA] });

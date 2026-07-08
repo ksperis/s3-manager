@@ -2,10 +2,11 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import type { BrowserObjectVersion } from "../../api/browser";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
-import type { BrowserObjectVersion } from "../../api/browser";
 
 type BrowserObjectVersionsListProps = {
   title?: string;
@@ -42,7 +43,7 @@ export default function BrowserObjectVersionsList({
         <p className={titleClassName}>{title}</p>
         {loading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>}
       </div>
-      {error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{error}</p>}
+      {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
       <div className={bodyClassName}>
         {versions.length === 0 && !loading && (
           <span className="ui-caption text-slate-500 dark:text-slate-400">{emptyLabel}</span>

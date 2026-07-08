@@ -6,6 +6,7 @@ import type { MultipartUploadItem } from "../../api/browser";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
 
@@ -119,7 +120,7 @@ export default function BrowserMultipartUploadsModal({
           </div>
         </div>
 
-        {error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{error}</p>}
+        {error && <UiInlineMessage tone="error">{error}</UiInlineMessage>}
 
         <DataTableShell
           columns={uploadColumns}
