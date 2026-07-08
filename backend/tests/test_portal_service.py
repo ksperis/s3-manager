@@ -930,6 +930,22 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     assert state.can_create_storage_spaces is False
 
 
+def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, db_session):
+    account = S3Account(name="portal-account-server-logs-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-server-logs-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    portal_settings = PortalSettings(server_access_logging_enabled=False)
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
+
+    state = service.get_state(user, access)
+
+    assert state.server_access_logging_enabled is False
+
+
 def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session):
     account = S3Account(name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-empty-scope@example.com", hashed_password="x", role="ui_user")

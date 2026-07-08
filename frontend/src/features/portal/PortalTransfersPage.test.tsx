@@ -6,6 +6,7 @@ import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 
 const mocks = vi.hoisted(() => ({
   transfers: [] as PortalWorkspaceTransfer[],
+  serverAccessLoggingEnabled: true,
   fetchPortalServerAccessLogPage: vi.fn(),
   downloadPortalServerAccessRawLogs: vi.fn(),
   createObjectURL: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock("./usePortalWorkspaceData", () => ({
         { id: "lab-exchange", name: "Lab Exchange" },
       ],
       transfers: mocks.transfers,
+    },
+    state: {
+      server_access_logging_enabled: mocks.serverAccessLoggingEnabled,
     },
     loading: false,
     accountLoading: false,
@@ -54,6 +58,7 @@ describe("PortalTransfersPage", () => {
     mocks.createObjectURL.mockReturnValue("blob:raw-logs");
     mocks.revokeObjectURL.mockReset();
     mocks.anchorClick.mockReset();
+    mocks.serverAccessLoggingEnabled = true;
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: mocks.createObjectURL });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: mocks.revokeObjectURL });
     Object.defineProperty(HTMLAnchorElement.prototype, "click", { configurable: true, value: mocks.anchorClick });
@@ -99,26 +104,15 @@ describe("PortalTransfersPage", () => {
     ];
   });
 
-  it("shows server logs first and keeps browser transfers in a separate tab", async () => {
+  it("shows recent Portal transfers first and keeps server logs in a separate enabled tab", async () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Operation logs" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
-    expect(screen.getByText("Server-side operations")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Retrieve logs" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Raw logs" })).toBeInTheDocument();
-    expect(screen.queryByText("Recent browser transfers")).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalledWith(
-        "101",
-        expect.objectContaining({ mode: "operations", limit: 25, offset: 0 })
-      );
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Live browser" }));
-
-    expect(screen.getByText("Recent browser transfers")).toBeInTheDocument();
-    expect(screen.getByText("Live transfer history")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recent Portal transfers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Server logs" })).toBeInTheDocument();
+    expect(screen.getAllByText("Recent Portal transfers").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Latest Portal transfer history")).toBeInTheDocument();
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
     expect(screen.getByText("Retry from the related space")).toBeInTheDocument();
     expect(screen.getByText("report.csv")).toBeInTheDocument();
@@ -130,18 +124,42 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByText("Quota reached.")).toBeInTheDocument();
     expect(screen.getAllByRole("table")[0]).toHaveClass("responsive-data-table");
     expect(screen.getByText("report.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    expect(screen.queryByText("Server-side operations")).not.toBeInTheDocument();
+    expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
+
+    expect(screen.getByText("Server-side operations")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retrieve logs" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Raw logs" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalledWith(
+        "101",
+        expect.objectContaining({ mode: "operations", limit: 25, offset: 0 })
+      );
+    });
   });
 
-  it("points an empty browser transfer history back to spaces", () => {
+  it("points an empty recent Portal transfer history back to spaces", () => {
     mocks.transfers = [];
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Live browser" }));
 
     expect(screen.getByRole("heading", { name: "Operation logs" })).toBeInTheDocument();
-    expect(screen.getByText("No browser transfer yet")).toBeInTheDocument();
-    expect(screen.getByText("Browser-side operations appear automatically after you add files to a space or download files from one.")).toBeInTheDocument();
+    expect(screen.getByText("No recent Portal transfer yet")).toBeInTheDocument();
+    expect(screen.getByText("The latest transfers started from this Portal session appear here automatically.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Start from spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
+  });
+
+  it("hides server logs when server access logging is disabled for the active account", () => {
+    mocks.serverAccessLoggingEnabled = false;
+
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Recent Portal transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Server logs" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Server-side operations")).not.toBeInTheDocument();
+    expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
   it("automatically loads server logs for the selected date and page", async () => {
@@ -207,6 +225,7 @@ describe("PortalTransfersPage", () => {
     });
 
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
     fireEvent.change(screen.getByLabelText("Go to date"), { target: { value: "2026-07-08" } });
 
     await waitFor(() => {
@@ -243,6 +262,7 @@ describe("PortalTransfersPage", () => {
 
   it("sends advanced server log filters to the backend", async () => {
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
 
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalled();
@@ -277,6 +297,7 @@ describe("PortalTransfersPage", () => {
 
   it("downloads raw server logs for a selected date range and storage space", async () => {
     renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
     fireEvent.click(screen.getByRole("button", { name: "Raw logs" }));
 
     const dialog = screen.getByRole("dialog", { name: "Retrieve raw server logs" });

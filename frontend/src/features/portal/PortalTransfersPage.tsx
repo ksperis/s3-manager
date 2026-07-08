@@ -252,7 +252,7 @@ function serverLogStatusLabel(entry: PortalServerAccessLogEntry, t: ReturnType<t
 
 export default function PortalTransfersPage() {
   const { t, locale } = useI18n();
-  const [activeLogsTab, setActiveLogsTab] = useState<LogsTab>("server");
+  const [activeLogsTab, setActiveLogsTab] = useState<LogsTab>("live");
   const [activeLiveTab, setActiveLiveTab] = useState<LiveTransferTab>("all");
   const [serverLogDate, setServerLogDate] = useState(todayDateInputValue);
   const [serverLogSpaceId, setServerLogSpaceId] = useState("");
@@ -272,8 +272,21 @@ export default function PortalTransfersPage() {
   const [rawLogsSpaceId, setRawLogsSpaceId] = useState("");
   const [rawLogsLoading, setRawLogsLoading] = useState(false);
   const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
   const storageSpaces = workspace.spaces ?? [];
+  const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
+  const logsTabs = useMemo(() => {
+    const tabs: Array<{ id: LogsTab; label: string }> = [
+      {
+        id: "live",
+        label: t({ en: "Recent Portal transfers", fr: "Derniers transferts portail", de: "Letzte Portal-Transfers" }),
+      },
+    ];
+    if (serverAccessLoggingEnabled) {
+      tabs.push({ id: "server", label: t({ en: "Server logs", fr: "Logs serveur", de: "Serverlogs" }) });
+    }
+    return tabs;
+  }, [serverAccessLoggingEnabled, t]);
 
   const serverLogAdvancedFilterParam = useMemo(
     () => buildServerLogAdvancedFilterPayload(serverLogAdvancedApplied),
@@ -574,7 +587,13 @@ export default function PortalTransfersPage() {
   const serverLogAdvancedDraftActiveCount = serverLogAdvancedDraftSummaryItems.length;
 
   useEffect(() => {
-    if (activeLogsTab !== "server" || !accountIdForApi || !serverLogDate) return;
+    if (!serverAccessLoggingEnabled && activeLogsTab === "server") {
+      setActiveLogsTab("live");
+    }
+  }, [activeLogsTab, serverAccessLoggingEnabled]);
+
+  useEffect(() => {
+    if (activeLogsTab !== "server" || !serverAccessLoggingEnabled || !accountIdForApi || !serverLogDate) return;
     let cancelled = false;
     setServerLogsLoading(true);
     setServerLogsError(null);
@@ -617,7 +636,7 @@ export default function PortalTransfersPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeLogsTab, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
+  }, [accountIdForApi, activeLogsTab, serverAccessLoggingEnabled, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
 
   const openRawLogsModal = useCallback(() => {
     setRawLogsDateFrom(serverLogDate);
@@ -807,11 +826,11 @@ export default function PortalTransfersPage() {
   const liveTransfersContent = workspace.transfers.length === 0 ? (
     <PageEmptyState
       eyebrow={t({ en: "Nothing moving", fr: "Aucun mouvement", de: "Keine Bewegung" })}
-      title={t({ en: "No browser transfer yet", fr: "Aucun transfert navigateur", de: "Noch keine Browser-Übertragung" })}
+      title={t({ en: "No recent Portal transfer yet", fr: "Aucun transfert portail récent", de: "Noch kein aktueller Portal-Transfer" })}
       description={t({
-        en: "Browser-side operations appear automatically after you add files to a space or download files from one.",
-        fr: "Les opérations côté navigateur apparaissent automatiquement après l'ajout de fichiers à un espace ou le téléchargement depuis un espace.",
-        de: "Browserseitige Vorgänge erscheinen automatisch, nachdem Sie Dateien zu einem Bereich hinzufügen oder daraus herunterladen.",
+        en: "The latest transfers started from this Portal session appear here automatically.",
+        fr: "Les derniers transferts lancés depuis cette session portail apparaissent ici automatiquement.",
+        de: "Die neuesten Transfers aus dieser Portal-Sitzung erscheinen hier automatisch.",
       })}
       primaryAction={{ label: t({ en: "Start from spaces", fr: "Commencer depuis les espaces", de: "In Bereichen starten" }), to: "/portal/storage-spaces" }}
     />
@@ -819,11 +838,11 @@ export default function PortalTransfersPage() {
     <>
       <UiCard
         muted
-        title={t({ en: "Recent browser transfers", fr: "Transferts navigateur récents", de: "Letzte Browser-Übertragungen" })}
+        title={t({ en: "Recent Portal transfers", fr: "Derniers transferts via le portail", de: "Letzte Portal-Transfers" })}
         description={t({
-          en: "These operations come from the Portal browser session and stay useful for immediate progress feedback.",
-          fr: "Ces opérations viennent de la session navigateur du portail et restent utiles pour suivre la progression immédiate.",
-          de: "Diese Vorgänge stammen aus der Portal-Browsersitzung und bleiben für unmittelbares Fortschrittsfeedback nützlich.",
+          en: "These are only the latest uploads and downloads started from this Portal session.",
+          fr: "Il s'agit uniquement des derniers envois et téléchargements lancés depuis cette session portail.",
+          de: "Dies sind nur die neuesten Uploads und Downloads aus dieser Portal-Sitzung.",
         })}
       >
         <div className="grid gap-4 sm:grid-cols-3">
@@ -861,11 +880,11 @@ export default function PortalTransfersPage() {
       </UiCard>
 
       <UiCard
-        title={t({ en: "Live transfer history", fr: "Historique live des transferts", de: "Live-Übertragungsverlauf" })}
+        title={t({ en: "Latest Portal transfer history", fr: "Historique des derniers transferts portail", de: "Verlauf der neuesten Portal-Transfers" })}
         description={t({
-          en: "Filter browser-side uploads and downloads.",
-          fr: "Filtrez les envois et téléchargements côté navigateur.",
-          de: "Filtern Sie browserseitige Uploads und Downloads.",
+          en: "Filter the uploads and downloads recently started from the Portal.",
+          fr: "Filtrez les envois et téléchargements récemment lancés depuis le portail.",
+          de: "Filtern Sie die zuletzt aus dem Portal gestarteten Uploads und Downloads.",
         })}
       >
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
@@ -902,25 +921,22 @@ export default function PortalTransfersPage() {
       <PageHeader
         title={t({ en: "Operation logs", fr: "Logs des opérations", de: "Vorgangslogs" })}
         description={t({
-          en: "Review server-side S3 operations first, with browser live transfers kept aside for immediate Portal feedback.",
-          fr: "Consultez d'abord les opérations S3 côté serveur, avec les transferts live du navigateur conservés à part pour le suivi immédiat du portail.",
-          de: "Prüfen Sie zuerst serverseitige S3-Vorgänge; Browser-Live-Übertragungen bleiben separat für unmittelbares Portal-Feedback.",
+          en: "Review the latest transfers started from the Portal, and server-side S3 audit logs when access logging is enabled for this project.",
+          fr: "Consultez les derniers transferts lancés depuis le portail, ainsi que les logs d'audit S3 côté serveur lorsque l'audit est activé pour ce projet.",
+          de: "Prüfen Sie die neuesten aus dem Portal gestarteten Transfers sowie serverseitige S3-Auditlogs, wenn Access Logging für dieses Projekt aktiviert ist.",
         })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Logs", fr: "Logs", de: "Logs" }) })}
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
       />
 
       <PageTabs
-        tabs={[
-          { id: "server", label: t({ en: "Server logs", fr: "Logs serveur", de: "Serverlogs" }) },
-          { id: "live", label: t({ en: "Live browser", fr: "Live navigateur", de: "Live-Browser" }) },
-        ]}
+        tabs={logsTabs}
         activeTab={activeLogsTab}
         onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
         variant="bar"
       />
 
-      {activeLogsTab === "server" ? (
+      {activeLogsTab === "server" && serverAccessLoggingEnabled ? (
         <UiCard
           title={t({ en: "Server-side operations", fr: "Opérations côté serveur", de: "Serverseitige Vorgänge" })}
           description={t({

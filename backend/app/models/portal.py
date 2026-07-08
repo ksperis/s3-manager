@@ -81,6 +81,7 @@ class PortalState(BaseModel):
     can_create_storage_spaces: bool = False
     can_manage_portal_users: bool = False
     allow_named_bucket_create: bool = False
+    server_access_logging_enabled: bool = True
     storage_space_version_cleanup_enabled: bool = True
 
 

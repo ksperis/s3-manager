@@ -60,6 +60,7 @@ export type PortalState = {
   can_create_storage_spaces?: boolean;
   can_manage_portal_users?: boolean;
   allow_named_bucket_create?: boolean;
+  server_access_logging_enabled?: boolean;
   storage_space_version_cleanup_enabled?: boolean;
 };
 
