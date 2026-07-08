@@ -23,8 +23,9 @@ import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import StatCards from "../../components/StatCards";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
   uiCardMutedClass,
@@ -508,69 +509,59 @@ export default function BillingPage() {
         description="Choose the month, Ceph endpoint, subject view, and ordering used to aggregate costs and traffic."
         controls={
           <div className="flex flex-wrap items-end gap-3">
-            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-              Month
-              <input
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-                className={toolbarCompactInputClasses}
-              />
-            </label>
-            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-              Endpoint
-              <select
-                value={selectedEndpointId ?? ""}
-                onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
-                className={toolbarCompactSelectClasses}
-              >
-                {endpoints.length === 0 ? <option value="">No Ceph endpoint</option> : null}
-                {endpoints.map((endpoint) => (
-                  <option key={endpoint.id} value={endpoint.id}>
-                    {endpoint.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-              Subject
-              <select
-                value={subjectType}
-                onChange={(event) => setSubjectType(event.target.value as "account" | "s3_user")}
-                className={toolbarCompactSelectClasses}
-              >
-                {SUBJECT_TYPES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-              Sort by
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as BillingSortBy)}
-                className={toolbarCompactSelectClasses}
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-              Direction
-              <select
-                value={sortDir}
-                onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
-                className={toolbarCompactSelectClasses}
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
-            </label>
+            <UiInput
+              label="Month"
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+              size="compact"
+            />
+            <UiSelect
+              label="Endpoint"
+              value={selectedEndpointId ?? ""}
+              onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
+              size="compact"
+            >
+              {endpoints.length === 0 ? <option value="">No Ceph endpoint</option> : null}
+              {endpoints.map((endpoint) => (
+                <option key={endpoint.id} value={endpoint.id}>
+                  {endpoint.name}
+                </option>
+              ))}
+            </UiSelect>
+            <UiSelect
+              label="Subject"
+              value={subjectType}
+              onChange={(event) => setSubjectType(event.target.value as "account" | "s3_user")}
+              size="compact"
+            >
+              {SUBJECT_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </UiSelect>
+            <UiSelect
+              label="Sort by"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as BillingSortBy)}
+              size="compact"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </UiSelect>
+            <UiSelect
+              label="Direction"
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as "asc" | "desc")}
+              size="compact"
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </UiSelect>
           </div>
         }
         items={[
@@ -605,15 +596,13 @@ export default function BillingPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-3">
-                <label className={cx("flex flex-col gap-1 ui-caption", uiMutedTextClass)}>
-                  Collect day
-                  <input
-                    type="date"
-                    value={collectDay}
-                    onChange={(event) => setCollectDay(event.target.value)}
-                    className={toolbarCompactInputClasses}
-                  />
-                </label>
+                <UiInput
+                  label="Collect day"
+                  type="date"
+                  value={collectDay}
+                  onChange={(event) => setCollectDay(event.target.value)}
+                  size="compact"
+                />
                 <UiButton
                   variant="primary"
                   size="sm"

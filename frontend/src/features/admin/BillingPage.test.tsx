@@ -145,6 +145,13 @@ describe("BillingPage", () => {
     expect(await screen.findByText("Tenant A")).toBeInTheDocument();
     expect(screen.getByText("12.50 EUR")).toBeInTheDocument();
     expect(mocks.getBillingSubjects).toHaveBeenCalledWith("2026-07", 7, "account", 1, 25, "name", "asc");
+    expect(screen.getByLabelText("Month")).toHaveValue("2026-07");
+    expect(screen.getByLabelText("Month")).toHaveAttribute("type", "month");
+    expect(screen.getByRole("combobox", { name: "Endpoint" })).toHaveValue("7");
+    expect(screen.getByRole("combobox", { name: "Subject" })).toHaveValue("account");
+    expect(screen.getByRole("combobox", { name: "Sort by" })).toHaveValue("name");
+    expect(screen.getByRole("combobox", { name: "Direction" })).toHaveValue("asc");
+    expect(screen.getByLabelText("Collect day")).toHaveAttribute("type", "date");
 
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
