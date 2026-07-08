@@ -22,7 +22,8 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import {
   FeatureRuleFeature,
   FeatureRuleInventoryBucket,
@@ -184,36 +185,30 @@ export default function ManagerFeatureRulesPage() {
             title="Feature rules"
             countLabel={`${filteredItems.length} bucket(s) · ${ruleCount} ${selectedItemLabel} · ${configuredCount} configured`}
             search={
-              <div className="flex items-center gap-2">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Search
-                </span>
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Bucket, rule, tag"
-                  className={`${toolbarCompactInputClasses} w-full sm:w-64`}
-                />
-              </div>
+              <UiInput
+                label="Search"
+                type="search"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Bucket, rule, tag"
+                fieldClassName="w-full sm:w-64"
+                size="compact"
+              />
             }
             filters={
               <>
-                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Feature
-                  <select
-                    aria-label="Feature"
-                    value={feature}
-                    onChange={(event) => setFeature(event.target.value as FeatureRuleFeature)}
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 ui-body normal-case tracking-normal text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    {FEATURE_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id} disabled={option.id === "notifications" && !snsFeatureEnabled}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <UiSelect
+                  label="Feature"
+                  value={feature}
+                  onChange={(event) => setFeature(event.target.value as FeatureRuleFeature)}
+                  size="compact"
+                >
+                  {FEATURE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id} disabled={option.id === "notifications" && !snsFeatureEnabled}>
+                      {option.label}
+                    </option>
+                  ))}
+                </UiSelect>
                 <UiSegmentedControl
                   ariaLabel="Status"
                   options={STATUS_OPTIONS}

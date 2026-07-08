@@ -73,6 +73,9 @@ describe("ManagerFeatureRulesPage", () => {
     renderPage();
 
     await waitFor(() => expect(listFeatureRuleInventoryMock).toHaveBeenCalledWith("account-1", "lifecycle"));
+    expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
+    expect(screen.getByLabelText("Search")).toHaveAttribute("placeholder", "Bucket, rule, tag");
+    expect(screen.getByRole("combobox", { name: "Feature" })).toHaveValue("lifecycle");
     expect(screen.getByText("logs-prod")).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("manager-table");
     expect(screen.getByRole("columnheader", { name: "JSON" })).toHaveClass("text-right");
@@ -191,6 +194,11 @@ describe("ManagerFeatureRulesPage", () => {
     renderPage();
 
     expect(await screen.findByText("logs-prod")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "broken" } });
+
+    expect(screen.queryByText("logs-prod")).not.toBeInTheDocument();
+    expect(screen.getByText("broken")).toBeInTheDocument();
+
     const statusGroup = screen.getByRole("group", { name: "Status" });
     expect(within(statusGroup).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
 
