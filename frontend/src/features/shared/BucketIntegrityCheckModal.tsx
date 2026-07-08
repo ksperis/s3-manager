@@ -18,8 +18,11 @@ import {
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import UiInput from "../../components/ui/UiInput";
 import UiProgressBar from "../../components/ui/UiProgressBar";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
+import UiSelect from "../../components/ui/UiSelect";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
@@ -287,50 +290,39 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
               onChange={setCheckMode}
             />
           </div>
-          <label className="space-y-1 ui-caption">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Parallelism</span>
-            <input
-              type="number"
-              min={1}
-              max={64}
-              value={parallelism}
-              disabled={running}
-              onChange={(event) => setParallelism(Number(event.target.value))}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
-          <label className="space-y-1 ui-caption">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Since</span>
-            <input
-              type="datetime-local"
-              value={since}
-              disabled={running}
-              onChange={(event) => setSince(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
-          <label className="space-y-1 ui-caption">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Max MB per object</span>
-            <input
-              type="number"
-              min={0}
-              step="0.1"
-              value={maxMb}
-              disabled={running || checkMode === "head"}
-              onChange={(event) => setMaxMb(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-900/50 dark:disabled:text-slate-500"
-            />
-          </label>
-          <label className="flex items-center gap-2 self-end rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={allVersions}
-              disabled={running}
-              onChange={(event) => setAllVersions(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30 dark:border-slate-600"
-            />
+          <UiInput
+            label="Parallelism"
+            type="number"
+            min={1}
+            max={64}
+            value={parallelism}
+            disabled={running}
+            onChange={(event) => setParallelism(Number(event.target.value))}
+          />
+          <UiInput
+            label="Since"
+            type="datetime-local"
+            value={since}
+            disabled={running}
+            onChange={(event) => setSince(event.target.value)}
+          />
+          <UiInput
+            label="Max MB per object"
+            type="number"
+            min={0}
+            step="0.1"
+            value={maxMb}
+            disabled={running || checkMode === "head"}
+            onChange={(event) => setMaxMb(event.target.value)}
+          />
+          <UiCheckboxField
+            checked={allVersions}
+            disabled={running}
+            onChange={(event) => setAllVersions(event.target.checked)}
+            className="self-end rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-caption font-semibold text-[var(--ui-text)]"
+          >
             All versions
-          </label>
+          </UiCheckboxField>
         </div>
 
         {progress && (
@@ -365,46 +357,45 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
               <BucketOperationSummaryStat label="Bytes read" value={formatBytes(result.bytes_read)} />
             </div>
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
-              <input
+              <UiInput
+                aria-label="Filter integrity results"
                 type="text"
                 value={resultSearch}
                 onChange={(event) => setResultSearch(event.target.value)}
                 placeholder="Filter by bucket, context, object, or error"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
-              <select
+              <UiSelect
                 aria-label="Filter integrity status"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as "all" | BucketIntegrityResult["status"])}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="all">All statuses</option>
                 <option value="passed">Passed</option>
                 <option value="completed_with_errors">Completed with errors</option>
                 <option value="failed">Failed</option>
                 <option value="canceled">Canceled</option>
-              </select>
-              <select
+              </UiSelect>
+              <UiSelect
                 aria-label="Filter integrity errors"
                 value={errorFilter}
                 onChange={(event) => setErrorFilter(event.target.value as "all" | "with_errors" | "without_errors")}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="all">All error states</option>
                 <option value="with_errors">With errors</option>
                 <option value="without_errors">Without errors</option>
-              </select>
-              <button
+              </UiSelect>
+              <UiButton
                 type="button"
+                variant="secondary"
                 onClick={() => {
                   setResultSearch("");
                   setStatusFilter("all");
                   setErrorFilter("all");
                 }}
-                className="rounded-md border border-slate-300 px-3 py-2 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+                className="justify-center"
               >
                 Reset filters
-              </button>
+              </UiButton>
             </div>
             <p className="ui-caption text-slate-600 dark:text-slate-300">
               Showing {formatNumber(filteredBucketResults.length)} / {formatNumber(result.buckets.length)} bucket result(s).
