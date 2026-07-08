@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -27,6 +27,9 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
+import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
@@ -155,11 +158,8 @@ const endpointToggleCardClass =
   "flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const endpointToggleCardDisabledClass = cx(endpointToggleCardClass, "opacity-70");
 const endpointToggleCheckboxClass = cx(uiCheckboxClass, "disabled:cursor-not-allowed disabled:opacity-50");
-const endpointFormInputClass = cx(uiInputClass, "rounded-lg font-normal");
-const endpointFormReadOnlyInputClass = cx(
-  endpointFormInputClass,
-  "read-only:bg-slate-100 read-only:text-slate-600 dark:read-only:bg-slate-900 dark:read-only:text-slate-300",
-);
+const endpointReadOnlyInputClass =
+  "read-only:bg-slate-100 read-only:text-slate-600 dark:read-only:bg-slate-900 dark:read-only:text-slate-300";
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -1398,16 +1398,12 @@ export default function StorageEndpointsPage() {
             {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
             <div className="grid gap-4 sm:grid-cols-2">
               <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "opacity-70" : undefined}>
-                <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                  Storage name
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                    className={endpointFormInputClass}
-                    required
-                  />
-                </label>
+                <UiInput
+                  label="Storage name"
+                  value={form.name}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  required
+                />
               </fieldset>
 
               <div className="sm:pt-6">
@@ -1462,58 +1458,45 @@ export default function StorageEndpointsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Endpoint S3
-                <input
-                  type="text"
-                  value={awsMode ? computedAwsS3Endpoint : form.endpoint_url}
-                  onChange={(e) => {
-                    if (!awsMode) {
-                      setForm((prev) => ({ ...prev, endpoint_url: e.target.value }));
-                    }
-                  }}
-                  className={endpointFormReadOnlyInputClass}
-                  placeholder={awsMode ? computedAwsS3Endpoint : "https://s3.example.com"}
-                  readOnly={awsMode}
-                  required
-                />
-              </label>
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Region (optional)
-                <input
-                  type="text"
-                  value={form.region}
-                  onChange={(e) => handleRegionChange(e.target.value)}
-                  className={endpointFormInputClass}
-                  placeholder="us-east-1"
-                />
-              </label>
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Latitude (optional)
-                <input
-                  type="number"
-                  value={form.latitude}
-                  onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value }))}
-                  className={endpointFormInputClass}
-                  placeholder="48.8566"
-                  min="-90"
-                  max="90"
-                  step="any"
-                />
-              </label>
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Longitude (optional)
-                <input
-                  type="number"
-                  value={form.longitude}
-                  onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value }))}
-                  className={endpointFormInputClass}
-                  placeholder="2.3522"
-                  min="-180"
-                  max="180"
-                  step="any"
-                />
-              </label>
+              <UiInput
+                label="Endpoint S3"
+                value={awsMode ? computedAwsS3Endpoint : form.endpoint_url}
+                onChange={(e) => {
+                  if (!awsMode) {
+                    setForm((prev) => ({ ...prev, endpoint_url: e.target.value }));
+                  }
+                }}
+                className={endpointReadOnlyInputClass}
+                placeholder={awsMode ? computedAwsS3Endpoint : "https://s3.example.com"}
+                readOnly={awsMode}
+                required
+              />
+              <UiInput
+                label="Region (optional)"
+                value={form.region}
+                onChange={(e) => handleRegionChange(e.target.value)}
+                placeholder="us-east-1"
+              />
+              <UiInput
+                label="Latitude (optional)"
+                type="number"
+                value={form.latitude}
+                onChange={(e) => setForm((prev) => ({ ...prev, latitude: e.target.value }))}
+                placeholder="48.8566"
+                min="-90"
+                max="90"
+                step="any"
+              />
+              <UiInput
+                label="Longitude (optional)"
+                type="number"
+                value={form.longitude}
+                onChange={(e) => setForm((prev) => ({ ...prev, longitude: e.target.value }))}
+                placeholder="2.3522"
+                min="-180"
+                max="180"
+                step="any"
+              />
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
@@ -1551,21 +1534,20 @@ export default function StorageEndpointsPage() {
                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Management</p>
                   <div className="mt-3 grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                      Admin Ops
+                      <p>Admin Ops</p>
                       <div className="grid gap-3">
-                        <input
-                          type="text"
+                        <UiInput
+                          label="Admin access key"
                           value={form.admin_access_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
-                          className={endpointFormInputClass}
                           placeholder="Access key admin"
                           required={form.features.admin.enabled}
                         />
-                        <input
+                        <UiInput
+                          label="Admin secret key"
                           type="password"
                           value={form.admin_secret_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                          className={endpointFormInputClass}
                           placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
                           required={!editingId && form.features.admin.enabled}
                         />
@@ -1575,21 +1557,20 @@ export default function StorageEndpointsPage() {
                       </p>
                     </div>
                     <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                      Supervision Ops
+                      <p>Supervision Ops</p>
                       <div className="grid gap-3">
-                        <input
-                          type="text"
+                        <UiInput
+                          label="Supervision access key"
                           value={form.supervision_access_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
-                          className={endpointFormInputClass}
                           placeholder="Access key supervision"
                           required={form.features.usage.enabled || form.features.metrics.enabled}
                         />
-                        <input
+                        <UiInput
+                          label="Supervision secret key"
                           type="password"
                           value={form.supervision_secret_key}
                           onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
-                          className={endpointFormInputClass}
                           placeholder="Secret key supervision"
                           required={!editingId && (form.features.usage.enabled || form.features.metrics.enabled)}
                         />
@@ -1605,13 +1586,13 @@ export default function StorageEndpointsPage() {
                     <p className="ui-body font-semibold text-slate-700 dark:text-slate-100">
                       What are Admin Ops and Supervision Ops?
                     </p>
-                    <button
-                      type="button"
+                    <UiButton
+                      size="xs"
+                      variant="secondary"
                       onClick={() => setShowOpsHelp((prev) => !prev)}
-                      className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
                     >
                       {showOpsHelp ? "Hide" : "Show"}
-                    </button>
+                    </UiButton>
                   </div>
                   {showOpsHelp && (
                     <>
@@ -1805,21 +1786,17 @@ export default function StorageEndpointsPage() {
                         </label>
                       </div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                          Ceph admin endpoint override (optional)
-                          <input
-                            type="text"
-                            value={form.features.admin.endpoint}
-                            onChange={(e) =>
-                              updateFeatures((current) => ({
-                                ...current,
-                                admin: { ...current.admin, endpoint: e.target.value },
-                              }))
-                            }
-                            className={endpointFormInputClass}
-                            placeholder="http://rgw-admin.local"
-                          />
-                        </label>
+                        <UiInput
+                          label="Ceph admin endpoint override (optional)"
+                          value={form.features.admin.endpoint}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              admin: { ...current.admin, endpoint: e.target.value },
+                            }))
+                          }
+                          placeholder="http://rgw-admin.local"
+                        />
                       </div>
                       <p className="ui-caption text-slate-500 dark:text-slate-400">
                         Admin, account API, usage log, and metrics are auto-detected from credentials. Usage log/metrics require supervision credentials.
@@ -1889,87 +1866,73 @@ export default function StorageEndpointsPage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                    {awsMode ? "STS endpoint" : "STS endpoint override (optional)"}
-                    <input
-                      type="text"
-                      value={awsMode ? computedAwsStsEndpoint : form.features.sts.endpoint}
-                      onChange={(e) => {
-                        if (!awsMode) {
-                          updateFeatures((current) => ({
-                            ...current,
-                            sts: { ...current.sts, endpoint: e.target.value },
-                          }));
-                        }
-                      }}
-                      className={endpointFormReadOnlyInputClass}
-                      placeholder={awsMode ? computedAwsStsEndpoint : "https://sts.example.com"}
-                      disabled={!form.features.sts.enabled}
-                      readOnly={awsMode}
-                      title={!form.features.sts.enabled ? "Enable STS first to define a dedicated STS endpoint." : undefined}
-                    />
-                  </label>
-                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                    {awsMode ? "IAM endpoint" : "IAM endpoint override (optional)"}
-                    <input
-                      type="text"
-                      value={awsMode ? computedAwsIamEndpoint : form.features.iam.endpoint}
-                      onChange={(e) => {
-                        if (!awsMode) {
-                          updateFeatures((current) => ({
-                            ...current,
-                            iam: { ...current.iam, endpoint: e.target.value },
-                          }));
-                        }
-                      }}
-                      className={endpointFormReadOnlyInputClass}
-                      placeholder={awsMode ? computedAwsIamEndpoint : "https://iam.example.com"}
-                      disabled={!form.features.iam.enabled}
-                      readOnly={awsMode}
-                      title={!form.features.iam.enabled ? "Enable IAM first to define a dedicated IAM endpoint." : undefined}
-                    />
-                  </label>
-                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                    Healthcheck mode
-                    <select
-                      value={form.features.healthcheck.mode ?? "http"}
-                      onChange={(e) =>
+                  <UiInput
+                    label={awsMode ? "STS endpoint" : "STS endpoint override (optional)"}
+                    value={awsMode ? computedAwsStsEndpoint : form.features.sts.endpoint}
+                    onChange={(e) => {
+                      if (!awsMode) {
                         updateFeatures((current) => ({
                           ...current,
-                          healthcheck: {
-                            ...current.healthcheck,
-                            mode: e.target.value === "s3" ? "s3" : "http",
-                          },
-                        }))
+                          sts: { ...current.sts, endpoint: e.target.value },
+                        }));
                       }
-                      className={endpointFormInputClass}
-                      disabled={!cephMode}
-                      title={!cephMode ? "Healthcheck signed mode is available only for Ceph endpoints." : signedProbeBlockedReason ?? undefined}
-                    >
-                      <option value="http">HTTP probe</option>
-                      <option value="s3" disabled={Boolean(signedProbeBlockedReason)} title={signedProbeBlockedReason ?? undefined}>
-                        S3 signed probe{signedProbeBlockedReason ? " (requires supervision credentials)" : ""}
-                      </option>
-                    </select>
-                  </label>
-                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100 sm:col-span-2">
-                    Healthcheck URL override (optional)
-                    <input
-                      type="text"
-                      value={form.features.healthcheck.endpoint}
-                      onChange={(e) =>
+                    }}
+                    className={endpointReadOnlyInputClass}
+                    placeholder={awsMode ? computedAwsStsEndpoint : "https://sts.example.com"}
+                    disabled={!form.features.sts.enabled}
+                    readOnly={awsMode}
+                    title={!form.features.sts.enabled ? "Enable STS first to define a dedicated STS endpoint." : undefined}
+                  />
+                  <UiInput
+                    label={awsMode ? "IAM endpoint" : "IAM endpoint override (optional)"}
+                    value={awsMode ? computedAwsIamEndpoint : form.features.iam.endpoint}
+                    onChange={(e) => {
+                      if (!awsMode) {
                         updateFeatures((current) => ({
                           ...current,
-                          healthcheck: { ...current.healthcheck, endpoint: e.target.value },
-                        }))
+                          iam: { ...current.iam, endpoint: e.target.value },
+                        }));
                       }
-                      className={endpointFormInputClass}
-                      placeholder="https://rgw.example.com/healthz"
-                    />
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Empty value uses the endpoint URL. S3 mode signs a lightweight request with endpoint credentials.
-                    </p>
-                  </label>
+                    }}
+                    className={endpointReadOnlyInputClass}
+                    placeholder={awsMode ? computedAwsIamEndpoint : "https://iam.example.com"}
+                    disabled={!form.features.iam.enabled}
+                    readOnly={awsMode}
+                    title={!form.features.iam.enabled ? "Enable IAM first to define a dedicated IAM endpoint." : undefined}
+                  />
+                  <UiSelect
+                    label="Healthcheck mode"
+                    value={form.features.healthcheck.mode ?? "http"}
+                    onChange={(e) =>
+                      updateFeatures((current) => ({
+                        ...current,
+                        healthcheck: {
+                          ...current.healthcheck,
+                          mode: e.target.value === "s3" ? "s3" : "http",
+                        },
+                      }))
+                    }
+                    disabled={!cephMode}
+                    title={!cephMode ? "Healthcheck signed mode is available only for Ceph endpoints." : signedProbeBlockedReason ?? undefined}
+                  >
+                    <option value="http">HTTP probe</option>
+                    <option value="s3" disabled={Boolean(signedProbeBlockedReason)} title={signedProbeBlockedReason ?? undefined}>
+                      S3 signed probe{signedProbeBlockedReason ? " (requires supervision credentials)" : ""}
+                    </option>
+                  </UiSelect>
+                  <UiInput
+                    label="Healthcheck URL override (optional)"
+                    fieldClassName="sm:col-span-2"
+                    value={form.features.healthcheck.endpoint}
+                    onChange={(e) =>
+                      updateFeatures((current) => ({
+                        ...current,
+                        healthcheck: { ...current.healthcheck, endpoint: e.target.value },
+                      }))
+                    }
+                    placeholder="https://rgw.example.com/healthz"
+                    hint="Empty value uses the endpoint URL. S3 mode signs a lightweight request with endpoint credentials."
+                  />
                 </div>
               </div>
 
@@ -1977,21 +1940,17 @@ export default function StorageEndpointsPage() {
             </fieldset>
 
             <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={formCloseGuard.requestClose}
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
-              >
+              <UiButton variant="secondary" size="sm" onClick={formCloseGuard.requestClose}>
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
+                size="sm"
                 disabled={saving}
                 title={saving ? "Save in progress." : undefined}
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? "Saving..." : editingId ? (tagsOnlyMode ? "Save tags" : "Update") : "Create"}
-              </button>
+              </UiButton>
             </div>
             {formCloseGuard.confirmationDialog}
           </form>
@@ -2006,21 +1965,21 @@ export default function StorageEndpointsPage() {
               Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
             </p>
             <div className="flex items-center justify-end gap-3">
-              <button
+              <UiButton
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
-                type="button"
+                variant="secondary"
+                size="sm"
               >
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 onClick={handleDelete}
                 disabled={deleteBusy}
-                className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
-                type="button"
+                variant="danger"
+                size="sm"
               >
                 {deleteBusy ? "Deleting..." : "Delete"}
-              </button>
+              </UiButton>
             </div>
           </div>
         </Modal>
