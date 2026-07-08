@@ -11,7 +11,11 @@ import PaginationControls from "../../components/PaginationControls";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import UiButton from "../../components/ui/UiButton";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiDataTableClass } from "../../components/ui/styles";
@@ -1191,15 +1195,9 @@ export default function ProfilePage({
     setConnectionsPage(1);
   };
 
-  const inputClasses =
-    "mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
-  const primaryButtonClasses =
-    "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60";
   const cardClasses = "ui-surface-card";
   const sectionHeadingClasses = "ui-body font-semibold text-slate-900 dark:text-slate-100";
   const sectionDescriptionClasses = "ui-caption text-slate-500 dark:text-slate-400";
-  const secondaryButtonClasses =
-    "inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800";
 
   return (
     <div className="space-y-4">
@@ -1222,33 +1220,24 @@ export default function ProfilePage({
           </div>
           <div className="space-y-4 px-5 py-5">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Email
-                </span>
-                <input
-                  type="email"
-                  value={storedUser?.email ?? ""}
-                  disabled
-                  className={`${inputClasses} cursor-not-allowed opacity-70`}
-                />
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Name
-                </span>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(event) => {
-                    setProfileTouched(true);
-                    setFullName(event.target.value);
-                  }}
-                  disabled={isS3Session}
-                  className={`${inputClasses} ${isS3Session ? "cursor-not-allowed opacity-70" : ""}`}
-                  placeholder="Your name"
-                />
-              </label>
+              <UiInput
+                label="Email"
+                type="email"
+                value={storedUser?.email ?? ""}
+                disabled
+                className="cursor-not-allowed opacity-70"
+              />
+              <UiInput
+                label="Name"
+                value={fullName}
+                onChange={(event) => {
+                  setProfileTouched(true);
+                  setFullName(event.target.value);
+                }}
+                disabled={isS3Session}
+                className={isS3Session ? "cursor-not-allowed opacity-70" : undefined}
+                placeholder="Your name"
+              />
             </div>
             {isS3Session && (
               <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -1257,9 +1246,9 @@ export default function ProfilePage({
             )}
             {profileMessage && <UiInlineMessage tone="success">{profileMessage}</UiInlineMessage>}
             <div>
-              <button type="submit" disabled={profileSaving || isS3Session} className={primaryButtonClasses}>
+              <UiButton type="submit" size="sm" disabled={profileSaving || isS3Session}>
                 {profileSaving ? "Saving..." : "Save profile"}
-              </button>
+              </UiButton>
             </div>
           </div>
         </form>
@@ -1276,50 +1265,35 @@ export default function ProfilePage({
               </PageBanner>
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Current
-                  </span>
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                    className={inputClasses}
-                    autoComplete="current-password"
-                  />
-                </label>
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    New
-                  </span>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    className={inputClasses}
-                    autoComplete="new-password"
-                  />
-                </label>
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Confirm
-                  </span>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    className={inputClasses}
-                    autoComplete="new-password"
-                  />
-                </label>
+                <UiInput
+                  label="Current"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+                <UiInput
+                  label="New"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <UiInput
+                  label="Confirm"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
               </div>
             )}
             {passwordError && <UiInlineMessage tone="error">{passwordError}</UiInlineMessage>}
             {passwordMessage && <UiInlineMessage tone="success">{passwordMessage}</UiInlineMessage>}
             <div>
-              <button type="submit" disabled={passwordSaving || !canChangePassword} className={primaryButtonClasses}>
+              <UiButton type="submit" size="sm" disabled={passwordSaving || !canChangePassword}>
                 {passwordSaving ? "Updating..." : "Change password"}
-              </button>
+              </UiButton>
             </div>
           </div>
         </form>
@@ -1331,114 +1305,96 @@ export default function ProfilePage({
           </div>
           <div className="space-y-4 px-5 py-5">
             <div className="grid gap-3 md:grid-cols-3">
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Language
-                </span>
-                <select
-                  value={preferencesLanguage}
-                  onChange={(event) => {
-                    setPreferencesTouched(true);
-                    setPreferencesLanguage(event.target.value as UiLanguagePreference);
-                  }}
-                  className={inputClasses}
-                >
-                  <option value="en">English</option>
-                  <option value="fr">French</option>
-                  <option value="de">Deutsch</option>
-                  <option value="auto">Auto (browser)</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Theme
-                </span>
-                <select
-                  value={preferencesTheme}
-                  onChange={(event) => {
-                    setPreferencesTouched(true);
-                    setPreferencesTheme(event.target.value as "light" | "dark");
-                  }}
-                  className={inputClasses}
-                >
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Default workspace
-                </span>
-                <select
-                  value={preferredWorkspace ?? ""}
-                  onChange={(event) => {
-                    setPreferencesTouched(true);
-                    setPreferredWorkspace((event.target.value as WorkspaceId) || null);
-                  }}
-                  className={inputClasses}
-                  disabled={availableWorkspaces.length === 0}
-                >
-                  {availableWorkspaces.length === 0 && <option value="">No workspace available</option>}
-                  {availableWorkspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <UiSelect
+                label="Language"
+                value={preferencesLanguage}
+                onChange={(event) => {
+                  setPreferencesTouched(true);
+                  setPreferencesLanguage(event.target.value as UiLanguagePreference);
+                }}
+              >
+                <option value="en">English</option>
+                <option value="fr">French</option>
+                <option value="de">Deutsch</option>
+                <option value="auto">Auto (browser)</option>
+              </UiSelect>
+              <UiSelect
+                label="Theme"
+                value={preferencesTheme}
+                onChange={(event) => {
+                  setPreferencesTouched(true);
+                  setPreferencesTheme(event.target.value as "light" | "dark");
+                }}
+              >
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </UiSelect>
+              <UiSelect
+                label="Default workspace"
+                value={preferredWorkspace ?? ""}
+                onChange={(event) => {
+                  setPreferencesTouched(true);
+                  setPreferredWorkspace((event.target.value as WorkspaceId) || null);
+                }}
+                disabled={availableWorkspaces.length === 0}
+              >
+                {availableWorkspaces.length === 0 && <option value="">No workspace available</option>}
+                {availableWorkspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.label}
+                  </option>
+                ))}
+              </UiSelect>
             </div>
-            <label className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-3 dark:border-slate-700">
-              <input
-                type="checkbox"
+            <UiCheckboxField
                 checked={preferencesShowSelectorTags}
                 onChange={(event) => {
                   setPreferencesTouched(true);
                   setPreferencesShowSelectorTags(event.target.checked);
                 }}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-              />
+                className="flex items-start rounded-md border border-[color:var(--ui-border)] px-3 py-3"
+                checkboxClassName="mt-1"
+            >
               <span>
                 <span className="ui-body text-slate-700 dark:text-slate-200">Show tags in top selectors</span>
                 <span className="mt-1 block ui-caption text-slate-500 dark:text-slate-400">
                   Display compact endpoint and context tags in the topbar selectors on this browser only.
                 </span>
               </span>
-            </label>
+            </UiCheckboxField>
             {!isS3Session && (
               <div className="grid gap-3 md:grid-cols-2">
-                <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={quotaAlertsEnabled}
+                <UiCheckboxField
+                  checked={quotaAlertsEnabled}
+                  onChange={(event) => {
+                    setPreferencesTouched(true);
+                    setQuotaAlertsEnabled(event.target.checked);
+                  }}
+                  className="flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
+                >
+                  <span className="ui-body text-slate-700 dark:text-slate-200">Receive quota alert emails</span>
+                </UiCheckboxField>
+                {canConfigureGlobalQuotaWatch && (
+                  <UiCheckboxField
+                    checked={quotaAlertsGlobalWatch}
                     onChange={(event) => {
                       setPreferencesTouched(true);
-                      setQuotaAlertsEnabled(event.target.checked);
+                      setQuotaAlertsGlobalWatch(event.target.checked);
                     }}
-                  />
-                  <span className="ui-body text-slate-700 dark:text-slate-200">Receive quota alert emails</span>
-                </label>
-                {canConfigureGlobalQuotaWatch && (
-                  <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={quotaAlertsGlobalWatch}
-                      onChange={(event) => {
-                        setPreferencesTouched(true);
-                        setQuotaAlertsGlobalWatch(event.target.checked);
-                      }}
-                    />
+                    className="flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
+                  >
                     <span className="ui-body text-slate-700 dark:text-slate-200">
                       Global quota watch (all storage spaces)
                     </span>
-                  </label>
+                  </UiCheckboxField>
                 )}
               </div>
             )}
             {preferencesMessage && <UiInlineMessage tone={preferencesMessageTone}>{preferencesMessage}</UiInlineMessage>}
             <div>
-              <button type="submit" className={primaryButtonClasses}>
+              <UiButton type="submit" size="sm">
                 Save preferences
-              </button>
+              </UiButton>
             </div>
           </div>
         </form>
@@ -1451,9 +1407,9 @@ export default function ProfilePage({
             <p className={sectionDescriptionClasses}>List your connections and manage credentials.</p>
           </div>
           {canManagePrivateConnections && (
-            <button type="button" className={primaryButtonClasses} onClick={openCreateConnectionModal}>
+            <UiButton size="sm" onClick={openCreateConnectionModal}>
               Add connection
-            </button>
+            </UiButton>
           )}
         </div>
 
@@ -1717,18 +1673,12 @@ export default function ProfilePage({
           )}
           <form onSubmit={handleCreatePrivateConnection} className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Name
-                  </span>
-                  <input
-                    type="text"
-                    value={createConnectionForm.name}
-                    onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, name: event.target.value }))}
-                    className={inputClasses}
-                    placeholder="Mon endpoint S3"
-                  />
-                </label>
+                <UiInput
+                  label="Name"
+                  value={createConnectionForm.name}
+                  onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Mon endpoint S3"
+                />
                 <div className="space-y-3 sm:pt-6">
                   {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
                   <UiTagEditor
@@ -1794,17 +1744,17 @@ export default function ProfilePage({
                 />
               </div>
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className={secondaryButtonClasses}
+              <UiButton
+                variant="secondary"
+                size="sm"
                 onClick={createConnectionCloseGuard.requestClose}
                 disabled={creatingConnection}
               >
                 Cancel
-              </button>
-              <button type="submit" className={primaryButtonClasses} disabled={creatingConnection}>
+              </UiButton>
+              <UiButton type="submit" size="sm" disabled={creatingConnection}>
                 {creatingConnection ? "Creating..." : "Create connection"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {createConnectionCloseGuard.confirmationDialog}
@@ -1839,17 +1789,11 @@ export default function ProfilePage({
               return (
                 <>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block">
-                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Name
-                          </span>
-                          <input
-                            type="text"
-                            value={draft.name}
-                            onChange={(event) => handleUpdateConnectionDraft(editingConnection.id, "name", event.target.value)}
-                            className={inputClasses}
-                          />
-                        </label>
+                        <UiInput
+                          label="Name"
+                          value={draft.name}
+                          onChange={(event) => handleUpdateConnectionDraft(editingConnection.id, "name", event.target.value)}
+                        />
                         <div className="space-y-3 sm:pt-6">
                           {privateTagCatalogError && <PageBanner tone="warning">{privateTagCatalogError}</PageBanner>}
                           <UiTagEditor
@@ -1921,21 +1865,21 @@ export default function ProfilePage({
               );
             })()}
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className={secondaryButtonClasses}
+              <UiButton
+                variant="secondary"
+                size="sm"
                 onClick={editConnectionCloseGuard.requestClose}
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
-                className={primaryButtonClasses}
+                size="sm"
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
                 {savingConnectionBusyId === editingConnection.id ? "Saving..." : "Save"}
-              </button>
+              </UiButton>
             </div>
           </form>
           {editConnectionCloseGuard.confirmationDialog}
