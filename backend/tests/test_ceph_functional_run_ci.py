@@ -31,6 +31,13 @@ def test_ci_endpoint_payload_enables_replication(monkeypatch):
     assert payload[0]["features"]["replication"] == {"enabled": True}
 
 
+def test_ci_app_settings_payload_enables_portal_features():
+    payload = json.loads(run_ci._build_app_settings_payload())
+
+    assert payload["general"]["portal_enabled"] is True
+    assert payload["general"]["browser_portal_enabled"] is True
+
+
 def test_ci_endpoint_payload_can_seed_two_lab_zones(monkeypatch):
     _seed_required_endpoint_env(monkeypatch)
     monkeypatch.setenv("CEPH_TEST_LAB_S3_ENDPOINT_Z2", "https://s3-z2.example.test")

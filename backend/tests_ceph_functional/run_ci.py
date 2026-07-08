@@ -240,6 +240,8 @@ def _build_app_settings_payload() -> str:
             "browser_root_enabled": True,
             "browser_manager_enabled": True,
             "browser_ceph_admin_enabled": True,
+            "browser_portal_enabled": True,
+            "portal_enabled": True,
             "billing_enabled": False,
             "endpoint_status_enabled": True,
             "quota_alerts_enabled": False,
@@ -342,6 +344,7 @@ def _prepare_environment(backend_root: Path, backend_base_url: str) -> dict[str,
     env["FEATURE_CEPH_ADMIN_ENABLED"] = "true"
     env["FEATURE_STORAGE_OPS_ENABLED"] = "true"
     env["FEATURE_ENDPOINT_STATUS_ENABLED"] = "true"
+    env["FEATURE_PORTAL_ENABLED"] = "true"
     env["BUCKET_MIGRATION_WORKER_ENABLED"] = "true"
 
     env["CEPH_TEST_BACKEND_BASE_URL"] = backend_base_url
