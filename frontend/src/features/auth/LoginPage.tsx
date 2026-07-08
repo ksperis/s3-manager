@@ -18,6 +18,7 @@ import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type Lo
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
@@ -435,9 +436,7 @@ export default function LoginPage() {
                   />
                 </div>
                 {(error || ldapError) && (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
-                    {error || ldapError}
-                  </p>
+                  <UiInlineMessage tone="error">{error || ldapError}</UiInlineMessage>
                 )}
                 <button type="submit" disabled={loading} className={buttonClasses}>
                   {loading ? "Signing in..." : "Sign in with directory"}
@@ -472,9 +471,7 @@ export default function LoginPage() {
                   />
                 </div>
                 {error && (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
-                    {error}
-                  </p>
+                  <UiInlineMessage tone="error">{error}</UiInlineMessage>
                 )}
                 <button type="submit" disabled={loading} className={buttonClasses}>
                   {loading ? "Signing in..." : "Sign in"}
@@ -556,16 +553,12 @@ export default function LoginPage() {
                       </div>
                     )}
                     {endpointError && (
-                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-caption text-rose-700">
-                        {endpointError}
-                      </p>
+                      <UiInlineMessage tone="error">{endpointError}</UiInlineMessage>
                     )}
                   </div>
                 )}
                 {error && (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
-                    {error}
-                  </p>
+                  <UiInlineMessage tone="error">{error}</UiInlineMessage>
                 )}
                 <button type="submit" disabled={loading} className={buttonClasses}>
                   {loading ? "Connecting..." : "Connect with keys"}
@@ -592,9 +585,7 @@ export default function LoginPage() {
                   </button>
                 ))}
                 {oidcError && (
-                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
-                    {oidcError}
-                  </p>
+                  <UiInlineMessage tone="error">{oidcError}</UiInlineMessage>
                 )}
               </div>
             )}

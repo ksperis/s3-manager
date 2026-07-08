@@ -9,6 +9,7 @@ import { fetchGeneralSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { CLIENT_STORAGE_KEYS, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
@@ -95,7 +96,7 @@ export default function OidcCallbackPage() {
           {processing && <p className="ui-body text-slate-500">Please wait...</p>}
           {error && (
             <>
-              <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">{error}</p>
+              <UiInlineMessage tone="error">{error}</UiInlineMessage>
               <button
                 type="button"
                 className="mt-6 w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600"
