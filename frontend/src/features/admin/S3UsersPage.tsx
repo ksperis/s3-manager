@@ -18,6 +18,7 @@ import {
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
+import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
@@ -867,25 +868,16 @@ export default function S3UsersPage() {
           }
           secondaryContent={
             quickFilterActive ? (
-              <div>
-                <div className="inline-flex items-center gap-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Active filters summary
-                  </p>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                  >
-                    Clear all
-                  </button>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100">
-                    Search {quickFilterMode === "exact" ? "exact" : "contains"}: {filter.trim()}
-                  </span>
-                </div>
-              </div>
+              <ActiveFiltersBar
+                label="Active filters summary"
+                items={[
+                  {
+                    id: "search",
+                    label: `Search ${quickFilterMode === "exact" ? "exact" : "contains"}: ${filter.trim()}`,
+                  },
+                ]}
+                onClearAll={clearAllFilters}
+              />
             ) : null
           }
         />

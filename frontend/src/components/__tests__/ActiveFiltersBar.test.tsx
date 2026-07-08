@@ -30,4 +30,19 @@ describe("ActiveFiltersBar", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("supports summary-only filters without per-chip remove actions", () => {
+    render(
+      <ActiveFiltersBar
+        items={[{ id: "search", label: "Search exact: gold" }]}
+        onClearAll={vi.fn()}
+        label="Active filters summary"
+      />
+    );
+
+    expect(screen.getByText("Active filters summary")).toBeInTheDocument();
+    expect(screen.getByText("Search exact: gold")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove filter" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear all" })).toBeInTheDocument();
+  });
 });

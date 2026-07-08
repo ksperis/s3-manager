@@ -8,7 +8,7 @@ import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass } from "./ui/
 export type ActiveFilterBarItem = {
   id: string;
   label: ReactNode;
-  onRemove: () => void;
+  onRemove?: () => void;
   removeLabel?: string;
 };
 
@@ -38,15 +38,17 @@ export default function ActiveFiltersBar({
           className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-400/35 dark:bg-primary-500/15 dark:text-primary-100"
         >
           <span className="min-w-0 truncate">{item.label}</span>
-          <button
-            type="button"
-            onClick={item.onRemove}
-            className="rounded-full px-1 leading-none opacity-75 transition hover:bg-primary/20 hover:opacity-100 dark:hover:bg-primary-400/20"
-            title={item.removeLabel}
-            aria-label={item.removeLabel ?? "Remove filter"}
-          >
-            x
-          </button>
+          {item.onRemove ? (
+            <button
+              type="button"
+              onClick={item.onRemove}
+              className="rounded-full px-1 leading-none opacity-75 transition hover:bg-primary/20 hover:opacity-100 dark:hover:bg-primary-400/20"
+              title={item.removeLabel}
+              aria-label={item.removeLabel ?? "Remove filter"}
+            >
+              x
+            </button>
+          ) : null}
         </span>
       ))}
       <button
