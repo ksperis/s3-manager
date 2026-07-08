@@ -9,8 +9,10 @@ const mocks = vi.hoisted(() => ({
   listPublicLinksMock: vi.fn(),
   grantShareMock: vi.fn(),
   revokePublicLinkMock: vi.fn(),
+  updateStorageSpaceMock: vi.fn(),
   updateShareMock: vi.fn(),
   revokeShareMock: vi.fn(),
+  refreshWorkspaceDataMock: vi.fn(),
   hookResult: {
     workspace: {
       spaces: [
@@ -34,6 +36,7 @@ const mocks = vi.hoisted(() => ({
     accountError: null,
     hasAccountContext: true,
     accountIdForApi: "101",
+    refreshWorkspaceData: vi.fn(),
   },
 }));
 
@@ -47,6 +50,7 @@ vi.mock("../../api/portal", () => ({
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   revokePortalStorageSpacePublicLink: (...args: unknown[]) => mocks.revokePublicLinkMock(...args),
+  updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
 }));
@@ -114,45 +118,47 @@ describe("PortalSharesPage", () => {
     ]);
     mocks.revokeShareMock.mockResolvedValue(undefined);
     mocks.revokePublicLinkMock.mockResolvedValue([]);
+    mocks.updateStorageSpaceMock.mockResolvedValue({});
+    mocks.hookResult.refreshWorkspaceData.mockClear();
   });
 
-  it("loads shares from storage space API with simple roles", async () => {
+  it("loads collaborators from the space API with simple roles", async () => {
     const user = userEvent.setup();
 
     render(<PortalSharesPage />);
 
-    expect(screen.getByText("Loading shares...")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Shares" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Create a new share" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Shared by me" }));
+    expect(screen.getByText("Loading collaborators...")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Invite people to a space" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "People I invited" }));
     expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Create a new share" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Storage Space to share")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Eligible users")).toHaveClass("ui-control");
+    expect(screen.getByRole("heading", { name: "Invite people to a space" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Space to share")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("People")).toHaveClass("ui-control");
     expect(screen.getByRole("combobox", { name: "Access for editor@example.com" })).toHaveClass("ui-control");
     expect(screen.queryByText("Expires")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveValue("Viewer");
     await waitFor(() => {
       expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
     });
-    expect(screen.getByText("Portal user · Direct access")).toBeInTheDocument();
-    expect(screen.getByText("Already shared")).toBeInTheDocument();
+    expect(screen.getByText("Workspace member · Direct access")).toBeInTheDocument();
+    expect(screen.getByText("Already invited")).toBeInTheDocument();
     expect(screen.queryByText(/bucket permissions/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
-  it("preselects the tab and storage space from the URL context", async () => {
+  it("preselects the tab and space from the URL context", async () => {
     window.history.pushState({}, "", "/portal/shares?space_id=research-data&tab=by");
 
     render(<PortalSharesPage />);
 
-    expect(await screen.findByRole("heading", { name: "Create a new share" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Invite people to a space" })).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.listShareCandidatesMock).toHaveBeenCalledWith("101", "research-data");
     });
   });
 
-  it("creates shares from the rich eligible user picker", async () => {
+  it("invites collaborators from the people picker", async () => {
     const user = userEvent.setup();
     mocks.grantShareMock.mockResolvedValue({
       id: "research-data:13",
@@ -167,12 +173,12 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
+    await user.click(await screen.findByRole("button", { name: "People I invited" }));
     expect(await screen.findByText("Editor User")).toBeInTheDocument();
     const checkboxes = screen.getAllByRole("checkbox");
     await user.click(checkboxes[1]);
     await user.selectOptions(screen.getByRole("combobox", { name: "Access for editor@example.com" }), "Owner");
-    await user.click(screen.getByRole("button", { name: "Create share" }));
+    await user.click(screen.getByRole("button", { name: "Invite people" }));
 
     await waitFor(() => {
       expect(mocks.grantShareMock).toHaveBeenCalledWith("101", "research-data", {
@@ -187,13 +193,13 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
-    await user.type(await screen.findByPlaceholderText("Search eligible Portal users..."), "missing person");
+    await user.click(await screen.findByRole("button", { name: "People I invited" }));
+    await user.type(await screen.findByPlaceholderText("Search people by name or email..."), "missing person");
 
-    expect(await screen.findByText(/request account access from an admin/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Ask an admin to add external collaborators/i)).toBeInTheDocument();
   });
 
-  it("loads shares only for active shared storage spaces", async () => {
+  it("loads collaborator inventory for all active spaces", async () => {
     mocks.hookResult.workspace.spaces = [
       {
         id: "research-data",
@@ -236,9 +242,61 @@ describe("PortalSharesPage", () => {
     render(<PortalSharesPage />);
 
     await waitFor(() => {
-      expect(mocks.listSharesMock).toHaveBeenCalledTimes(1);
+      expect(mocks.listSharesMock).toHaveBeenCalledTimes(2);
     });
     expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
+    expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "private-data");
+    expect(mocks.listSharesMock).not.toHaveBeenCalledWith("101", "archived-data");
+  });
+
+  it("makes a private owner space invite-ready before granting collaborators", async () => {
+    const user = userEvent.setup();
+    mocks.hookResult.workspace.spaces = [
+      {
+        id: "private-data",
+        name: "Private Data",
+        role: "Owner",
+        status: "Active",
+        access: "Private",
+        ownerUserId: 7,
+        visibility: "private",
+        region: "eu-west-3",
+        createdLabel: "May 11, 2023",
+        shareCount: 0,
+      },
+    ];
+    mocks.grantShareMock.mockResolvedValue({
+      id: "private-data:13",
+      storage_space_id: "private-data",
+      storage_space_name: "Private Data",
+      user_id: 13,
+      email: "editor@example.com",
+      role: "Editor",
+      direction: "by_me",
+      activity_label: "Active",
+    });
+
+    render(<PortalSharesPage />);
+
+    await user.click(await screen.findByRole("button", { name: "People I invited" }));
+    expect(await screen.findByText("Editor User")).toBeInTheDocument();
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[1]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Access for editor@example.com" }), "Editor");
+    await user.click(screen.getByRole("button", { name: "Invite people" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "private-data", {
+        visibility: "shared",
+        share_scope: "restricted",
+        account_member_role: null,
+      });
+    });
+    expect(mocks.grantShareMock).toHaveBeenCalledWith("101", "private-data", {
+      user_id: 13,
+      role: "Editor",
+    });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
   it("loads public links from real portal endpoints", async () => {
@@ -271,10 +329,10 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
-    expect(await screen.findByText("No shares to display.")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "People I invited" }));
+    expect(await screen.findByText("No collaborators invited yet.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Public links" }));
-    expect(await screen.findByText("No public links to display.")).toBeInTheDocument();
+    expect(await screen.findByText("No public links yet.")).toBeInTheDocument();
   });
 
   it("confirms share and public link revocation with target and impacts", async () => {
@@ -282,13 +340,13 @@ describe("PortalSharesPage", () => {
 
     render(<PortalSharesPage />);
 
-    await user.click(await screen.findByRole("button", { name: "Shared by me" }));
+    await user.click(await screen.findByRole("button", { name: "People I invited" }));
     expect((await screen.findAllByText("viewer@example.com")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("viewer@example.com")[0].closest("table")).toHaveClass("responsive-data-table");
     await user.click(screen.getByRole("button", { name: "Revoke" }));
     const shareDialog = screen.getByRole("dialog", { name: "Revoke access" });
     expect(within(shareDialog).getByText("viewer@example.com")).toBeInTheDocument();
-    expect(within(shareDialog).getByText("This person loses access to the Storage Space immediately.")).toBeInTheDocument();
+    expect(within(shareDialog).getByText("This person loses access to the space immediately.")).toBeInTheDocument();
     await user.click(within(shareDialog).getByRole("button", { name: "Revoke access" }));
 
     await waitFor(() => {

@@ -161,7 +161,7 @@ export default function PortalAccessKeysPage() {
       console.error(err);
       setStorageSpaces([]);
       setSelectedSpaceId("");
-      setStorageSpacesError(extractApiError(err, t({ en: "Unable to load Storage Spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })));
+      setStorageSpacesError(extractApiError(err, t({ en: "Unable to load spaces.", fr: "Impossible de charger les espaces.", de: "Bereiche können nicht geladen werden." })));
     } finally {
       setStorageSpacesLoading(false);
     }
@@ -193,7 +193,7 @@ export default function PortalAccessKeysPage() {
       console.error(err);
       setConnectionSpaces([]);
       setConnectionSpaceId("");
-      setConnectionSpacesError(extractApiError(err, t({ en: "Unable to load Storage Spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })));
+      setConnectionSpacesError(extractApiError(err, t({ en: "Unable to load spaces.", fr: "Impossible de charger les espaces.", de: "Bereiche können nicht geladen werden." })));
     } finally {
       setConnectionSpacesLoading(false);
     }
@@ -509,9 +509,9 @@ export default function PortalAccessKeysPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" })}
-        description={t({ en: "Create S3 access keys for external tools. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des clés d'accès S3 pour les outils externes. Utilisez le point de terminaison indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie S3-Zugriffsschlüssel für externe Werkzeuge. Verwenden Sie den hier angezeigten Endpunkt; jedes Secret wird nur einmal angezeigt." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }) })}
+        title={t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" })}
+        description={t({ en: "Create credentials only when another app needs S3 access. Use the endpoint shown here; each secret is shown only once.", fr: "Créez des identifiants uniquement lorsqu'une autre application a besoin d'un accès S3. Utilisez le point de terminaison indiqué ici; chaque secret n'est affiché qu'une seule fois.", de: "Erstellen Sie Zugangsdaten nur, wenn eine andere App S3-Zugriff benötigt. Verwenden Sie den hier angezeigten Endpunkt; jedes Secret wird nur einmal angezeigt." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" }) })}
         actions={[
           {
             label: busy === "create" ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "New key", fr: "Nouvelle clé", de: "Neuer Schlüssel" }),
@@ -526,7 +526,7 @@ export default function PortalAccessKeysPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {state && !canManageAccessKeys && (
-        <PageBanner tone="warning">{t({ en: "Access-key management is disabled for this portal account.", fr: "La gestion des clés d'accès est désactivée pour ce compte Portal.", de: "Die Verwaltung von Zugriffsschlüsseln ist für dieses Portal-Konto deaktiviert." })}</PageBanner>
+        <PageBanner tone="warning">{t({ en: "External-tool access is disabled for this portal account.", fr: "L'accès aux outils externes est désactivé pour ce compte Portal.", de: "Der Zugriff für externe Werkzeuge ist für dieses Portal-Konto deaktiviert." })}</PageBanner>
       )}
       {state && canManageAccessKeys && (
         <PageBanner tone="info">
@@ -550,7 +550,7 @@ export default function PortalAccessKeysPage() {
           }
           description={
             createdKey.target_type === "external"
-              ? t({ en: "The secret is shown only once and is limited to the selected Storage Space.", fr: "Le secret n'est affiché qu'une seule fois et reste limité à l'espace de stockage sélectionné.", de: "Das Secret wird nur einmal angezeigt und bleibt auf den ausgewählten Speicherbereich beschränkt." })
+              ? t({ en: "The secret is shown only once and is limited to the selected space.", fr: "Le secret n'est affiché qu'une seule fois et reste limité à l'espace sélectionné.", de: "Das Secret wird nur einmal angezeigt und bleibt auf den ausgewählten Bereich beschränkt." })
               : t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })
           }
           badge={t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
@@ -590,15 +590,15 @@ export default function PortalAccessKeysPage() {
               </h2>
               <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
                 {t({
-                  en: "Choose a key and Storage Space, then download ready-to-use connection details.",
-                  fr: "Choisissez une clé et un espace de stockage, puis téléchargez les informations de connexion prêtes à l'emploi.",
-                  de: "Wählen Sie Schlüssel und Speicherbereich aus und laden Sie fertige Verbindungsdetails herunter.",
+                  en: "Choose a key and space, then download ready-to-use connection details.",
+                  fr: "Choisissez une clé et un espace, puis téléchargez les informations de connexion prêtes à l'emploi.",
+                  de: "Wählen Sie Schlüssel und Bereich aus und laden Sie fertige Verbindungsdetails herunter.",
                 })}
               </p>
             </div>
             {selectedConnectionKeyBucket ? (
               <span className={cx("rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
-                {t({ en: "Storage Space set by this key", fr: "Espace défini par cette clé", de: "Speicherbereich durch Schlüssel festgelegt" })}
+                {t({ en: "Space set by this key", fr: "Espace défini par cette clé", de: "Bereich durch Schlüssel festgelegt" })}
               </span>
             ) : null}
           </div>
@@ -627,12 +627,12 @@ export default function PortalAccessKeysPage() {
               </select>
             </label>
             <label className="space-y-1">
-              <span className={uiLabelClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+              <span className={uiLabelClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</span>
               <select
                 className={uiInputClass}
                 value={connectionSpaceSelectValue}
                 onChange={(event) => setConnectionSpaceId(event.target.value)}
-                aria-label={t({ en: "Connection Storage Space", fr: "Espace de connexion", de: "Verbindungs-Speicherbereich" })}
+                aria-label={t({ en: "Connection space", fr: "Espace de connexion", de: "Verbindungsbereich" })}
                 disabled={connectionSpacesLoading || connectionSpaces.length === 0 || Boolean(selectedConnectionKeyBucket)}
               >
                 {connectionSpacesLoading ? (
@@ -640,7 +640,7 @@ export default function PortalAccessKeysPage() {
                 ) : selectedConnectionKeyBucket && !selectedConnectionSpace ? (
                   <option value={selectedConnectionKeyBucket}>{selectedConnectionKey?.storage_space_name || selectedConnectionKeyBucket}</option>
                 ) : connectionSpaces.length === 0 ? (
-                  <option value="">{t({ en: "No Storage Space", fr: "Aucun espace de stockage", de: "Kein Speicherbereich" })}</option>
+                  <option value="">{t({ en: "No space", fr: "Aucun espace", de: "Kein Bereich" })}</option>
                 ) : (
                   connectionSpaces.map((space) => (
                     <option key={space.id} value={space.id}>
@@ -693,7 +693,7 @@ export default function PortalAccessKeysPage() {
               <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
             </div>
             <div>
-              <dt className={uiMutedTextClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</dt>
+              <dt className={uiMutedTextClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
               <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
             </div>
             <div>
@@ -718,8 +718,8 @@ export default function PortalAccessKeysPage() {
         <PageBanner tone="info">{t({ en: "Loading portal account...", fr: "Chargement du compte Portal...", de: "Portal-Konto wird geladen..." })}</PageBanner>
       ) : !hasAccountContext ? (
         <PageEmptyState
-          title={t({ en: "Select a portal account before managing access keys", fr: "Sélectionnez un compte Portal avant de gérer les clés d'accès", de: "Wählen Sie ein Portal-Konto aus, bevor Sie Zugriffsschlüssel verwalten" })}
-          description={t({ en: "Access keys are scoped to the selected portal account.", fr: "Les clés d'accès sont limitées au compte Portal sélectionné.", de: "Zugriffsschlüssel sind auf das ausgewählte Portal-Konto beschränkt." })}
+          title={t({ en: "Select a portal account before connecting external tools", fr: "Sélectionnez un compte Portal avant de connecter des outils externes", de: "Wählen Sie ein Portal-Konto aus, bevor Sie externe Werkzeuge verbinden" })}
+          description={t({ en: "External-tool keys are scoped to the selected portal account.", fr: "Les clés pour outils externes sont limitées au compte Portal sélectionné.", de: "Schlüssel für externe Werkzeuge sind auf das ausgewählte Portal-Konto beschränkt." })}
           tone="warning"
         />
       ) : (
@@ -796,7 +796,7 @@ export default function PortalAccessKeysPage() {
                   <span className="space-y-1">
                     <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "For an external user", fr: "Pour un utilisateur externe", de: "Für einen externen Benutzer" })}</span>
                     <span className={cx("block ui-caption", uiMutedTextClass)}>
-                      {t({ en: "Limits the credential to one Storage Space.", fr: "Limite le credential à un seul espace de stockage.", de: "Beschränkt die Zugangsdaten auf einen Speicherbereich." })}
+                      {t({ en: "Limits the credential to one space.", fr: "Limite le credential à un seul espace.", de: "Beschränkt die Zugangsdaten auf einen Bereich." })}
                     </span>
                   </span>
                 </label>
@@ -816,7 +816,7 @@ export default function PortalAccessKeysPage() {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className={uiLabelClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+                  <span className={uiLabelClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</span>
                   <select
                     className={uiInputClass}
                     value={selectedSpaceId}
@@ -826,7 +826,7 @@ export default function PortalAccessKeysPage() {
                     {storageSpacesLoading ? (
                       <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
                     ) : storageSpaces.length === 0 ? (
-                      <option value="">{t({ en: "No owner Storage Space", fr: "Aucun espace propriétaire", de: "Kein eigener Speicherbereich" })}</option>
+                      <option value="">{t({ en: "No owned space", fr: "Aucun espace propriétaire", de: "Kein eigener Bereich" })}</option>
                     ) : (
                       storageSpaces.map((space) => (
                         <option key={space.id} value={space.id}>
@@ -889,7 +889,7 @@ export default function PortalAccessKeysPage() {
                   <dt className={uiMutedTextClass}>{t({ en: "Scope", fr: "Périmètre", de: "Umfang" })}</dt>
                   <dd className={cx("font-semibold", uiTitleTextClass)}>
                     {createTarget === "external"
-                      ? selectedSpace?.name || t({ en: "Select a Storage Space", fr: "Sélectionner un espace", de: "Speicherbereich auswählen" })
+                      ? selectedSpace?.name || t({ en: "Select a space", fr: "Sélectionner un espace", de: "Bereich auswählen" })
                       : t({ en: "My Portal access", fr: "Mes accès Portal", de: "Mein Portal-Zugriff" })}
                   </dd>
                 </div>

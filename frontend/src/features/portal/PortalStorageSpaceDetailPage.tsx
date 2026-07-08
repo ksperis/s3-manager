@@ -47,7 +47,7 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import { storageSpaceObjectPath } from "./portalWorkspaceModel";
+import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
   PortalPageState,
@@ -237,10 +237,10 @@ export default function PortalStorageSpaceDetailPage() {
         description: metadataDescription.trim() || null,
       });
       refreshWorkspaceData();
-      setMessage(t({ en: "Storage Space updated.", fr: "Espace de stockage mis à jour.", de: "Speicherbereich aktualisiert." }));
+      setMessage(t({ en: "Space updated.", fr: "Espace mis à jour.", de: "Bereich aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, t({ en: "Unable to update this Storage Space.", fr: "Impossible de mettre à jour cet espace de stockage.", de: "Dieser Speicherbereich kann nicht aktualisiert werden." })));
+      setMessage(extractApiError(err, t({ en: "Unable to update this space.", fr: "Impossible de mettre à jour cet espace.", de: "Dieser Bereich kann nicht aktualisiert werden." })));
     } finally {
       setMetadataBusy(false);
     }
@@ -348,7 +348,7 @@ export default function PortalStorageSpaceDetailPage() {
       navigate("/portal/storage-spaces");
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, t({ en: "Unable to archive this Storage Space.", fr: "Impossible d'archiver cet espace de stockage.", de: "Dieser Speicherbereich kann nicht archiviert werden." })));
+      setMessage(extractApiError(err, t({ en: "Unable to archive this space.", fr: "Impossible d'archiver cet espace.", de: "Dieser Bereich kann nicht archiviert werden." })));
       setMetadataBusy(false);
     }
   };
@@ -360,10 +360,10 @@ export default function PortalStorageSpaceDetailPage() {
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, { archived: false });
       refreshWorkspaceData();
-      setMessage(t({ en: "Storage Space restored.", fr: "Espace de stockage restauré.", de: "Speicherbereich wiederhergestellt." }));
+      setMessage(t({ en: "Space restored.", fr: "Espace restauré.", de: "Bereich wiederhergestellt." }));
     } catch (err) {
       console.error(err);
-      setMessage(extractApiError(err, t({ en: "Unable to restore this Storage Space.", fr: "Impossible de restaurer cet espace de stockage.", de: "Dieser Speicherbereich kann nicht wiederhergestellt werden." })));
+      setMessage(extractApiError(err, t({ en: "Unable to restore this space.", fr: "Impossible de restaurer cet espace.", de: "Dieser Bereich kann nicht wiederhergestellt werden." })));
     } finally {
       setMetadataBusy(false);
     }
@@ -375,13 +375,13 @@ export default function PortalStorageSpaceDetailPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading storage space...", fr: "Chargement de l'espace de stockage...", de: "Speicherbereich wird geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view this Storage Space.", fr: "Sélectionnez un compte pour voir cet espace de stockage.", de: "Wählen Sie ein Konto aus, um diesen Speicherbereich anzuzeigen." }),
+    loadingMessage: t({ en: "Loading space...", fr: "Chargement de l'espace...", de: "Bereich wird geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view this space.", fr: "Sélectionnez un compte pour voir cet espace.", de: "Wählen Sie ein Konto aus, um diesen Bereich anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   if (!space || !accountIdForApi) {
-    return <PortalPageState>{t({ en: "Storage Space not available.", fr: "Espace de stockage indisponible.", de: "Speicherbereich nicht verfügbar." })}</PortalPageState>;
+    return <PortalPageState>{t({ en: "Space not available.", fr: "Espace indisponible.", de: "Bereich nicht verfügbar." })}</PortalPageState>;
   }
 
   const browserAvailable =
@@ -481,25 +481,25 @@ export default function PortalStorageSpaceDetailPage() {
   };
 
   const storageSpaceSettingsCard = space.role === "Owner" ? (
-    <UiCard title={t({ en: "Storage Space settings", fr: "Paramètres de l'espace de stockage", de: "Speicherbereichseinstellungen" })}>
+    <UiCard title={t({ en: "Space settings", fr: "Paramètres de l'espace", de: "Bereichseinstellungen" })}>
       <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto_auto] lg:items-end">
         <UiInput
-          label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+          label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
           size="compact"
           className="h-9 disabled:opacity-70"
           value={metadataName}
           onChange={(event) => setMetadataName(event.target.value)}
-          aria-label={t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+          aria-label={t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
           disabled={!canRename || metadataBusy}
-          title={canRename ? t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" }) : t({ en: "Name locked for this Storage Space", fr: "Nom verrouillé pour cet espace de stockage", de: "Name für diesen Speicherbereich gesperrt" })}
+          title={canRename ? t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" }) : t({ en: "Name locked for this space", fr: "Nom verrouillé pour cet espace", de: "Name für diesen Bereich gesperrt" })}
         />
         <UiInput
-          label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })}
+          label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
           size="compact"
           className="h-9"
           value={metadataDescription}
           onChange={(event) => setMetadataDescription(event.target.value)}
-          aria-label={t({ en: "Storage Space description", fr: "Description de l'espace de stockage", de: "Beschreibung des Speicherbereichs" })}
+          aria-label={t({ en: "Space description", fr: "Description de l'espace", de: "Beschreibung des Bereichs" })}
         />
         <UiButton disabled={metadataBusy} onClick={handleSaveMetadata} className="h-9 px-3 py-1.5">
           {t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
@@ -517,18 +517,141 @@ export default function PortalStorageSpaceDetailPage() {
     </UiCard>
   ) : null;
 
+  const filesSection = (
+    <section id="space-files" className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className={cx("text-[15px] font-bold", uiTitleTextClass)}>
+            {t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
+          </h2>
+          <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
+            {canModifyObjects
+              ? t({ en: "Upload files, create folders, and choose a file to share outside the account.", fr: "Ajoutez des fichiers, créez des dossiers et choisissez un fichier à partager en externe.", de: "Laden Sie Dateien hoch, erstellen Sie Ordner und wählen Sie eine Datei zum externen Teilen aus." })
+              : t({ en: "Browse and download the files available to you in this space.", fr: "Parcourez et téléchargez les fichiers disponibles dans cet espace.", de: "Durchsuchen und laden Sie die für Sie verfügbaren Dateien in diesem Bereich herunter." })}
+          </p>
+        </div>
+        {!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access) ? (
+          <Link
+            to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
+            className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
+          >
+            {t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
+          </Link>
+        ) : null}
+      </div>
+      {isArchived ? (
+        <PageBanner tone="warning">
+          {t({ en: "This space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Bereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}
+        </PageBanner>
+      ) : !canBrowse ? (
+        <PageBanner tone="warning">
+          {t({ en: "Files are not available for this private space. You can still manage its collaborators and settings.", fr: "Les fichiers ne sont pas disponibles pour cet espace privé. Vous pouvez toujours gérer ses collaborateurs et paramètres.", de: "Dateien sind für diesen privaten Bereich nicht verfügbar. Sie können weiterhin Mitwirkende und Einstellungen verwalten." })}
+        </PageBanner>
+      ) : browserAvailable ? (
+        <div className="min-h-[520px] h-[min(72vh,760px)]">
+          <BrowserEmbed
+            accountIdForApi={accountIdForApi}
+            hasContext={hasAccountContext}
+            workspaceSurface="portal"
+            actionProfile="portal-basic"
+            hiddenActionIds={canModifyObjects ? undefined : VIEWER_HIDDEN_BROWSER_ACTION_IDS}
+            lockedBucketName={lockedBucketName}
+            lockedBucketLabel={space.name}
+            storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
+            quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}
+            quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
+            onOpenObjectDetailsRoute={(target) => {
+              if (target.bucketName !== lockedBucketName) return;
+              navigate(storageSpaceObjectPath(space, target.key));
+            }}
+            onCreatePublicLinkForObject={canCreatePublicLinks ? openPublicLinkDialog : undefined}
+            transferReporter={{
+              start: (transfer) => {
+                if (transfer.bucketName !== lockedBucketName) return null;
+                return startPortalTransfer({
+                  accountId: String(accountIdForApi),
+                  spaceId: space.id,
+                  spaceName: space.name,
+                  name: transfer.name,
+                  direction: transfer.direction,
+                  sizeBytes: transfer.sizeBytes,
+                });
+              },
+              complete: completePortalTransfer,
+              fail: failPortalTransfer,
+            }}
+          />
+        </div>
+      ) : (
+        <PageBanner tone="warning">
+          {t({ en: "Files are unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "Les fichiers sont indisponibles. Demandez à un administrateur d'activer la navigation pour cet espace de travail.", de: "Dateien sind nicht verfügbar. Bitten Sie einen Administrator, Dateibrowsing für diesen Workspace zu aktivieren." })}
+        </PageBanner>
+      )}
+    </section>
+  );
+
+  const externalToolsCard = (
+    <UiCard title={t({ en: "Connect external tools", fr: "Connecter des outils externes", de: "Externe Werkzeuge verbinden" })}>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+        <div>
+          <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Space", fr: "Espace", de: "Bereich" })}
+          </div>
+          <div className={cx("mt-1 break-all text-sm font-bold", uiTitleTextClass)}>{space.name}</div>
+        </div>
+        <div>
+          <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+            {t({ en: "Name for S3 tools", fr: "Nom pour les outils S3", de: "Name für S3-Werkzeuge" })}
+          </div>
+          <div className={cx("mt-1 break-all font-mono text-sm font-bold", uiTitleTextClass)}>{lockedBucketName}</div>
+        </div>
+        {isArchived ? (
+          <span className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-300">
+            {t({ en: "Unavailable while archived", fr: "Indisponible si archivé", de: "Archiviert nicht verfügbar" })}
+          </span>
+        ) : (
+          <Link
+            to={accessKeysPath}
+            className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-primary hover:bg-[color:var(--ui-hover)] hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-primary-200"
+          >
+            {t({ en: "Connection details", fr: "Détails de connexion", de: "Verbindungsdetails" })}
+          </Link>
+        )}
+      </div>
+      <p className={cx("mt-3 ui-caption", uiMutedTextClass)}>
+        {isArchived
+          ? t({ en: "Archived spaces have no active external-tool access.", fr: "Les espaces archivés n'ont aucun accès actif pour les outils externes.", de: "Archivierte Bereiche haben keinen aktiven Zugriff für externe Werkzeuge." })
+          : t({
+              en: "Use this only when an external S3 tool asks for a bucket name. The Portal keeps showing the space name everywhere else.",
+              fr: "Utilisez ce nom uniquement lorsqu'un outil S3 externe demande un nom de bucket. Le Portal continue d'afficher le nom de l'espace partout ailleurs.",
+              de: "Verwenden Sie dies nur, wenn ein externes S3-Werkzeug nach einem Bucket-Namen fragt. Das Portal zeigt sonst überall den Bereichsnamen.",
+            })}
+      </p>
+    </UiCard>
+  );
+
   return (
     <div className="space-y-4">
       <PageHeader
         title={space.name}
         description={pageDescription}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), to: "/portal/storage-spaces" }, { label: space.name })}
         inlineContent={<UiBadge tone={portalStorageSpaceStatusTone(space)}>{portalStatusLabel(space.status, t)}</UiBadge>}
-        actions={!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access) ? [{
-          label: t({ en: "Share", fr: "Partager", de: "Freigeben" }),
-          to: `/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`,
-          variant: "secondary",
-        }] : []}
+        actions={[
+          ...(canModifyObjects
+            ? [{
+                label: t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" }),
+                to: `${storageSpacePath(space)}#space-files`,
+              }]
+            : []),
+          ...(!isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access)
+            ? [{
+                label: t({ en: "Invite people", fr: "Inviter", de: "Einladen" }),
+                to: `/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`,
+                variant: "secondary" as const,
+              }]
+            : []),
+        ]}
       />
 
       {message ? <PageBanner tone="info">{message}</PageBanner> : null}
@@ -545,47 +668,9 @@ export default function PortalStorageSpaceDetailPage() {
         <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
       </section>
 
-      {storageSpaceSettingsCard}
+      {filesSection}
 
-      <UiCard title={t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" })}>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-          <div>
-            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-              {t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}
-            </div>
-            <div className={cx("mt-1 break-all text-sm font-bold", uiTitleTextClass)}>{space.name}</div>
-          </div>
-          <div>
-            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-              {t({ en: "Name to use in S3 tools", fr: "Nom à utiliser dans les outils S3", de: "Name fuer S3-Werkzeuge" })}
-            </div>
-            <div className={cx("mt-1 break-all font-mono text-sm font-bold", uiTitleTextClass)}>{lockedBucketName}</div>
-          </div>
-          {isArchived ? (
-            <span className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-300">
-              {t({ en: "Unavailable while archived", fr: "Indisponible si archivé", de: "Archiviert nicht verfügbar" })}
-            </span>
-          ) : (
-            <Link
-              to={accessKeysPath}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-primary hover:bg-[color:var(--ui-hover)] hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-primary-200"
-            >
-              {t({ en: "Open connection details", fr: "Ouvrir les détails de connexion", de: "Verbindungsdetails öffnen" })}
-            </Link>
-          )}
-        </div>
-        <p className={cx("mt-3 ui-caption", uiMutedTextClass)}>
-          {isArchived
-            ? t({ en: "Archived Storage Spaces have no active external-tool access.", fr: "Les espaces archivés n'ont aucun accès actif pour les outils externes.", de: "Archivierte Speicherbereiche haben keinen aktiven Zugriff fuer externe Werkzeuge." })
-            : t({
-                en: "Use this name only when an S3 tool asks for a bucket. Portal keeps showing the Storage Space name everywhere else.",
-                fr: "Utilisez ce nom uniquement lorsqu'un outil S3 demande un bucket. Portal continue d'afficher le nom de l'espace de stockage ailleurs.",
-                de: "Verwenden Sie diesen Namen nur, wenn ein S3-Werkzeug nach einem Bucket fragt. Portal zeigt sonst weiter den Speicherbereichsnamen.",
-              })}
-        </p>
-      </UiCard>
-
-      <UiCard title={t({ en: "Access", fr: "Accès", de: "Zugriff" })}>
+      <UiCard title={t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" })}>
         {accessSummaryLoading ? (
           <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
             {t({ en: "Loading access...", fr: "Chargement des accès...", de: "Zugriff wird geladen..." })}
@@ -608,7 +693,7 @@ export default function PortalStorageSpaceDetailPage() {
                 </div>
                 <p className={cx("mt-2 text-xs font-medium", uiMutedTextClass)}>
                   {isArchived
-                    ? t({ en: "Archived Storage Spaces have no active Portal access.", fr: "Les espaces archivés n'ont aucun accès Portal actif.", de: "Archivierte Speicherbereiche haben keinen aktiven Portal-Zugriff." })
+                    ? t({ en: "Archived spaces have no active collaborator access.", fr: "Les espaces archivés n'ont aucun accès collaborateur actif.", de: "Archivierte Bereiche haben keinen aktiven Mitwirkendenzugriff." })
                     : portalAccessModeDescription(savedAccessMode, t)}
                 </p>
                 <p className={cx("mt-1 text-[11px] font-semibold", uiMutedTextClass)}>
@@ -626,7 +711,7 @@ export default function PortalStorageSpaceDetailPage() {
               </div>
               <div>
                 <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-                  {t({ en: "External reach", fr: "Portée externe", de: "Externe Reichweite" })}
+                  {t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
                 </div>
                 <Link
                   to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=links`}
@@ -649,8 +734,8 @@ export default function PortalStorageSpaceDetailPage() {
                   accountMemberRole={accessAccountMemberRole}
                   onAccountMemberRoleChange={setAccessAccountMemberRole}
                   disabled={accessBusy || isArchived}
-                  modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                  roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
+                  modeLabel={t({ en: "Who can access this space?", fr: "Qui peut accéder à cet espace ?", de: "Wer kann auf diesen Bereich zugreifen?" })}
+                  roleLabel={t({ en: "Default role for team members", fr: "Rôle par défaut des membres", de: "Standardrolle für Teammitglieder" })}
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <UiButton
@@ -678,7 +763,7 @@ export default function PortalStorageSpaceDetailPage() {
                   to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
                   className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
                 >
-                  {t({ en: "Open Shares", fr: "Ouvrir Partages", de: "Freigaben öffnen" })}
+                  {t({ en: "Manage collaborators", fr: "Gérer les collaborateurs", de: "Mitwirkende verwalten" })}
                 </Link>
               </div>
               {accessSummary.explicit_shares.length > 0 ? (
@@ -775,54 +860,9 @@ export default function PortalStorageSpaceDetailPage() {
         ) : null}
       </UiCard>
 
-      {isArchived ? (
-        <PageBanner tone="warning">
-          {t({ en: "This Storage Space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace de stockage est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Speicherbereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}
-        </PageBanner>
-      ) : !canBrowse ? (
-        <PageBanner tone="warning">
-          {t({ en: "File browsing is not available for this private Storage Space. You can still manage its Portal details.", fr: "La navigation dans les fichiers n'est pas disponible pour cet espace privé. Vous pouvez toujours gérer ses détails Portal.", de: "Dateibrowsing ist für diesen privaten Speicherbereich nicht verfügbar. Die Portal-Details können weiterhin verwaltet werden." })}
-        </PageBanner>
-      ) : browserAvailable ? (
-        <div className="min-h-[520px] h-[min(72vh,760px)]">
-          <BrowserEmbed
-            accountIdForApi={accountIdForApi}
-            hasContext={hasAccountContext}
-            workspaceSurface="portal"
-            actionProfile="portal-basic"
-            hiddenActionIds={canModifyObjects ? undefined : VIEWER_HIDDEN_BROWSER_ACTION_IDS}
-            lockedBucketName={lockedBucketName}
-            lockedBucketLabel={space.name}
-            storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
-            quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}
-            quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
-            onOpenObjectDetailsRoute={(target) => {
-              if (target.bucketName !== lockedBucketName) return;
-              navigate(storageSpaceObjectPath(space, target.key));
-            }}
-            onCreatePublicLinkForObject={canCreatePublicLinks ? openPublicLinkDialog : undefined}
-            transferReporter={{
-              start: (transfer) => {
-                if (transfer.bucketName !== lockedBucketName) return null;
-                return startPortalTransfer({
-                  accountId: String(accountIdForApi),
-                  spaceId: space.id,
-                  spaceName: space.name,
-                  name: transfer.name,
-                  direction: transfer.direction,
-                  sizeBytes: transfer.sizeBytes,
-                });
-              },
-              complete: completePortalTransfer,
-              fail: failPortalTransfer,
-            }}
-          />
-        </div>
-      ) : (
-        <PageBanner tone="warning">
-          {t({ en: "File browsing is unavailable. Ask an administrator to enable file browsing for this workspace.", fr: "La navigation dans les fichiers est indisponible. Demandez à un administrateur de l'activer pour cet espace de travail.", de: "Dateibrowsing ist nicht verfügbar. Bitten Sie einen Administrator, es für diesen Arbeitsbereich zu aktivieren." })}
-        </PageBanner>
-      )}
+      {storageSpaceSettingsCard}
+
+      {externalToolsCard}
 
       {publicLinkTarget ? (
         <Modal
@@ -844,7 +884,7 @@ export default function PortalStorageSpaceDetailPage() {
                 <dd className="min-w-0 break-all font-mono text-[11px]">{publicLinkTarget.key}</dd>
               </div>
               <div className="grid grid-cols-[130px_1fr] gap-3">
-                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</dt>
+                <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
                 <dd className={cx("min-w-0 font-bold", uiTitleTextClass)}>{space.name}</dd>
               </div>
             </dl>
@@ -891,13 +931,13 @@ export default function PortalStorageSpaceDetailPage() {
 
       {pendingAccessChange ? (
         <ConfirmActionDialog
-          title={t({ en: "Change access", fr: "Modifier l'accès", de: "Zugriff ändern" })}
-          description={t({ en: "Confirm the new access mode for this Storage Space.", fr: "Confirmez le nouveau mode d'accès de cet espace de stockage.", de: "Bestätigen Sie den neuen Zugriffsmodus für diesen Speicherbereich." })}
+          title={t({ en: "Change collaborators", fr: "Modifier les collaborateurs", de: "Mitwirkende ändern" })}
+          description={t({ en: "Confirm who can access this space.", fr: "Confirmez qui peut accéder à cet espace.", de: "Bestätigen Sie, wer auf diesen Bereich zugreifen kann." })}
           confirmLabel={t({ en: "Update access", fr: "Mettre à jour l'accès", de: "Zugriff aktualisieren" })}
           tone="primary"
           loading={accessBusy}
           details={[
-            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: space.name },
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
             {
               label: t({ en: "New access", fr: "Nouvel accès", de: "Neuer Zugriff" }),
               value: pendingAccessChange.mode === "account"
@@ -910,8 +950,8 @@ export default function PortalStorageSpaceDetailPage() {
           impacts={pendingAccessChange.mode === "private"
             ? [
                 t({ en: "Only the owner keeps active access.", fr: "Seul le propriétaire conserve un accès actif.", de: "Nur der Eigentümer behält aktiven Zugriff." }),
-                t({ en: "Existing direct collaborator grants are kept but become inactive while the Storage Space is private.", fr: "Les droits directs existants sont conservés mais deviennent inactifs tant que l'espace est privé.", de: "Bestehende direkte Berechtigungen bleiben erhalten, sind bei privatem Zugriff aber inaktiv." }),
-                t({ en: "Public links are suspended while the Storage Space is private.", fr: "Les liens publics sont suspendus tant que l'espace est privé.", de: "Öffentliche Links sind bei privatem Zugriff ausgesetzt." }),
+                t({ en: "Existing direct collaborator grants are kept but become inactive while the space is private.", fr: "Les droits directs existants sont conservés mais deviennent inactifs tant que l'espace est privé.", de: "Bestehende direkte Berechtigungen bleiben erhalten, sind bei privatem Zugriff aber inaktiv." }),
+                t({ en: "Public links are suspended while the space is private.", fr: "Les liens publics sont suspendus tant que l'espace est privé.", de: "Öffentliche Links sind bei privatem Zugriff ausgesetzt." }),
               ]
             : pendingAccessChange.mode === "account"
             ? [
@@ -937,12 +977,12 @@ export default function PortalStorageSpaceDetailPage() {
           loading={accessBusy}
           details={[
             { label: t({ en: "Person", fr: "Personne", de: "Person" }), value: pendingAccessRevoke.email },
-            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: space.name },
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
             { label: t({ en: "Access", fr: "Accès", de: "Zugriff" }), value: portalRoleLabel(pendingAccessRevoke.role, t) },
           ]}
           impacts={[
             t({ en: "This person loses direct access immediately.", fr: "Cette personne perd immédiatement son accès direct.", de: "Diese Person verliert sofort den direkten Zugriff." }),
-            t({ en: "Files in the Storage Space are not deleted.", fr: "Les fichiers de l'espace de stockage ne sont pas supprimés.", de: "Dateien im Speicherbereich werden nicht gelöscht." }),
+            t({ en: "Files in the space are not deleted.", fr: "Les fichiers de l'espace ne sont pas supprimés.", de: "Dateien im Bereich werden nicht gelöscht." }),
           ]}
           onCancel={() => setPendingAccessRevoke(null)}
           onConfirm={() => confirmAccessRevoke(pendingAccessRevoke)}
@@ -951,16 +991,16 @@ export default function PortalStorageSpaceDetailPage() {
 
       {archiveDialogOpen ? (
         <ConfirmActionDialog
-          title={t({ en: "Archive Storage Space", fr: "Archiver l'espace de stockage", de: "Speicherbereich archivieren" })}
-          description={t({ en: "Confirm that you want to archive this Storage Space.", fr: "Confirmez que vous voulez archiver cet espace de stockage.", de: "Bestätigen Sie, dass Sie diesen Speicherbereich archivieren möchten." })}
-          confirmLabel={t({ en: "Archive Storage Space", fr: "Archiver l'espace de stockage", de: "Speicherbereich archivieren" })}
+          title={t({ en: "Archive space", fr: "Archiver l'espace", de: "Bereich archivieren" })}
+          description={t({ en: "Confirm that you want to archive this space.", fr: "Confirmez que vous voulez archiver cet espace.", de: "Bestätigen Sie, dass Sie diesen Bereich archivieren möchten." })}
+          confirmLabel={t({ en: "Archive space", fr: "Archiver l'espace", de: "Bereich archivieren" })}
           loading={metadataBusy}
           details={[
-            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: space.name },
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
             { label: t({ en: "Status", fr: "Statut", de: "Status" }), value: t({ en: "Can be restored later", fr: "Restaurable plus tard", de: "Kann später wiederhergestellt werden" }) },
           ]}
           impacts={[
-            t({ en: "The Storage Space is removed from active file work until it is restored.", fr: "L'espace de stockage est retiré des fichiers actifs jusqu'à sa restauration.", de: "Der Speicherbereich wird bis zur Wiederherstellung aus der aktiven Dateiarbeit entfernt." }),
+            t({ en: "The space is removed from active file work until it is restored.", fr: "L'espace est retiré des fichiers actifs jusqu'à sa restauration.", de: "Der Bereich wird bis zur Wiederherstellung aus der aktiven Dateiarbeit entfernt." }),
             t({ en: "Existing files are kept and are not deleted.", fr: "Les fichiers existants sont conservés et ne sont pas supprimés.", de: "Bestehende Dateien bleiben erhalten und werden nicht gelöscht." }),
             t({ en: "Public links and file access are suspended while archived.", fr: "Les liens publics et l'accès aux fichiers sont suspendus pendant l'archivage.", de: "Öffentliche Links und Dateizugriff sind während der Archivierung ausgesetzt." }),
           ]}

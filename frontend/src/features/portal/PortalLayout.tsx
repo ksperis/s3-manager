@@ -25,9 +25,9 @@ function usePortalNavSections(): SidebarSection[] {
         label: t({ en: "Workspace", fr: "Espace de travail", de: "Arbeitsbereich" }),
         links: [
           { to: "/portal", label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }), end: true, icon: <HomeIcon /> },
-          { to: "/portal/storage-spaces", label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }), icon: <StorageIcon /> },
-          { to: "/portal/shares", label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), icon: <ShareIcon /> },
-          { to: "/portal/access-keys", label: t({ en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" }), icon: <KeyIcon /> },
+          { to: "/portal/storage-spaces", label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), icon: <StorageIcon /> },
+          { to: "/portal/shares", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }), icon: <ShareIcon /> },
+          { to: "/portal/access-keys", label: t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" }), icon: <KeyIcon /> },
           { to: "/portal/activity", label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }), icon: <ActivityIcon /> },
           { to: "/portal/transfers", label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }), icon: <TransferIcon /> },
           { to: "/portal/usage", label: t({ en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" }), icon: <ChartIcon /> },

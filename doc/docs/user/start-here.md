@@ -16,7 +16,7 @@ Use this page when you log in for the first time and need to understand where to
 3. Pick the workspace matching your task:
    - `Admin`: platform setup and governance.
    - `Manager`: bucket and IAM administration.
-   - `Portal`: self-service buckets and access keys on explicitly assigned RGW accounts.
+   - `Portal`: spaces, files, collaborators, and external-tool credentials on explicitly assigned accounts.
    - `Browser`: object operations.
    - `Ceph Admin`: Ceph cluster-level tasks.
    - `Storage Ops`: cross-context bucket operations.
@@ -28,7 +28,7 @@ Use this page when you log in for the first time and need to understand where to
 | Your goal | Workspace | First action | Ask an admin when... |
 |---|---|---|---|
 | Browse, upload, download, preview, or restore files | **Browser** | Select the right account or connection, then open the bucket. | The workspace is missing, the bucket is dimmed, or an action is disabled. |
-| Work in an assigned self-service area | **Portal** | Select your Portal account, then open **Storage Spaces**. | You cannot see the expected Storage Space or need a new share/access key policy. |
+| Work in an assigned self-service area | **Portal** | Select your Portal account, then open **Spaces**. | You cannot see the expected space or need a new collaborator/external-tool policy. |
 | Configure buckets, IAM, topics, or Manager tools | **Manager** | Select the account context, then open the relevant section. | The account context is missing or a tool is hidden. |
 | Configure users, endpoints, feature flags, audit, or billing | **Admin** | Open **Storage Backends**, **Platform**, or **Settings**. | You do not have `ui_admin` or `ui_superadmin`. |
 | Work on Ceph RGW accounts, users, or cluster-wide buckets | **Ceph Admin** | Select the endpoint before taking action. | You do not have the Ceph Admin entitlement. |
@@ -40,15 +40,15 @@ Use this page when you log in for the first time and need to understand where to
 - **Account / context** decides which credentials execute S3 or IAM actions.
 - **Endpoint** appears on Ceph Admin and endpoint-scoped views. It decides which backend receives the request.
 
-If an action is missing, disabled, or returns `AccessDenied`, first check the selected workspace and context. The UI does not widen storage permissions. Native Browser and Manager actions follow IAM/S3, while Portal Storage Spaces follow the spaces and collaborator grants configured in Portal.
+If an action is missing, disabled, or returns `AccessDenied`, first check the selected workspace and context. The UI does not widen storage permissions. Native Browser and Manager actions follow IAM/S3, while Portal spaces follow the spaces and collaborator grants configured in Portal.
 
 ## First login checklist: storage user
 
 - Sign in and confirm whether **Portal** or **Browser** is available.
-- In Portal, open **Storage Spaces** and choose the space assigned to your work.
+- In Portal, open **Spaces** and choose the space assigned to your work.
 - In Browser, select the expected account or connection, then open a bucket.
 - Upload and download a small test object when your role allows it.
-- If access is missing, report the workspace, account/context, bucket or Storage Space, and exact error text.
+- If access is missing, report the workspace, account/context, bucket or space, and exact error text.
 
 ## First login checklist: storage administrator
 

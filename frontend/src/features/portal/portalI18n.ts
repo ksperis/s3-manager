@@ -46,14 +46,14 @@ export function portalShareScopeLabel(
     return t({ en: "Private", fr: "Privé", de: "Privat" });
   }
   return shareScope === "account"
-    ? t({ en: "All", fr: "Tous", de: "Alle" })
-    : t({ en: "Restricted", fr: "Restreint", de: "Beschränkt" });
+    ? t({ en: "Team", fr: "Équipe", de: "Team" })
+    : t({ en: "Selected people", fr: "Personnes choisies", de: "Ausgewählte Personen" });
 }
 
 export function portalAccountRoleLabel(role: string | null | undefined, t: TFunction): string {
-  if (role === "portal_manager") return t({ en: "Portal manager", fr: "Manager portail", de: "Portal-Manager" });
-  if (role === "portal_user") return t({ en: "Portal user", fr: "Utilisateur portail", de: "Portal-Benutzer" });
-  return t({ en: "Portal member", fr: "Membre portail", de: "Portal-Mitglied" });
+  if (role === "portal_manager") return t({ en: "Workspace manager", fr: "Gestionnaire d'espace", de: "Workspace-Manager" });
+  if (role === "portal_user") return t({ en: "Workspace member", fr: "Membre d'espace", de: "Workspace-Mitglied" });
+  return t({ en: "Workspace member", fr: "Membre d'espace", de: "Workspace-Mitglied" });
 }
 
 export function portalAccessSourceLabel(source: string | null | undefined, t: TFunction): string {
@@ -112,12 +112,12 @@ export function portalActivityActionLabel(action: string, t: TFunction): string 
   if (normalized === "deleted") return t({ en: "Deleted", fr: "A supprimé", de: "Gelöscht" });
   if (normalized === "shared") return t({ en: "Shared", fr: "A partagé", de: "Freigegeben" });
   if (normalized === "created folder") return t({ en: "Created folder", fr: "A créé un dossier", de: "Ordner erstellt" });
-  if (normalized === "created storage space") return t({ en: "Created storage space", fr: "A créé un espace de stockage", de: "Speicherbereich erstellt" });
-  if (normalized === "updated storage space") return t({ en: "Updated storage space", fr: "A mis à jour un espace de stockage", de: "Speicherbereich aktualisiert" });
-  if (normalized === "archived storage space") return t({ en: "Archived storage space", fr: "A archivé un espace de stockage", de: "Speicherbereich archiviert" });
-  if (normalized === "restored storage space") return t({ en: "Restored storage space", fr: "A restauré un espace de stockage", de: "Speicherbereich wiederhergestellt" });
-  if (normalized === "updated share") return t({ en: "Updated share", fr: "A mis à jour un partage", de: "Freigabe aktualisiert" });
-  if (normalized === "removed share") return t({ en: "Removed share", fr: "A retiré un partage", de: "Freigabe entfernt" });
+  if (normalized === "created storage space") return t({ en: "Created space", fr: "A créé un espace", de: "Bereich erstellt" });
+  if (normalized === "updated storage space") return t({ en: "Updated space", fr: "A mis à jour un espace", de: "Bereich aktualisiert" });
+  if (normalized === "archived storage space") return t({ en: "Archived space", fr: "A archivé un espace", de: "Bereich archiviert" });
+  if (normalized === "restored storage space") return t({ en: "Restored space", fr: "A restauré un espace", de: "Bereich wiederhergestellt" });
+  if (normalized === "updated share") return t({ en: "Updated collaborator", fr: "A mis à jour un collaborateur", de: "Mitwirkenden aktualisiert" });
+  if (normalized === "removed share") return t({ en: "Removed collaborator", fr: "A retiré un collaborateur", de: "Mitwirkenden entfernt" });
   if (normalized === "created public link") return t({ en: "Created public link", fr: "A créé un lien public", de: "Öffentlichen Link erstellt" });
   if (normalized === "revoked public link") return t({ en: "Revoked public link", fr: "A révoqué un lien public", de: "Öffentlichen Link widerrufen" });
   if (normalized === "create portal access key") return t({ en: "Created access key", fr: "A créé une clé d'accès", de: "Zugriffsschlüssel erstellt" });

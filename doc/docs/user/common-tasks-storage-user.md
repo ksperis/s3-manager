@@ -6,17 +6,17 @@ Use this page when you know what you want to do, but not which workspace or page
 
 | Task | Go to | What to check first |
 |---|---|---|
-| Browse files in an assigned Storage Space | [Portal: Storage Spaces](portal-storage-spaces.md) | The expected Portal account is selected. |
+| Browse files in an assigned space | [Portal: Spaces](portal-storage-spaces.md) | The expected Portal account is selected. |
 | Browse files in a bucket or connection | [Workspace: Browser](workspace-browser.md) | The account or connection context is selected in the topbar. |
 | Upload or download files | [Feature: Object operations in Browser](feature-objects-browser.md) | You have write access for upload, and read access for download. |
 | Recover or inspect a previous object version | [Feature: Object versions in Browser](feature-object-versions-browser.md) | Versioning is enabled on the bucket. |
-| Create credentials for an external S3 client | [Portal: Access keys](portal-access-keys.md) | Portal access-key creation is enabled for your account. |
+| Create credentials for an external S3 client | [Portal: External tools](portal-access-keys.md) | Portal external-tool credential creation is enabled for your account. |
 | Understand usage, quota, or alerts | [Portal: Usage and alerts](portal-usage-alerts.md) | Usage collection is available for the selected account. |
-| Report missing access | [Troubleshooting](troubleshooting.md) | Capture workspace, account/context, bucket or Storage Space, and exact error text. |
+| Report missing access | [Troubleshooting](troubleshooting.md) | Capture workspace, account/context, bucket or space, and exact error text. |
 
 ## A good first workflow
 
-1. Open **Portal** if your organization gives you Storage Spaces.
+1. Open **Portal** if your organization gives you spaces.
 2. Open **Browser** if you work directly with buckets, prefixes, and objects.
 3. Select the account, connection, or Portal account before acting.
 4. Upload and download a small test file.

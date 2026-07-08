@@ -174,22 +174,22 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Portal workspace">
   <figure data-thumb-label="Overview">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal dashboard with usage, activity, collaborator, transfer, and alert summaries" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal dashboard with usage, activity, collaborator, transfer, and alert summaries" loading="lazy">
     </div>
-    <figcaption><strong>Overview.</strong> Portal opens on a user dashboard with quota, Storage Space usage, recent activity, transfers, shares, and simple alerts.</figcaption>
+    <figcaption><strong>Overview.</strong> Portal opens on a user dashboard with quota, space usage, recent activity, transfers, collaborator signals, and simple alerts.</figcaption>
   </figure>
-  <figure data-thumb-label="Storage Spaces">
+  <figure data-thumb-label="Spaces">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-storage-spaces.light.png" alt="Portal Storage Spaces list with search, usage, roles, status, and open actions" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-storage-spaces.dark.png" alt="Portal Storage Spaces list with search, usage, roles, status, and open actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-storage-spaces.light.png" alt="Portal Spaces page with create, upload, invite, public-link tasks and space rows" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-storage-spaces.dark.png" alt="Portal Spaces page with create, upload, invite, public-link tasks and space rows" loading="lazy">
     </div>
-    <figcaption><strong>Storage Spaces.</strong> End users see spaces as collaborative work areas rather than raw S3 configuration surfaces.</figcaption>
+    <figcaption><strong>Spaces.</strong> End users see spaces as collaborative work areas rather than raw S3 configuration surfaces.</figcaption>
   </figure>
   <figure data-thumb-label="Object List">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-list.light.png" alt="Portal object list for a Storage Space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-list.dark.png" alt="Portal object list for a Storage Space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-object-list.light.png" alt="Portal object list for a space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-object-list.dark.png" alt="Portal object list for a space with breadcrumbs, metrics, search, upload, and folder navigation" loading="lazy">
     </div>
     <figcaption><strong>Object list.</strong> The Portal object view keeps browsing, upload, download, and share actions simple while leaving advanced inspection to Browser.</figcaption>
   </figure>
@@ -207,12 +207,12 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
     </div>
     <figcaption><strong>Usage.</strong> Usage & Analytics consolidates storage, traffic, requests, and billing source signals in end-user language.</figcaption>
   </figure>
-  <figure data-thumb-label="Access Keys">
+  <figure data-thumb-label="External tools">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal Access keys page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal Access keys page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-access-keys.light.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-access-keys.dark.png" alt="Portal External tools page with endpoint guidance, one-time secret warning, and external key actions" loading="lazy">
     </div>
-    <figcaption><strong>Access keys.</strong> Portal users can create external S3 keys with clear endpoint guidance and safety copy.</figcaption>
+    <figcaption><strong>External tools.</strong> Portal users can create external S3 keys with clear endpoint guidance and safety copy.</figcaption>
   </figure>
   <figure data-thumb-label="Settings">
     <div class="docs-themed-shot" data-docs-themed-shot>

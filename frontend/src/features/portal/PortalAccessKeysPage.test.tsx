@@ -108,7 +108,7 @@ describe("PortalAccessKeysPage", () => {
   it("lists external keys without rendering the portal key", async () => {
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Access keys" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "External tools" })).toBeInTheDocument();
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
     expect(screen.queryByText("AK-PORTAL")).not.toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
@@ -165,7 +165,7 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByText("SK-NEW")).toBeInTheDocument();
   });
 
-  it("creates an external credential for an owner Storage Space", async () => {
+  it("creates an external credential for an owned space", async () => {
     mocks.state = { ...mocks.state, access_keys: [] };
     mocks.createPortalAccessKey.mockResolvedValue({
       access_key_id: "AK-EXT",
@@ -187,7 +187,7 @@ describe("PortalAccessKeysPage", () => {
     await user.click(within(dialog).getByLabelText("For an external user"));
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     await user.type(within(dialog).getByPlaceholderText("name@example.org"), "partner@example.org");
-    await user.selectOptions(within(dialog).getByLabelText("Storage Space"), "research-data");
+    await user.selectOptions(within(dialog).getByLabelText("Space"), "research-data");
     await user.click(within(dialog).getByLabelText("Read/write"));
     await user.click(within(dialog).getByRole("button", { name: "Create key" }));
 
@@ -199,7 +199,7 @@ describe("PortalAccessKeysPage", () => {
         permission: "read_write",
       })
     );
-    expect(await screen.findByText("The secret is shown only once and is limited to the selected Storage Space.")).toBeInTheDocument();
+    expect(await screen.findByText("The secret is shown only once and is limited to the selected space.")).toBeInTheDocument();
     expect(screen.getAllByText("AK-EXT").length).toBeGreaterThan(0);
     expect(screen.getByText("SK-EXT")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Download with secret" }).length).toBeGreaterThan(0);
@@ -207,7 +207,7 @@ describe("PortalAccessKeysPage", () => {
     expect(await readDownloadedBlobText(downloadedBlobs.at(-1))).toContain("Secret key: SK-EXT");
   });
 
-  it("opens external key creation from a preselected Storage Space link", async () => {
+  it("opens external key creation from a preselected space link", async () => {
     mocks.state = { ...mocks.state, access_keys: [] };
     const user = userEvent.setup();
     renderPage("/portal/access-keys?space_id=research-data-internal&create=external");
@@ -215,7 +215,7 @@ describe("PortalAccessKeysPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Create access key" });
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     expect(within(dialog).getByLabelText("For an external user")).toBeChecked();
-    expect(within(dialog).getByLabelText("Storage Space")).toHaveValue("research-data");
+    expect(within(dialog).getByLabelText("Space")).toHaveValue("research-data");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog", { name: "Create access key" })).not.toBeInTheDocument();
   });
@@ -274,6 +274,6 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "New key" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Disable" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
-    expect(screen.getByText("Access-key management is disabled for this portal account.")).toBeInTheDocument();
+    expect(screen.getByText("External-tool access is disabled for this portal account.")).toBeInTheDocument();
   });
 });

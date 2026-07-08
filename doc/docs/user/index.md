@@ -23,12 +23,12 @@ Use this section for task-oriented instructions. Each page focuses on actionable
 |---|---|---|
 | A storage user | [Common tasks for storage users](common-tasks-storage-user.md) | You know where to browse files, manage simple access, and report missing permissions. |
 | A storage administrator | [Storage admin runbook](admin-runbook-storage-admin.md) | You can configure the first endpoint, context, workspace, validation, and handover evidence. |
-| A Portal user | [Workspace: Portal](workspace-portal.md) | You understand Storage Spaces, files, sharing, usage, and access keys. |
+| A Portal user | [Workspace: Portal](workspace-portal.md) | You understand spaces, files, collaborators, usage, and external tools. |
 | A Browser user | [Workspace: Browser](workspace-browser.md) | You can select the right context and act on objects safely. |
 
 ## Search help
 
-Use [Glossary and search tips](glossary.md) when you are not sure whether the product calls something a file, object, bucket, Storage Space, context, endpoint, access key, or connection.
+Use [Glossary and search tips](glossary.md) when you are not sure whether the product calls something a file, object, bucket, space, context, endpoint, access key, or connection.
 
 ## Visual example
 

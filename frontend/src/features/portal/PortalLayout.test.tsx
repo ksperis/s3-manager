@@ -103,9 +103,9 @@ describe("PortalLayout", () => {
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Dashboard",
-      "Storage Spaces",
-      "Shares",
-      "Access keys",
+      "Spaces",
+      "Collaborators",
+      "External tools",
       "Activity",
       "Transfers",
       "Usage & Analytics",
@@ -159,9 +159,9 @@ describe("PortalLayout", () => {
     const nav = screen.getByRole("navigation", { name: "PORTAL navigation" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Tableau de bord",
-      "Espaces de stockage",
-      "Partages",
-      "Clés d'accès",
+      "Espaces",
+      "Collaborateurs",
+      "Outils externes",
       "Activité",
       "Transferts",
       "Utilisation et analyses",

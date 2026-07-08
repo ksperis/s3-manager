@@ -9,6 +9,7 @@ import {
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   revokePortalStorageSpacePublicLink,
+  updatePortalStorageSpace,
   type PortalPublicLink,
   revokePortalStorageSpaceShare,
   updatePortalStorageSpaceShare,
@@ -92,14 +93,14 @@ function SharesTable({
     () => [
       {
         id: "name",
-        label: t({ en: "Name", fr: "Nom", de: "Name" }),
-        mobileLabel: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
+        mobileLabel: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         primary: true,
         render: (share) => share.spaceName,
       },
       {
         id: "person",
-        label: editable ? t({ en: "Shared with", fr: "Partagé avec", de: "Geteilt mit" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
+        label: editable ? t({ en: "Collaborator", fr: "Collaborateur", de: "Mitwirkende" }) : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
         render: (share) => share.person,
       },
       {
@@ -159,9 +160,13 @@ function SharesTable({
       rows={shares}
       rowKey={(share) => share.id}
       status={tableStatus}
-      loadingMessage={t({ en: "Loading shares...", fr: "Chargement des partages...", de: "Freigaben werden geladen..." })}
-      errorMessage={t({ en: "Unable to load shares.", fr: "Impossible de charger les partages.", de: "Freigaben können nicht geladen werden." })}
-      emptyMessage={t({ en: "No shares to display.", fr: "Aucun partage à afficher.", de: "Keine Freigaben zum Anzeigen." })}
+      loadingMessage={t({ en: "Loading collaborators...", fr: "Chargement des collaborateurs...", de: "Mitwirkende werden geladen..." })}
+      errorMessage={t({ en: "Unable to load collaborators.", fr: "Impossible de charger les collaborateurs.", de: "Mitwirkende können nicht geladen werden." })}
+      emptyMessage={
+        editable
+          ? t({ en: "No collaborators invited yet.", fr: "Aucun collaborateur invité pour l'instant.", de: "Noch keine Mitwirkenden eingeladen." })
+          : t({ en: "No spaces have been shared with you yet.", fr: "Aucun espace n'a encore été partagé avec vous.", de: "Noch keine Bereiche wurden mit Ihnen geteilt." })
+      }
       responsiveCards
     />
   );
@@ -182,22 +187,31 @@ export default function PortalSharesPage() {
   const [sharesMessage, setSharesMessage] = useState<string | null>(null);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(null);
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const {
+    workspace,
+    loading,
+    error,
+    hasAccountContext,
+    accountError,
+    accountLoading,
+    accountIdForApi,
+    refreshWorkspaceData = () => undefined,
+  } = usePortalWorkspaceData();
   const initialUrlContextApplied = useRef(false);
-  const activeSharedSpaces = useMemo(
-    () => workspace.spaces.filter((space) => space.status !== "Archived" && space.visibility === "shared"),
+  const activeCollaboratorSpaces = useMemo(
+    () => workspace.spaces.filter((space) => space.status !== "Archived"),
     [workspace.spaces]
   );
-  const activeSharedOwnerSpaces = useMemo(
-    () => activeSharedSpaces.filter((space) => space.role === "Owner"),
-    [activeSharedSpaces]
+  const activeOwnerSpaces = useMemo(
+    () => activeCollaboratorSpaces.filter((space) => space.role === "Owner"),
+    [activeCollaboratorSpaces]
   );
 
   const spaceIds = useMemo(() => workspace.spaces.map((space) => space.id).join("|"), [workspace.spaces]);
-  const activeSharedSpaceIds = useMemo(() => activeSharedSpaces.map((space) => space.id).join("|"), [activeSharedSpaces]);
+  const activeCollaboratorSpaceIds = useMemo(() => activeCollaboratorSpaces.map((space) => space.id).join("|"), [activeCollaboratorSpaces]);
   const sharesRequestKey = useMemo(
-    () => (accountIdForApi ? `${accountIdForApi}:${activeSharedSpaceIds}` : ""),
-    [accountIdForApi, activeSharedSpaceIds]
+    () => (accountIdForApi ? `${accountIdForApi}:${activeCollaboratorSpaceIds}` : ""),
+    [accountIdForApi, activeCollaboratorSpaceIds]
   );
   const selectedShareEntries = selectedPortalShares(selectedShareRolesByUserId);
 
@@ -216,18 +230,18 @@ export default function PortalSharesPage() {
   }, [workspace.spaces]);
 
   useEffect(() => {
-    const selectableSpaces = activeTab === "with" ? activeSharedSpaces : activeSharedOwnerSpaces;
+    const selectableSpaces = activeTab === "with" ? activeCollaboratorSpaces : activeOwnerSpaces;
     if (!selectedSpaceId && selectableSpaces[0]) {
       setSelectedSpaceId(selectableSpaces[0].id);
     }
     if (selectedSpaceId && !selectableSpaces.some((space) => space.id === selectedSpaceId)) {
       setSelectedSpaceId(selectableSpaces[0]?.id ?? "");
     }
-  }, [activeSharedOwnerSpaces, activeSharedSpaces, activeTab, selectedSpaceId]);
+  }, [activeOwnerSpaces, activeCollaboratorSpaces, activeTab, selectedSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!accountIdForApi || activeSharedSpaces.length === 0) {
+    if (!accountIdForApi || activeCollaboratorSpaces.length === 0) {
       setApiShares([]);
       setSharesLoadedKey(sharesRequestKey);
       setSharesError(null);
@@ -237,7 +251,7 @@ export default function PortalSharesPage() {
     }
     setApiShares(null);
     setSharesError(null);
-    Promise.all(activeSharedSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
+    Promise.all(activeCollaboratorSpaces.map((space) => listPortalStorageSpaceShares(accountIdForApi, space.id)))
       .then((results) => {
         if (!cancelled) {
           setApiShares(results.flat());
@@ -249,13 +263,13 @@ export default function PortalSharesPage() {
         if (!cancelled) {
           setApiShares(null);
           setSharesLoadedKey(null);
-          setSharesError(extractApiError(err, t({ en: "Unable to load shares.", fr: "Impossible de charger les partages.", de: "Freigaben können nicht geladen werden." })));
+          setSharesError(extractApiError(err, t({ en: "Unable to load collaborators.", fr: "Impossible de charger les collaborateurs.", de: "Mitwirkende können nicht geladen werden." })));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeSharedSpaces, sharesRequestKey, t]);
+  }, [accountIdForApi, activeCollaboratorSpaces, sharesRequestKey, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,9 +280,7 @@ export default function PortalSharesPage() {
       };
     }
     Promise.all(
-      workspace.spaces
-        .filter((space) => space.role === "Owner" && space.status !== "Archived" && space.visibility === "shared")
-        .map((space) => listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { includeRevoked: true }))
+      activeOwnerSpaces.map((space) => listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { includeRevoked: true }))
     )
       .then((results) => {
         if (!cancelled) setPublicLinks(results.flat());
@@ -280,7 +292,7 @@ export default function PortalSharesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, spaceIds, workspace.spaces]);
+  }, [accountIdForApi, activeOwnerSpaces, spaceIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,7 +319,7 @@ export default function PortalSharesPage() {
         if (!cancelled) {
           setShareCandidates([]);
           setSelectedShareRolesByUserId({});
-          setSharesError(extractApiError(err, t({ en: "Unable to load eligible users.", fr: "Impossible de charger les utilisateurs éligibles.", de: "Berechtigte Benutzer können nicht geladen werden." })));
+          setSharesError(extractApiError(err, t({ en: "Unable to load people.", fr: "Impossible de charger les personnes.", de: "Personen können nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -342,10 +354,19 @@ export default function PortalSharesPage() {
 
   const handleCreateShare = async () => {
     if (!accountIdForApi || !selectedSpaceId || selectedShareEntries.length === 0) return;
-    if (!activeSharedOwnerSpaces.some((space) => space.id === selectedSpaceId)) return;
+    const selectedSpace = activeOwnerSpaces.find((space) => space.id === selectedSpaceId);
+    if (!selectedSpace) return;
     setBusyShareId("new");
     setSharesError(null);
     try {
+      if (selectedSpace.visibility === "private") {
+        await updatePortalStorageSpace(accountIdForApi, selectedSpace.id, {
+          visibility: "shared",
+          share_scope: "restricted",
+          account_member_role: null,
+        });
+        refreshWorkspaceData();
+      }
       const createdShares = await Promise.all(
         selectedShareEntries.map((entry) =>
           grantPortalStorageSpaceShare(accountIdForApi, selectedSpaceId, {
@@ -370,7 +391,7 @@ export default function PortalSharesPage() {
       setActiveTab("by");
     } catch (err) {
       console.error(err);
-      setSharesError(extractApiError(err, t({ en: "Unable to create share.", fr: "Impossible de créer le partage.", de: "Freigabe kann nicht erstellt werden." })));
+      setSharesError(extractApiError(err, t({ en: "Unable to invite collaborators.", fr: "Impossible d'inviter les collaborateurs.", de: "Mitwirkende können nicht eingeladen werden." })));
     } finally {
       setBusyShareId(null);
     }
@@ -385,7 +406,7 @@ export default function PortalSharesPage() {
       setApiShares((current) => (current ?? []).map((item) => (item.id === updated.id ? updated : item)));
     } catch (err) {
       console.error(err);
-      setSharesError(extractApiError(err, t({ en: "Unable to update share.", fr: "Impossible de mettre à jour le partage.", de: "Freigabe kann nicht aktualisiert werden." })));
+      setSharesError(extractApiError(err, t({ en: "Unable to update this collaborator.", fr: "Impossible de mettre à jour ce collaborateur.", de: "Dieser Mitwirkende kann nicht aktualisiert werden." })));
     } finally {
       setBusyShareId(null);
     }
@@ -406,7 +427,7 @@ export default function PortalSharesPage() {
       setPendingAction(null);
     } catch (err) {
       console.error(err);
-      setSharesError(extractApiError(err, t({ en: "Unable to revoke share.", fr: "Impossible de révoquer le partage.", de: "Freigabe kann nicht widerrufen werden." })));
+      setSharesError(extractApiError(err, t({ en: "Unable to remove this collaborator.", fr: "Impossible de retirer ce collaborateur.", de: "Dieser Mitwirkende kann nicht entfernt werden." })));
       setPendingAction(null);
     } finally {
       setBusyShareId(null);
@@ -460,7 +481,7 @@ export default function PortalSharesPage() {
     () => [
       {
         id: "space",
-        label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         primary: true,
         render: (link) => link.storage_space_name,
       },
@@ -513,7 +534,7 @@ export default function PortalSharesPage() {
   );
 
   const sharesInitialLoading = Boolean(
-    accountIdForApi && activeSharedSpaces.length > 0 && !sharesError && sharesLoadedKey !== sharesRequestKey
+    accountIdForApi && activeCollaboratorSpaces.length > 0 && !sharesError && sharesLoadedKey !== sharesRequestKey
   );
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
@@ -521,17 +542,17 @@ export default function PortalSharesPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading shares...", fr: "Chargement des partages...", de: "Freigaben werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to manage shares.", fr: "Sélectionnez un compte pour gérer les partages.", de: "Wählen Sie ein Konto aus, um Freigaben zu verwalten." }),
+    loadingMessage: t({ en: "Loading collaborators...", fr: "Chargement des collaborateurs...", de: "Mitwirkende werden geladen..." }),
+    noAccountMessage: t({ en: "Select an account to manage collaborators.", fr: "Sélectionnez un compte pour gérer les collaborateurs.", de: "Wählen Sie ein Konto aus, um Mitwirkende zu verwalten." }),
   });
   if (pageState) return pageState;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Shares", fr: "Partages", de: "Freigaben" })}
-        description={t({ en: "Manage shared access with Viewer, Editor, and Owner roles.", fr: "Gérez les accès partagés avec les rôles Lecteur, Éditeur et Propriétaire.", de: "Verwalten Sie geteilte Zugriffe mit den Rollen Betrachter, Bearbeiter und Eigentümer." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }) })}
+        title={t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" })}
+        description={t({ en: "Invite people to spaces and review public links.", fr: "Invitez des personnes dans des espaces et vérifiez les liens publics.", de: "Laden Sie Personen in Bereiche ein und prüfen Sie öffentliche Links." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) })}
       />
       {sharesError ? <PageBanner tone="warning">{sharesError}</PageBanner> : null}
       {sharesMessage ? <PageBanner tone="info">{sharesMessage}</PageBanner> : null}
@@ -540,7 +561,7 @@ export default function PortalSharesPage() {
           <PageTabs
             tabs={[
               { id: "with", label: t({ en: "Shared with me", fr: "Partagés avec moi", de: "Mit mir geteilt" }) },
-              { id: "by", label: t({ en: "Shared by me", fr: "Partagés par moi", de: "Von mir geteilt" }) },
+              { id: "by", label: t({ en: "People I invited", fr: "Personnes invitées", de: "Von mir eingeladene Personen" }) },
               { id: "links", label: t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" }) },
             ]}
             activeTab={activeTab}
@@ -556,7 +577,7 @@ export default function PortalSharesPage() {
             status={publicLinksTableStatus}
             loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
             errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
-            emptyMessage={t({ en: "No public links to display.", fr: "Aucun lien public à afficher.", de: "Keine öffentlichen Links zum Anzeigen." })}
+            emptyMessage={t({ en: "No public links yet.", fr: "Aucun lien public pour l'instant.", de: "Noch keine öffentlichen Links." })}
             responsiveCards
           />
         ) : (
@@ -580,7 +601,7 @@ export default function PortalSharesPage() {
       </UiCard>
 
       {activeTab === "by" ? (
-        <UiCard title={t({ en: "Create a new share", fr: "Créer un nouveau partage", de: "Neue Freigabe erstellen" })}>
+        <UiCard title={t({ en: "Invite people to a space", fr: "Inviter des personnes dans un espace", de: "Personen in einen Bereich einladen" })}>
           <div className="space-y-3">
             <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto]">
               <UiSelect
@@ -588,27 +609,27 @@ export default function PortalSharesPage() {
                 className="h-9"
                 value={selectedSpaceId}
                 onChange={(event) => setSelectedSpaceId(event.target.value)}
-                aria-label={t({ en: "Storage Space to share", fr: "Espace de stockage à partager", de: "Zu teilender Speicherbereich" })}
+                aria-label={t({ en: "Space to share", fr: "Espace à partager", de: "Zu teilender Bereich" })}
               >
-                {activeSharedOwnerSpaces.map((space) => (
+                {activeOwnerSpaces.map((space) => (
                   <option key={space.id} value={space.id}>{space.name}</option>
                 ))}
               </UiSelect>
               <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
                 {t({
-                  en: "Select existing Portal members of this account, then assign their role.",
-                  fr: "Sélectionnez les membres Portal existants de ce compte, puis attribuez leur rôle.",
-                  de: "Wählen Sie vorhandene Portal-Mitglieder dieses Kontos aus und weisen Sie eine Rolle zu.",
+                  en: "Choose people who already have workspace access, then decide what they can do in this space.",
+                  fr: "Choisissez des personnes qui ont déjà accès au workspace, puis décidez ce qu'elles peuvent faire dans cet espace.",
+                  de: "Wählen Sie Personen mit Workspace-Zugriff aus und legen Sie fest, was sie in diesem Bereich tun dürfen.",
                 })}
               </div>
               <UiButton
-                disabled={!accountIdForApi || !selectedSpaceId || selectedShareEntries.length === 0 || busyShareId === "new" || activeSharedOwnerSpaces.length === 0}
+                disabled={!accountIdForApi || !selectedSpaceId || selectedShareEntries.length === 0 || busyShareId === "new" || activeOwnerSpaces.length === 0}
                 onClick={handleCreateShare}
                 className="h-9 px-3 py-1.5"
               >
                 {busyShareId === "new"
-                  ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
-                  : t({ en: "Create share", fr: "Créer le partage", de: "Freigabe erstellen" })}
+                  ? t({ en: "Inviting...", fr: "Invitation...", de: "Einladung läuft..." })
+                  : t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
               </UiButton>
             </div>
             <PortalShareCandidatePicker
@@ -643,13 +664,13 @@ export default function PortalSharesPage() {
           loading={busyShareId === pendingAction.share.id}
           details={[
             { label: t({ en: "Person", fr: "Personne", de: "Person" }), value: pendingAction.share.person },
-            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: pendingAction.share.spaceName },
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: pendingAction.share.spaceName },
             { label: t({ en: "Access", fr: "Accès", de: "Zugriff" }), value: portalRoleLabel(pendingAction.share.access, t) },
           ]}
           impacts={[
-            t({ en: "This person loses access to the Storage Space immediately.", fr: "Cette personne perd immédiatement l'accès à l'espace de stockage.", de: "Diese Person verliert sofort den Zugriff auf den Speicherbereich." }),
-            t({ en: "Files in the Storage Space are not deleted.", fr: "Les fichiers de l'espace de stockage ne sont pas supprimés.", de: "Dateien im Speicherbereich werden nicht gelöscht." }),
-            t({ en: "You can share the Storage Space again later if needed.", fr: "Vous pourrez repartager l'espace de stockage plus tard si nécessaire.", de: "Sie können den Speicherbereich später bei Bedarf erneut freigeben." }),
+            t({ en: "This person loses access to the space immediately.", fr: "Cette personne perd immédiatement l'accès à l'espace.", de: "Diese Person verliert sofort den Zugriff auf den Bereich." }),
+            t({ en: "Files in the space are not deleted.", fr: "Les fichiers de l'espace ne sont pas supprimés.", de: "Dateien im Bereich werden nicht gelöscht." }),
+            t({ en: "You can invite the person again later if needed.", fr: "Vous pourrez réinviter cette personne plus tard si nécessaire.", de: "Sie können diese Person später bei Bedarf erneut einladen." }),
           ]}
           onCancel={() => setPendingAction(null)}
           onConfirm={() => confirmRevoke(pendingAction.share)}
@@ -664,12 +685,12 @@ export default function PortalSharesPage() {
           loading={busyShareId === `public-link-${pendingAction.link.id}`}
           details={[
             { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: pendingAction.link.object_name },
-            { label: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }), value: pendingAction.link.storage_space_name },
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: pendingAction.link.storage_space_name },
             { label: t({ en: "Link", fr: "Lien", de: "Link" }), value: pendingAction.link.url, mono: true },
           ]}
           impacts={[
             t({ en: "Anyone using this URL loses access immediately.", fr: "Toute personne utilisant cette URL perd immédiatement l'accès.", de: "Alle, die diese URL verwenden, verlieren sofort den Zugriff." }),
-            t({ en: "The file remains in the Storage Space.", fr: "Le fichier reste dans l'espace de stockage.", de: "Die Datei bleibt im Speicherbereich." }),
+            t({ en: "The file remains in the space.", fr: "Le fichier reste dans l'espace.", de: "Die Datei bleibt im Bereich." }),
             t({ en: "You can create a new public link later if sharing is still allowed.", fr: "Vous pourrez créer un nouveau lien public plus tard si le partage reste autorisé.", de: "Sie können später einen neuen öffentlichen Link erstellen, wenn Freigaben weiter erlaubt sind." }),
           ]}
           onCancel={() => setPendingAction(null)}

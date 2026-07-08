@@ -27,22 +27,22 @@ export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceRol
 export function portalAccessModeDescription(mode: PortalAccessMode, t: ReturnType<typeof useI18n>["t"]): string {
   if (mode === "account") {
     return t({
-      en: "Current and future Portal members of this account receive this access automatically.",
-      fr: "Les membres Portal actuels et futurs de ce compte reçoivent automatiquement cet accès.",
-      de: "Aktuelle und zukünftige Portal-Mitglieder dieses Kontos erhalten diesen Zugriff automatisch.",
+      en: "Everyone already added to this account can work in the space automatically.",
+      fr: "Toutes les personnes déjà ajoutées à ce compte peuvent travailler dans cet espace automatiquement.",
+      de: "Alle bereits zu diesem Konto hinzugefügten Personen können automatisch in diesem Bereich arbeiten.",
     });
   }
   if (mode === "restricted") {
     return t({
-      en: "Only selected Portal users receive access.",
-      fr: "Seuls les utilisateurs Portal sélectionnés reçoivent l'accès.",
-      de: "Nur ausgewählte Portal-Benutzer erhalten Zugriff.",
+      en: "Only the people you choose can work in this space.",
+      fr: "Seules les personnes que vous choisissez peuvent travailler dans cet espace.",
+      de: "Nur die von Ihnen ausgewählten Personen können in diesem Bereich arbeiten.",
     });
   }
   return t({
-    en: "Only the owner can access this Storage Space.",
-    fr: "Seul le propriétaire peut accéder à cet espace de stockage.",
-    de: "Nur der Eigentümer kann auf diesen Speicherbereich zugreifen.",
+    en: "Only you can access this space until you invite collaborators.",
+    fr: "Vous seul pouvez accéder à cet espace tant que vous n'invitez pas de collaborateurs.",
+    de: "Nur Sie können auf diesen Bereich zugreifen, bis Sie Mitwirkende einladen.",
   });
 }
 
@@ -55,18 +55,18 @@ export function portalAccessModeSummary(
   if (mode === "account") {
     if (memberCount != null) {
       return t({
-        en: `All: ${memberCount} account member${memberCount > 1 ? "s" : ""}`,
-        fr: `Tous : ${memberCount} membre${memberCount > 1 ? "s" : ""} du compte`,
-        de: `Alle: ${memberCount} Kontomitglied${memberCount > 1 ? "er" : ""}`,
+        en: `Team: ${memberCount} member${memberCount > 1 ? "s" : ""}`,
+        fr: `Équipe : ${memberCount} membre${memberCount > 1 ? "s" : ""}`,
+        de: `Team: ${memberCount} Mitglied${memberCount > 1 ? "er" : ""}`,
       });
     }
-    return t({ en: "All: all account members", fr: "Tous : tous les membres du compte", de: "Alle: alle Kontomitglieder" });
+    return t({ en: "Team: all account members", fr: "Équipe : tous les membres du compte", de: "Team: alle Kontomitglieder" });
   }
   if (mode === "restricted") {
     return t({
-      en: `Restricted: ${selectedCount} selected user${selectedCount > 1 ? "s" : ""}`,
-      fr: `Restreint : ${selectedCount} utilisateur${selectedCount > 1 ? "s" : ""} sélectionné${selectedCount > 1 ? "s" : ""}`,
-      de: `Beschränkt: ${selectedCount} ausgewählte Benutzer`,
+      en: `Selected people: ${selectedCount}`,
+      fr: `Personnes choisies : ${selectedCount}`,
+      de: `Ausgewählte Personen: ${selectedCount}`,
     });
   }
   return t({ en: "Private: only you", fr: "Privé : vous uniquement", de: "Privat: nur Sie" });
@@ -155,19 +155,19 @@ export function PortalShareCandidatePicker({
     <div className="space-y-2">
       <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto]">
         <UiInput
-          label={t({ en: "Eligible users", fr: "Utilisateurs éligibles", de: "Berechtigte Benutzer" })}
+          label={t({ en: "People", fr: "Personnes", de: "Personen" })}
           size="compact"
           className="h-9"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder={t({ en: "Search eligible Portal users...", fr: "Rechercher des utilisateurs Portal éligibles...", de: "Berechtigte Portal-Benutzer suchen..." })}
+          placeholder={t({ en: "Search people by name or email...", fr: "Rechercher une personne par nom ou email...", de: "Personen nach Name oder E-Mail suchen..." })}
         />
         <div className={cx("self-center text-[11px] font-semibold", uiMutedTextClass)}>
           {selectedCount} {t({ en: "selected", fr: "sélectionné(s)", de: "ausgewählt" })}
         </div>
       </div>
       {loading ? (
-        <div className={cx("text-xs font-semibold", uiMutedTextClass)}>{t({ en: "Loading eligible users...", fr: "Chargement des utilisateurs éligibles...", de: "Berechtigte Benutzer werden geladen..." })}</div>
+        <div className={cx("text-xs font-semibold", uiMutedTextClass)}>{t({ en: "Loading people...", fr: "Chargement des personnes...", de: "Personen werden geladen..." })}</div>
       ) : error ? (
         <UiInlineMessage tone="error">{error}</UiInlineMessage>
       ) : visibleCandidates.length > 0 ? (
@@ -194,7 +194,7 @@ export function PortalShareCandidatePicker({
                   {portalAccountRoleLabel(candidate.account_role, t)} · {portalAccessSourceLabel(candidate.access_source, t)}
                 </div>
                 {disabled ? (
-                  <UiBadge tone="neutral">{t({ en: "Already shared", fr: "Déjà partagé", de: "Bereits geteilt" })}</UiBadge>
+                  <UiBadge tone="neutral">{t({ en: "Already invited", fr: "Déjà invité", de: "Bereits eingeladen" })}</UiBadge>
                 ) : (
                   <UiSelect
                     size="compact"
@@ -217,14 +217,14 @@ export function PortalShareCandidatePicker({
         <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
           {term
             ? t({
-                en: "No eligible Portal member matches this search. To add someone else, request account access from an admin.",
-                fr: "Aucun membre Portal éligible ne correspond à cette recherche. Pour ajouter une autre personne, demandez un accès au compte à un administrateur.",
-                de: "Kein berechtigtes Portal-Mitglied passt zu dieser Suche. Fordern Sie für andere Personen Kontozugriff bei einem Admin an.",
+                en: "No person matches this search. Ask an admin to add external collaborators to the account first.",
+                fr: "Aucune personne ne correspond à cette recherche. Demandez d'abord à un administrateur d'ajouter les collaborateurs externes au compte.",
+                de: "Keine Person passt zu dieser Suche. Bitten Sie zuerst einen Admin, externe Mitwirkende zum Konto hinzuzufügen.",
               })
             : t({
-                en: "Only Portal members of this account can be selected. To add someone else, request account access from an admin.",
-                fr: "Seuls les membres Portal de ce compte peuvent être sélectionnés. Pour ajouter une autre personne, demandez un accès au compte à un administrateur.",
-                de: "Nur Portal-Mitglieder dieses Kontos können ausgewählt werden. Fordern Sie für andere Personen Kontozugriff bei einem Admin an.",
+                en: "Only people already added to this account can be invited here. Ask an admin to add external collaborators first.",
+                fr: "Seules les personnes déjà ajoutées à ce compte peuvent être invitées ici. Demandez d'abord à un administrateur d'ajouter les collaborateurs externes.",
+                de: "Nur bereits zu diesem Konto hinzugefügte Personen können hier eingeladen werden. Bitten Sie zuerst einen Admin, externe Mitwirkende hinzuzufügen.",
               })}
         </div>
       )}

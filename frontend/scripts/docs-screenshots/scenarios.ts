@@ -966,7 +966,7 @@ export const scenarios: DocScreenshotScenario[] = [
     docPage: "user/screenshots-gallery.md",
     route: "/portal/storage-spaces",
     outputBasename: "portal-storage-spaces",
-    waitFor: "h1:has-text('Storage Spaces')",
+    waitFor: "h1:has-text('Spaces')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
     actions: [
       { type: "wait", selector: "text=genomics-2026" },
@@ -1021,7 +1021,7 @@ export const scenarios: DocScreenshotScenario[] = [
     docPage: "user/screenshots-gallery.md",
     route: "/portal/access-keys",
     outputBasename: "portal-access-keys",
-    waitFor: "h1:has-text('Access keys')",
+    waitFor: "h1:has-text('External tools')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
     actions: [
       { type: "wait", selector: "text=AKIAHELIOSPORTAL001" },

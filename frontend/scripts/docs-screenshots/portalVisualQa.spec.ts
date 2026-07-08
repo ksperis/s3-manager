@@ -20,17 +20,17 @@ type PortalVisualLocale = "en" | "fr" | "de";
 
 const portalRoutes = [
   { path: "/portal", expected: { en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" } },
-  { path: "/portal/storage-spaces", expected: { en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" } },
+  { path: "/portal/storage-spaces", expected: { en: "Spaces", fr: "Espaces", de: "Bereiche" } },
   { path: "/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F", expected: { en: "sample_001.fastq.gz", fr: "sample_001.fastq.gz", de: "sample_001.fastq.gz" } },
   {
     path: "/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz",
     expected: { en: "Quick preview", fr: "Aperçu rapide", de: "Schnellvorschau" },
   },
-  { path: "/portal/shares", expected: { en: "Shared with me", fr: "Partagés avec moi", de: "Mit mir geteilt" } },
+  { path: "/portal/shares", expected: { en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" } },
   { path: "/portal/activity", expected: { en: "Activity", fr: "Activité", de: "Aktivität" } },
   { path: "/portal/transfers", expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" } },
   { path: "/portal/usage", expected: { en: "Usage & Analytics", fr: "Utilisation et analyses", de: "Nutzung und Analysen" } },
-  { path: "/portal/access-keys", expected: { en: "Access keys", fr: "Clés d'accès", de: "Zugriffsschlüssel" } },
+  { path: "/portal/access-keys", expected: { en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" } },
   { path: "/portal/settings", expected: { en: "Settings", fr: "Paramètres", de: "Einstellungen" } },
 ];
 

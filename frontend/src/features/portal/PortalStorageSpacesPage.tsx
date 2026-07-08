@@ -21,7 +21,14 @@ import UiCard from "../../components/ui/UiCard";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
-import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import {
+  cx,
+  uiButtonBaseClass,
+  uiButtonVariants,
+  uiMutedTextClass,
+  uiPanelMutedClass,
+  uiTitleTextClass,
+} from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
@@ -51,6 +58,48 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 function visibleStatus(space: { status: string }) {
   if (space.status === "Active") return null;
   return space.status;
+}
+
+function JourneyStepCard({
+  title,
+  description,
+  actionLabel,
+  to,
+  onClick,
+  disabled = false,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  to?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const actionClass = cx(
+    uiButtonBaseClass,
+    disabled ? uiButtonVariants.secondary : uiButtonVariants.primary,
+    "h-8 px-3 py-1.5 text-xs",
+    disabled && "pointer-events-none opacity-60"
+  );
+  return (
+    <div className={cx(uiPanelMutedClass, "flex min-h-[132px] flex-col justify-between p-4")}>
+      <div>
+        <h2 className={cx("text-sm font-bold", uiTitleTextClass)}>{title}</h2>
+        <p className={cx("mt-2 text-xs leading-5", uiMutedTextClass)}>{description}</p>
+      </div>
+      <div className="mt-3">
+        {to ? (
+          <Link to={to} className={actionClass} aria-disabled={disabled ? true : undefined}>
+            {actionLabel}
+          </Link>
+        ) : (
+          <button type="button" onClick={onClick} disabled={disabled} className={actionClass}>
+            {actionLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function PortalStorageSpacesPage() {
@@ -108,8 +157,8 @@ export default function PortalStorageSpacesPage() {
     () => [
       {
         id: "name",
-        label: t({ en: "Name", fr: "Nom", de: "Name" }),
-        mobileLabel: t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" }),
+        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
+        mobileLabel: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         primary: true,
         render: (space) => (
           <>
@@ -128,7 +177,7 @@ export default function PortalStorageSpacesPage() {
       },
       {
         id: "access",
-        label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
+        label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }),
         render: (space) => {
           const status = visibleStatus(space);
           return (
@@ -187,6 +236,9 @@ export default function PortalStorageSpacesPage() {
   const selectedRestrictedEntries = selectedPortalShares(restrictedRolesByUserId);
   const selectedImportRestrictedEntries = selectedPortalShares(importRestrictedRolesByUserId);
   const portalMemberCount = shareCandidates.length + 1;
+  const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived");
+  const firstWritableSpace = activeSpaces.find((space) => space.contentRole === "Owner" || space.contentRole === "Editor" || space.role === "Owner" || space.role === "Editor");
+  const firstOwnerSpace = activeSpaces.find((space) => space.role === "Owner");
 
   useEffect(() => {
     let cancelled = false;
@@ -213,7 +265,7 @@ export default function PortalStorageSpacesPage() {
         console.error(err);
         if (!cancelled) {
           setShareCandidates([]);
-          setShareCandidatesError(extractApiError(err, t({ en: "Unable to load eligible users.", fr: "Impossible de charger les utilisateurs éligibles.", de: "Berechtigte Benutzer können nicht geladen werden." })));
+          setShareCandidatesError(extractApiError(err, t({ en: "Unable to load people.", fr: "Impossible de charger les personnes.", de: "Personen können nicht geladen werden." })));
         }
       })
       .finally(() => {
@@ -257,7 +309,7 @@ export default function PortalStorageSpacesPage() {
       navigate(storageSpacePath({ id: created.id }));
     } catch (err) {
       console.error(err);
-      setCreateError(extractApiError(err, t({ en: "Unable to create Storage Space.", fr: "Impossible de créer l'espace de stockage.", de: "Speicherbereich kann nicht erstellt werden." })));
+      setCreateError(extractApiError(err, t({ en: "Unable to create this space.", fr: "Impossible de créer cet espace.", de: "Dieser Bereich kann nicht erstellt werden." })));
     } finally {
       setCreateBusy(false);
     }
@@ -291,54 +343,88 @@ export default function PortalStorageSpacesPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading storage spaces...", fr: "Chargement des espaces de stockage...", de: "Speicherbereiche werden geladen..." }),
-    noAccountMessage: t({ en: "Select an account to view storage spaces.", fr: "Sélectionnez un compte pour voir les espaces de stockage.", de: "Wählen Sie ein Konto aus, um Speicherbereiche anzuzeigen." }),
+    loadingMessage: t({ en: "Loading spaces...", fr: "Chargement des espaces...", de: "Bereiche werden geladen..." }),
+    noAccountMessage: t({ en: "Select an account to view spaces.", fr: "Sélectionnez un compte pour voir les espaces.", de: "Wählen Sie ein Konto aus, um Bereiche anzuzeigen." }),
   });
   if (pageState) return pageState;
   const headerActions = [
-    ...(canCreate ? [{ label: t({ en: "Create storage space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" }), onClick: () => setShowCreate((value) => !value) }] : []),
+    ...(canCreate ? [{ label: t({ en: "Create space", fr: "Créer un espace", de: "Bereich erstellen" }), onClick: () => setShowCreate((value) => !value) }] : []),
     ...(canImport
-      ? [{ label: t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" }), onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
+      ? [{ label: t({ en: "Add existing space", fr: "Ajouter un espace existant", de: "Vorhandenen Bereich hinzufügen" }), onClick: () => setShowImport((value) => !value), variant: "secondary" as const }]
       : []),
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" })}
-        description={t({ en: "Manage access, files and usage for your Storage Spaces.", fr: "Gérez les accès, les fichiers et l'utilisation de vos espaces de stockage.", de: "Verwalten Sie Zugriff, Dateien und Nutzung Ihrer Speicherbereiche." })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage Spaces", fr: "Espaces de stockage", de: "Speicherbereiche" }) })}
+        title={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
+        description={t({ en: "Create places for project files, upload data, and invite collaborators.", fr: "Créez des espaces pour les fichiers de projet, ajoutez des données et invitez des collaborateurs.", de: "Erstellen Sie Bereiche für Projektdateien, laden Sie Daten hoch und laden Sie Mitwirkende ein." })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }) })}
         actions={headerActions}
       />
 
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label={t({ en: "Main workspace tasks", fr: "Tâches principales de l'espace", de: "Wichtige Workspace-Aufgaben" })}>
+        <JourneyStepCard
+          title={t({ en: "Create a space", fr: "Créer un espace", de: "Bereich erstellen" })}
+          description={t({ en: "Start a focused place for a project, dataset, or team handoff.", fr: "Démarrez un espace dédié à un projet, un jeu de données ou un transfert d'équipe.", de: "Starten Sie einen fokussierten Bereich für ein Projekt, einen Datensatz oder eine Teamübergabe." })}
+          actionLabel={t({ en: "Start", fr: "Commencer", de: "Starten" })}
+          onClick={() => setShowCreate(true)}
+          disabled={!canCreate}
+        />
+        <JourneyStepCard
+          title={t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" })}
+          description={t({ en: "Open a space and add files or folders without seeing storage internals.", fr: "Ouvrez un espace et ajoutez des fichiers ou dossiers sans voir les détails techniques.", de: "Öffnen Sie einen Bereich und fügen Sie Dateien oder Ordner ohne technische Details hinzu." })}
+          actionLabel={t({ en: "Open files", fr: "Ouvrir les fichiers", de: "Dateien öffnen" })}
+          to={firstWritableSpace ? `${storageSpacePath(firstWritableSpace)}#space-files` : undefined}
+          disabled={!firstWritableSpace}
+        />
+        <JourneyStepCard
+          title={t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
+          description={t({ en: "Give selected people Viewer, Editor, or Owner access to a space.", fr: "Donnez aux personnes choisies un accès Lecteur, Éditeur ou Propriétaire.", de: "Geben Sie ausgewählten Personen Betrachter-, Bearbeiter- oder Eigentümerzugriff." })}
+          actionLabel={t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
+          to={firstOwnerSpace ? `/portal/shares?space_id=${encodeURIComponent(firstOwnerSpace.id)}&tab=by` : undefined}
+          disabled={!firstOwnerSpace}
+        />
+        <JourneyStepCard
+          title={t({ en: "Share outside", fr: "Partager en externe", de: "Extern teilen" })}
+          description={t({ en: "Review public links and create new ones from selected files when sharing is allowed.", fr: "Consultez les liens publics et créez-en depuis les fichiers lorsque le partage est autorisé.", de: "Prüfen Sie öffentliche Links und erstellen Sie neue aus Dateien, wenn Teilen erlaubt ist." })}
+          actionLabel={t({ en: "Review links", fr: "Voir les liens", de: "Links prüfen" })}
+          to="/portal/shares?tab=links"
+          disabled={workspace.spaces.length === 0}
+        />
+      </section>
+
       {showCreate ? (
-        <UiCard title={t({ en: "Create Storage Space", fr: "Créer un espace de stockage", de: "Speicherbereich erstellen" })}>
+        <UiCard
+          title={t({ en: "Create a space", fr: "Créer un espace", de: "Bereich erstellen" })}
+          description={t({ en: "Name the place first. You can upload files and invite collaborators right after it opens.", fr: "Nommez d'abord l'espace. Vous pourrez ajouter des fichiers et inviter des collaborateurs dès son ouverture.", de: "Benennen Sie zuerst den Bereich. Danach können Sie Dateien hochladen und Mitwirkende einladen." })}
+        >
           <div className={cx("grid gap-3", canUseNamedBucket
             ? "lg:grid-cols-[180px_1fr_1.5fr_auto]"
             : "lg:grid-cols-[1fr_1.5fr_auto]")}>
             {canUseNamedBucket ? (
               <UiSelect
-                label={t({ en: "Storage Space naming mode", fr: "Mode de nommage de l'espace de stockage", de: "Benennungsmodus des Speicherbereichs" })}
+                label={t({ en: "Storage setup", fr: "Configuration du stockage", de: "Speicher-Einrichtung" })}
                 size="compact"
                 className="h-9"
                 value={newNamingMode}
                 onChange={(event) => setNewNamingMode(event.target.value as "generic_uuid" | "named_bucket")}
               >
-                <option value="generic_uuid">{t({ en: "Automatic storage", fr: "Stockage automatique", de: "Automatischer Speicher" })}</option>
+                <option value="generic_uuid">{t({ en: "Automatic space", fr: "Espace automatique", de: "Automatischer Bereich" })}</option>
                 <option value="named_bucket">{t({ en: "Named storage", fr: "Stockage nommé", de: "Benannter Speicher" })}</option>
               </UiSelect>
             ) : null}
             <UiInput
               label={effectiveNamingMode === "named_bucket"
-                ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
-                : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+                ? t({ en: "Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Bereich und Speicher" })
+                : t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
               size="compact"
               className="h-9"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               placeholder={effectiveNamingMode === "named_bucket"
-                ? t({ en: "Storage Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Speicherbereich und Speicher" })
-                : t({ en: "Storage Space name", fr: "Nom de l'espace de stockage", de: "Name des Speicherbereichs" })}
+                ? t({ en: "Space and storage name", fr: "Nom de l'espace et du stockage", de: "Name von Bereich und Speicher" })
+                : t({ en: "Project, team, or dataset name", fr: "Nom du projet, de l'équipe ou du jeu de données", de: "Projekt-, Team- oder Datensatzname" })}
             />
             <UiInput
               label={t({ en: "Description", fr: "Description", de: "Beschreibung" })}
@@ -359,8 +445,8 @@ export default function PortalStorageSpacesPage() {
                 onModeChange={setNewAccessMode}
                 accountMemberRole={newAccountMemberRole}
                 onAccountMemberRoleChange={setNewAccountMemberRole}
-                modeLabel={t({ en: "Storage Space access", fr: "Accès à l'espace de stockage", de: "Zugriff auf den Speicherbereich" })}
-                roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
+                modeLabel={t({ en: "Who can access this space?", fr: "Qui peut accéder à cet espace ?", de: "Wer kann auf diesen Bereich zugreifen?" })}
+                roleLabel={t({ en: "Default role for team members", fr: "Rôle par défaut des membres", de: "Standardrolle für Teammitglieder" })}
               />
             ) : (
               <div className={cx("text-xs font-medium", uiMutedTextClass)}>
@@ -391,7 +477,7 @@ export default function PortalStorageSpacesPage() {
       ) : null}
 
       {showImport ? (
-        <UiCard title={t({ en: "Add existing storage", fr: "Ajouter un stockage existant", de: "Vorhandenen Speicher hinzufügen" })}>
+        <UiCard title={t({ en: "Add existing space", fr: "Ajouter un espace existant", de: "Vorhandenen Bereich hinzufügen" })}>
           <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto]">
             <UiInput
               label={t({ en: "Existing storage name", fr: "Nom du stockage existant", de: "Name des vorhandenen Speichers" })}
@@ -419,8 +505,8 @@ export default function PortalStorageSpacesPage() {
               onModeChange={setImportAccessMode}
               accountMemberRole={importAccountMemberRole}
               onAccountMemberRoleChange={setImportAccountMemberRole}
-              modeLabel={t({ en: "Imported Storage Space access", fr: "Accès à l'espace importé", de: "Zugriff auf den importierten Speicherbereich" })}
-              roleLabel={t({ en: "Default access for account members", fr: "Accès par défaut des membres du compte", de: "Standardzugriff für Kontomitglieder" })}
+              modeLabel={t({ en: "Who can access this space?", fr: "Qui peut accéder à cet espace ?", de: "Wer kann auf diesen Bereich zugreifen?" })}
+              roleLabel={t({ en: "Default role for team members", fr: "Rôle par défaut des membres", de: "Standardrolle für Teammitglieder" })}
             />
             <div className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
               {portalAccessModeSummary(importAccessMode, selectedImportRestrictedEntries.length, portalMemberCount, t)}
@@ -454,10 +540,10 @@ export default function PortalStorageSpacesPage() {
             className="h-9"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={t({ en: "Search storage spaces...", fr: "Rechercher des espaces de stockage...", de: "Speicherbereiche suchen..." })}
+            placeholder={t({ en: "Search spaces...", fr: "Rechercher des espaces...", de: "Bereiche suchen..." })}
           />
           <UiSelect
-            label={t({ en: "Role", fr: "Rôle", de: "Rolle" })}
+            label={t({ en: "My role", fr: "Mon rôle", de: "Meine Rolle" })}
             size="compact"
             className="h-9"
             value={roleFilter}
@@ -498,21 +584,19 @@ export default function PortalStorageSpacesPage() {
           rows={filteredSpaces}
           rowKey={(space) => space.id}
           status={tableStatus}
-          loadingMessage={t({ en: "Loading storage spaces...", fr: "Chargement des espaces de stockage...", de: "Speicherbereiche werden geladen..." })}
-          errorMessage={t({ en: "Unable to load storage spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })}
-          emptyMessage={
-            canCreate
-              ? t({
-                  en: "No Storage Spaces yet. Create one to start storing files.",
-                  fr: "Aucun espace de stockage pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
-                  de: "Noch keine Speicherbereiche. Erstellen Sie einen, um Dateien zu speichern.",
-                })
-              : t({
-                  en: "No Storage Spaces are available. Ask an administrator to add you to a Storage Space or enable creation for your account.",
-                  fr: "Aucun espace de stockage n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
-                  de: "Es sind keine Speicherbereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Speicherbereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
-                })
-          }
+          loadingMessage={t({ en: "Loading spaces...", fr: "Chargement des espaces...", de: "Bereiche werden geladen..." })}
+          errorMessage={t({ en: "Unable to load spaces.", fr: "Impossible de charger les espaces.", de: "Bereiche können nicht geladen werden." })}
+          emptyMessage={canCreate
+            ? t({
+                en: "No spaces yet. Create one to start storing files.",
+                fr: "Aucun espace pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
+                de: "Noch keine Bereiche. Erstellen Sie einen, um Dateien zu speichern.",
+              })
+            : t({
+                en: "No spaces are available. Ask an administrator to add you to a space or enable creation for your account.",
+                fr: "Aucun espace n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
+                de: "Es sind keine Bereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Bereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
+              })}
           responsiveCards
         />
         <div className={cx("mt-4 flex items-center justify-between text-[11px] font-semibold", uiMutedTextClass)}>

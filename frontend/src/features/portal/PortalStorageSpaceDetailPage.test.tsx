@@ -117,7 +117,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/portal/storage-spaces/research-data"]}>
       <Routes>
-        <Route path="/portal/storage-spaces" element={<div>Storage Spaces</div>} />
+        <Route path="/portal/storage-spaces" element={<div>Spaces</div>} />
         <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
       </Routes>
     </MemoryRouter>
@@ -204,7 +204,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.refreshWorkspaceData.mockClear();
   });
 
-  it("embeds the main Browser in locked portal-basic mode for the storage space", () => {
+  it("embeds the main Browser in locked portal-basic mode for the space", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
@@ -213,11 +213,15 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Storage Space settings" }).compareDocumentPosition(screen.getByRole("heading", { name: "Access" })) &
+      screen.getByRole("heading", { name: "Files" }).compareDocumentPosition(screen.getByRole("heading", { name: "Collaborators" })) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Access" }).compareDocumentPosition(screen.getByTestId("portal-browser-embed")) &
+      screen.getByRole("heading", { name: "Collaborators" }).compareDocumentPosition(screen.getByRole("heading", { name: "Space settings" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Space settings" }).compareDocumentPosition(screen.getByRole("heading", { name: "Connect external tools" })) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
 
@@ -242,7 +246,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(embedProps.hiddenActionIds).toBeUndefined();
   });
 
-  it("hides write Browser actions for read-only Viewer storage spaces", () => {
+  it("hides write Browser actions for read-only Viewer spaces", () => {
     mocks.hookResult.workspace.spaces[0].role = "Viewer";
     mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
 
@@ -307,7 +311,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByText(/File browsing is unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Files are unavailable/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
@@ -317,10 +321,10 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByLabelText("Storage Space name")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Storage Space name")).toBeDisabled();
-    expect(screen.getByLabelText("Storage Space description")).toHaveClass("ui-control");
-    fireEvent.change(screen.getByLabelText("Storage Space description"), {
+    expect(screen.getByLabelText("Space name")).toHaveClass("ui-control");
+    expect(screen.getByLabelText("Space name")).toBeDisabled();
+    expect(screen.getByLabelText("Space description")).toHaveClass("ui-control");
+    fireEvent.change(screen.getByLabelText("Space description"), {
       target: { value: "Updated description" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -333,11 +337,11 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the unified access panel with collaborators and public link context", async () => {
+  it("shows the collaborator panel with public link context", async () => {
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Access" })).toBeInTheDocument();
-    expect(screen.getAllByText("Restricted").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.getAllByText("Selected people").length).toBeGreaterThan(0);
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveClass("ui-control");
@@ -345,19 +349,19 @@ describe("PortalStorageSpaceDetailPage", () => {
       "href",
       "/portal/shares?space_id=research-data&tab=links"
     );
-    expect(screen.getByRole("link", { name: "Open Shares" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Manage collaborators" })).toHaveAttribute(
       "href",
       "/portal/shares?space_id=research-data&tab=by"
     );
   });
 
-  it("shows external-tool mapping without replacing the Storage Space name", async () => {
+  it("shows external-tool mapping without replacing the space name", async () => {
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "External tools" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
     expect(screen.getByText("research-data-internal")).toBeInTheDocument();
-    expect(screen.getByText(/Use this name only when an S3 tool asks for a bucket/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open connection details" })).toHaveAttribute(
+    expect(screen.getByText(/Use this only when an external S3 tool asks for a bucket/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connection details" })).toHaveAttribute(
       "href",
       "/portal/access-keys?space_id=research-data-internal&create=external"
     );
@@ -367,11 +371,11 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("confirms access mode changes from the Access panel", async () => {
     renderPage();
 
-    const accessSelect = await screen.findByLabelText("Storage Space access");
+    const accessSelect = await screen.findByLabelText("Who can access this space?");
     fireEvent.change(accessSelect, { target: { value: "account" } });
     fireEvent.click(screen.getByRole("button", { name: "Save access" }));
 
-    expect(screen.getByRole("heading", { name: "Change access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Change collaborators" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update access" }));
 
     await waitFor(() => {
@@ -384,7 +388,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes workspace data after restoring an archived storage space", async () => {
+  it("refreshes workspace data after restoring an archived space", async () => {
     mocks.hookResult.workspace.spaces[0].status = "Archived";
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
@@ -398,13 +402,13 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
-  it("hides the embedded Browser when the storage space is archived", () => {
+  it("hides the embedded Browser when the space is archived", () => {
     mocks.hookResult.workspace.spaces[0].status = "Archived";
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
     renderPage();
 
-    expect(screen.getByText(/This Storage Space is archived/i)).toBeInTheDocument();
+    expect(screen.getByText(/This space is archived/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
@@ -416,9 +420,9 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    expect(screen.getByText(/File browsing is not available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Files are not available for this private space/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Storage Space settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
@@ -427,11 +431,11 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
 
-    expect(screen.getByRole("heading", { name: "Archive Storage Space" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Archive space" })).toBeInTheDocument();
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
     expect(screen.getByText("Existing files are kept and are not deleted.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Archive Storage Space" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive space" }));
 
     await waitFor(() => {
       expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", { archived: true });
