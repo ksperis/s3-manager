@@ -361,13 +361,13 @@ body {
   margin: 0;
   overscroll-behavior: contain;
   scrollbar-color: transparent transparent;
-  scrollbar-width: none;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 .md-sidebar__scrollwrap:hover,
 .md-sidebar__scrollwrap:focus-within {
   scrollbar-color: var(--shell-icon-muted) transparent;
-  scrollbar-width: thin;
 }
 
 .md-sidebar__scrollwrap::-webkit-scrollbar {
