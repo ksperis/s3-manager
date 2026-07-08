@@ -12,6 +12,7 @@ import {
 } from "../../api/apiTokens";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
@@ -334,22 +335,13 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
       {copyMessage && <PageBanner tone="info">{copyMessage}</PageBanner>}
 
       {revealedToken && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="font-semibold">New API token: {revealedToken.token.name}</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">
-                This token is shown only once. Store it securely now.
-              </p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-              One-time display
-            </span>
-          </div>
-          <div className="mt-3 rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-            {revealedToken.value}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <OneTimeSecretPanel
+          title={`New API token: ${revealedToken.token.name}`}
+          description="This token is shown only once. Store it securely now."
+          badge="One-time display"
+          values={[{ label: "Token", value: revealedToken.value }]}
+          actions={
+            <>
             <button
               type="button"
               className={secondaryCompactButtonClass}
@@ -378,8 +370,9 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
             >
               Copy Ansible
             </button>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
 
       <div className="ui-surface-card">

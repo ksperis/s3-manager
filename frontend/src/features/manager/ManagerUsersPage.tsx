@@ -17,6 +17,7 @@ import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import ListToolbar from "../../components/ListToolbar";
+import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -32,6 +33,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
@@ -438,46 +440,37 @@ export default function ManagerUsersPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {createdKey && createdForUser && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">Key created for {createdForUser}</p>
-              <p className="ui-caption text-amber-700 dark:text-amber-200">
-                Copy these values now; the secret will only be shown once.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
+        <OneTimeSecretPanel
+          title={`Key created for ${createdForUser}`}
+          description="Copy these values now; the secret will only be shown once."
+          values={[
+            { label: "Access key", value: createdKey.access_key_id, copyLabel: "Copy" },
+            {
+              label: "Secret key",
+              value: createdKey.secret_access_key ?? "Not provided",
+              copyLabel: createdKey.secret_access_key ? "Copy" : undefined,
+            },
+          ]}
+          actions={
+            <>
+              <UiButton
                 type="button"
+                variant="secondary"
+                size="xs"
                 onClick={() => setShowAddConnectionModal(true)}
                 disabled={!createdKey.secret_access_key}
-                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
               >
                 Add as S3 Connection
-              </button>
+              </UiButton>
               <Link
                 to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
                 className="ui-body font-medium text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
               >
                 Manage keys
               </Link>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600 dark:text-amber-300">Access key</div>
-              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                {createdKey.access_key_id}
-              </div>
-            </div>
-            <div>
-              <div className="ui-caption uppercase tracking-wide text-amber-600 dark:text-amber-300">Secret key</div>
-              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
-                {createdKey.secret_access_key ?? "Not provided"}
-              </div>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
 
       {needsS3AccountSelection ? (

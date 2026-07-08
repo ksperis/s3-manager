@@ -1,18 +1,20 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApiTokensPage from "./ApiTokensPage";
 
 const listApiTokensMock = vi.fn();
+const createApiTokenMock = vi.fn();
 
 vi.mock("../../api/apiTokens", () => ({
   listApiTokens: (includeRevoked?: boolean) => listApiTokensMock(includeRevoked),
-  createApiToken: vi.fn(),
+  createApiToken: (...args: unknown[]) => createApiTokenMock(...args),
   revokeApiToken: vi.fn(),
 }));
 
 describe("ApiTokensPage list states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listApiTokensMock.mockResolvedValue([]);
   });
 
   it("shows error banner and error row when list load fails with no rows", async () => {
@@ -55,5 +57,32 @@ describe("ApiTokensPage list states", () => {
     await waitFor(() => {
       expect(listApiTokensMock).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("shows newly created token in the shared one-time secret panel", async () => {
+    createApiTokenMock.mockResolvedValue({
+      access_token: "secret-token-value",
+      api_token: {
+        id: "tok-new",
+        name: "automation",
+        created_at: "2026-03-01T00:00:00.000Z",
+        expires_at: "2099-06-01T00:00:00.000Z",
+        last_used_at: null,
+        revoked_at: null,
+      },
+    });
+
+    render(<ApiTokensPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByPlaceholderText("ansible-production"), { target: { value: "automation" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create token" }));
+
+    expect(await screen.findByText("New API token: automation")).toBeInTheDocument();
+    expect(screen.getByText("One-time display")).toBeInTheDocument();
+    expect(screen.getByText("secret-token-value")).toHaveClass("font-mono");
+    expect(screen.getByText("secret-token-value")).toHaveClass("border-amber-200");
+    expect(screen.getByRole("button", { name: "Copy auth header" })).toBeInTheDocument();
   });
 });

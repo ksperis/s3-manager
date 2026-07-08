@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ const useS3AccountContextMock = vi.fn();
 const listIamUsersMock = vi.fn();
 const listIamGroupsMock = vi.fn();
 const listIamPoliciesMock = vi.fn();
+const createIamUserMock = vi.fn();
 
 vi.mock("./S3AccountContext", () => ({
   useS3AccountContext: () => useS3AccountContextMock(),
@@ -18,7 +19,7 @@ vi.mock("../../api/managerIamUsers", async () => {
   return {
     ...actual,
     listIamUsers: (...args: unknown[]) => listIamUsersMock(...args),
-    createIamUser: vi.fn(),
+    createIamUser: (...args: unknown[]) => createIamUserMock(...args),
     deleteIamUser: vi.fn(),
   };
 });
@@ -45,6 +46,7 @@ describe("ManagerUsersPage", () => {
     listIamUsersMock.mockReset();
     listIamGroupsMock.mockReset();
     listIamPoliciesMock.mockReset();
+    createIamUserMock.mockReset();
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -211,5 +213,54 @@ describe("ManagerUsersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create user" }));
 
     expect(screen.getAllByText("Attach policies (optional)")).toHaveLength(1);
+  });
+
+  it("shows created access keys in the shared one-time secret panel", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [
+        {
+          id: "acc-1",
+          kind: "account",
+          display_name: "Tenant account",
+          endpoint_name: "Default",
+        },
+      ],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+    });
+    createIamUserMock.mockResolvedValue({
+      name: "bob",
+      access_key: {
+        access_key_id: "AKIA-BOB",
+        secret_access_key: "SECRET-BOB",
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listIamUsersMock).toHaveBeenCalledWith("acc-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByPlaceholderText("User name"), { target: { value: "bob" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    expect(await screen.findByText("Key created for bob")).toBeInTheDocument();
+    expect(screen.getByText("AKIA-BOB")).toHaveClass("font-mono");
+    expect(screen.getByText("SECRET-BOB")).toHaveClass("font-mono");
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Add as S3 Connection" })).toHaveClass("h-7");
+    expect(screen.getByRole("link", { name: "Manage keys" })).toHaveAttribute("href", "/manager/users/bob/keys");
   });
 });
