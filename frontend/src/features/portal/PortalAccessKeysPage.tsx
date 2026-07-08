@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   createPortalAccessKey,
@@ -30,6 +31,17 @@ import { cx, uiInputClass, uiLabelClass, uiMutedTextClass, uiPanelMutedClass, ui
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
+import {
+  buildCyberduckBookmark,
+  buildGenericConnectionSheet,
+  bucketNameForPortalExternalTool,
+  parsePortalExternalToolEndpoint,
+  portalExternalToolBaseFilename,
+  portalExternalToolPermissionLabel,
+  storageSpaceNameForPortalExternalTool,
+  triggerPortalExternalToolDownload,
+  type PortalExternalToolConnection,
+} from "./portalExternalToolAccess";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalAccessKeyStatusLabel, portalDateTimeLabel } from "./portalI18n";
 
@@ -73,6 +85,7 @@ function isOwnerStorageSpace(space: PortalStorageSpaceSummary): boolean {
 
 export default function PortalAccessKeysPage() {
   const { locale, t } = useI18n();
+  const [searchParams] = useSearchParams();
   const { accountIdForApi, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalAccessKeysState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -89,6 +102,15 @@ export default function PortalAccessKeysPage() {
   const [storageSpaces, setStorageSpaces] = useState<PortalStorageSpaceSummary[]>([]);
   const [storageSpacesLoading, setStorageSpacesLoading] = useState(false);
   const [storageSpacesError, setStorageSpacesError] = useState<string | null>(null);
+  const [connectionSpaces, setConnectionSpaces] = useState<PortalStorageSpaceSummary[]>([]);
+  const [connectionSpacesLoading, setConnectionSpacesLoading] = useState(false);
+  const [connectionSpacesError, setConnectionSpacesError] = useState<string | null>(null);
+  const [connectionKeyId, setConnectionKeyId] = useState("");
+  const [connectionSpaceId, setConnectionSpaceId] = useState("");
+  const [queryCreateHandled, setQueryCreateHandled] = useState(false);
+
+  const requestedSpaceId = searchParams.get("space_id") ?? "";
+  const requestedCreateTarget = searchParams.get("create") ?? "";
 
   const loadKeys = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -129,6 +151,10 @@ export default function PortalAccessKeysPage() {
         if (current && ownerSpaces.some((space) => space.id === current)) {
           return current;
         }
+        const requested = ownerSpaces.find(
+          (space) => space.id === requestedSpaceId || space.internal_bucket_name === requestedSpaceId
+        );
+        if (requested) return requested.id;
         return ownerSpaces[0]?.id || "";
       });
     } catch (err) {
@@ -139,14 +165,53 @@ export default function PortalAccessKeysPage() {
     } finally {
       setStorageSpacesLoading(false);
     }
-  }, [accountIdForApi, t]);
+  }, [accountIdForApi, requestedSpaceId, t]);
 
   useEffect(() => {
     if (!createWizardOpen || createTarget !== "external") return;
     void loadStorageSpacesForWizard();
   }, [createTarget, createWizardOpen, loadStorageSpacesForWizard]);
 
-  const visibleKeys = useMemo(() => (state?.access_keys ?? []).filter((key) => !key.is_portal), [state?.access_keys]);
+  const loadConnectionSpaces = useCallback(async () => {
+    if (!accountIdForApi) return;
+    setConnectionSpacesLoading(true);
+    setConnectionSpacesError(null);
+    try {
+      const spaces = await listPortalStorageSpaces(accountIdForApi, { sort: "name" });
+      const activeSpaces = spaces.filter((space) => !space.archived_at);
+      setConnectionSpaces(activeSpaces);
+      setConnectionSpaceId((current) => {
+        if (current && activeSpaces.some((space) => space.id === current || space.internal_bucket_name === current)) {
+          return current;
+        }
+        const requested = activeSpaces.find(
+          (space) => space.id === requestedSpaceId || space.internal_bucket_name === requestedSpaceId
+        );
+        return requested?.id || activeSpaces[0]?.id || "";
+      });
+    } catch (err) {
+      console.error(err);
+      setConnectionSpaces([]);
+      setConnectionSpaceId("");
+      setConnectionSpacesError(extractApiError(err, t({ en: "Unable to load Storage Spaces.", fr: "Impossible de charger les espaces de stockage.", de: "Speicherbereiche können nicht geladen werden." })));
+    } finally {
+      setConnectionSpacesLoading(false);
+    }
+  }, [accountIdForApi, requestedSpaceId, t]);
+
+  useEffect(() => {
+    if (!state || !hasAccountContext || !accountIdForApi) return;
+    void loadConnectionSpaces();
+  }, [accountIdForApi, hasAccountContext, loadConnectionSpaces, state]);
+
+  const visibleKeys = useMemo(() => {
+    const keys = (state?.access_keys ?? []).filter((key) => !key.is_portal);
+    if (createdKey && !createdKey.is_portal && !keys.some((key) => key.access_key_id === createdKey.access_key_id)) {
+      return [createdKey, ...keys];
+    }
+    return keys;
+  }, [createdKey, state?.access_keys]);
+  const activeKeys = useMemo(() => visibleKeys.filter(isKeyActive), [visibleKeys]);
   const canManageAccessKeys = Boolean(state?.can_manage_access_keys);
   const maxAccessKeys = state?.max_access_keys ?? 0;
   const maxReached = maxAccessKeys > 0 && visibleKeys.length >= maxAccessKeys;
@@ -155,6 +220,72 @@ export default function PortalAccessKeysPage() {
     () => storageSpaces.find((space) => space.id === selectedSpaceId) ?? null,
     [selectedSpaceId, storageSpaces]
   );
+  const selectedConnectionKey = useMemo(
+    () => activeKeys.find((key) => key.access_key_id === connectionKeyId) ?? activeKeys[0] ?? null,
+    [activeKeys, connectionKeyId]
+  );
+  const selectedConnectionKeyBucket = selectedConnectionKey?.target_type === "external"
+    ? bucketNameForPortalExternalTool(selectedConnectionKey, null)
+    : "";
+  const selectedConnectionSpace = useMemo(() => {
+    const matchValue = selectedConnectionKeyBucket || connectionSpaceId;
+    return (
+      connectionSpaces.find((space) => space.id === matchValue || space.internal_bucket_name === matchValue) ??
+      connectionSpaces[0] ??
+      null
+    );
+  }, [connectionSpaceId, connectionSpaces, selectedConnectionKeyBucket]);
+  const selectedConnectionBucketName = bucketNameForPortalExternalTool(selectedConnectionKey, selectedConnectionSpace);
+  const selectedConnection: PortalExternalToolConnection | null = selectedConnectionKey && selectedConnectionBucketName
+    ? {
+        key: selectedConnectionKey,
+        endpoint: parsePortalExternalToolEndpoint(state?.s3_endpoint),
+        storageSpaceName: storageSpaceNameForPortalExternalTool(selectedConnectionKey, selectedConnectionSpace),
+        bucketName: selectedConnectionBucketName,
+        permissionLabel: portalExternalToolPermissionLabel(selectedConnectionKey.permission),
+      }
+    : null;
+  const selectedConnectionHasOneTimeSecret = Boolean(
+    createdKey?.secret_access_key && selectedConnectionKey?.access_key_id === createdKey.access_key_id
+  );
+  const showSecretConnectionDownload = selectedConnectionHasOneTimeSecret && Boolean(selectedConnection);
+  const connectionSpaceSelectValue = selectedConnectionKeyBucket
+    ? selectedConnectionSpace?.id || selectedConnectionKeyBucket
+    : connectionSpaceId;
+  const connectionEndpointLabel = selectedConnection?.endpoint?.original || state?.s3_endpoint || t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" });
+  const cyberduckBookmarkUnavailable = Boolean(selectedConnection && !selectedConnection.endpoint);
+
+  useEffect(() => {
+    if (!selectedConnectionKey && activeKeys[0]) {
+      setConnectionKeyId(activeKeys[0].access_key_id);
+    }
+  }, [activeKeys, selectedConnectionKey]);
+
+  useEffect(() => {
+    if (!selectedConnectionKeyBucket) return;
+    const matchingSpace = connectionSpaces.find(
+      (space) => space.id === selectedConnectionKeyBucket || space.internal_bucket_name === selectedConnectionKeyBucket
+    );
+    setConnectionSpaceId(matchingSpace?.id || selectedConnectionKeyBucket);
+  }, [connectionSpaces, selectedConnectionKeyBucket]);
+
+  useEffect(() => {
+    if (
+      queryCreateHandled ||
+      requestedCreateTarget !== "external" ||
+      !state ||
+      !canManageAccessKeys ||
+      maxReached ||
+      !requestedSpaceId
+    ) {
+      return;
+    }
+    setCreateTarget("external");
+    setSelectedSpaceId(requestedSpaceId);
+    setStorageSpacesError(null);
+    setCreateWizardOpen(true);
+    setQueryCreateHandled(true);
+  }, [canManageAccessKeys, maxReached, queryCreateHandled, requestedCreateTarget, requestedSpaceId, state]);
 
   const openCreateWizard = () => {
     if (createDisabled) return;
@@ -189,6 +320,11 @@ export default function PortalAccessKeysPage() {
     try {
       const key = await createPortalAccessKey(accountIdForApi, payload);
       setCreatedKey(key);
+      setConnectionKeyId(key.access_key_id);
+      const createdBucket = bucketNameForPortalExternalTool(key, selectedSpace);
+      if (createdBucket) {
+        setConnectionSpaceId(createdBucket);
+      }
       setActionMessage(
         key.target_type === "external"
           ? t({ en: "External credential created", fr: "Credential externe créé", de: "Externe Zugangsdaten erstellt" })
@@ -257,6 +393,36 @@ export default function PortalAccessKeysPage() {
     }
   };
 
+  const handleDownloadCyberduckBookmark = () => {
+    if (!selectedConnection) return;
+    if (!selectedConnection.endpoint) {
+      setActionMessage(null);
+      setError(t({ en: "Cyberduck bookmark download needs a valid S3 endpoint.", fr: "Le téléchargement du favori Cyberduck nécessite un point de terminaison S3 valide.", de: "Der Cyberduck-Bookmark benötigt einen gültigen S3-Endpunkt." }));
+      return;
+    }
+    const filename = `${portalExternalToolBaseFilename(selectedConnection)}.duck`;
+    triggerPortalExternalToolDownload(filename, buildCyberduckBookmark(selectedConnection), "application/xml;charset=utf-8");
+    setError(null);
+    setActionMessage(t({ en: "Cyberduck bookmark downloaded.", fr: "Favori Cyberduck téléchargé.", de: "Cyberduck-Bookmark heruntergeladen." }));
+  };
+
+  const handleDownloadConnectionSheet = (includeSecret: boolean) => {
+    if (!selectedConnection) return;
+    const filename = `${portalExternalToolBaseFilename(selectedConnection)}${includeSecret ? "-with-secret" : ""}.txt`;
+    const secretAccessKey = includeSecret && selectedConnectionHasOneTimeSecret ? createdKey?.secret_access_key : null;
+    triggerPortalExternalToolDownload(
+      filename,
+      buildGenericConnectionSheet(selectedConnection, { secretAccessKey }),
+      "text/plain;charset=utf-8"
+    );
+    setError(null);
+    setActionMessage(
+      includeSecret && secretAccessKey
+        ? t({ en: "Connection details with the one-time secret downloaded.", fr: "Détails de connexion avec le secret à usage unique téléchargés.", de: "Verbindungsdetails mit einmaligem Secret heruntergeladen." })
+        : t({ en: "Connection details downloaded.", fr: "Détails de connexion téléchargés.", de: "Verbindungsdetails heruntergeladen." })
+    );
+  };
+
   const createDisabled = !state || !canManageAccessKeys || maxReached || Boolean(busy);
   const createWizardSubmitDisabled =
     busy === "create" ||
@@ -304,6 +470,16 @@ export default function PortalAccessKeysPage() {
         const disabled = Boolean(busy) || !canManageAccessKeys;
         return (
           <div className="flex flex-wrap justify-end gap-2">
+            {active ? (
+              <button
+                type="button"
+                onClick={() => setConnectionKeyId(key.access_key_id)}
+                className={tableActionButtonClasses}
+                disabled={disabled}
+              >
+                {t({ en: "Connect", fr: "Connecter", de: "Verbinden" })}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => handleToggleKey(key)}
@@ -378,6 +554,18 @@ export default function PortalAccessKeysPage() {
               : t({ en: "The secret is shown only once.", fr: "Le secret n'est affiché qu'une seule fois.", de: "Das Secret wird nur einmal angezeigt." })
           }
           badge={t({ en: "Copy these values now", fr: "Copiez ces valeurs maintenant", de: "Diese Werte jetzt kopieren" })}
+          actions={
+            showSecretConnectionDownload ? (
+              <>
+                <UiButton type="button" variant="secondary" size="xs" onClick={() => handleDownloadConnectionSheet(false)}>
+                  {t({ en: "Download details", fr: "Télécharger les détails", de: "Details herunterladen" })}
+                </UiButton>
+                <UiButton type="button" variant="warning" size="xs" onClick={() => handleDownloadConnectionSheet(true)}>
+                  {t({ en: "Download with secret", fr: "Télécharger avec secret", de: "Mit Secret herunterladen" })}
+                </UiButton>
+              </>
+            ) : null
+          }
           values={[
             {
               label: t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" }),
@@ -392,6 +580,139 @@ export default function PortalAccessKeysPage() {
           ]}
         />
       )}
+
+      {state && hasAccountContext ? (
+        <section className="ui-surface-card space-y-4 p-4" aria-labelledby="portal-external-tool-access">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 id="portal-external-tool-access" className={cx("text-sm font-bold", uiTitleTextClass)}>
+                {t({ en: "Connect an external tool", fr: "Connecter un outil externe", de: "Externes Werkzeug verbinden" })}
+              </h2>
+              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                {t({
+                  en: "Choose a key and Storage Space, then download ready-to-use connection details.",
+                  fr: "Choisissez une clé et un espace de stockage, puis téléchargez les informations de connexion prêtes à l'emploi.",
+                  de: "Wählen Sie Schlüssel und Speicherbereich aus und laden Sie fertige Verbindungsdetails herunter.",
+                })}
+              </p>
+            </div>
+            {selectedConnectionKeyBucket ? (
+              <span className={cx("rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
+                {t({ en: "Storage Space set by this key", fr: "Espace défini par cette clé", de: "Speicherbereich durch Schlüssel festgelegt" })}
+              </span>
+            ) : null}
+          </div>
+
+          {connectionSpacesError ? <PageBanner tone="warning">{connectionSpacesError}</PageBanner> : null}
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto] lg:items-end">
+            <label className="space-y-1">
+              <span className={uiLabelClass}>{t({ en: "Access key", fr: "Clé d'accès", de: "Zugriffsschlüssel" })}</span>
+              <select
+                className={uiInputClass}
+                value={selectedConnectionKey?.access_key_id ?? ""}
+                onChange={(event) => setConnectionKeyId(event.target.value)}
+                aria-label={t({ en: "Connection access key", fr: "Clé d'accès de connexion", de: "Verbindungsschlüssel" })}
+                disabled={activeKeys.length === 0}
+              >
+                {activeKeys.length === 0 ? (
+                  <option value="">{t({ en: "No active key", fr: "Aucune clé active", de: "Kein aktiver Schlüssel" })}</option>
+                ) : (
+                  activeKeys.map((key) => (
+                    <option key={key.access_key_id} value={key.access_key_id}>
+                      {key.access_key_id} - {keyScopeLabel(key, t)}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className={uiLabelClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</span>
+              <select
+                className={uiInputClass}
+                value={connectionSpaceSelectValue}
+                onChange={(event) => setConnectionSpaceId(event.target.value)}
+                aria-label={t({ en: "Connection Storage Space", fr: "Espace de connexion", de: "Verbindungs-Speicherbereich" })}
+                disabled={connectionSpacesLoading || connectionSpaces.length === 0 || Boolean(selectedConnectionKeyBucket)}
+              >
+                {connectionSpacesLoading ? (
+                  <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
+                ) : selectedConnectionKeyBucket && !selectedConnectionSpace ? (
+                  <option value={selectedConnectionKeyBucket}>{selectedConnectionKey?.storage_space_name || selectedConnectionKeyBucket}</option>
+                ) : connectionSpaces.length === 0 ? (
+                  <option value="">{t({ en: "No Storage Space", fr: "Aucun espace de stockage", de: "Kein Speicherbereich" })}</option>
+                ) : (
+                  connectionSpaces.map((space) => (
+                    <option key={space.id} value={space.id}>
+                      {space.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <UiButton
+                type="button"
+                variant="secondary"
+                onClick={handleDownloadCyberduckBookmark}
+                disabled={!selectedConnection || !selectedConnection.endpoint}
+                className="h-9"
+              >
+                {t({ en: "Cyberduck bookmark", fr: "Favori Cyberduck", de: "Cyberduck-Bookmark" })}
+              </UiButton>
+              <UiButton
+                type="button"
+                variant="secondary"
+                onClick={() => handleDownloadConnectionSheet(false)}
+                disabled={!selectedConnection}
+                className="h-9"
+              >
+                {t({ en: "Connection details", fr: "Détails de connexion", de: "Verbindungsdetails" })}
+              </UiButton>
+              {showSecretConnectionDownload ? (
+                <UiButton type="button" variant="warning" onClick={() => handleDownloadConnectionSheet(true)} className="h-9">
+                  {t({ en: "Details with secret", fr: "Détails avec secret", de: "Details mit Secret" })}
+                </UiButton>
+              ) : null}
+            </div>
+          </div>
+
+          {cyberduckBookmarkUnavailable ? (
+            <PageBanner tone="info">
+              {t({
+                en: "Cyberduck bookmark download is unavailable because this Storage service does not expose a valid S3 endpoint here. Generic connection details are still available.",
+                fr: "Le téléchargement du favori Cyberduck est indisponible car ce service de stockage n'expose pas de point de terminaison S3 valide ici. Les détails de connexion génériques restent disponibles.",
+                de: "Der Cyberduck-Bookmark ist nicht verfügbar, weil hier kein gültiger S3-Endpunkt bereitsteht. Allgemeine Verbindungsdetails sind weiterhin verfügbar.",
+              })}
+            </PageBanner>
+          ) : null}
+
+          <dl className="grid gap-3 ui-caption md:grid-cols-4">
+            <div>
+              <dt className={uiMutedTextClass}>{t({ en: "Endpoint", fr: "Point de terminaison", de: "Endpunkt" })}</dt>
+              <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
+            </div>
+            <div>
+              <dt className={uiMutedTextClass}>{t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}</dt>
+              <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
+            </div>
+            <div>
+              <dt className={uiMutedTextClass}>{t({ en: "Name to use in S3 tools", fr: "Nom à utiliser dans les outils S3", de: "Name fuer S3-Werkzeuge" })}</dt>
+              <dd className={cx("break-all font-mono font-semibold", uiTitleTextClass)}>{selectedConnection?.bucketName ?? "-"}</dd>
+            </div>
+            <div>
+              <dt className={uiMutedTextClass}>{t({ en: "Secret", fr: "Secret", de: "Secret" })}</dt>
+              <dd className={cx("font-semibold", uiTitleTextClass)}>
+                {!selectedConnection
+                  ? t({ en: "Create or enable a key first", fr: "Créez ou activez d'abord une clé", de: "Erstellen oder aktivieren Sie zuerst einen Schlüssel" })
+                  : showSecretConnectionDownload
+                  ? t({ en: "Available once for this new key", fr: "Disponible une fois pour cette nouvelle clé", de: "Einmalig fuer diesen neuen Schlüssel verfügbar" })
+                  : t({ en: "Not shown again", fr: "Non réaffiché", de: "Wird nicht erneut angezeigt" })}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
 
       {accountLoading ? (
         <PageBanner tone="info">{t({ en: "Loading portal account...", fr: "Chargement du compte Portal...", de: "Portal-Konto wird geladen..." })}</PageBanner>

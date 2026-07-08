@@ -17,6 +17,7 @@ Use this page when you need to open, create, import, archive, or understand a Po
 | Import an existing bucket | **Storage Spaces > Import** | Portal managers can expose existing buckets as Storage Spaces and choose the initial access mode. Restricted imports can include selected collaborators immediately. |
 | Archive a space | Space actions | Archived spaces keep metadata but suspend browsing, sharing, and public links. |
 | Understand access | Space details > Access | The Access panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
+| Connect an external S3 tool | Space details > External tools | Copy the Storage Space to bucket-name mapping, then open Access keys with the space preselected. |
 
 ## Access modes
 
@@ -31,6 +32,10 @@ When a Portal manager creates or imports a Restricted Storage Space, selected co
 ## You are done when
 
 The Storage Space appears in the list with the expected access mode, role, usage, and open action.
+
+For an external S3 tool, the Storage Space detail page shows the exact bucket
+name to use. Keep using the Storage Space name inside Portal; use the bucket
+name only when the external tool asks for it.
 
 ## If you do not see a space
 

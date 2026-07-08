@@ -19,8 +19,14 @@ external user.
 5. For an external user, choose the Storage Space and select **Read only** or
    **Read/write**.
 6. Copy the secret immediately. It is shown only once.
-7. Store the key in the external tool or secret manager.
-8. Disable or delete unused keys when they are no longer needed.
+7. In **Connect an external tool**, choose the key and Storage Space.
+8. Download either:
+   - **Cyberduck bookmark** to open the Storage Space directly in Cyberduck;
+   - **Connection details** for another S3-compatible client.
+9. If you need a one-time file that also includes the secret, use the explicit
+   **Details with secret** action immediately after creating the key, then delete
+   the file after configuring the tool.
+10. Disable or delete unused keys when they are no longer needed.
 
 ## Important limits
 
@@ -30,6 +36,10 @@ external user.
 - External credentials are limited to one Storage Space and to the selected
   permission level.
 - Access keys do not grant access outside the underlying storage policies.
+- The bucket name is shown only as the name an external S3 tool asks for. Use
+  the Storage Space name everywhere else in Portal.
+- Cyberduck bookmark files do not include the secret. Cyberduck asks for it
+  when connecting.
 
 ## You are done when
 

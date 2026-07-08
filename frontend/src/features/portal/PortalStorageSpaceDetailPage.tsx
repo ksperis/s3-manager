@@ -401,6 +401,7 @@ export default function PortalStorageSpaceDetailPage() {
       ? space.usedBytes / space.objectCount
       : null;
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
+  const accessKeysPath = `/portal/access-keys?space_id=${encodeURIComponent(lockedBucketName)}&create=external`;
   const canCreatePublicLinks = Boolean(
     canBrowse &&
     space.role === "Owner" &&
@@ -545,6 +546,44 @@ export default function PortalStorageSpaceDetailPage() {
       </section>
 
       {storageSpaceSettingsCard}
+
+      <UiCard title={t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" })}>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <div>
+            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+              {t({ en: "Storage Space", fr: "Espace de stockage", de: "Speicherbereich" })}
+            </div>
+            <div className={cx("mt-1 break-all text-sm font-bold", uiTitleTextClass)}>{space.name}</div>
+          </div>
+          <div>
+            <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
+              {t({ en: "Name to use in S3 tools", fr: "Nom à utiliser dans les outils S3", de: "Name fuer S3-Werkzeuge" })}
+            </div>
+            <div className={cx("mt-1 break-all font-mono text-sm font-bold", uiTitleTextClass)}>{lockedBucketName}</div>
+          </div>
+          {isArchived ? (
+            <span className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-300">
+              {t({ en: "Unavailable while archived", fr: "Indisponible si archivé", de: "Archiviert nicht verfügbar" })}
+            </span>
+          ) : (
+            <Link
+              to={accessKeysPath}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-[color:var(--ui-border)] px-3 py-1.5 text-xs font-semibold text-primary hover:bg-[color:var(--ui-hover)] hover:text-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-primary-200"
+            >
+              {t({ en: "Open connection details", fr: "Ouvrir les détails de connexion", de: "Verbindungsdetails öffnen" })}
+            </Link>
+          )}
+        </div>
+        <p className={cx("mt-3 ui-caption", uiMutedTextClass)}>
+          {isArchived
+            ? t({ en: "Archived Storage Spaces have no active external-tool access.", fr: "Les espaces archivés n'ont aucun accès actif pour les outils externes.", de: "Archivierte Speicherbereiche haben keinen aktiven Zugriff fuer externe Werkzeuge." })
+            : t({
+                en: "Use this name only when an S3 tool asks for a bucket. Portal keeps showing the Storage Space name everywhere else.",
+                fr: "Utilisez ce nom uniquement lorsqu'un outil S3 demande un bucket. Portal continue d'afficher le nom de l'espace de stockage ailleurs.",
+                de: "Verwenden Sie diesen Namen nur, wenn ein S3-Werkzeug nach einem Bucket fragt. Portal zeigt sonst weiter den Speicherbereichsnamen.",
+              })}
+        </p>
+      </UiCard>
 
       <UiCard title={t({ en: "Access", fr: "Accès", de: "Zugriff" })}>
         {accessSummaryLoading ? (

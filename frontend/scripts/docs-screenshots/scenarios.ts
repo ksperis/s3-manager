@@ -1026,6 +1026,7 @@ export const scenarios: DocScreenshotScenario[] = [
     actions: [
       { type: "wait", selector: "text=AKIAHELIOSPORTAL001" },
       { type: "wait", selector: "text=Use endpoint https://s3-default.docs.example.com" },
+      { type: "wait", selector: "text=Connect an external tool" },
     ],
     mockRules: withBaseRules(),
   },

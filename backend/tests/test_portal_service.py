@@ -4238,6 +4238,7 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     assert created.secret_access_key == f"SK-{permission}"
     assert created.external_email == "partner@example.org"
     assert created.storage_space_id == metadata.bucket_name
+    assert created.bucket_name == metadata.bucket_name
     assert created.permission == permission
     assert row.external_email == "partner@example.org"
     assert not hasattr(row, "secret_access_key")
@@ -4413,6 +4414,43 @@ def test_bucket_policy_principals_include_active_external_credentials(db_session
     assert "arn:aws:iam::RGW1:user/portal-ext-active" in principals
     assert "arn:aws:iam:::user/portal-ext-active" in principals
     assert not any("portal-ext-inactive" in principal for principal in principals)
+
+
+def test_list_external_access_key_exposes_bucket_without_secret(db_session):
+    account = S3Account(name="portal-account-ext-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-owner-ext-list@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="external-list-bucket",
+        display_name="External List Space",
+        owner_user_id=user.id,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+    credential = PortalExternalAccessCredential(
+        account_id=account.id,
+        storage_space_metadata_id=metadata.id,
+        bucket_name=metadata.bucket_name,
+        created_by_user_id=user.id,
+        external_email="partner@example.org",
+        permission="read_only",
+        iam_user_id="iam-ext-list",
+        iam_username="portal-ext-list",
+        access_key_id="AK-EXT-LIST",
+        status="Active",
+    )
+    db_session.add(credential)
+    db_session.commit()
+
+    keys = PortalService(db_session).list_access_keys(user, _portal_access(account, user))
+
+    external = next(key for key in keys if key.access_key_id == "AK-EXT-LIST")
+    assert external.target_type == "external"
+    assert external.storage_space_name == "External List Space"
+    assert external.bucket_name == metadata.bucket_name
+    assert external.secret_access_key is None
 
 
 def test_portal_access_key_routes_record_audit(db_session):

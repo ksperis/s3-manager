@@ -24,6 +24,7 @@ export type PortalAccessKey = {
   external_email?: string | null;
   storage_space_id?: string | null;
   storage_space_name?: string | null;
+  bucket_name?: string | null;
   permission?: "read_only" | "read_write" | null;
 };
 

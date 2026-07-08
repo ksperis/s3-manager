@@ -69,5 +69,6 @@ def portal_access_key_from_external_credential(
         external_email=credential.external_email,
         storage_space_id=credential.bucket_name,
         storage_space_name=storage_space_name,
+        bucket_name=credential.bucket_name,
         permission=credential.permission,
     )

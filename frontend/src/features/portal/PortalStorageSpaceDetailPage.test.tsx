@@ -351,6 +351,19 @@ describe("PortalStorageSpaceDetailPage", () => {
     );
   });
 
+  it("shows external-tool mapping without replacing the Storage Space name", async () => {
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "External tools" })).toBeInTheDocument();
+    expect(screen.getByText("research-data-internal")).toBeInTheDocument();
+    expect(screen.getByText(/Use this name only when an S3 tool asks for a bucket/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open connection details" })).toHaveAttribute(
+      "href",
+      "/portal/access-keys?space_id=research-data-internal&create=external"
+    );
+    expect(screen.getAllByText("Research Data").length).toBeGreaterThan(1);
+  });
+
   it("confirms access mode changes from the Access panel", async () => {
     renderPage();
 
