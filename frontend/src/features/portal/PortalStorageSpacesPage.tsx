@@ -18,6 +18,7 @@ import PageHeader from "../../components/PageHeader";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
@@ -381,7 +382,11 @@ export default function PortalStorageSpacesPage() {
               onRoleChange={(userId, role) => updateRestrictedRoles(setRestrictedRolesByUserId, userId, role)}
             />
           ) : null}
-          {createError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{createError}</div> : null}
+          {createError ? (
+            <UiInlineMessage tone="error" className="mt-3">
+              {createError}
+            </UiInlineMessage>
+          ) : null}
         </UiCard>
       ) : null}
 
@@ -432,7 +437,11 @@ export default function PortalStorageSpacesPage() {
               onRoleChange={(userId, role) => updateRestrictedRoles(setImportRestrictedRolesByUserId, userId, role)}
             />
           ) : null}
-          {importError ? <div className="mt-3 text-xs font-semibold text-rose-600 dark:text-rose-300">{importError}</div> : null}
+          {importError ? (
+            <UiInlineMessage tone="error" className="mt-3">
+              {importError}
+            </UiInlineMessage>
+          ) : null}
         </UiCard>
       ) : null}
 

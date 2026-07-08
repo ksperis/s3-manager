@@ -8,6 +8,7 @@ import {
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
 import UiBadge from "../../components/ui/UiBadge";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import { cx, uiCheckboxClass, uiMutedTextClass } from "../../components/ui/styles";
@@ -168,7 +169,7 @@ export function PortalShareCandidatePicker({
       {loading ? (
         <div className={cx("text-xs font-semibold", uiMutedTextClass)}>{t({ en: "Loading eligible users...", fr: "Chargement des utilisateurs éligibles...", de: "Berechtigte Benutzer werden geladen..." })}</div>
       ) : error ? (
-        <div className="text-xs font-semibold text-rose-600 dark:text-rose-300">{error}</div>
+        <UiInlineMessage tone="error">{error}</UiInlineMessage>
       ) : visibleCandidates.length > 0 ? (
         <div className="max-h-56 overflow-y-auto rounded-md border border-[color:var(--ui-border)]">
           {visibleCandidates.map((candidate) => {
