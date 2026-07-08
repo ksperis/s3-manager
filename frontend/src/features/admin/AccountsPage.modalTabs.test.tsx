@@ -686,8 +686,12 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     await screen.findByText("acc-2");
 
+    const searchInput = screen.getByLabelText("Search");
+    expect(searchInput).toHaveAttribute("type", "search");
+    expect(searchInput).toHaveAttribute("placeholder", "Search by name, RGW ID, group, or tag");
+
     fireEvent.click(screen.getByLabelText("Toggle filter match mode"));
-    fireEvent.change(screen.getByPlaceholderText("Search by name, RGW ID, group, or tag"), {
+    fireEvent.change(searchInput, {
       target: { value: "gold" },
     });
 

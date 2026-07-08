@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass } from "../../components/ui/styles";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -31,6 +31,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
+import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
@@ -40,7 +41,6 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import AssociationSummary, {
@@ -2350,16 +2350,16 @@ export default function S3AccountsPage() {
           showHeading={false}
           countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
           search={
-            <div className="flex items-center gap-2">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-              <div className="relative w-full sm:w-64 md:w-72">
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(e) => handleFilterChange(e.target.value)}
-                  placeholder="Search by name, RGW ID, group, or tag"
-                  className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
-                />
+            <ToolbarSearchInput
+              value={filter}
+              onChange={handleFilterChange}
+              placeholder="Search by name, RGW ID, group, or tag"
+              className="w-full sm:w-64 md:w-72"
+              inputClassName={cx(
+                "pr-9",
+                quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""
+              )}
+              trailingControl={
                 <button
                   type="button"
                   onClick={toggleQuickFilterMode}
@@ -2369,8 +2369,8 @@ export default function S3AccountsPage() {
                 >
                   {quickFilterMode === "contains" ? "~" : "="}
                 </button>
-              </div>
-            </div>
+              }
+            />
           }
           secondaryContent={
             quickFilterActive ? (
