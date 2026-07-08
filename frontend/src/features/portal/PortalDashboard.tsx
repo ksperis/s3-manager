@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import type { HealthCheckStatus } from "../../api/healthchecks";
 import type { PortalUsageStorageSpace } from "../../api/portal";
 import type { ManagerUsageTrendBaseline } from "../../api/stats";
+import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import {
   buildWorkspaceStorageEvolutionPoints,
@@ -514,6 +515,34 @@ function QuickLinksCard({ links }: { links: QuickLink[] }) {
   );
 }
 
+function PortalOnboardingDashboard() {
+  const { t } = useI18n();
+  return (
+    <div className="space-y-3" data-testid="portal-dashboard-onboarding">
+      <PageHeader
+        title={t({ en: "Portal dashboard", fr: "Tableau de bord Portal", de: "Portal-Dashboard" })}
+        description={t({
+          en: "Start by creating a Storage Space, then add files from that space.",
+          fr: "Commencez par créer un espace de stockage, puis ajoutez des fichiers depuis cet espace.",
+          de: "Erstellen Sie zuerst einen Speicherbereich und fügen Sie dann Dateien aus diesem Bereich hinzu.",
+        })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }) })}
+      />
+      <PageEmptyState
+        eyebrow={t({ en: "Start here", fr: "Commencer ici", de: "Hier starten" })}
+        title={t({ en: "Set up your first space", fr: "Configurez votre premier espace", de: "Richten Sie Ihren ersten Bereich ein" })}
+        description={t({
+          en: "A space keeps files, folders, and collaborators together. After it exists, open it to upload files.",
+          fr: "Un espace regroupe les fichiers, dossiers et collaborateurs. Une fois créé, ouvrez-le pour ajouter des fichiers.",
+          de: "Ein Bereich hält Dateien, Ordner und Mitwirkende zusammen. Danach öffnen Sie ihn, um Dateien hochzuladen.",
+        })}
+        primaryAction={{ label: t({ en: "Create a space", fr: "Créer un espace", de: "Bereich erstellen" }), to: "/portal/storage-spaces?create=1" }}
+        secondaryAction={{ label: t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" }), to: "/portal/storage-spaces" }}
+      />
+    </div>
+  );
+}
+
 export default function PortalDashboard() {
   const { t } = useI18n();
   const {
@@ -652,6 +681,10 @@ export default function PortalDashboard() {
     noAccountMessage: t({ en: "Select an account to open the dashboard.", fr: "Sélectionnez un compte pour ouvrir le tableau de bord.", de: "Wählen Sie ein Konto aus, um das Dashboard zu öffnen." }),
   });
   if (pageState) return pageState;
+
+  if (workspace.spaces.length === 0 && workspace.usedObjects === 0) {
+    return <PortalOnboardingDashboard />;
+  }
 
   return (
     <div className="space-y-3" data-testid="portal-dashboard">

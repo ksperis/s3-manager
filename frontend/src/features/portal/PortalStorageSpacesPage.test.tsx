@@ -130,10 +130,10 @@ describe("PortalStorageSpacesPage", () => {
 
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
-    expect(screen.getByRole("heading", { name: "Create a space" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Upload files" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Invite collaborators" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Share outside" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create a space" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Upload files" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Invite collaborators" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share outside" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Search")).toHaveClass("ui-control");
     expect(screen.getByLabelText("My role")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Status")).toHaveClass("ui-control");
@@ -157,6 +157,35 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByRole("button", { name: "Create space" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add existing space" })).toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
+  });
+
+  it("opens the create form from the dashboard create query when creation is available", () => {
+    render(
+      <MemoryRouter initialEntries={["/portal/storage-spaces?create=1"]}>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: "Create a space" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Space name")).toHaveClass("ui-control");
+  });
+
+  it("ignores the dashboard create query when creation is unavailable", () => {
+    mocks.hookResult.state = {
+      account_role: "portal_user",
+      can_manage_buckets: false,
+      can_create_storage_spaces: false,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/portal/storage-spaces?create=1"]}>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("heading", { name: "Create a space" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Space name")).not.toBeInTheDocument();
   });
 
   it("renders the storage spaces page in French when requested", () => {

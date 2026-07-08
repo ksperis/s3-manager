@@ -188,6 +188,36 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
+  it("replaces the dashboard with onboarding when there are no spaces or files", () => {
+    mocks.hookResult.workspace = {
+      ...mocks.hookResult.workspace,
+      usedBytes: 0,
+      usedObjects: 0,
+      spaces: [],
+      activity: [],
+      transfers: [],
+      alerts: [],
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "Create a space" })).toHaveAttribute(
+      "href",
+      "/portal/storage-spaces?create=1"
+    );
+    expect(screen.getByRole("link", { name: "Upload files" })).toHaveAttribute(
+      "href",
+      "/portal/storage-spaces"
+    );
+    expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).not.toBeInTheDocument();
+    expect(screen.queryByText("Storage overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Top storage spaces")).not.toBeInTheDocument();
+  });
+
   it("aligns the storage overview card with manager growth and projection details", () => {
     render(
       <MemoryRouter>

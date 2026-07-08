@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createPortalStorageSpace,
   importPortalStorageSpace,
@@ -22,10 +22,7 @@ import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
-  uiButtonBaseClass,
-  uiButtonVariants,
   uiMutedTextClass,
-  uiPanelMutedClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
@@ -60,52 +57,11 @@ function visibleStatus(space: { status: string }) {
   return space.status;
 }
 
-function JourneyStepCard({
-  title,
-  description,
-  actionLabel,
-  to,
-  onClick,
-  disabled = false,
-}: {
-  title: string;
-  description: string;
-  actionLabel: string;
-  to?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  const actionClass = cx(
-    uiButtonBaseClass,
-    disabled ? uiButtonVariants.secondary : uiButtonVariants.primary,
-    "h-8 px-3 py-1.5 text-xs",
-    disabled && "pointer-events-none opacity-60"
-  );
-  return (
-    <div className={cx(uiPanelMutedClass, "flex min-h-[132px] flex-col justify-between p-4")}>
-      <div>
-        <h2 className={cx("text-sm font-bold", uiTitleTextClass)}>{title}</h2>
-        <p className={cx("mt-2 text-xs leading-5", uiMutedTextClass)}>{description}</p>
-      </div>
-      <div className="mt-3">
-        {to ? (
-          <Link to={to} className={actionClass} aria-disabled={disabled ? true : undefined}>
-            {actionLabel}
-          </Link>
-        ) : (
-          <button type="button" onClick={onClick} disabled={disabled} className={actionClass}>
-            {actionLabel}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function PortalStorageSpacesPage() {
   const { t } = useI18n();
   const { workspace, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, state } = usePortalWorkspaceData({ includeArchived: true });
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<PortalStorageSpaceRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -234,9 +190,13 @@ export default function PortalStorageSpacesPage() {
   const selectedRestrictedEntries = selectedPortalShares(restrictedRolesByUserId);
   const selectedImportRestrictedEntries = selectedPortalShares(importRestrictedRolesByUserId);
   const portalMemberCount = shareCandidates.length + 1;
-  const activeSpaces = workspace.spaces.filter((space) => space.status !== "Archived");
-  const firstWritableSpace = activeSpaces.find((space) => space.contentRole === "Owner" || space.contentRole === "Editor" || space.role === "Owner" || space.role === "Editor");
-  const firstOwnerSpace = activeSpaces.find((space) => space.role === "Owner");
+  const createRequested = searchParams.get("create") === "1";
+
+  useEffect(() => {
+    if (canCreate && createRequested) {
+      setShowCreate(true);
+    }
+  }, [canCreate, createRequested]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,7 +262,7 @@ export default function PortalStorageSpacesPage() {
         ...effectiveNewAccessPayload,
         initial_shares: effectiveNewAccessPayload.share_scope === "restricted" ? selectedRestrictedEntries : [],
       });
-      navigate(storageSpacePath({ id: created.id }));
+      navigate(storageSpacePath({ id: created.id }), { state: { portalSpaceCreated: true } });
     } catch (err) {
       console.error(err);
       setCreateError(extractApiError(err, t({ en: "Unable to create this space.", fr: "Impossible de créer cet espace.", de: "Dieser Bereich kann nicht erstellt werden." })));
@@ -322,7 +282,7 @@ export default function PortalStorageSpacesPage() {
         ...effectiveImportAccessPayload,
         initial_shares: effectiveImportAccessPayload.share_scope === "restricted" ? selectedImportRestrictedEntries : [],
       });
-      navigate(storageSpacePath({ id: imported.id }));
+      navigate(storageSpacePath({ id: imported.id }), { state: { portalSpaceImported: true } });
     } catch (err) {
       console.error(err);
       setImportError(extractApiError(err, t({ en: "Unable to add existing storage.", fr: "Impossible d'ajouter le stockage existant.", de: "Vorhandener Speicher kann nicht hinzugefügt werden." })));
@@ -356,37 +316,6 @@ export default function PortalStorageSpacesPage() {
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }) })}
         actions={headerActions}
       />
-
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label={t({ en: "Main workspace tasks", fr: "Tâches principales de l'espace", de: "Wichtige Workspace-Aufgaben" })}>
-        <JourneyStepCard
-          title={t({ en: "Create a space", fr: "Créer un espace", de: "Bereich erstellen" })}
-          description={t({ en: "Start a focused place for a project, dataset, or team handoff.", fr: "Démarrez un espace dédié à un projet, un jeu de données ou un transfert d'équipe.", de: "Starten Sie einen fokussierten Bereich für ein Projekt, einen Datensatz oder eine Teamübergabe." })}
-          actionLabel={t({ en: "Start", fr: "Commencer", de: "Starten" })}
-          onClick={() => setShowCreate(true)}
-          disabled={!canCreate}
-        />
-        <JourneyStepCard
-          title={t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" })}
-          description={t({ en: "Open a space and add files or folders without seeing storage internals.", fr: "Ouvrez un espace et ajoutez des fichiers ou dossiers sans voir les détails techniques.", de: "Öffnen Sie einen Bereich und fügen Sie Dateien oder Ordner ohne technische Details hinzu." })}
-          actionLabel={t({ en: "Open files", fr: "Ouvrir les fichiers", de: "Dateien öffnen" })}
-          to={firstWritableSpace ? `${storageSpacePath(firstWritableSpace)}#space-files` : undefined}
-          disabled={!firstWritableSpace}
-        />
-        <JourneyStepCard
-          title={t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
-          description={t({ en: "Give selected people Viewer, Editor, or Owner access to a space.", fr: "Donnez aux personnes choisies un accès Lecteur, Éditeur ou Propriétaire.", de: "Geben Sie ausgewählten Personen Betrachter-, Bearbeiter- oder Eigentümerzugriff." })}
-          actionLabel={t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
-          to={firstOwnerSpace ? `/portal/shares?space_id=${encodeURIComponent(firstOwnerSpace.id)}&tab=by` : undefined}
-          disabled={!firstOwnerSpace}
-        />
-        <JourneyStepCard
-          title={t({ en: "Share outside", fr: "Partager en externe", de: "Extern teilen" })}
-          description={t({ en: "Review public links and create new ones from selected files when sharing is allowed.", fr: "Consultez les liens publics et créez-en depuis les fichiers lorsque le partage est autorisé.", de: "Prüfen Sie öffentliche Links und erstellen Sie neue aus Dateien, wenn Teilen erlaubt ist." })}
-          actionLabel={t({ en: "Review links", fr: "Voir les liens", de: "Links prüfen" })}
-          to="/portal/shares?tab=links"
-          disabled={workspace.spaces.length === 0}
-        />
-      </section>
 
       {showCreate ? (
         <UiCard
