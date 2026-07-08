@@ -248,6 +248,23 @@ describe("BucketDetailPage replication state", () => {
     expect(propertiesGroup).not.toHaveClass("ui-surface-muted");
   });
 
+  it("uses the shared warning banner when Ceph Admin bucket context is missing", async () => {
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: null,
+      selectedEndpoint: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    const endpointWarning = await screen.findByText("Select a Ceph endpoint before managing this bucket.");
+    expect(endpointWarning).toHaveClass("ui-caption");
+    expect(endpointWarning).toHaveClass("border-amber-200");
+  });
+
   it("hides Manager quota tab without bucket quota access", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [{ id: "ceph-account", name: "Ceph account", endpoint_provider: "ceph" }],

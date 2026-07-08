@@ -116,6 +116,7 @@ import {
   type BucketUsageStatsSnapshot,
 } from "../../api/bucketUsageStats";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import { MetricsCard } from "../../components/MetricsCard";
@@ -2938,16 +2939,10 @@ export default function BucketDetailPage({
       )}
 
       {isCephAdmin && !endpointId && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Select a Ceph endpoint before managing this bucket.
-        </div>
+        <PageBanner tone="warning">Select a Ceph endpoint before managing this bucket.</PageBanner>
       )}
 
-      {bucketError && (
-        <div className="rounded-md bg-rose-50 px-4 py-3 ui-body text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
-          {bucketError}
-        </div>
-      )}
+      {bucketError && <PageBanner tone="error">{bucketError}</PageBanner>}
 
       <PageTabs
         activeTab={activeTab}
@@ -4702,16 +4697,12 @@ export default function BucketDetailPage({
                     endpointId && bucketName ? (
                       <TrafficAnalytics scope="ceph-admin" endpointId={endpointId} bucketName={bucketName} enabled={hasCephContext} />
                     ) : (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                        Select an endpoint and a bucket to view detailed metrics.
-                      </div>
+                      <PageBanner tone="warning">Select an endpoint and a bucket to view detailed metrics.</PageBanner>
                     )
                   ) : hasAccountContext && bucketName ? (
                     <TrafficAnalytics accountId={accountIdForApi} bucketName={bucketName} enabled={hasAccountContext} />
                   ) : (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                      Select an account and a bucket to view detailed metrics.
-                    </div>
+                    <PageBanner tone="warning">Select an account and a bucket to view detailed metrics.</PageBanner>
                   ))}
               </div>
             ),
