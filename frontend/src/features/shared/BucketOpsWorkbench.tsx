@@ -27,6 +27,7 @@ import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiDetails from "../../components/ui/UiDetails";
 import UiButton from "../../components/ui/UiButton";
+import UiRemoveIcon from "../../components/ui/UiRemoveIcon";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import {
   cx,
@@ -7348,10 +7349,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               <button
                 type="button"
                 onClick={() => removeTagForBucket(bucketTarget, tag)}
-                className="ml-0.5 leading-none opacity-70 hover:opacity-100"
+                className="ml-0.5 flex items-center opacity-70 hover:opacity-100"
                 title="Remove tag"
+                aria-label={`Remove tag ${tag}`}
               >
-                ×
+                <UiRemoveIcon className="h-2.5 w-2.5" />
               </button>
             </span>
           );
@@ -8202,7 +8204,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                             title="Remove tag filter"
                             aria-label={`Remove ${tag}`}
                           >
-                            x
+                            <UiRemoveIcon className="h-3 w-3" />
                           </button>
                         </span>
                       );
