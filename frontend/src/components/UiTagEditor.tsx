@@ -8,6 +8,7 @@ import { getTagColorOption, TAG_COLOR_OPTIONS } from "../utils/tagPalette";
 import { DEFAULT_TAG_SCOPE, normalizeUiTags, type UiTagDefinition } from "../utils/uiTags";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
 import UiBadge from "./ui/UiBadge";
+import UiRemoveIcon from "./ui/UiRemoveIcon";
 import { cx, uiLabelClass } from "./ui/styles";
 
 type UiTagEditorProps = {
@@ -234,9 +235,9 @@ export default function UiTagEditor({
                       removeTag(tag.label);
                     }}
                     aria-label={`Remove tag ${tag.label}`}
-                    className="border-l border-current/15 px-1.5 py-0.5 text-[10px] font-semibold leading-4 opacity-70 transition hover:opacity-100 focus:outline-none"
+                    className="flex items-center border-l border-current/15 px-1.5 py-0.5 opacity-70 transition hover:opacity-100 focus:outline-none"
                   >
-                    ×
+                    <UiRemoveIcon className="h-2.5 w-2.5" />
                   </button>
                 </span>
               );

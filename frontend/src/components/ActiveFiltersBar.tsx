@@ -2,7 +2,8 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { ReactNode, SVGProps } from "react";
+import type { ReactNode } from "react";
+import UiRemoveIcon from "./ui/UiRemoveIcon";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass } from "./ui/styles";
 
 export type ActiveFilterBarItem = {
@@ -46,7 +47,7 @@ export default function ActiveFiltersBar({
               title={item.removeLabel}
               aria-label={item.removeLabel ?? "Remove filter"}
             >
-              <FilterRemoveIcon aria-hidden="true" className="h-3 w-3" />
+              <UiRemoveIcon className="h-3 w-3" />
             </button>
           ) : null}
         </span>
@@ -59,13 +60,5 @@ export default function ActiveFiltersBar({
         {clearLabel}
       </button>
     </div>
-  );
-}
-
-function FilterRemoveIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...props}>
-      <path d="M4 4l8 8M12 4l-8 8" />
-    </svg>
   );
 }
