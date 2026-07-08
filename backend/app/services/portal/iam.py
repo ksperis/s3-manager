@@ -13,23 +13,6 @@ class PortalIamMixin:
     def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
         return normalize_string_list(origins)
 
-    def _normalize_policy_value(self, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {key: self._normalize_policy_value(value[key]) for key in sorted(value)}
-        if isinstance(value, list):
-            normalized = [self._normalize_policy_value(item) for item in value]
-            if all(isinstance(item, dict) for item in normalized):
-                return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
-            if all(isinstance(item, (str, int, float, bool, type(None))) for item in normalized):
-                return sorted(normalized, key=lambda item: str(item))
-            return normalized
-        return value
-
-    def _normalize_policy_document(self, policy: Optional[dict]) -> Optional[dict]:
-        if policy is None or not isinstance(policy, dict):
-            return None
-        return self._normalize_policy_value(policy)
-
     def _policy_statements(self, policy: Optional[dict]) -> list[dict]:
         if not policy or not isinstance(policy, dict):
             return []
@@ -37,21 +20,6 @@ class PortalIamMixin:
         if not isinstance(statements, list):
             statements = [statements]
         return [stmt for stmt in statements if isinstance(stmt, dict)]
-
-    def _find_statement(self, statements: list[dict], sid: str) -> Optional[dict]:
-        for stmt in statements:
-            if stmt.get("Sid") == sid:
-                return stmt
-        return None
-
-    def _action_set(self, value: Any) -> set[str]:
-        if value is None:
-            return set()
-        if isinstance(value, str):
-            return {value}
-        if isinstance(value, list):
-            return {item for item in value if isinstance(item, str)}
-        return set()
 
     def _without_allowed_policy_actions(self, policy: dict, blocked_actions: set[str]) -> dict:
         statements = policy.get("Statement") or []
@@ -84,15 +52,6 @@ class PortalIamMixin:
             else filtered_statements[0]
         )
         return policy
-
-    def _expected_bucket_action_set(self, portal_settings: PortalSettings) -> set[str]:
-        advanced = portal_settings.bucket_access_policy.advanced_policy
-        if isinstance(advanced, dict):
-            statements = self._policy_statements(advanced)
-            bucket_stmt = self._find_statement(statements, self._bucket_access_sid)
-            if bucket_stmt and "Action" in bucket_stmt:
-                return self._action_set(bucket_stmt.get("Action"))
-        return set(self._bucket_access_actions(portal_settings))
 
     def _resolve_group_policy(
         self,
@@ -132,11 +91,6 @@ class PortalIamMixin:
         if isinstance(policy, dict) and "Version" not in policy:
             policy["Version"] = "2012-10-17"
         return policy
-
-    def _bucket_access_actions(self, portal_settings: Optional[PortalSettings] = None) -> list[str]:
-        settings = portal_settings or self._portal_settings()
-        actions = self._normalize_actions(settings.bucket_access_policy.actions)
-        return actions or list(self._bucket_access_default_actions)
 
     def _storage_space_share_sid(self, role: PortalStorageSpaceRole) -> str:
         return f"{self._storage_space_share_sid_prefix}{role}"
@@ -565,7 +519,7 @@ class PortalIamMixin:
             .all()
         )
         for metadata in metadata_rows:
-            self._sync_storage_space_bucket_policy(account, metadata.bucket_name, metadata)
+            self._sync_storage_space_access_projection(account, metadata, sync_participants=False)
 
     def _bucket_names_from_resources(self, resources: Any) -> set[str]:
         if not isinstance(resources, list):
@@ -808,6 +762,24 @@ class PortalIamMixin:
                 portal_settings=self._effective_portal_settings(account),
             )
             self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
+
+    def _sync_storage_space_access_projection(
+        self,
+        account: S3Account,
+        metadata: PortalStorageSpaceMetadata,
+        *,
+        extra_user_ids: Optional[set[int]] = None,
+        sync_participants: bool = True,
+        sync_bucket_policy: bool = True,
+    ) -> None:
+        if sync_participants:
+            self._sync_storage_space_participant_projections(
+                account,
+                metadata,
+                extra_user_ids=extra_user_ids,
+            )
+        if sync_bucket_policy:
+            self._sync_storage_space_bucket_policy(account, metadata.bucket_name, metadata)
 
     def _portal_bucket_cors_rules(self, origins: list[str]) -> list[dict]:
         return [
@@ -1337,358 +1309,6 @@ class PortalIamMixin:
                 portal_access_key_from_active_link(link, include_secret=True),
             )
         return keys
-
-    def _ensure_user_bucket_policy(
-        self,
-        iam_service: RGWIAMService,
-        iam_username: Optional[str],
-        bucket_name: str,
-        portal_settings: Optional[PortalSettings] = None,
-    ) -> None:
-        if not iam_username:
-            raise RuntimeError("IAM username missing for this portal user")
-        settings = portal_settings or self._portal_settings()
-        policy_settings = settings.bucket_access_policy
-        advanced_policy = policy_settings.advanced_policy if isinstance(policy_settings.advanced_policy, dict) else None
-        use_advanced = advanced_policy is not None
-        existing_policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
-        existing_resources: list[str] = []
-        if isinstance(existing_policy, dict):
-            existing_statements = existing_policy.get("Statement") or []
-            if not isinstance(existing_statements, list):
-                existing_statements = [existing_statements]
-            for stmt in existing_statements:
-                if not isinstance(stmt, dict) or stmt.get("Sid") != self._bucket_access_sid:
-                    continue
-                resources = stmt.get("Resource") or []
-                if not isinstance(resources, list):
-                    resources = [resources]
-                existing_resources = [arn for arn in resources if isinstance(arn, str)]
-                break
-        if use_advanced and advanced_policy is not None:
-            policy = copy.deepcopy(advanced_policy)
-        else:
-            policy = existing_policy
-        statements = policy.get("Statement") or []
-        if not isinstance(statements, list):
-            statements = [statements]
-        bucket_statement = None
-        for stmt in statements:
-            if not isinstance(stmt, dict):
-                continue
-            if stmt.get("Sid") == self._bucket_access_sid:
-                bucket_statement = stmt
-                break
-        if bucket_statement is None:
-            bucket_statement = {
-                "Sid": self._bucket_access_sid,
-                "Effect": "Allow",
-                "Resource": [],
-            }
-            statements.append(bucket_statement)
-        actions = self._bucket_access_actions(settings)
-        if "Effect" not in bucket_statement:
-            bucket_statement["Effect"] = "Allow"
-        if not use_advanced or "Action" not in bucket_statement:
-            bucket_statement["Action"] = actions
-
-        resources = bucket_statement.get("Resource") or []
-        if not isinstance(resources, list):
-            resources = [resources]
-        for arn in existing_resources:
-            if arn not in resources:
-                resources.append(arn)
-
-        for arn in (f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"):
-            if arn not in resources:
-                resources.append(arn)
-
-        bucket_statement["Resource"] = resources
-        policy = {
-            "Version": policy.get("Version") or "2012-10-17",
-            "Statement": statements,
-        }
-        iam_service.put_user_inline_policy(iam_username, self._bucket_access_policy_name, policy)
-
-    def _set_user_storage_space_policy(
-        self,
-        iam_service: RGWIAMService,
-        iam_username: Optional[str],
-        bucket_name: str,
-        role: PortalStorageSpaceRole,
-    ) -> None:
-        if not iam_username:
-            raise RuntimeError("IAM username missing for this portal user")
-        policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
-        statements = policy.get("Statement") or []
-        if not isinstance(statements, list):
-            statements = [statements]
-        managed_sids = {self._bucket_access_sid, *self._storage_space_share_sids()}
-        remove_arns = set(self._bucket_arns(bucket_name))
-        next_statements: list[dict] = []
-        target_statement = None
-        target_sid = self._storage_space_share_sid(role)
-
-        for stmt in statements:
-            if not isinstance(stmt, dict):
-                continue
-            sid = stmt.get("Sid")
-            if sid in managed_sids:
-                resources = stmt.get("Resource") or []
-                if not isinstance(resources, list):
-                    resources = [resources]
-                resources = [arn for arn in resources if arn not in remove_arns]
-                if resources:
-                    stmt = copy.deepcopy(stmt)
-                    stmt["Resource"] = resources
-                    next_statements.append(stmt)
-            else:
-                next_statements.append(stmt)
-
-        for stmt in next_statements:
-            if stmt.get("Sid") == target_sid:
-                target_statement = stmt
-                break
-        if target_statement is None:
-            target_statement = {
-                "Sid": target_sid,
-                "Effect": "Allow",
-                "Action": self._storage_space_role_actions(role),
-                "Resource": [],
-            }
-            next_statements.append(target_statement)
-        target_statement["Effect"] = "Allow"
-        target_statement["Action"] = self._storage_space_role_actions(role)
-        resources = target_statement.get("Resource") or []
-        if not isinstance(resources, list):
-            resources = [resources]
-        for arn in self._bucket_arns(bucket_name):
-            if arn not in resources:
-                resources.append(arn)
-        target_statement["Resource"] = resources
-
-        iam_service.put_user_inline_policy(
-            iam_username,
-            self._bucket_access_policy_name,
-            {
-                "Version": policy.get("Version") or "2012-10-17",
-                "Statement": next_statements,
-            },
-        )
-
-    def _remove_user_storage_space_policy(
-        self,
-        iam_service: RGWIAMService,
-        iam_username: Optional[str],
-        bucket_name: str,
-    ) -> None:
-        if not iam_username:
-            return
-        policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
-        statements = policy.get("Statement") or []
-        if not isinstance(statements, list):
-            statements = [statements]
-        managed_sids = {self._bucket_access_sid, *self._storage_space_share_sids()}
-        remove_arns = set(self._bucket_arns(bucket_name))
-        next_statements: list[dict] = []
-        for stmt in statements:
-            if not isinstance(stmt, dict):
-                continue
-            if stmt.get("Sid") not in managed_sids:
-                next_statements.append(stmt)
-                continue
-            resources = stmt.get("Resource") or []
-            if not isinstance(resources, list):
-                resources = [resources]
-            remaining = [arn for arn in resources if arn not in remove_arns]
-            if remaining:
-                stmt = copy.deepcopy(stmt)
-                stmt["Resource"] = remaining
-                next_statements.append(stmt)
-        if next_statements:
-            iam_service.put_user_inline_policy(
-                iam_username,
-                self._bucket_access_policy_name,
-                {
-                    "Version": policy.get("Version") or "2012-10-17",
-                    "Statement": next_statements,
-                },
-            )
-        else:
-            iam_service.delete_user_inline_policy(iam_username, self._bucket_access_policy_name)
-
-    def _portal_user_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
-        member_rows = self._portal_account_member_map(account)
-        if not member_rows:
-            return []
-        iam_by_user_id = {
-            user_id: iam_username
-            for user_id, iam_username in (
-                self.db.query(AccountIAMUser.user_id, AccountIAMUser.iam_username)
-                .filter(AccountIAMUser.account_id == account.id)
-                .filter(AccountIAMUser.user_id.in_(member_rows))
-                .all()
-            )
-        }
-        return [
-            (user, account_role, iam_by_user_id.get(user_id))
-            for user_id, (user, account_role, _sources) in sorted(member_rows.items(), key=lambda item: item[1][0].email.lower())
-        ]
-
-    def check_iam_compliance(self, account: S3Account) -> PortalIamComplianceReport:
-        iam_service = self._get_iam_service(account)
-        portal_settings = self._effective_portal_settings(account)
-        issues: list[PortalIamComplianceIssue] = []
-
-        groups = {group.name for group in iam_service.list_groups()}
-        for group_key, group_name, policy_name in (
-            ("manager", self._manager_group_name, self._manager_group_policy_name),
-            ("user", self._user_group_name, self._inline_policy_name),
-        ):
-            if group_name not in groups:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="group",
-                        subject=group_name,
-                        message="Groupe IAM introuvable.",
-                    )
-                )
-                continue
-            attached = iam_service.list_group_policies(group_name)
-            if attached:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="group",
-                        subject=group_name,
-                        message=f"Policies attachees detectees ({len(attached)}).",
-                    )
-                )
-            expected_policy = self._resolve_group_policy(portal_settings, group_key)
-            actual_policy = iam_service.get_group_inline_policy(group_name, policy_name)
-            expected_normalized = self._normalize_policy_document(expected_policy)
-            actual_normalized = self._normalize_policy_document(actual_policy)
-            if expected_policy is None:
-                if actual_policy:
-                    issues.append(
-                        PortalIamComplianceIssue(
-                            scope="group",
-                            subject=group_name,
-                            message="Policy inline presente mais aucune n'est attendue.",
-                        )
-                    )
-            else:
-                if actual_policy is None:
-                    issues.append(
-                        PortalIamComplianceIssue(
-                            scope="group",
-                            subject=group_name,
-                            message="Policy inline manquante.",
-                        )
-                    )
-                elif expected_normalized != actual_normalized:
-                    issues.append(
-                        PortalIamComplianceIssue(
-                            scope="group",
-                            subject=group_name,
-                            message="Policy inline divergente des settings du portail.",
-                        )
-                    )
-
-        portal_users = self._portal_user_rows(account)
-        for user_obj, account_role, iam_username in portal_users:
-            expected_group = (
-                self._manager_group_name
-                if account_role == AccountRole.PORTAL_MANAGER.value
-                else self._user_group_name
-            )
-            subject = user_obj.email
-            if not iam_username:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message="IAM user manquant pour ce compte.",
-                    )
-                )
-                continue
-            subject = f"{user_obj.email} ({iam_username})"
-            groups_for_user = iam_service.list_groups_for_user(iam_username)
-            portal_groups = [
-                g.name
-                for g in groups_for_user
-                if g.name in {self._manager_group_name, self._user_group_name}
-            ]
-            if expected_group not in portal_groups:
-                current = ", ".join(portal_groups) if portal_groups else "aucun"
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message=f"Groupe attendu '{expected_group}' absent (actuels: {current}).",
-                    )
-                )
-            if len(portal_groups) > 1:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message="Appartient aux deux groupes portail (manager/user).",
-                    )
-                )
-            policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name)
-            expected_access = self._db_storage_space_content_access(
-                user_obj,
-                account,
-                account_role or AccountRole.PORTAL_NONE.value,
-            )
-            actual_access = self._extract_storage_space_access(policy)
-            if expected_access and not policy:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message="Policy portal-user-buckets manquante pour les grants DB attendus.",
-                    )
-                )
-            mismatched = sorted(
-                bucket_name
-                for bucket_name, expected_role in expected_access.items()
-                if actual_access.get(bucket_name) != expected_role
-            )
-            if mismatched:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message=f"Projection IAM divergente des grants DB: {', '.join(mismatched)}.",
-                    )
-                )
-            stale = sorted(bucket_name for bucket_name in actual_access if bucket_name not in expected_access)
-            if stale:
-                issues.append(
-                    PortalIamComplianceIssue(
-                        scope="user",
-                        subject=subject,
-                        message=f"Grants IAM obsoletes absents de la DB: {', '.join(stale)}.",
-                    )
-                )
-
-        return PortalIamComplianceReport(ok=len(issues) == 0, issues=issues)
-
-    def apply_iam_compliance(self, account: S3Account) -> PortalIamComplianceReport:
-        iam_service = self._get_iam_service(account)
-        portal_settings = self._effective_portal_settings(account)
-        self._ensure_portal_groups(iam_service, portal_settings)
-        portal_users = self._portal_user_rows(account)
-        for target_user, account_role, iam_username in portal_users:
-            if not iam_username:
-                continue
-            role = account_role or AccountRole.PORTAL_USER.value
-            self._sync_user_group_membership(iam_service, iam_username, role, portal_settings=portal_settings)
-            access_by_bucket = self._db_storage_space_content_access(target_user, account, role)
-            self._sync_user_storage_space_policy_projection(iam_service, iam_username, access_by_bucket)
-        self._sync_account_storage_space_bucket_policies(account)
-        return self.check_iam_compliance(account)
 
     def list_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
         if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:

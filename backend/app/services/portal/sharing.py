@@ -330,11 +330,6 @@ class PortalSharingMixin:
         account_role = self._user_s3_account_role(target.id, access.account.id)
         if account_role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
             raise RuntimeError("User is not allowed for this Portal account.")
-        iam_link = (
-            self.db.query(AccountIAMUser)
-            .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
-            .first()
-        )
         grant = (
             self.db.query(PortalStorageSpaceGrant)
             .filter(
@@ -356,22 +351,7 @@ class PortalSharingMixin:
         self.db.add(grant)
         try:
             self.db.flush()
-            if iam_link and iam_link.iam_username:
-                iam_service = self._get_iam_service(access.account)
-                self._sync_user_group_membership(
-                    iam_service,
-                    iam_link.iam_username,
-                    account_role,
-                    portal_settings=self._effective_portal_settings(access.account),
-                )
-                self._sync_user_storage_space_projection(
-                    target,
-                    access.account,
-                    account_role,
-                    iam_service,
-                    iam_link.iam_username,
-                )
-            self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
+            self._sync_storage_space_access_projection(access.account, metadata, extra_user_ids={target.id})
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -406,11 +386,6 @@ class PortalSharingMixin:
         metadata = self._require_storage_space_active(access.account, bucket_name)
         if metadata is None:
             raise RuntimeError("Storage space metadata is missing.")
-        link = (
-            self.db.query(AccountIAMUser)
-            .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
-            .first()
-        )
         grant = (
             self.db.query(PortalStorageSpaceGrant)
             .filter(
@@ -419,22 +394,12 @@ class PortalSharingMixin:
             )
             .first()
         )
-        account_role = self._user_s3_account_role(target.id, access.account.id)
         try:
             if grant is not None:
                 self.db.delete(grant)
                 self.db.flush()
-            if link and link.iam_username:
-                iam_service = self._get_iam_service(access.account)
-                self._sync_user_storage_space_projection(
-                    target,
-                    access.account,
-                    account_role,
-                    iam_service,
-                    link.iam_username,
-                )
             if grant is not None:
-                self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
+                self._sync_storage_space_access_projection(access.account, metadata, extra_user_ids={target.id})
             self.db.commit()
         except Exception:
             self.db.rollback()

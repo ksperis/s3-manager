@@ -355,17 +355,6 @@ class PortalUserCard(BaseModel):
     iam_only: bool = False
 
 
-class PortalIamComplianceIssue(BaseModel):
-    scope: str
-    subject: str
-    message: str
-
-
-class PortalIamComplianceReport(BaseModel):
-    ok: bool
-    issues: list[PortalIamComplianceIssue]
-
-
 class PortalAccountSettings(BaseModel):
     effective: PortalSettings
     admin_override: PortalSettingsOverride

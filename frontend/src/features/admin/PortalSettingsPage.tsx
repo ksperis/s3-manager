@@ -30,7 +30,7 @@ export default function PortalSettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [corsOriginsText, setCorsOriginsText] = useState("");
   const initRef = useRef(false);
-  const [resettingPolicy, setResettingPolicy] = useState<"manager" | "user" | "bucket" | null>(null);
+  const [resettingPolicy, setResettingPolicy] = useState<"manager" | "user" | null>(null);
 
   const normalizeListInput = (value: string): string[] =>
     value
@@ -142,21 +142,6 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleBucketActionsChange = (value: string) => {
-    const actions = normalizeListInput(value);
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            portal: {
-              ...prev.portal,
-              bucket_access_policy: { ...prev.portal.bucket_access_policy, actions, advanced_policy: null },
-            },
-          }
-        : prev
-    );
-  };
-
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -204,7 +189,7 @@ export default function PortalSettingsPage() {
     }
   };
 
-  const handleResetPolicy = async (scope: "manager" | "user" | "bucket") => {
+  const handleResetPolicy = async (scope: "manager" | "user") => {
     if (!settings) return;
     setResettingPolicy(scope);
     setError(null);
@@ -216,10 +201,8 @@ export default function PortalSettingsPage() {
         const portal = { ...prev.portal };
         if (scope === "manager") {
           portal.iam_group_manager_policy = defaults.portal.iam_group_manager_policy;
-        } else if (scope === "user") {
-          portal.iam_group_user_policy = defaults.portal.iam_group_user_policy;
         } else {
-          portal.bucket_access_policy = defaults.portal.bucket_access_policy;
+          portal.iam_group_user_policy = defaults.portal.iam_group_user_policy;
         }
         return { ...prev, portal };
       });
@@ -382,34 +365,6 @@ export default function PortalSettingsPage() {
                 </div>
               </SettingsItem>
             </div>
-            <SettingsItem
-              title="Storage Space access policy"
-              description="Actions projected when a Portal grant gives a user access to a Storage Space."
-              action={
-                <button
-                  type="button"
-                  onClick={() => handleResetPolicy("bucket")}
-                  disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                  className={settingsInlineButtonClassName}
-                >
-                  {resettingPolicy === "bucket" ? "Resetting..." : "Reset policy"}
-                </button>
-              }
-            >
-              <div className="mt-3">
-                <textarea
-                  value={(settings?.portal.bucket_access_policy.actions || []).join("\n")}
-                  onChange={(e) => handleBucketActionsChange(e.target.value)}
-                  className={settingsTextareaClassName}
-                  rows={8}
-                  placeholder="s3:GetObject"
-                  disabled={!settings}
-                />
-                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  Storage Space grant projections receive storage resources automatically from Portal grants.
-                </p>
-              </div>
-            </SettingsItem>
           </SettingsSection>
         </SettingsCard>
         <SettingsCard>

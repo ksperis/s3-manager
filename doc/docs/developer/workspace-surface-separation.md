@@ -118,7 +118,9 @@ placeholder.
 - Portal-managed bucket policies must only add, replace, or remove dedicated
   `Sid` statements such as `PortalStorageSpaceAccess` and
   `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
-  statements.
+  statements. The Portal role templates for `Viewer`, `Editor`, and `Owner`
+  are code-owned backend projections from DB grants; they are not an editable
+  bucket/IAM policy document in Portal.
 - The default `portal-manager` IAM group policy must stay limited to global
   Portal bootstrap actions such as `s3:ListAllMyBuckets` and
   `sts:GetSessionToken`. Do not reintroduce `iam:*`, `s3:*`,
@@ -223,7 +225,8 @@ The current backend flow is:
    routes resolve Portal credentials and enforce the minimal file profile.
 6. Apply platform-owned bucket defaults and synchronize IAM projections from
    the DB grants through backend orchestration with the account credentials,
-   not by widening the `portal-manager` group policy.
+   not by widening the `portal-manager` group policy or exposing
+   `bucket_access_policy` as a Portal permission control.
 7. Record mutating Portal actions through audit logging.
 8. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.

@@ -216,15 +216,6 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_active_credentials", lambda *args, **kwargs: ("AK-PORTAL", "SK-PORTAL"))
 
-    policy_calls: dict = {}
-
-    def fake_ensure_policy(iam_svc, iam_username, bucket_name, **kwargs):
-        policy_calls["iam_service"] = iam_svc
-        policy_calls["iam_username"] = iam_username
-        policy_calls["bucket_name"] = bucket_name
-
-    monkeypatch.setattr(service, "_ensure_user_bucket_policy", fake_ensure_policy)
-
     created_buckets = []
     versioning_calls = []
     lifecycle_calls = []
@@ -280,43 +271,6 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
     cors_rules = cors_calls[0][1]["rules"]
     assert isinstance(cors_rules, list) and len(cors_rules) == 1
     assert "Authorization" in (cors_rules[0].get("AllowedHeaders") or [])
-    assert policy_calls == {}
-
-
-def test_ensure_user_bucket_policy_appends_resources(db_session):
-    service = PortalService(db_session)
-
-    class FakeIAMService:
-        def __init__(self):
-            self.policies = {}
-
-        def get_user_inline_policy(self, username, policy_name):
-            return self.policies.get((username, policy_name))
-
-        def put_user_inline_policy(self, username, policy_name, policy_document):
-            self.policies[(username, policy_name)] = policy_document
-
-    iam = FakeIAMService()
-    service._ensure_user_bucket_policy(iam, "portal-iam", "bucket-one")
-    service._ensure_user_bucket_policy(iam, "portal-iam", "bucket-two")
-    service._ensure_user_bucket_policy(iam, "portal-iam", "bucket-one")
-
-    policy = iam.policies.get(("portal-iam", service._bucket_access_policy_name))
-    assert policy is not None
-    statements = policy.get("Statement") or []
-    bucket_statement = next(
-        stmt for stmt in statements if isinstance(stmt, dict) and stmt.get("Sid") == service._bucket_access_sid
-    )
-    resources = bucket_statement.get("Resource") or []
-
-    assert bucket_statement.get("Action") == service._bucket_access_actions()
-    assert f"arn:aws:s3:::bucket-one" in resources
-    assert f"arn:aws:s3:::bucket-one/*" in resources
-    assert f"arn:aws:s3:::bucket-two" in resources
-    assert f"arn:aws:s3:::bucket-two/*" in resources
-    assert len([r for r in resources if r == "arn:aws:s3:::bucket-one"]) == 1
-    assert len([r for r in resources if r == "arn:aws:s3:::bucket-one/*"]) == 1
-    assert policy.get("Version") == "2012-10-17"
 
 
 def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(monkeypatch, db_session):
@@ -348,7 +302,6 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, iam_user, False))
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_active_credentials", lambda *args, **kwargs: ("AK-PORTAL", "SK-PORTAL"))
-    monkeypatch.setattr(service, "_ensure_user_bucket_policy", lambda *args, **kwargs: None)
 
     created_buckets = []
     versioning_calls = []
@@ -1698,8 +1651,7 @@ def test_portal_manager_creates_private_and_shared_without_user_create_setting(m
         "create_bucket",
         lambda _user, _access, bucket_name, **_kwargs: created_buckets.append(bucket_name),
     )
-    monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "get_bucket_stats",
@@ -1735,8 +1687,7 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda _existing: "restricted-bucket")
     monkeypatch.setattr(service, "create_bucket", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "get_storage_space",
@@ -1832,7 +1783,7 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
     monkeypatch.setattr(service, "delete_bucket", lambda _user, _access, bucket_name, **_kwargs: deleted_buckets.append(bucket_name))
     monkeypatch.setattr(
         service,
-        "_sync_storage_space_participant_projections",
+        "_sync_storage_space_access_projection",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("projection failed")),
     )
 
@@ -1939,7 +1890,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
-    policy_calls = []
+    projection_calls = []
     monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-bucket"}])
     monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
@@ -1948,8 +1899,8 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
-        "_ensure_user_bucket_policy",
-        lambda _iam_service, iam_username, bucket_name, **_kwargs: policy_calls.append((iam_username, bucket_name)),
+        "_sync_storage_space_access_projection",
+        lambda _account, metadata_arg, **_kwargs: projection_calls.append(metadata_arg.bucket_name),
     )
     monkeypatch.setattr(
         service,
@@ -1967,7 +1918,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     storage_space = service.import_storage_space(user, access, bucket_name=" existing-bucket ", description="Imported bucket")
 
     assert storage_space.id == "existing-bucket"
-    assert policy_calls == []
+    assert projection_calls == ["existing-bucket"]
     metadata = (
         db_session.query(PortalStorageSpaceMetadata)
         .filter_by(account_id=account.id, bucket_name="existing-bucket")
@@ -2000,8 +1951,7 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_sync_storage_space_participant_projections", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "get_storage_space",
@@ -2146,8 +2096,8 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     monkeypatch.setattr(service, "list_existing_user_storage_space_access", lambda *_args, **_kwargs: {"restore-data": "Owner"})
     monkeypatch.setattr(
         service,
-        "_sync_storage_space_bucket_policy",
-        lambda _account, _bucket_name, metadata_arg: sync_archived_values.append(metadata_arg.archived_at),
+        "_sync_storage_space_access_projection",
+        lambda _account, metadata_arg, **_kwargs: sync_archived_values.append(metadata_arg.archived_at),
     )
     monkeypatch.setattr(
         service,
@@ -2503,7 +2453,7 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     iam = FakeIAMService()
 
-    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Viewer")
+    service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Viewer"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
     access = service._extract_storage_space_access(policy)
 
@@ -2511,7 +2461,7 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
     viewer_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceViewer")
     assert viewer_statement["Action"] == ["s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"]
 
-    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Editor")
+    service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Editor"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
     access = service._extract_storage_space_access(policy)
 
@@ -2521,7 +2471,7 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
     assert "s3:PutObject" in editor_statement["Action"]
     assert "s3:DeleteObject" in editor_statement["Action"]
 
-    service._set_user_storage_space_policy(iam, "portal-iam", "research-data", "Owner")
+    service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Owner"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
     access = service._extract_storage_space_access(policy)
 
@@ -2956,12 +2906,12 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_sync_user_storage_space_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
-    bucket_policy_syncs = []
+    projection_syncs = []
     monkeypatch.setattr(
         service,
-        "_sync_storage_space_bucket_policy",
-        lambda account_arg, bucket_name, metadata_arg: bucket_policy_syncs.append(
-            (account_arg.id, bucket_name, metadata_arg.id)
+        "_sync_storage_space_access_projection",
+        lambda account_arg, metadata_arg, **kwargs: projection_syncs.append(
+            (account_arg.id, metadata_arg.bucket_name, metadata_arg.id, kwargs.get("extra_user_ids"))
         ),
     )
     owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -2969,9 +2919,9 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
     service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
     service.revoke_storage_space_share(owner, owner_access, target, "research-data")
 
-    assert bucket_policy_syncs == [
-        (account.id, "research-data", metadata.id),
-        (account.id, "research-data", metadata.id),
+    assert projection_syncs == [
+        (account.id, "research-data", metadata.id, {target.id}),
+        (account.id, "research-data", metadata.id, {target.id}),
     ]
 
 
@@ -4220,7 +4170,11 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
-    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda acc, bucket, meta: synced.append((bucket, meta.id)))
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_access_projection",
+        lambda _account, meta, **kwargs: synced.append((meta.bucket_name, meta.id, kwargs.get("sync_participants"))),
+    )
 
     created = service.create_access_key(
         user,
@@ -4242,7 +4196,7 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     assert created.permission == permission
     assert row.external_email == "partner@example.org"
     assert not hasattr(row, "secret_access_key")
-    assert synced == [(metadata.bucket_name, metadata.id)]
+    assert synced == [(metadata.bucket_name, metadata.id, False)]
     policy = iam_service.policies[(row.iam_username, "portal-external-storage-space")]
     statements = policy["Statement"]
     actions = set(statements[0]["Action"])
@@ -4344,13 +4298,17 @@ def test_external_access_key_status_and_delete_resync_policy(monkeypatch, db_ses
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
-    monkeypatch.setattr(service, "_sync_storage_space_bucket_policy", lambda acc, bucket, meta: synced.append(bucket))
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_access_projection",
+        lambda _account, meta, **kwargs: synced.append((meta.bucket_name, kwargs.get("sync_participants"))),
+    )
 
     updated = service.update_access_key_status(user, _portal_access(account, user), "AK-EXT-LIFE", False)
     assert updated.target_type == "external"
     assert updated.is_active is False
     assert iam_service.calls[0] == ("update", "portal-ext-lifecycle", "AK-EXT-LIFE", "Inactive")
-    assert synced == [metadata.bucket_name]
+    assert synced == [(metadata.bucket_name, False)]
 
     deleted = service.delete_access_key(user, _portal_access(account, user), "AK-EXT-LIFE")
     db_session.refresh(credential)
@@ -4362,7 +4320,7 @@ def test_external_access_key_status_and_delete_resync_policy(monkeypatch, db_ses
     assert ("delete_key", "portal-ext-lifecycle", "AK-EXT-LIFE") in iam_service.calls
     assert ("delete_policy", "portal-ext-lifecycle", "portal-external-storage-space") in iam_service.calls
     assert ("delete_user", "portal-ext-lifecycle") in iam_service.calls
-    assert synced == [metadata.bucket_name, metadata.bucket_name]
+    assert synced == [(metadata.bucket_name, False), (metadata.bucket_name, False)]
 
 
 def test_bucket_policy_principals_include_active_external_credentials(db_session):

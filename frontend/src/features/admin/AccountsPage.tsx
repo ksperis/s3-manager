@@ -93,8 +93,6 @@ type PortalOverrideFormSnapshot = {
   managerPolicyActionsText: string;
   userPolicyMode: PolicyMode;
   userPolicyActionsText: string;
-  bucketPolicyMode: PolicyMode;
-  bucketPolicyActionsText: string;
 };
 
 const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
@@ -208,8 +206,6 @@ export default function S3AccountsPage() {
   const [adminManagerPolicyActionsText, setAdminManagerPolicyActionsText] = useState("");
   const [adminUserPolicyMode, setAdminUserPolicyMode] = useState<PolicyMode>("inherit");
   const [adminUserPolicyActionsText, setAdminUserPolicyActionsText] = useState("");
-  const [adminBucketPolicyMode, setAdminBucketPolicyMode] = useState<PolicyMode>("inherit");
-  const [adminBucketPolicyActionsText, setAdminBucketPolicyActionsText] = useState("");
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
@@ -481,8 +477,6 @@ export default function S3AccountsPage() {
       setAdminManagerPolicyActionsText("");
       setAdminUserPolicyMode("inherit");
       setAdminUserPolicyActionsText("");
-      setAdminBucketPolicyMode("inherit");
-      setAdminBucketPolicyActionsText("");
       return;
     }
     const override = portalAccountSettings.admin_override;
@@ -511,11 +505,6 @@ export default function S3AccountsPage() {
     const userPolicyMode: PolicyMode = userHasActions ? "actions" : "inherit";
     const userPolicyActionsText = (userOverride?.actions ?? (effective.iam_group_user_policy.actions || [])).join("\n");
 
-    const bucketOverride = override.bucket_access_policy;
-    const bucketHasActions = hasOwn(bucketOverride as Record<string, unknown> | null, "actions");
-    const bucketPolicyMode: PolicyMode = bucketHasActions ? "actions" : "inherit";
-    const bucketPolicyActionsText = (bucketOverride?.actions ?? (effective.bucket_access_policy.actions || [])).join("\n");
-
     setAdminPortalBucketCreateOverride(bucketCreate);
     setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
     setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
@@ -528,8 +517,6 @@ export default function S3AccountsPage() {
     setAdminManagerPolicyActionsText(managerPolicyActionsText);
     setAdminUserPolicyMode(userPolicyMode);
     setAdminUserPolicyActionsText(userPolicyActionsText);
-    setAdminBucketPolicyMode(bucketPolicyMode);
-    setAdminBucketPolicyActionsText(bucketPolicyActionsText);
     setPortalInitialSignature(
       buildPortalOverrideFormSignature({
         bucketCreate,
@@ -544,8 +531,6 @@ export default function S3AccountsPage() {
         managerPolicyActionsText,
         userPolicyMode,
         userPolicyActionsText,
-        bucketPolicyMode,
-        bucketPolicyActionsText,
       })
     );
   }, [portalAccountSettings]);
@@ -992,16 +977,12 @@ export default function S3AccountsPage() {
         managerPolicyActionsText: adminManagerPolicyActionsText,
         userPolicyMode: adminUserPolicyMode,
         userPolicyActionsText: adminUserPolicyActionsText,
-        bucketPolicyMode: adminBucketPolicyMode,
-        bucketPolicyActionsText: adminBucketPolicyActionsText,
       }),
     [
       adminBucketCorsOriginsOverride,
       adminBucketCorsOriginsText,
       adminBucketCorsOverride,
       adminBucketLifecycleOverride,
-      adminBucketPolicyActionsText,
-      adminBucketPolicyMode,
       adminBucketVersioningOverride,
       adminPortalNamedBucketCreateOverride,
       adminManagerPolicyActionsText,
@@ -1140,9 +1121,6 @@ export default function S3AccountsPage() {
     }
     if (adminUserPolicyMode === "actions") {
       payload.iam_group_user_policy = { actions: normalizeListInput(adminUserPolicyActionsText) };
-    }
-    if (adminBucketPolicyMode === "actions") {
-      payload.bucket_access_policy = { actions: normalizeListInput(adminBucketPolicyActionsText) };
     }
     return payload;
   };
@@ -2209,39 +2187,6 @@ export default function S3AccountsPage() {
                             )}
                           </PortalSettingsItem>
 
-                          <PortalSettingsItem
-                            title="Policy bucket access"
-                            description={`Mode: ${adminBucketPolicyMode}`}
-                            action={
-                              <select
-                                value={adminBucketPolicyMode}
-                                onChange={(e) => {
-                                  const mode = e.target.value as PolicyMode;
-                                  setAdminBucketPolicyMode(mode);
-                                  if (mode === "actions" && !adminBucketPolicyActionsText) {
-                                    setAdminBucketPolicyActionsText(
-                                      (effectivePortalSettings.bucket_access_policy.actions || []).join("\n")
-                                    );
-                                  }
-                                }}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                disabled={portalSettingsLoading || portalSettingsSaving}
-                              >
-                                <option value="inherit">Inherit</option>
-                                <option value="actions">Actions</option>
-                              </select>
-                            }
-                          >
-                            {adminBucketPolicyMode === "actions" && (
-                              <textarea
-                                value={adminBucketPolicyActionsText}
-                                onChange={(e) => setAdminBucketPolicyActionsText(e.target.value)}
-                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                rows={4}
-                                disabled={portalSettingsLoading || portalSettingsSaving}
-                              />
-                            )}
-                          </PortalSettingsItem>
                         </PortalSettingsSection>
 
                         <PortalSettingsSection title="BUCKET DEFAULTS" layout="grid">

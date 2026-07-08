@@ -51,8 +51,6 @@ from app.models.portal import (
     PortalActivityItem,
     PortalAlert,
     PortalIAMUser,
-    PortalIamComplianceIssue,
-    PortalIamComplianceReport,
     PortalPublicLink,
     PortalState,
     PortalTransfer,

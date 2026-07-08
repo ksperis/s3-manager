@@ -11,7 +11,6 @@ import {
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceRole,
   type PortalStorageSpaceShareCandidate,
-  type PortalStorageSpaceVisibility,
 } from "../../api/portal";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
@@ -35,6 +34,7 @@ import { formatBytes, formatCompactNumber } from "../../utils/format";
 import {
   PortalAccessModeFields,
   PortalShareCandidatePicker,
+  portalAccessPayloadFromMode,
   portalAccessModeDescription,
   portalAccessModeSummary,
   selectedPortalShares,
@@ -229,10 +229,8 @@ export default function PortalStorageSpacesPage() {
   const canChooseVisibility = state?.account_role === "portal_manager";
   const effectiveNamingMode = canUseNamedBucket ? newNamingMode : "generic_uuid";
   const effectiveNewAccessMode: PortalAccessMode = canChooseVisibility ? newAccessMode : "private";
-  const effectiveNewVisibility: PortalStorageSpaceVisibility = effectiveNewAccessMode === "private" ? "private" : "shared";
-  const effectiveNewShareScope = effectiveNewAccessMode === "account" ? "account" : "restricted";
-  const effectiveImportVisibility: PortalStorageSpaceVisibility = importAccessMode === "private" ? "private" : "shared";
-  const effectiveImportShareScope = importAccessMode === "account" ? "account" : "restricted";
+  const effectiveNewAccessPayload = portalAccessPayloadFromMode(effectiveNewAccessMode, newAccountMemberRole);
+  const effectiveImportAccessPayload = portalAccessPayloadFromMode(importAccessMode, importAccountMemberRole);
   const selectedRestrictedEntries = selectedPortalShares(restrictedRolesByUserId);
   const selectedImportRestrictedEntries = selectedPortalShares(importRestrictedRolesByUserId);
   const portalMemberCount = shareCandidates.length + 1;
@@ -301,10 +299,8 @@ export default function PortalStorageSpacesPage() {
         name: newName.trim(),
         naming_mode: effectiveNamingMode,
         description: newDescription.trim() || null,
-        visibility: effectiveNewVisibility,
-        share_scope: effectiveNewShareScope,
-        account_member_role: effectiveNewShareScope === "account" ? newAccountMemberRole : null,
-        initial_shares: effectiveNewShareScope === "restricted" ? selectedRestrictedEntries : [],
+        ...effectiveNewAccessPayload,
+        initial_shares: effectiveNewAccessPayload.share_scope === "restricted" ? selectedRestrictedEntries : [],
       });
       navigate(storageSpacePath({ id: created.id }));
     } catch (err) {
@@ -323,10 +319,8 @@ export default function PortalStorageSpacesPage() {
       const imported = await importPortalStorageSpace(accountIdForApi, {
         bucket_name: importBucketName.trim(),
         description: importDescription.trim() || null,
-        visibility: effectiveImportVisibility,
-        share_scope: effectiveImportShareScope,
-        account_member_role: effectiveImportShareScope === "account" ? importAccountMemberRole : null,
-        initial_shares: effectiveImportShareScope === "restricted" ? selectedImportRestrictedEntries : [],
+        ...effectiveImportAccessPayload,
+        initial_shares: effectiveImportAccessPayload.share_scope === "restricted" ? selectedImportRestrictedEntries : [],
       });
       navigate(storageSpacePath({ id: imported.id }));
     } catch (err) {

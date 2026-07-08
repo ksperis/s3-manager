@@ -334,8 +334,7 @@ class PortalStorageSpacesMixin:
             self.db.flush()
             self._add_storage_space_initial_grants(metadata, user, validated_initial_shares)
             self.db.flush()
-            self._sync_storage_space_participant_projections(access.account, metadata)
-            self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
+            self._sync_storage_space_access_projection(access.account, metadata)
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -423,8 +422,7 @@ class PortalStorageSpacesMixin:
             self.db.flush()
             self._add_storage_space_initial_grants(metadata, user, validated_initial_shares)
             self.db.flush()
-            self._sync_storage_space_participant_projections(access.account, metadata)
-            self._sync_storage_space_bucket_policy(access.account, cleaned_bucket_name, metadata)
+            self._sync_storage_space_access_projection(access.account, metadata)
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -502,12 +500,11 @@ class PortalStorageSpacesMixin:
         metadata.updated_at = utcnow()
         self.db.add(metadata)
         self.db.flush()
-        self._sync_storage_space_participant_projections(
+        self._sync_storage_space_access_projection(
             access.account,
             metadata,
             extra_user_ids=previous_participant_user_ids,
         )
-        self._sync_storage_space_bucket_policy(access.account, bucket_name, metadata)
         self.db.commit()
         storage_space = self.get_storage_space(user, access, bucket_name)
         if storage_space is None:

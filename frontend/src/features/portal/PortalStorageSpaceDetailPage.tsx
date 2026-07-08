@@ -47,6 +47,8 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+  portalAccessModeFromParts,
+  portalAccessPayloadFromMode,
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
@@ -150,13 +152,7 @@ export default function PortalStorageSpaceDetailPage() {
   } = usePortalWorkspaceData({ includeArchived: true });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
-  const spaceAccessMode: PortalAccessMode = space
-    ? space.visibility === "private"
-      ? "private"
-      : space.shareScope === "account"
-      ? "account"
-      : "restricted"
-    : "private";
+  const spaceAccessMode: PortalAccessMode = space ? portalAccessModeFromParts(space.visibility, space.shareScope) : "private";
   const savedAccessMode: PortalAccessMode = accessSummary
     ? accessSummary.mode === "all"
       ? "account"
@@ -262,9 +258,7 @@ export default function PortalStorageSpaceDetailPage() {
     setMessage(null);
     try {
       await updatePortalStorageSpace(accountIdForApi, space.id, {
-        visibility: change.mode === "private" ? "private" : "shared",
-        share_scope: change.mode === "account" ? "account" : "restricted",
-        account_member_role: change.mode === "account" ? change.accountMemberRole : null,
+        ...portalAccessPayloadFromMode(change.mode, change.accountMemberRole),
       });
       setPendingAccessChange(null);
       refreshWorkspaceData();

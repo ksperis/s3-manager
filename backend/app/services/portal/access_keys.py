@@ -250,7 +250,7 @@ class PortalAccessKeysMixin:
             )
             self.db.add(credential)
             self.db.flush()
-            self._sync_storage_space_bucket_policy(access.account, metadata.bucket_name, metadata)
+            self._sync_storage_space_access_projection(access.account, metadata, sync_participants=False)
             self.db.commit()
             self.db.refresh(credential)
         except Exception:
@@ -335,7 +335,7 @@ class PortalAccessKeysMixin:
             self.db.flush()
             metadata = external.storage_space
             if metadata is not None:
-                self._sync_storage_space_bucket_policy(access.account, external.bucket_name, metadata)
+                self._sync_storage_space_access_projection(access.account, metadata, sync_participants=False)
             self.db.commit()
             self.db.refresh(external)
             return portal_access_key_from_external_credential(
@@ -384,7 +384,7 @@ class PortalAccessKeysMixin:
             self.db.add(external)
             self.db.flush()
             if metadata is not None:
-                self._sync_storage_space_bucket_policy(access.account, external.bucket_name, metadata)
+                self._sync_storage_space_access_projection(access.account, metadata, sync_participants=False)
             self.db.commit()
             return deleted
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)

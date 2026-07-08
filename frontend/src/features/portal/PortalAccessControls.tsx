@@ -3,9 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import {
+  type PortalStorageSpaceCreate,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceRole,
   type PortalStorageSpaceShareCandidate,
+  type PortalStorageSpaceShareScope,
+  type PortalStorageSpaceVisibility,
 } from "../../api/portal";
 import UiBadge from "../../components/ui/UiBadge";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
@@ -23,6 +26,25 @@ import { portalRoleTone } from "./portalUi";
 
 export type PortalAccessMode = "private" | "account" | "restricted";
 export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceRole };
+
+export function portalAccessModeFromParts(
+  visibility?: PortalStorageSpaceVisibility | null,
+  shareScope?: PortalStorageSpaceShareScope | null,
+): PortalAccessMode {
+  if (visibility !== "shared") return "private";
+  return shareScope === "account" ? "account" : "restricted";
+}
+
+export function portalAccessPayloadFromMode(
+  mode: PortalAccessMode,
+  accountMemberRole?: PortalStorageSpaceAccountMemberRole | null,
+): Pick<PortalStorageSpaceCreate, "visibility" | "share_scope" | "account_member_role"> {
+  return {
+    visibility: mode === "private" ? "private" : "shared",
+    share_scope: mode === "account" ? "account" : "restricted",
+    account_member_role: mode === "account" ? accountMemberRole ?? "Editor" : null,
+  };
+}
 
 export function portalAccessModeDescription(mode: PortalAccessMode, t: ReturnType<typeof useI18n>["t"]): string {
   if (mode === "account") {

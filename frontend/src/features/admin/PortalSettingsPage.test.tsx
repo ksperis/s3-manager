@@ -151,7 +151,7 @@ describe("PortalSettingsPage", () => {
     expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
     expect(screen.queryByText("Policy bucket access")).not.toBeInTheDocument();
-    expect(screen.getByText("Storage Space access policy")).toBeInTheDocument();
+    expect(screen.queryByText("Storage Space access policy")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Portal user Storage Space creation")).toBeInTheDocument();
   });
 });
