@@ -156,7 +156,9 @@ describe("ProfilePage live validation", () => {
     await waitFor(() => {
       expect(validateConnectionCredentialsMock).toHaveBeenCalledTimes(1);
     }, { timeout: 3000 });
-    expect(await screen.findByText("Invalid S3 credentials.")).toBeInTheDocument();
+    const createValidationError = await screen.findByText("Invalid S3 credentials.");
+    expect(createValidationError).toBeInTheDocument();
+    expect(createValidationError).toHaveClass("border-rose-200");
     expect(screen.getByRole("button", { name: "Create connection" })).toBeEnabled();
   });
 
@@ -239,7 +241,9 @@ describe("ProfilePage live validation", () => {
     await waitFor(() => {
       expect(validateConnectionCredentialsMock).toHaveBeenCalled();
     }, { timeout: 3000 });
-    expect(await within(dialog).findByText("Invalid S3 credentials.")).toBeInTheDocument();
+    const editValidationError = await within(dialog).findByText("Invalid S3 credentials.");
+    expect(editValidationError).toBeInTheDocument();
+    expect(editValidationError).toHaveClass("border-rose-200");
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 

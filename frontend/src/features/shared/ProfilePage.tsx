@@ -11,6 +11,7 @@ import PaginationControls from "../../components/PaginationControls";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
+import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiDataTableClass } from "../../components/ui/styles";
@@ -1307,10 +1308,8 @@ export default function ProfilePage({
                 </label>
               </div>
             )}
-            {passwordError && <p className="ui-caption font-semibold text-rose-600">{passwordError}</p>}
-            {passwordMessage && (
-              <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-300">{passwordMessage}</p>
-            )}
+            {passwordError && <UiInlineMessage tone="error">{passwordError}</UiInlineMessage>}
+            {passwordMessage && <UiInlineMessage tone="success">{passwordMessage}</UiInlineMessage>}
             <div>
               <button type="submit" disabled={passwordSaving || !canChangePassword} className={primaryButtonClasses}>
                 {passwordSaving ? "Updating..." : "Change password"}
@@ -1708,9 +1707,9 @@ export default function ProfilePage({
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {connectionsError}
-            </div>
+            </UiInlineMessage>
           )}
           <form onSubmit={handleCreatePrivateConnection} className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1865,9 +1864,9 @@ export default function ProfilePage({
           maxWidthClass="max-w-3xl"
         >
           {connectionsError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <UiInlineMessage tone="error" className="mb-3">
               {connectionsError}
-            </div>
+            </UiInlineMessage>
           )}
           <form
             className="space-y-4"
