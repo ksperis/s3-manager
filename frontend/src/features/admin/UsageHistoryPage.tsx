@@ -23,15 +23,11 @@ import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import StatCards from "../../components/StatCards";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import {
-  toolbarCompactButtonClasses,
-  toolbarCompactInputClasses,
-  toolbarCompactSelectClasses,
-} from "../../components/toolbarControlClasses";
+import UiButton from "../../components/ui/UiButton";
+import UiInput from "../../components/ui/UiInput";
+import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
-  uiButtonBaseClass,
-  uiButtonVariants,
   uiMutedTextClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
@@ -375,15 +371,15 @@ export default function UsageHistoryPage() {
         description="Stored quota usage snapshots collected for RGW accounts and users."
         breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Usage history" })}
         rightContent={
-          <button
-            type="button"
+          <UiButton
             onClick={() => void handleCollect()}
             disabled={collectLoading}
-            className={cx(uiButtonBaseClass, uiButtonVariants.primary, "h-8 gap-2 px-3 py-1.5 text-xs")}
+            loading={collectLoading}
+            size="sm"
+            leftIcon={<RefreshIcon className={cx("h-3.5 w-3.5", collectLoading && "animate-spin")} />}
           >
-            <RefreshIcon className={cx("h-3.5 w-3.5", collectLoading && "animate-spin")} />
             {collectLoading ? "Collecting..." : "Collect usage"}
-          </button>
+          </UiButton>
         }
       />
 
@@ -393,98 +389,84 @@ export default function UsageHistoryPage() {
         description="Filter the stored usage snapshots. Daily rows keep the latest usage for each day; hourly rows keep the exact collected quotas."
         controls={
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Granularity
-              <select
-                value={granularity}
-                onChange={(event) => setGranularity(event.target.value as UsageHistoryGranularity)}
-                className={toolbarCompactSelectClasses}
-              >
-                <option value="daily">Daily</option>
-                <option value="hourly">Hourly</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Endpoint
-              <select
-                value={selectedEndpointId ?? ""}
-                onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
-                className={toolbarCompactSelectClasses}
-                disabled={endpointsLoading}
-              >
-                <option value="">{endpointsLoading ? "Loading..." : "All endpoints"}</option>
-                {endpoints.map((endpoint) => (
-                  <option key={endpoint.id} value={endpoint.id}>
-                    {endpoint.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Subject
-              <select
-                value={subjectType}
-                onChange={(event) => setSubjectType(event.target.value as UsageHistorySubjectType)}
-                className={toolbarCompactSelectClasses}
-              >
-                {SUBJECT_TYPES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Start
-              <input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className={toolbarCompactInputClasses}
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              End
-              <input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className={toolbarCompactInputClasses}
-              />
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Sort by
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as UsageHistorySortBy)}
-                className={toolbarCompactSelectClasses}
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 ui-caption text-[var(--ui-text-muted)]">
-              Direction
-              <select
-                value={sortDir}
-                onChange={(event) => setSortDir(event.target.value as UsageHistorySortDir)}
-                className={toolbarCompactSelectClasses}
-              >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              className={toolbarCompactButtonClasses}
+            <UiSelect
+              label="Granularity"
+              value={granularity}
+              onChange={(event) => setGranularity(event.target.value as UsageHistoryGranularity)}
+              size="compact"
+            >
+              <option value="daily">Daily</option>
+              <option value="hourly">Hourly</option>
+            </UiSelect>
+            <UiSelect
+              label="Endpoint"
+              value={selectedEndpointId ?? ""}
+              onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
+              disabled={endpointsLoading}
+              size="compact"
+            >
+              <option value="">{endpointsLoading ? "Loading..." : "All endpoints"}</option>
+              {endpoints.map((endpoint) => (
+                <option key={endpoint.id} value={endpoint.id}>
+                  {endpoint.name}
+                </option>
+              ))}
+            </UiSelect>
+            <UiSelect
+              label="Subject"
+              value={subjectType}
+              onChange={(event) => setSubjectType(event.target.value as UsageHistorySubjectType)}
+              size="compact"
+            >
+              {SUBJECT_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </UiSelect>
+            <UiInput
+              label="Start"
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              size="compact"
+            />
+            <UiInput
+              label="End"
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              size="compact"
+            />
+            <UiSelect
+              label="Sort by"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as UsageHistorySortBy)}
+              size="compact"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </UiSelect>
+            <UiSelect
+              label="Direction"
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as UsageHistorySortDir)}
+              size="compact"
+            >
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </UiSelect>
+            <UiButton
+              variant="secondary"
+              size="sm"
               onClick={() => setReloadToken((current) => current + 1)}
               disabled={historyLoading}
             >
               Refresh
-            </button>
+            </UiButton>
           </div>
         }
         items={[

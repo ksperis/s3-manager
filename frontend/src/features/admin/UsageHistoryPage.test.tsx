@@ -126,6 +126,14 @@ describe("UsageHistoryPage", () => {
     expect(await screen.findByText("Tenant A")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
+    expect(screen.getByRole("combobox", { name: "Granularity" })).toHaveValue("daily");
+    expect(screen.getByRole("combobox", { name: "Endpoint" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Subject" })).toHaveValue("all");
+    expect(screen.getByLabelText("Start")).toHaveAttribute("type", "date");
+    expect(screen.getByLabelText("End")).toHaveAttribute("type", "date");
+    expect(screen.getByRole("combobox", { name: "Sort by" })).toHaveValue("period");
+    expect(screen.getByRole("combobox", { name: "Direction" })).toHaveValue("desc");
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
 
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
