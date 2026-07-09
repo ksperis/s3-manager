@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getPortalBillingMe, type BillingSubjectDetail } from "../../api/billing";
 import type { BucketUsageStatsAggregate } from "../../api/bucketUsageStats";
+import type { HealthCheckStatus } from "../../api/healthchecks";
 import { fetchPortalUsageHistoryTrends, getPortalUsageStatsAggregate } from "../../api/portal";
 import type { TrafficWindow } from "../../api/stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "../../api/usageHistory";
@@ -17,7 +18,9 @@ import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
-import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
+import UiBadge from "../../components/ui/UiBadge";
+import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
@@ -39,6 +42,42 @@ function currentMonth(): string {
 function percent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.min(100, Math.max(0, (used / quota) * 100));
+}
+
+function backendStatusFromHealth(health: ReturnType<typeof usePortalWorkspaceData>["health"]): HealthCheckStatus {
+  if (!health || health.endpoint_count <= 0) return "unknown";
+  if (health.down_count > 0) return "down";
+  if (health.degraded_count > 0) return "degraded";
+  if (health.up_count > 0) return "up";
+  return "unknown";
+}
+
+function backendStatusTone(status: HealthCheckStatus): "success" | "warning" | "danger" | "neutral" {
+  if (status === "up") return "success";
+  if (status === "degraded") return "warning";
+  if (status === "down") return "danger";
+  return "neutral";
+}
+
+function backendStatusLabel(status: HealthCheckStatus, t: ReturnType<typeof useI18n>["t"]): string {
+  if (status === "up") return t({ en: "Operational", fr: "Opérationnel", de: "Betriebsbereit" });
+  if (status === "degraded") return t({ en: "Degraded", fr: "Dégradé", de: "Beeinträchtigt" });
+  if (status === "down") return t({ en: "Issue", fr: "Incident", de: "Problem" });
+  return t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" });
+}
+
+function backendStatusHint(status: HealthCheckStatus, t: ReturnType<typeof useI18n>["t"]): string {
+  if (status === "up") return t({ en: "The storage service is responding normally.", fr: "Le service de stockage répond normalement.", de: "Der Speicherdienst antwortet normal." });
+  if (status === "degraded") return t({ en: "Some storage checks are degraded.", fr: "Certains contrôles du stockage sont dégradés.", de: "Einige Speicherprüfungen sind beeinträchtigt." });
+  if (status === "down") return t({ en: "Some storage checks are failing.", fr: "Certains contrôles du stockage échouent.", de: "Einige Speicherprüfungen schlagen fehl." });
+  return t({ en: "No recent backend check is available.", fr: "Aucun contrôle récent du backend n'est disponible.", de: "Keine aktuelle Backend-Prüfung verfügbar." });
+}
+
+function formatBackendTimestamp(value: string | null | undefined, locale: ReturnType<typeof useI18n>["locale"]): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(parsed);
 }
 
 export default function PortalUsagePage() {
@@ -67,6 +106,8 @@ export default function PortalUsagePage() {
     traffic,
     trafficLoading,
     trafficError,
+    health,
+    healthLoading,
     loading,
     error,
     accountError,
@@ -74,7 +115,7 @@ export default function PortalUsagePage() {
     hasAccountContext,
     accountIdForApi,
     state,
-  } = usePortalWorkspaceData({ includeTraffic: true, trafficWindow });
+  } = usePortalWorkspaceData({ includeTraffic: true, includeHealth: true, trafficWindow });
 
   const tabs = useMemo(
     () =>
@@ -250,6 +291,8 @@ export default function PortalUsagePage() {
   const cost = billing?.cost ?? null;
   const billingCoverage = billing?.coverage ?? null;
   const trafficMissing = !traffic && !trafficLoading && !trafficError;
+  const backendStatus = backendStatusFromHealth(health);
+  const backendIssueCount = (health?.down_count ?? 0) + (health?.degraded_count ?? 0);
 
   const billingMonthControl = (
     <label className={cx(uiCardMutedClass, "flex h-9 items-center gap-2 px-3 ui-caption font-semibold", uiMutedTextClass)}>
@@ -304,40 +347,85 @@ export default function PortalUsagePage() {
       </div>
 
       {activeTab === "storage" ? (
-        <MetricsSummaryCard
-          title={t({ en: "Room and files", fr: "Espace et fichiers", de: "Platz und Dateien" })}
-          description={t({ en: "Current storage, file count, and remaining room for this workspace.", fr: "Stockage actuel, nombre de fichiers et espace restant pour ce workspace.", de: "Aktueller Speicher, Dateianzahl und verbleibender Platz für diesen Workspace." })}
-        >
-          {usageError ? (
-            <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles de l'espace de travail restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricsSnapshotCard
-              label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
-              value={formatBytes(totalUsedBytes)}
-              hint={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatPercentage(quotaPercent)} of quota`, fr: `${formatPercentage(quotaPercent)} du quota`, de: `${formatPercentage(quotaPercent)} der Quote` })}
-              loading={usageLoading}
-            />
-            <MetricsSnapshotCard
-              label={t({ en: "Room left", fr: "Espace restant", de: "Verbleibender Platz" })}
-              value={formatBytes(remainingBytes)}
-              hint={quotaBytes == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatBytes(quotaBytes)} total`, fr: `${formatBytes(quotaBytes)} au total`, de: `${formatBytes(quotaBytes)} insgesamt` })}
-              loading={usageLoading}
-            />
-            <MetricsSnapshotCard
-              label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
-              value={formatCompactNumber(totalObjects)}
-              hint={objectQuotaPercent == null ? (totalObjects == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })) : t({ en: `${formatPercentage(objectQuotaPercent)} of file quota`, fr: `${formatPercentage(objectQuotaPercent)} du quota de fichiers`, de: `${formatPercentage(objectQuotaPercent)} der Dateiquote` })}
-              loading={usageLoading}
-            />
-            <MetricsSnapshotCard
-              label={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
-              value={formatCompactNumber(storageSpaceCount)}
-              hint={t({ en: "Visible here", fr: "Visibles ici", de: "Hier sichtbar" })}
-              loading={usageLoading}
-            />
-          </div>
-        </MetricsSummaryCard>
+        <div className="space-y-4">
+          <MetricsSummaryCard
+            title={t({ en: "Room and files", fr: "Espace et fichiers", de: "Platz und Dateien" })}
+            description={t({ en: "Current storage, file count, and remaining room for this workspace.", fr: "Stockage actuel, nombre de fichiers et espace restant pour ce workspace.", de: "Aktueller Speicher, Dateianzahl und verbleibender Platz für diesen Workspace." })}
+          >
+            {usageError ? (
+              <PageBanner tone="warning">{t({ en: "Usage data is unavailable from storage metrics. Available workspace data is still shown.", fr: "Les données d'utilisation sont indisponibles depuis les métriques de stockage. Les données disponibles de l'espace de travail restent affichées.", de: "Nutzungsdaten sind aus Speichermetriken nicht verfügbar. Verfügbare Arbeitsbereichsdaten werden weiterhin angezeigt." })}</PageBanner>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricsSnapshotCard
+                label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
+                value={formatBytes(totalUsedBytes)}
+                hint={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatPercentage(quotaPercent)} of quota`, fr: `${formatPercentage(quotaPercent)} du quota`, de: `${formatPercentage(quotaPercent)} der Quote` })}
+                loading={usageLoading}
+              />
+              <MetricsSnapshotCard
+                label={t({ en: "Room left", fr: "Espace restant", de: "Verbleibender Platz" })}
+                value={formatBytes(remainingBytes)}
+                hint={quotaBytes == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `${formatBytes(quotaBytes)} total`, fr: `${formatBytes(quotaBytes)} au total`, de: `${formatBytes(quotaBytes)} insgesamt` })}
+                loading={usageLoading}
+              />
+              <MetricsSnapshotCard
+                label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
+                value={formatCompactNumber(totalObjects)}
+                hint={objectQuotaPercent == null ? (totalObjects == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })) : t({ en: `${formatPercentage(objectQuotaPercent)} of file quota`, fr: `${formatPercentage(objectQuotaPercent)} du quota de fichiers`, de: `${formatPercentage(objectQuotaPercent)} der Dateiquote` })}
+                loading={usageLoading}
+              />
+              <MetricsSnapshotCard
+                label={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
+                value={formatCompactNumber(storageSpaceCount)}
+                hint={t({ en: "Visible here", fr: "Visibles ici", de: "Hier sichtbar" })}
+                loading={usageLoading}
+              />
+            </div>
+          </MetricsSummaryCard>
+
+          <MetricsCard
+            title={t({ en: "Backend status", fr: "Statut du backend", de: "Backend-Status" })}
+            description={t({ en: "Current availability of the storage service used by this workspace.", fr: "Disponibilité actuelle du service de stockage utilisé par ce workspace.", de: "Aktuelle Verfügbarkeit des Speicherdienstes für diesen Workspace." })}
+          >
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className={cx(uiCardMutedClass, "px-4 py-3")}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className={uiLabelClass}>{t({ en: "Backend status", fr: "Statut du backend", de: "Backend-Status" })}</p>
+                  {!healthLoading ? (
+                    <UiBadge tone={backendStatusTone(backendStatus)} className="rounded-md px-2 py-0 text-[11px] leading-5">
+                      {backendStatusLabel(backendStatus, t)}
+                    </UiBadge>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  {!healthLoading ? <WorkspaceStatusDot status={backendStatus} className="h-2.5 w-2.5 shrink-0" /> : null}
+                  <p className={cx("ui-subtitle", uiTitleTextClass)}>{healthLoading ? "..." : backendStatusLabel(backendStatus, t)}</p>
+                </div>
+                <p className={cx("ui-caption", uiMutedTextClass)}>
+                  {healthLoading ? t({ en: "Checking storage service status...", fr: "Vérification du statut du service de stockage...", de: "Status des Speicherdienstes wird geprüft..." }) : backendStatusHint(backendStatus, t)}
+                </p>
+              </div>
+              <MetricsSnapshotCard
+                label={t({ en: "Monitored services", fr: "Services surveillés", de: "Überwachte Dienste" })}
+                value={formatCompactNumber(health?.endpoint_count ?? 0)}
+                hint={t({ en: "Linked to this workspace", fr: "Liés à ce workspace", de: "Mit diesem Workspace verknüpft" })}
+                loading={healthLoading}
+              />
+              <MetricsSnapshotCard
+                label={t({ en: "Current issues", fr: "Incidents en cours", de: "Aktuelle Probleme" })}
+                value={formatCompactNumber(backendIssueCount)}
+                hint={t({ en: "Down or degraded checks", fr: "Contrôles en panne ou dégradés", de: "Ausgefallene oder beeinträchtigte Prüfungen" })}
+                loading={healthLoading}
+              />
+              <MetricsSnapshotCard
+                label={t({ en: "Last check", fr: "Dernier contrôle", de: "Letzte Prüfung" })}
+                value={formatBackendTimestamp(health?.generated_at, locale)}
+                hint={t({ en: "Latest backend reading", fr: "Dernière mesure du backend", de: "Letzte Backend-Messung" })}
+                loading={healthLoading}
+              />
+            </div>
+          </MetricsCard>
+        </div>
       ) : null}
 
       {activeTab === "storage-spaces" ? (

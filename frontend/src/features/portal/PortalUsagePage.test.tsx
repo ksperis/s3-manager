@@ -65,6 +65,28 @@ const mocks = vi.hoisted(() => ({
     },
     trafficLoading: false,
     trafficError: null,
+    health: {
+      generated_at: "2026-05-21T12:00:00Z",
+      incident_highlight_minutes: 720,
+      endpoint_count: 1,
+      up_count: 1,
+      degraded_count: 0,
+      down_count: 0,
+      unknown_count: 0,
+      endpoints: [
+        {
+          endpoint_id: 101,
+          name: "Primary storage",
+          endpoint_url: "https://s3.example.test",
+          status: "up",
+          checked_at: "2026-05-21T11:59:00Z",
+          latency_ms: 32,
+          check_mode: "s3",
+        },
+      ],
+      incidents: [],
+    },
+    healthLoading: false,
     loading: false,
     accountLoading: false,
     error: null,
@@ -285,6 +307,11 @@ describe("PortalUsagePage", () => {
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.getByText("Room left")).toBeInTheDocument();
     expect(screen.getByText("50% of quota")).toBeInTheDocument();
+    expect(screen.getAllByText("Backend status").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Operational").length).toBeGreaterThan(0);
+    expect(screen.getByText("Monitored services")).toBeInTheDocument();
+    expect(screen.getByText("Current issues")).toBeInTheDocument();
+    expect(mocks.hookArgs[0]).toMatchObject({ includeTraffic: true, includeHealth: true, trafficWindow: "week" });
 
     fireEvent.click(screen.getByRole("button", { name: "By space" }));
 
