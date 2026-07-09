@@ -15,6 +15,7 @@ export type PortalUserAccessRequestCreate = {
   request_type: "portal_user_access";
   target_name: string;
   target_email: string;
+  reason?: string | null;
 };
 
 export type PortalUserRemovalRequestCreate = {
@@ -29,7 +30,7 @@ export type PortalAccountQuotaChangeRequestCreate = {
   direction: PortalQuotaDirection;
   target_quota_value: number;
   target_quota_unit: PortalQuotaUnit;
-  reason: string;
+  reason?: string | null;
 };
 
 export type PortalAdminRequestCreate =

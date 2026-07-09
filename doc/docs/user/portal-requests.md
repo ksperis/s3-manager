@@ -7,24 +7,26 @@ storage limit.
 ## Before you start
 
 - The selected project is the project concerned by the request.
+- You are a storage manager for the selected project when creating collaborator
+  or storage-limit requests.
 - You know the person's name and email when requesting project access for them.
-- For storage-limit changes, you know the target capacity and why the project needs
-  more or less room.
+- For storage-limit changes, you know the target capacity. The reason field is
+  optional.
 
 ## Main tasks
 
 1. Open **Portal > Help requests**.
 2. Review **My help requests** first to see pending, approved, rejected, or
    failed requests.
-3. Select **Add someone** when a collaborator is missing from the picker on
-   **Portal > Collaborators**.
-4. Select **Remove someone** when a user should no longer belong to the selected
-   project.
-5. Select **Change storage limit** to choose a higher or lower limit, enter the
-   new target, choose the unit, and explain the reason. The preview shows the
-   current limit, the requested limit, and the space already used.
-6. Review the request list to follow its status.
-7. Open request details to read admin messages, execution errors, or the final
+3. Select **Manage membership** to add or remove a collaborator from the same
+   form. For removal, choose an existing direct collaborator from the project
+   list; the name and email are filled from that selection. The reason field is
+   optional.
+4. Select **Change storage limit** to choose a higher or lower limit, enter the
+   new target, and choose the unit. The preview shows the current limit, the
+   requested limit, and the space already used. The reason field is optional.
+5. Review the request list to follow its status.
+6. Open request details to read admin messages, execution errors, or the final
    result.
 
 ## Statuses

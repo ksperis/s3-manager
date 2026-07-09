@@ -11,7 +11,12 @@ import {
   type PortalQuotaDirection,
   type PortalQuotaUnit,
 } from "../../api/portalRequests";
-import { fetchPortalUsage, type PortalUsage } from "../../api/portal";
+import {
+  fetchPortalCollaborators,
+  fetchPortalUsage,
+  type PortalCollaborator,
+  type PortalUsage,
+} from "../../api/portal";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
@@ -47,8 +52,9 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
-type BusyAction = "user" | "remove" | "quota" | "refresh" | null;
-type RequestDialog = "add-person" | "remove-person" | "storage-limit" | null;
+type BusyAction = "collaborator" | "quota" | "refresh" | null;
+type CollaboratorAction = "add" | "remove";
+type RequestDialog = "collaborator" | "storage-limit" | null;
 type RequestsTab = "request-help" | "history";
 
 const quotaUnits: PortalQuotaUnit[] = ["MiB", "GiB", "TiB"];
@@ -76,6 +82,7 @@ export default function PortalRequestsPage() {
   const {
     accountIdForApi,
     hasAccountContext,
+    selectedAccount,
     loading: accountLoading,
     error: accountError,
   } = usePortalAccountContext();
@@ -86,11 +93,11 @@ export default function PortalRequestsPage() {
   const [busy, setBusy] = useState<BusyAction>(null);
   const [requestDialog, setRequestDialog] = useState<RequestDialog>(null);
   const [activeTab, setActiveTab] = useState<RequestsTab>("request-help");
+  const [collaboratorAction, setCollaboratorAction] =
+    useState<CollaboratorAction>("add");
   const [targetName, setTargetName] = useState("");
   const [targetEmail, setTargetEmail] = useState("");
-  const [removeName, setRemoveName] = useState("");
-  const [removeEmail, setRemoveEmail] = useState("");
-  const [removeReason, setRemoveReason] = useState("");
+  const [targetReason, setTargetReason] = useState("");
   const [quotaDirection, setQuotaDirection] =
     useState<PortalQuotaDirection>("increase");
   const [quotaValue, setQuotaValue] = useState("");
@@ -99,6 +106,14 @@ export default function PortalRequestsPage() {
   const [portalUsage, setPortalUsage] = useState<PortalUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [collaborators, setCollaborators] = useState<PortalCollaborator[]>([]);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
+  const [collaboratorsError, setCollaboratorsError] = useState<string | null>(
+    null,
+  );
+  const canRequestManagedChanges =
+    selectedAccount?.account_role === "portal_manager";
+  const showRequestHelpTab = accountLoading || canRequestManagedChanges;
 
   const loadRequests = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -131,6 +146,12 @@ export default function PortalRequestsPage() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  useEffect(() => {
+    if (!accountLoading && hasAccountContext && !canRequestManagedChanges) {
+      setActiveTab("history");
+    }
+  }, [accountLoading, canRequestManagedChanges, hasAccountContext]);
 
   const loadUsage = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -165,29 +186,79 @@ export default function PortalRequestsPage() {
     void loadUsage();
   }, [loadUsage]);
 
+  const loadCollaborators = useCallback(async () => {
+    if (!hasAccountContext || !accountIdForApi || !canRequestManagedChanges) {
+      setCollaborators([]);
+      setCollaboratorsLoading(false);
+      setCollaboratorsError(null);
+      return;
+    }
+    setCollaboratorsLoading(true);
+    setCollaboratorsError(null);
+    try {
+      const data = await fetchPortalCollaborators(accountIdForApi);
+      setCollaborators(data.collaborators ?? []);
+    } catch (err) {
+      console.error(err);
+      setCollaborators([]);
+      setCollaboratorsError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to load collaborators.",
+            fr: "Impossible de charger les collaborateurs.",
+            de: "Mitwirkende konnen nicht geladen werden.",
+          }),
+        ),
+      );
+    } finally {
+      setCollaboratorsLoading(false);
+    }
+  }, [accountIdForApi, canRequestManagedChanges, hasAccountContext, t]);
+
+  useEffect(() => {
+    void loadCollaborators();
+  }, [loadCollaborators]);
+
   const handleRefresh = async () => {
     setBusy("refresh");
     try {
-      await Promise.all([loadRequests(), loadUsage()]);
+      await Promise.all([loadRequests(), loadUsage(), loadCollaborators()]);
     } finally {
       setBusy(null);
     }
   };
 
-  const handleUserRequest = async (event: FormEvent) => {
+  const handleCollaboratorRequest = async (event: FormEvent) => {
     event.preventDefault();
     if (!accountIdForApi) return;
-    setBusy("user");
+    const cleanName = targetName.trim();
+    const cleanEmail = targetEmail.trim();
+    const cleanReason = targetReason.trim();
+    if (!cleanName || !cleanEmail) return;
+    setBusy("collaborator");
     setNotice(null);
     setError(null);
     try {
-      await createPortalRequest(accountIdForApi, {
-        request_type: "portal_user_access",
-        target_name: targetName,
-        target_email: targetEmail,
-      });
+      await createPortalRequest(
+        accountIdForApi,
+        collaboratorAction === "add"
+          ? {
+              request_type: "portal_user_access",
+              target_name: cleanName,
+              target_email: cleanEmail,
+              reason: cleanReason || null,
+            }
+          : {
+              request_type: "portal_user_removal",
+              target_name: cleanName,
+              target_email: cleanEmail,
+              reason: cleanReason || null,
+            },
+      );
       setTargetName("");
       setTargetEmail("");
+      setTargetReason("");
       setNotice(
         t({
           en: "Request sent. You can follow its status below.",
@@ -206,7 +277,7 @@ export default function PortalRequestsPage() {
           t({
             en: "Unable to send the collaborator request.",
             fr: "Impossible d'envoyer la demande collaborateur.",
-            de: "Anfrage für Mitwirkende kann nicht gesendet werden.",
+            de: "Anfrage fur Mitwirkende kann nicht gesendet werden.",
           }),
         ),
       );
@@ -215,49 +286,8 @@ export default function PortalRequestsPage() {
     }
   };
 
-  const handleUserRemovalRequest = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!accountIdForApi) return;
-    setBusy("remove");
-    setNotice(null);
-    setError(null);
-    try {
-      await createPortalRequest(accountIdForApi, {
-        request_type: "portal_user_removal",
-        target_name: removeName || null,
-        target_email: removeEmail,
-        reason: removeReason || null,
-      });
-      setRemoveName("");
-      setRemoveEmail("");
-      setRemoveReason("");
-      setNotice(
-        t({
-          en: "Request sent. You can follow its status below.",
-          fr: "Demande envoyée. Vous pouvez suivre son statut ci-dessous.",
-          de: "Anfrage gesendet. Sie können den Status unten verfolgen.",
-        }),
-      );
-      setRequestDialog(null);
-      setActiveTab("history");
-      await loadRequests();
-    } catch (err) {
-      console.error(err);
-      setError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to send the removal request.",
-            fr: "Impossible d'envoyer la demande de retrait.",
-            de: "Entfernungsanfrage kann nicht gesendet werden.",
-          }),
-        ),
-      );
-    } finally {
-      setBusy(null);
-    }
-  };
-
+  const requestsDisabled =
+    !hasAccountContext || accountLoading || Boolean(accountError);
   const currentQuotaBytes = portalUsage?.quota_max_size_bytes ?? null;
   const usedBytes = portalUsage?.used_bytes ?? null;
   const targetQuotaBytes = useMemo(
@@ -273,6 +303,49 @@ export default function PortalRequestsPage() {
     targetQuotaBytes != null &&
     ((quotaDirection === "increase" && targetQuotaBytes <= currentQuotaBytes) ||
       (quotaDirection === "decrease" && targetQuotaBytes >= currentQuotaBytes));
+  const removableCollaborators = useMemo(
+    () =>
+      collaborators.filter(
+        (collaborator) =>
+          collaborator.account_role === "portal_user" &&
+          collaborator.access_source !== "group",
+      ),
+    [collaborators],
+  );
+  const collaboratorSubmitDisabled =
+    requestsDisabled ||
+    !canRequestManagedChanges ||
+    busy === "collaborator" ||
+    !targetName.trim() ||
+    !targetEmail.trim() ||
+    (collaboratorAction === "remove" && removableCollaborators.length === 0);
+
+  const openCollaboratorDialog = (action: CollaboratorAction = "add") => {
+    setCollaboratorAction(action);
+    setTargetName("");
+    setTargetEmail("");
+    setTargetReason("");
+    setRequestDialog("collaborator");
+  };
+
+  const applyRemovalCollaborator = (email: string) => {
+    const collaborator = removableCollaborators.find(
+      (item) => item.email === email,
+    );
+    setTargetEmail(email);
+    setTargetName(
+      collaborator
+        ? collaborator.display_name || collaborator.email
+        : "",
+    );
+  };
+
+  const handleCollaboratorActionChange = (action: CollaboratorAction) => {
+    setCollaboratorAction(action);
+    setTargetName("");
+    setTargetEmail("");
+    setTargetReason("");
+  };
 
   const handleQuotaRequest = async (event: FormEvent) => {
     event.preventDefault();
@@ -323,7 +396,7 @@ export default function PortalRequestsPage() {
         direction: quotaDirection,
         target_quota_value: parsedQuota,
         target_quota_unit: quotaUnit,
-        reason: quotaReason,
+        reason: quotaReason.trim() || null,
       });
       setQuotaValue("");
       setQuotaReason("");
@@ -398,12 +471,10 @@ export default function PortalRequestsPage() {
     error,
     rowCount: requests.length,
   });
-  const requestsDisabled =
-    !hasAccountContext || accountLoading || Boolean(accountError);
   const quotaSubmitDisabled =
     requestsDisabled ||
+    !canRequestManagedChanges ||
     !targetQuotaBytes ||
-    !quotaReason ||
     quotaBelowUsed ||
     quotaDirectionMismatch;
   const closeRequestDialog = () => {
@@ -439,17 +510,33 @@ export default function PortalRequestsPage() {
       {notice ? <PageBanner tone="success">{notice}</PageBanner> : null}
       {error ? <PageBanner tone="error">{error}</PageBanner> : null}
       {usageError ? <PageBanner tone="warning">{usageError}</PageBanner> : null}
+      {collaboratorsError ? (
+        <PageBanner tone="warning">{collaboratorsError}</PageBanner>
+      ) : null}
+      {!accountLoading && hasAccountContext && !canRequestManagedChanges ? (
+        <PageBanner tone="info">
+          {t({
+            en: "Only storage managers can submit collaborator or storage-limit requests for this project.",
+            fr: "Seuls les managers du stockage peuvent envoyer des demandes collaborateur ou limite pour ce projet.",
+            de: "Nur Speicher-Manager konnen fur dieses Projekt Mitwirkenden- oder Speichergrenzen-Anfragen senden.",
+          })}
+        </PageBanner>
+      ) : null}
 
       <PageTabs
         tabs={[
-          {
-            id: "request-help",
-            label: t({
-              en: "Request help",
-              fr: "Demander de l'aide",
-              de: "Hilfe anfordern",
-            }),
-          },
+          ...(showRequestHelpTab
+            ? [
+                {
+                  id: "request-help",
+                  label: t({
+                    en: "Request help",
+                    fr: "Demander de l'aide",
+                    de: "Hilfe anfordern",
+                  }),
+                },
+              ]
+            : []),
           {
             id: "history",
             label: t({
@@ -459,11 +546,11 @@ export default function PortalRequestsPage() {
             }),
           },
         ]}
-        activeTab={activeTab}
+        activeTab={showRequestHelpTab ? activeTab : "history"}
         onChange={(tabId) => setActiveTab(tabId as RequestsTab)}
         variant="bar"
         headerActions={
-          activeTab === "history" ? (
+          !showRequestHelpTab || activeTab === "history" ? (
             <UiButton
               size="sm"
               variant="secondary"
@@ -476,9 +563,9 @@ export default function PortalRequestsPage() {
         }
       />
 
-      {activeTab === "request-help" ? (
+      {showRequestHelpTab && activeTab === "request-help" ? (
         <section
-          className="grid gap-3 md:grid-cols-3"
+          className="grid gap-3 md:grid-cols-2"
           aria-label={t({
             en: "Request options",
             fr: "Options de demande",
@@ -487,34 +574,34 @@ export default function PortalRequestsPage() {
         >
           <UiCard
             title={t({
-              en: "Add a collaborator",
-              fr: "Ajouter un collaborateur",
-              de: "Mitwirkenden hinzufügen",
+              en: "Add or remove a collaborator",
+              fr: "Ajouter ou retirer un collaborateur",
+              de: "Mitwirkenden hinzufugen oder entfernen",
             })}
             description={t({
-              en: "Ask support to give someone access to this project.",
-              fr: "Demandez au support de donner accès à ce projet à une personne.",
-              de: "Bitten Sie den Support, einer Person Zugriff auf dieses Projekt zu geben.",
+              en: "Ask support to update project membership from one shared form.",
+              fr: "Demandez au support de mettre à jour les membres du projet depuis un formulaire commun.",
+              de: "Bitten Sie den Support, die Projektmitglieder uber ein gemeinsames Formular zu aktualisieren.",
             })}
             actions={
               <UiButton
                 size="sm"
-                onClick={() => setRequestDialog("add-person")}
-                disabled={requestsDisabled}
+                onClick={() => openCollaboratorDialog("add")}
+                disabled={requestsDisabled || !canRequestManagedChanges}
               >
                 {t({
-                  en: "Add someone",
-                  fr: "Ajouter quelqu'un",
-                  de: "Person hinzufügen",
+                  en: "Manage membership",
+                  fr: "Gérer les membres",
+                  de: "Mitglieder verwalten",
                 })}
               </UiButton>
             }
           >
             <p className={cx("ui-caption", uiMutedTextClass)}>
               {t({
-                en: "Use this when the person is not available in collaborator lists yet.",
-                fr: "À utiliser quand la personne n'apparaît pas encore dans les listes de collaborateurs.",
-                de: "Nutzen Sie dies, wenn die Person noch nicht in den Mitwirkendenlisten erscheint.",
+                en: "Add a new person by email, or select an existing direct collaborator to remove.",
+                fr: "Ajoutez une nouvelle personne par e-mail, ou sélectionnez un collaborateur direct existant à retirer.",
+                de: "Fugen Sie eine neue Person per E-Mail hinzu oder wahlen Sie einen bestehenden direkten Mitwirkenden zum Entfernen aus.",
               })}
             </p>
           </UiCard>
@@ -535,7 +622,7 @@ export default function PortalRequestsPage() {
                 size="sm"
                 variant="secondary"
                 onClick={() => setRequestDialog("storage-limit")}
-                disabled={requestsDisabled}
+                disabled={requestsDisabled || !canRequestManagedChanges}
               >
                 {t({
                   en: "Change limit",
@@ -560,44 +647,10 @@ export default function PortalRequestsPage() {
             </p>
           </UiCard>
 
-          <UiCard
-            title={t({
-              en: "Remove a collaborator",
-              fr: "Retirer un collaborateur",
-              de: "Mitwirkenden entfernen",
-            })}
-            description={t({
-              en: "Ask support to remove project access for someone.",
-              fr: "Demandez au support de retirer l'accès d'une personne au projet.",
-              de: "Bitten Sie den Support, einer Person den Projektzugriff zu entfernen.",
-            })}
-            actions={
-              <UiButton
-                size="sm"
-                variant="danger"
-                onClick={() => setRequestDialog("remove-person")}
-                disabled={requestsDisabled}
-              >
-                {t({
-                  en: "Remove someone",
-                  fr: "Retirer quelqu'un",
-                  de: "Person entfernen",
-                })}
-              </UiButton>
-            }
-          >
-            <p className={cx("ui-caption", uiMutedTextClass)}>
-              {t({
-                en: "The support team reviews the request before access changes.",
-                fr: "L'équipe support vérifie la demande avant tout changement d'accès.",
-                de: "Das Support-Team prüft die Anfrage vor jeder Zugriffsänderung.",
-              })}
-            </p>
-          </UiCard>
         </section>
       ) : null}
 
-      {activeTab === "history" ? (
+      {!showRequestHelpTab || activeTab === "history" ? (
         <section className={uiCardClass}>
           <ListToolbar
             title={t({
@@ -640,77 +693,105 @@ export default function PortalRequestsPage() {
         </section>
       ) : null}
 
-      {requestDialog === "add-person" ? (
+      {requestDialog === "collaborator" ? (
         <Modal
           title={t({
-            en: "Add someone to this project",
-            fr: "Ajouter une personne à ce projet",
-            de: "Person zu diesem Projekt hinzufügen",
+            en: "Update project membership",
+            fr: "Mettre à jour les membres du projet",
+            de: "Projektmitglieder aktualisieren",
           })}
           onClose={closeRequestDialog}
         >
-          <form className="grid gap-3" onSubmit={handleUserRequest}>
+          <form className="grid gap-3" onSubmit={handleCollaboratorRequest}>
+            <UiSelect
+              label={t({ en: "Action", fr: "Action", de: "Aktion" })}
+              value={collaboratorAction}
+              onChange={(event) =>
+                handleCollaboratorActionChange(
+                  event.target.value as CollaboratorAction,
+                )
+              }
+              disabled={
+                requestsDisabled ||
+                !canRequestManagedChanges ||
+                busy === "collaborator"
+              }
+            >
+              <option value="add">
+                {t({ en: "Add", fr: "Ajouter", de: "Hinzufugen" })}
+              </option>
+              <option value="remove">
+                {t({ en: "Remove", fr: "Retirer", de: "Entfernen" })}
+              </option>
+            </UiSelect>
+            {collaboratorAction === "remove" ? (
+              <UiSelect
+                label={t({ en: "Email", fr: "Mail", de: "E-Mail" })}
+                value={targetEmail}
+                onChange={(event) =>
+                  applyRemovalCollaborator(event.target.value)
+                }
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "collaborator" ||
+                  collaboratorsLoading ||
+                  removableCollaborators.length === 0
+                }
+                required
+              >
+                <option value="">
+                  {t({
+                    en: "Select a collaborator",
+                    fr: "Sélectionner un collaborateur",
+                    de: "Mitwirkenden auswahlen",
+                  })}
+                </option>
+                {removableCollaborators.map((collaborator) => (
+                  <option key={collaborator.user_id} value={collaborator.email}>
+                    {collaborator.display_name
+                      ? `${collaborator.display_name} <${collaborator.email}>`
+                      : collaborator.email}
+                  </option>
+                ))}
+              </UiSelect>
+            ) : (
+              <UiInput
+                label={t({ en: "Email", fr: "Mail", de: "E-Mail" })}
+                type="email"
+                value={targetEmail}
+                onChange={(event) => setTargetEmail(event.target.value)}
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "collaborator"
+                }
+                required
+              />
+            )}
             <UiInput
               label={t({ en: "Name", fr: "Nom", de: "Name" })}
               value={targetName}
               onChange={(event) => setTargetName(event.target.value)}
-              disabled={requestsDisabled || busy === "user"}
+              disabled={
+                requestsDisabled ||
+                !canRequestManagedChanges ||
+                busy === "collaborator" ||
+                collaboratorAction === "remove"
+              }
               required
             />
-            <UiInput
-              label={t({ en: "Email", fr: "Mail", de: "E-Mail" })}
-              type="email"
-              value={targetEmail}
-              onChange={(event) => setTargetEmail(event.target.value)}
-              disabled={requestsDisabled || busy === "user"}
-              required
-            />
-            <div className="flex justify-end">
-              <UiButton
-                type="submit"
-                size="sm"
-                disabled={requestsDisabled || !targetName || !targetEmail}
-                loading={busy === "user"}
-              >
+            {collaboratorAction === "remove" &&
+            !collaboratorsLoading &&
+            removableCollaborators.length === 0 ? (
+              <PageBanner tone="info">
                 {t({
-                  en: "Send request",
-                  fr: "Envoyer la demande",
-                  de: "Anfrage senden",
+                  en: "No direct Portal collaborators can be removed from this project.",
+                  fr: "Aucun collaborateur Portal direct ne peut être retiré de ce projet.",
+                  de: "Keine direkten Portal-Mitwirkenden konnen aus diesem Projekt entfernt werden.",
                 })}
-              </UiButton>
-            </div>
-          </form>
-        </Modal>
-      ) : null}
-
-      {requestDialog === "remove-person" ? (
-        <Modal
-          title={t({
-            en: "Remove someone from this project",
-            fr: "Retirer une personne de ce projet",
-            de: "Person aus diesem Projekt entfernen",
-          })}
-          onClose={closeRequestDialog}
-        >
-          <form className="grid gap-3" onSubmit={handleUserRemovalRequest}>
-            <UiInput
-              label={t({ en: "Email", fr: "Mail", de: "E-Mail" })}
-              type="email"
-              value={removeEmail}
-              onChange={(event) => setRemoveEmail(event.target.value)}
-              disabled={requestsDisabled || busy === "remove"}
-              required
-            />
-            <UiInput
-              label={t({
-                en: "Name (optional)",
-                fr: "Nom (optionnel)",
-                de: "Name (optional)",
-              })}
-              value={removeName}
-              onChange={(event) => setRemoveName(event.target.value)}
-              disabled={requestsDisabled || busy === "remove"}
-            />
+              </PageBanner>
+            ) : null}
             <label className="grid gap-1">
               <span className={uiLabelClass}>
                 {t({
@@ -721,24 +802,36 @@ export default function PortalRequestsPage() {
               </span>
               <textarea
                 className={cx(uiInputClass, "min-h-[72px] px-3 py-2 ui-body")}
-                value={removeReason}
-                onChange={(event) => setRemoveReason(event.target.value)}
-                disabled={requestsDisabled || busy === "remove"}
+                value={targetReason}
+                onChange={(event) => setTargetReason(event.target.value)}
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "collaborator"
+                }
               />
             </label>
             <div className="flex justify-end">
               <UiButton
                 type="submit"
                 size="sm"
-                variant="danger"
-                disabled={requestsDisabled || !removeEmail}
-                loading={busy === "remove"}
+                variant={
+                  collaboratorAction === "remove" ? "danger" : undefined
+                }
+                disabled={collaboratorSubmitDisabled}
+                loading={busy === "collaborator"}
               >
-                {t({
-                  en: "Send removal request",
-                  fr: "Envoyer la demande de retrait",
-                  de: "Entfernungsanfrage senden",
-                })}
+                {collaboratorAction === "remove"
+                  ? t({
+                      en: "Send removal request",
+                      fr: "Envoyer la demande de retrait",
+                      de: "Entfernungsanfrage senden",
+                    })
+                  : t({
+                      en: "Send request",
+                      fr: "Envoyer la demande",
+                      de: "Anfrage senden",
+                    })}
               </UiButton>
             </div>
           </form>
@@ -763,7 +856,11 @@ export default function PortalRequestsPage() {
                 onChange={(event) =>
                   setQuotaDirection(event.target.value as PortalQuotaDirection)
                 }
-                disabled={requestsDisabled || busy === "quota"}
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "quota"
+                }
               >
                 <option value="increase">
                   {t({ en: "Raise", fr: "Augmenter", de: "Erhöhen" })}
@@ -783,7 +880,11 @@ export default function PortalRequestsPage() {
                 step="0.01"
                 value={quotaValue}
                 onChange={(event) => setQuotaValue(event.target.value)}
-                disabled={requestsDisabled || busy === "quota"}
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "quota"
+                }
                 required
               />
               <UiSelect
@@ -792,7 +893,11 @@ export default function PortalRequestsPage() {
                 onChange={(event) =>
                   setQuotaUnit(event.target.value as PortalQuotaUnit)
                 }
-                disabled={requestsDisabled || busy === "quota"}
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "quota"
+                }
               >
                 {quotaUnits.map((unit) => (
                   <option key={unit} value={unit}>
@@ -836,14 +941,21 @@ export default function PortalRequestsPage() {
             ) : null}
             <label className="grid gap-1">
               <span className={uiLabelClass}>
-                {t({ en: "Reason", fr: "Motif", de: "Grund" })}
+                {t({
+                  en: "Reason (optional)",
+                  fr: "Motif (optionnel)",
+                  de: "Grund (optional)",
+                })}
               </span>
               <textarea
                 className={cx(uiInputClass, "min-h-[88px] px-3 py-2 ui-body")}
                 value={quotaReason}
                 onChange={(event) => setQuotaReason(event.target.value)}
-                disabled={requestsDisabled || busy === "quota"}
-                required
+                disabled={
+                  requestsDisabled ||
+                  !canRequestManagedChanges ||
+                  busy === "quota"
+                }
               />
             </label>
             <div className="flex justify-end">

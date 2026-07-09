@@ -27,6 +27,7 @@ export type S3Account = {
   db_id?: number | null;
   name: string;
   tags: TagDefinitionSummary[];
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   rgw_account_id?: string;
@@ -57,6 +58,7 @@ export type S3AccountSummary = {
   db_id?: number | null;
   name: string;
   tags: TagDefinitionSummary[];
+  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   rgw_account_id?: string | null;
   is_s3_user?: boolean | null;
   user_ids?: number[] | null;

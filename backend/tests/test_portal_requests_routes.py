@@ -33,14 +33,23 @@ def _seed_user(db_session, *, email: str, role: str = UserRole.UI_USER.value) ->
     return user
 
 
-def _install_portal_access_override(account: S3Account, user: User) -> None:
+def _install_portal_access_override(
+    account: S3Account,
+    user: User,
+    *,
+    role: str = AccountRole.PORTAL_MANAGER.value,
+) -> None:
     def override_portal_access():
+        can_manage = role == AccountRole.PORTAL_MANAGER.value
         return AccountAccess(
             account=account,
             actor=user,
             membership=None,
-            role=AccountRole.PORTAL_USER.value,
-            capabilities=AccountCapabilities(),
+            role=role,
+            capabilities=AccountCapabilities(
+                can_manage_buckets=can_manage,
+                can_manage_portal_users=can_manage,
+            ),
         )
 
     app.dependency_overrides[dependencies.get_portal_account_access] = override_portal_access
@@ -79,6 +88,24 @@ def test_portal_request_routes_create_and_isolate_by_requester(client: TestClien
     _install_portal_access_override(account, other)
     denied = client.get(f"/api/portal/requests/{created['id']}")
     assert denied.status_code == 404
+
+
+def test_portal_request_routes_require_manager_for_creation(client: TestClient, db_session):
+    account = _seed_account(db_session)
+    requester = _seed_user(db_session, email="requester@example.org")
+    _install_portal_access_override(account, requester, role=AccountRole.PORTAL_USER.value)
+
+    response = client.post(
+        "/api/portal/requests",
+        json={
+            "request_type": "account_quota_change",
+            "direction": "increase",
+            "target_quota_value": 20,
+            "target_quota_unit": "GiB",
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_admin_request_routes_approve_and_conflict(client: TestClient, db_session):
@@ -165,7 +192,6 @@ def test_admin_request_routes_reject_and_message(client: TestClient, db_session)
             "direction": "increase",
             "target_quota_value": 20,
             "target_quota_unit": "GiB",
-            "reason": "New project",
         },
     )
     request_id = create_response.json()["id"]

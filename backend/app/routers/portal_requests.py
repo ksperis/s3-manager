@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import User
 from app.models.portal_requests import PortalAdminRequestCreate, PortalAdminRequestOut, PortalAdminRequestStatus
-from app.routers.dependencies import AccountAccess, get_portal_account_access
+from app.routers.dependencies import AccountAccess, get_portal_account_access, require_portal_manager
 from app.routers.http_errors import sanitize_error_detail
 from app.services.portal_requests_service import (
     PortalRequestNotFound,
@@ -40,7 +40,7 @@ def list_portal_requests(
 @router.post("", response_model=PortalAdminRequestOut, status_code=status.HTTP_201_CREATED)
 def create_portal_request(
     payload: PortalAdminRequestCreate,
-    access: AccountAccess = Depends(get_portal_account_access),
+    access: AccountAccess = Depends(require_portal_manager),
     service: PortalRequestsService = Depends(lambda db=Depends(get_db): get_portal_requests_service(db)),
 ) -> PortalAdminRequestOut:
     try:

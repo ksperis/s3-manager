@@ -591,11 +591,11 @@ class PortalRequestsService:
 
     def _normalize_create_payload(self, payload: PortalAdminRequestCreate) -> tuple[str, dict[str, Any]]:
         if isinstance(payload, PortalUserAccessRequestCreate):
-            return payload.request_type, payload.model_dump(mode="json", exclude={"request_type"})
+            return payload.request_type, payload.model_dump(mode="json", exclude={"request_type"}, exclude_none=True)
         if isinstance(payload, PortalUserRemovalRequestCreate):
             return payload.request_type, payload.model_dump(mode="json", exclude={"request_type"}, exclude_none=True)
         if isinstance(payload, PortalAccountQuotaChangeRequestCreate):
-            return payload.request_type, payload.model_dump(mode="json", exclude={"request_type"})
+            return payload.request_type, payload.model_dump(mode="json", exclude={"request_type"}, exclude_none=True)
         raise ValueError("Unsupported Portal request payload")
 
     @staticmethod

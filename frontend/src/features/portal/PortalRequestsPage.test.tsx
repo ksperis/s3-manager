@@ -10,15 +10,12 @@ const mocks = vi.hoisted(() => ({
   listPortalRequests: vi.fn(),
   createPortalRequest: vi.fn(),
   fetchPortalUsage: vi.fn(),
+  fetchPortalCollaborators: vi.fn(),
+  usePortalAccountContext: vi.fn(),
 }));
 
 vi.mock("./PortalAccountContext", () => ({
-  usePortalAccountContext: () => ({
-    accountIdForApi: "101",
-    hasAccountContext: true,
-    loading: false,
-    error: null,
-  }),
+  usePortalAccountContext: mocks.usePortalAccountContext,
 }));
 
 vi.mock("../../api/portalRequests", () => ({
@@ -28,6 +25,7 @@ vi.mock("../../api/portalRequests", () => ({
 
 vi.mock("../../api/portal", () => ({
   fetchPortalUsage: mocks.fetchPortalUsage,
+  fetchPortalCollaborators: mocks.fetchPortalCollaborators,
 }));
 
 const pendingRequest: PortalAdminRequest = {
@@ -60,6 +58,18 @@ function renderPage() {
 describe("PortalRequestsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.usePortalAccountContext.mockReturnValue({
+      accountIdForApi: "101",
+      hasAccountContext: true,
+      selectedAccount: {
+        id: "101",
+        name: "Research Account",
+        tags: [],
+        account_role: "portal_manager",
+      },
+      loading: false,
+      error: null,
+    });
     mocks.listPortalRequests.mockResolvedValue([pendingRequest]);
     mocks.createPortalRequest.mockResolvedValue({ ...pendingRequest, id: 8 });
     mocks.fetchPortalUsage.mockResolvedValue({
@@ -69,9 +79,26 @@ describe("PortalRequestsPage", () => {
       quota_max_objects: 123,
       storage_spaces: [],
     });
+    mocks.fetchPortalCollaborators.mockResolvedValue({
+      summary: {
+        collaborator_count: 1,
+        external_access_key_count: 0,
+        trend: null,
+      },
+      collaborators: [
+        {
+          user_id: 22,
+          email: "old@example.org",
+          display_name: "Old User",
+          account_role: "portal_user",
+          access_source: "direct",
+          member_since: "2026-07-01T10:00:00Z",
+        },
+      ],
+    });
   });
 
-  it("separates request options from history and submits a collaborator access request from a modal", async () => {
+  it("separates manager request options from history and submits a collaborator access request from the shared modal", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -79,7 +106,7 @@ describe("PortalRequestsPage", () => {
       await screen.findByRole("heading", { name: "Help requests" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request help" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Add a collaborator" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add or remove a collaborator" })).toBeInTheDocument();
     expect(screen.queryByText("Raise to 20 GiB")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "History (1)" }));
@@ -88,15 +115,15 @@ describe("PortalRequestsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Request help" }));
     expect(
-      screen.queryByRole("heading", { name: "Add someone to this project" }),
+      screen.queryByRole("heading", { name: "Update project membership" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Add someone" }));
+    await user.click(screen.getByRole("button", { name: "Manage membership" }));
     const dialog = screen.getByRole("dialog", {
-      name: "Add someone to this project",
+      name: "Update project membership",
     });
-    await user.type(within(dialog).getByLabelText("Name"), "Jane Viewer");
     await user.type(within(dialog).getByLabelText("Email"), "jane@example.org");
+    await user.type(within(dialog).getByLabelText("Name"), "Jane Viewer");
     await user.click(
       within(dialog).getByRole("button", { name: "Send request" }),
     );
@@ -106,28 +133,27 @@ describe("PortalRequestsPage", () => {
         request_type: "portal_user_access",
         target_name: "Jane Viewer",
         target_email: "jane@example.org",
+        reason: null,
       });
     });
     expect(await screen.findByText("Raise to 20 GiB")).toBeInTheDocument();
   });
 
-  it("submits a Portal user removal request", async () => {
+  it("submits a Portal user removal request with the selected collaborator name prefilled", async () => {
     const user = userEvent.setup();
     renderPage();
 
     expect(
       await screen.findByRole("heading", { name: "Help requests" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Remove someone" }));
+    await user.click(screen.getByRole("button", { name: "Manage membership" }));
 
     const dialog = screen.getByRole("dialog", {
-      name: "Remove someone from this project",
+      name: "Update project membership",
     });
-    await user.type(within(dialog).getByLabelText("Email"), "old@example.org");
-    await user.type(
-      within(dialog).getByLabelText("Name (optional)"),
-      "Old User",
-    );
+    await user.selectOptions(within(dialog).getByLabelText("Action"), "remove");
+    await user.selectOptions(within(dialog).getByLabelText("Email"), "old@example.org");
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Old User");
     await user.type(
       within(dialog).getByLabelText("Reason (optional)"),
       "Left the project",
@@ -167,7 +193,6 @@ describe("PortalRequestsPage", () => {
       "decrease",
     );
     await user.type(within(dialog).getByLabelText("New limit"), "18");
-    await user.type(within(dialog).getByLabelText("Reason"), "Dataset cleanup");
     await user.click(
       within(dialog).getByRole("button", { name: "Send request" }),
     );
@@ -178,7 +203,7 @@ describe("PortalRequestsPage", () => {
         direction: "decrease",
         target_quota_value: 18,
         target_quota_unit: "GiB",
-        reason: "Dataset cleanup",
+        reason: null,
       });
     });
   });
@@ -202,7 +227,6 @@ describe("PortalRequestsPage", () => {
       "decrease",
     );
     await user.type(within(dialog).getByLabelText("New limit"), "10");
-    await user.type(within(dialog).getByLabelText("Reason"), "Too small");
 
     expect(
       await within(dialog).findByText(
@@ -212,5 +236,30 @@ describe("PortalRequestsPage", () => {
     expect(
       within(dialog).getByRole("button", { name: "Send request" }),
     ).toBeDisabled();
+  });
+
+  it("keeps managed request actions unavailable for non-manager Portal users", async () => {
+    mocks.usePortalAccountContext.mockReturnValue({
+      accountIdForApi: "101",
+      hasAccountContext: true,
+      selectedAccount: {
+        id: "101",
+        name: "Research Account",
+        tags: [],
+        account_role: "portal_user",
+      },
+      loading: false,
+      error: null,
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Help requests" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request help" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add or remove a collaborator" })).not.toBeInTheDocument();
+    expect(screen.getByText("Only storage managers can submit collaborator or storage-limit requests for this project.")).toBeInTheDocument();
+    expect(mocks.fetchPortalCollaborators).not.toHaveBeenCalled();
   });
 });

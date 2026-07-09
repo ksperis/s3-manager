@@ -259,7 +259,6 @@ def test_approve_quota_change_applies_new_account_quota_and_keeps_object_quota(d
             direction="increase",
             target_quota_value=12,
             target_quota_unit="GiB",
-            reason="Project growth",
         ),
     )
 

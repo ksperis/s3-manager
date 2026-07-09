@@ -18,6 +18,7 @@ class PortalUserAccessRequestCreate(BaseModel):
     request_type: Literal["portal_user_access"]
     target_name: str = Field(min_length=1, max_length=120)
     target_email: EmailStr
+    reason: Optional[str] = Field(default=None, max_length=2000)
 
     @field_validator("target_name")
     @classmethod
@@ -26,6 +27,14 @@ class PortalUserAccessRequestCreate(BaseModel):
         if not cleaned:
             raise ValueError("Name is required")
         return cleaned
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
 
 
 class PortalUserRemovalRequestCreate(BaseModel):
@@ -48,15 +57,15 @@ class PortalAccountQuotaChangeRequestCreate(BaseModel):
     direction: PortalQuotaDirection
     target_quota_value: float = Field(gt=0)
     target_quota_unit: PortalQuotaUnit = "GiB"
-    reason: str = Field(min_length=1, max_length=2000)
+    reason: Optional[str] = Field(default=None, max_length=2000)
 
     @field_validator("reason")
     @classmethod
-    def _normalize_reason(cls, value: str) -> str:
+    def _normalize_reason(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
         cleaned = " ".join(value.split())
-        if not cleaned:
-            raise ValueError("Reason is required")
-        return cleaned
+        return cleaned or None
 
 
 PortalAdminRequestCreate = Annotated[
