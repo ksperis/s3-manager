@@ -51,6 +51,7 @@ function buildSettings(): AppSettings {
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
       server_access_logging_enabled: true,
+      server_access_log_retention_days: 30,
       storage_space_version_cleanup_enabled: true,
       max_portal_user_access_keys: 2,
       iam_group_manager_policy: {
@@ -129,6 +130,21 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.max_portal_user_access_keys).toBe(5);
+  });
+
+  it("sends server access log retention in save payload", async () => {
+    render(<PortalSettingsPage />);
+
+    const input = (await screen.findByLabelText("Server access log retention days")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "45" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.portal.server_access_log_retention_days).toBe(45);
   });
 
   it("saves named storage creation setting without override policy controls", async () => {

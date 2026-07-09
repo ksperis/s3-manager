@@ -78,6 +78,23 @@ export default function PortalSettingsPage() {
     );
   };
 
+  const handleServerAccessLogRetentionChange = (value: string) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            portal: {
+              ...prev.portal,
+              server_access_log_retention_days: normalizePositiveInt(
+                value,
+                prev.portal.server_access_log_retention_days
+              ),
+            },
+          }
+        : prev
+    );
+  };
+
   const handleToggleStorageSpaceVersionCleanup = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, storage_space_version_cleanup_enabled: value } } : prev
@@ -161,6 +178,10 @@ export default function PortalSettingsPage() {
       setError("Max S3 access keys per portal user must be a positive integer.");
       return;
     }
+    if (!Number.isInteger(settings.portal.server_access_log_retention_days) || settings.portal.server_access_log_retention_days < 1) {
+      setError("Server access log retention must be a positive integer.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -232,6 +253,7 @@ export default function PortalSettingsPage() {
   const portalServerAccessLoggingEnabled = Boolean(settings?.portal.server_access_logging_enabled);
   const portalStorageSpaceVersionCleanupEnabled = Boolean(settings?.portal.storage_space_version_cleanup_enabled);
   const portalMaxAccessKeys = settings?.portal.max_portal_user_access_keys ?? 2;
+  const portalServerAccessLogRetentionDays = settings?.portal.server_access_log_retention_days ?? 30;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(settings?.portal.bucket_defaults.enable_lifecycle);
   const bucketCorsEnabled = Boolean(settings?.portal.bucket_defaults.enable_cors);
@@ -312,6 +334,22 @@ export default function PortalSettingsPage() {
                   onChange={(value) => handleToggleServerAccessLogging(value)}
                   disabled={!settings}
                   ariaLabel="Portal Server Access Logging"
+                />
+              }
+            />
+            <SettingsItem
+              title="Server access log retention"
+              description="Expire objects written by Portal Server Access Logging in newly created technical log buckets."
+              action={
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={portalServerAccessLogRetentionDays}
+                  onChange={(e) => handleServerAccessLogRetentionChange(e.target.value)}
+                  disabled={!settings || !portalServerAccessLoggingEnabled}
+                  aria-label="Server access log retention days"
+                  className={`w-28 ${settingsCompactInputClassName}`}
                 />
               }
             />

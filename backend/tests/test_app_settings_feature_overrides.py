@@ -210,6 +210,11 @@ def test_portal_storage_space_version_cleanup_default_enabled():
     assert settings.portal.storage_space_version_cleanup_enabled is True
 
 
+def test_portal_server_access_log_retention_default_days():
+    settings = AppSettings()
+    assert settings.portal.server_access_log_retention_days == 30
+
+
 def test_bucket_compare_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.bucket_compare_enabled is True

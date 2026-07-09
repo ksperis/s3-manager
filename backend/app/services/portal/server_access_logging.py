@@ -14,6 +14,8 @@ from ._shared import *
 
 SERVER_ACCESS_LOGGING_SID = "S3ManagerPortalServerAccessLogging"
 SERVER_ACCESS_LOGGING_PREFIX_ROOT = "portal-server-access/"
+SERVER_ACCESS_LOGGING_RETENTION_RULE_ID = "ExpirePortalServerAccessLogs"
+SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS = 30
 SERVER_ACCESS_LOG_RAW_MAX_DAYS = 31
 _HTTP_REQUEST_RE = re.compile(r"^(GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS) .+ HTTP/\d(?:\.\d)?$")
 
@@ -111,9 +113,54 @@ class PortalServerAccessLoggingMixin:
         access_key, secret_key = self._account_credentials(account)
         return get_s3_client(access_key, secret_key, **self._s3_client_kwargs(account))
 
-    def _ensure_portal_server_access_log_bucket(self, account: S3Account) -> str:
+    def _portal_server_access_log_retention_days(self, portal_settings: PortalSettings) -> int:
+        try:
+            retention_days = int(
+                getattr(
+                    portal_settings,
+                    "server_access_log_retention_days",
+                    SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS,
+                )
+                or SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS
+            )
+        except (TypeError, ValueError):
+            retention_days = SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS
+        return max(1, retention_days)
+
+    def _portal_server_access_log_lifecycle_rules(self, portal_settings: PortalSettings) -> list[dict]:
+        return [
+            {
+                "ID": SERVER_ACCESS_LOGGING_RETENTION_RULE_ID,
+                "Status": "Enabled",
+                "Prefix": SERVER_ACCESS_LOGGING_PREFIX_ROOT,
+                "Expiration": {"Days": self._portal_server_access_log_retention_days(portal_settings)},
+            }
+        ]
+
+    def _put_portal_server_access_log_lifecycle(
+        self,
+        account: S3Account,
+        log_bucket: str,
+        portal_settings: PortalSettings,
+    ) -> None:
+        access_key, secret_key = self._account_credentials(account)
+        s3_client.put_bucket_lifecycle(
+            log_bucket,
+            rules=self._portal_server_access_log_lifecycle_rules(portal_settings),
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._s3_client_kwargs(account),
+        )
+
+    def _ensure_portal_server_access_log_bucket(
+        self,
+        account: S3Account,
+        *,
+        portal_settings: Optional[PortalSettings] = None,
+    ) -> str:
         log_bucket = self._portal_server_access_log_bucket_name(account)
         client = self._portal_server_access_client(account)
+        created = False
         try:
             client.head_bucket(Bucket=log_bucket)
         except ClientError as exc:
@@ -127,8 +174,15 @@ class PortalServerAccessLoggingMixin:
                 secret_key=secret_key,
                 **self._s3_client_kwargs(account),
             )
+            created = True
         except BotoCoreError as exc:
             raise RuntimeError(f"Unable to inspect Portal access log bucket '{log_bucket}': {exc}") from exc
+        if created:
+            self._put_portal_server_access_log_lifecycle(
+                account,
+                log_bucket,
+                portal_settings or self._effective_portal_settings(account),
+            )
         return log_bucket
 
     def _portal_server_access_log_policy(self, account: S3Account, log_bucket: str, existing_policy: Optional[dict]) -> dict:
@@ -236,7 +290,7 @@ class PortalServerAccessLoggingMixin:
         if not self._portal_server_access_logging_account_ready(account):
             logger.debug("Skipping Portal Server Access Logging without a storage endpoint: account=%s", account.id)
             return
-        log_bucket = self._ensure_portal_server_access_log_bucket(account)
+        log_bucket = self._ensure_portal_server_access_log_bucket(account, portal_settings=effective)
         self._ensure_portal_server_access_log_bucket_policy(account, log_bucket)
         self._put_portal_server_access_logging(account, source_bucket, log_bucket)
 
@@ -259,7 +313,7 @@ class PortalServerAccessLoggingMixin:
             summary["skipped"] = len(metadata_rows)
             return summary
         if effective.server_access_logging_enabled:
-            log_bucket = self._ensure_portal_server_access_log_bucket(account)
+            log_bucket = self._ensure_portal_server_access_log_bucket(account, portal_settings=effective)
             self._ensure_portal_server_access_log_bucket_policy(account, log_bucket)
             for metadata in metadata_rows:
                 source_bucket = metadata.bucket_name

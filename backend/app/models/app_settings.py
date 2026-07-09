@@ -212,6 +212,7 @@ class PortalSettings(BaseModel):
     allow_portal_named_bucket_create: bool = False
     allow_portal_user_access_key_create: bool = True
     server_access_logging_enabled: bool = True
+    server_access_log_retention_days: int = Field(default=30, ge=1)
     storage_space_version_cleanup_enabled: bool = True
     max_portal_user_access_keys: int = Field(default=2, ge=1)
     iam_group_manager_policy: PortalIAMPolicySettings = Field(

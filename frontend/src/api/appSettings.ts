@@ -10,6 +10,7 @@ export type PortalSettings = {
   allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
   server_access_logging_enabled: boolean;
+  server_access_log_retention_days: number;
   storage_space_version_cleanup_enabled: boolean;
   max_portal_user_access_keys: number;
   iam_group_manager_policy: PortalIAMPolicySettings;

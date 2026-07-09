@@ -2371,6 +2371,114 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
     assert managed["Condition"]["ArnLike"] == {"aws:SourceArn": "arn:aws:s3:::*"}
 
 
+def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-log-retention",
+        rgw_account_id="rgw-log-retention",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    db_session.add(account)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    created_buckets = []
+    lifecycle_calls = []
+
+    class _MissingBucketClient:
+        def head_bucket(self, **_kwargs):
+            raise ClientError({"Error": {"Code": "NoSuchBucket"}}, "HeadBucket")
+
+    monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: _MissingBucketClient())
+    monkeypatch.setattr(
+        s3_client,
+        "create_bucket",
+        lambda name, **kwargs: created_buckets.append((name, kwargs)),
+    )
+    monkeypatch.setattr(
+        s3_client,
+        "put_bucket_lifecycle",
+        lambda name, **kwargs: lifecycle_calls.append((name, kwargs)),
+    )
+
+    log_bucket = service._ensure_portal_server_access_log_bucket(
+        account,
+        portal_settings=PortalSettings(server_access_log_retention_days=45),
+    )
+
+    assert log_bucket == service._portal_server_access_log_bucket_name(account)
+    assert created_buckets == [
+        (
+            log_bucket,
+            {
+                "access_key": "ROOT-AK",
+                "secret_key": "ROOT-SK",
+                "endpoint": None,
+                "region": None,
+                "force_path_style": False,
+                "verify_tls": True,
+            },
+        )
+    ]
+    assert lifecycle_calls == [
+        (
+            log_bucket,
+            {
+                "rules": [
+                    {
+                        "ID": "ExpirePortalServerAccessLogs",
+                        "Status": "Enabled",
+                        "Prefix": "portal-server-access/",
+                        "Expiration": {"Days": 45},
+                    }
+                ],
+                "access_key": "ROOT-AK",
+                "secret_key": "ROOT-SK",
+                "endpoint": None,
+                "region": None,
+                "force_path_style": False,
+                "verify_tls": True,
+            },
+        )
+    ]
+
+
+def test_portal_server_access_log_existing_bucket_keeps_retention_unchanged(monkeypatch, db_session):
+    account = S3Account(
+        name="portal-log-retention-existing",
+        rgw_account_id="rgw-log-retention-existing",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+    )
+    db_session.add(account)
+    db_session.commit()
+
+    service = PortalService(db_session)
+
+    class _ExistingBucketClient:
+        def head_bucket(self, **_kwargs):
+            return {}
+
+    monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: _ExistingBucketClient())
+    monkeypatch.setattr(
+        s3_client,
+        "create_bucket",
+        lambda *args, **kwargs: pytest.fail("Bucket should already exist"),
+    )
+    monkeypatch.setattr(
+        s3_client,
+        "put_bucket_lifecycle",
+        lambda *args, **kwargs: pytest.fail("Existing access log buckets should not be migrated"),
+    )
+
+    log_bucket = service._ensure_portal_server_access_log_bucket(
+        account,
+        portal_settings=PortalSettings(server_access_log_retention_days=45),
+    )
+
+    assert log_bucket == service._portal_server_access_log_bucket_name(account)
+
+
 def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkeypatch, db_session):
     account = S3Account(
         name="portal-log-read",
@@ -2621,7 +2729,7 @@ def test_reconcile_portal_server_access_logging_enables_and_disables_managed_buc
     enabled_calls = []
     disabled_calls = []
     monkeypatch.setattr(service, "_portal_server_access_logging_account_ready", lambda _account: True)
-    monkeypatch.setattr(service, "_ensure_portal_server_access_log_bucket", lambda _account: "technical-logs")
+    monkeypatch.setattr(service, "_ensure_portal_server_access_log_bucket", lambda _account, **_kwargs: "technical-logs")
     monkeypatch.setattr(service, "_ensure_portal_server_access_log_bucket_policy", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
