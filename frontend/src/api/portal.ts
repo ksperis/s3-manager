@@ -693,7 +693,7 @@ export async function deletePortalStorageSpaceObject(
 }
 
 export function portalStorageSpaceVersionCleanupConfirmationPhrase(spaceName: string): string {
-  return `CLEAN HISTORY ${spaceName}`;
+  return `CLEAN HISTORY ${spaceName.toUpperCase()}`;
 }
 
 function buildPortalVersionCleanupPostInit(payload: { confirmation: string }): RequestInit {

@@ -111,7 +111,7 @@ vi.mock("../../api/portal", () => ({
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
-  portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName}`,
+  portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
   streamPortalStorageSpaceVersionCleanup: (...args: unknown[]) => mocks.streamHistoryCleanupMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
@@ -227,6 +227,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
+    mocks.hookResult.workspace.spaces[0].name = "Research Data";
     mocks.hookResult.workspace.spaces[0].role = "Owner";
     mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
     mocks.hookResult.workspace.spaces[0].canBrowse = true;
@@ -477,8 +478,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     const startButton = screen.getByRole("button", { name: "Start cleanup" });
     expect(startButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY Research Data"), {
-      target: { value: "CLEAN HISTORY Research Data" },
+    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY RESEARCH DATA"), {
+      target: { value: "CLEAN HISTORY RESEARCH DATA" },
     });
     fireEvent.click(startButton);
 
@@ -486,7 +487,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       expect(mocks.streamHistoryCleanupMock).toHaveBeenCalledWith(
         "101",
         "research-data",
-        { confirmation: "CLEAN HISTORY Research Data" },
+        { confirmation: "CLEAN HISTORY RESEARCH DATA" },
         expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) })
       );
     });
@@ -495,6 +496,22 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Versions deleted")).toBeInTheDocument();
     expect(screen.getByText("Markers removed")).toBeInTheDocument();
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("enables history cleanup when a cased space name is typed as displayed uppercase", async () => {
+    mocks.hookResult.workspace.spaces[0].name = "Test1";
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
+
+    const startButton = screen.getByRole("button", { name: "Start cleanup" });
+    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY TEST1"), {
+      target: { value: "CLEAN HISTORY TEST1" },
+    });
+
+    expect(startButton).toBeEnabled();
   });
 
   it("shows history cleanup disabled when the account override turns it off", async () => {

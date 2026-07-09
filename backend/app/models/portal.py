@@ -232,7 +232,7 @@ class PortalStorageSpaceVersionCleanupRequest(BaseModel):
 
 
 def portal_storage_space_version_cleanup_confirmation_phrase(space_name: str) -> str:
-    return f"CLEAN HISTORY {space_name}"
+    return f"CLEAN HISTORY {space_name.upper()}"
 
 
 class PortalStorageSpaceVersionCleanupProgress(BaseModel):

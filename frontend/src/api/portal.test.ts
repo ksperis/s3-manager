@@ -49,6 +49,7 @@ import {
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   listPortalStorageSpaces,
+  portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
   updatePortalAccessKeyStatus,
@@ -68,6 +69,11 @@ describe("portal storage spaces api", () => {
     clientMock.patch.mockResolvedValue({ data: {} });
     clientMock.put.mockResolvedValue({ data: {} });
     clientMock.delete.mockResolvedValue({ data: [] });
+  });
+
+  it("builds history cleanup confirmation phrases as displayed uppercase text", () => {
+    expect(portalStorageSpaceVersionCleanupConfirmationPhrase("Test1")).toBe("CLEAN HISTORY TEST1");
+    expect(portalStorageSpaceVersionCleanupConfirmationPhrase("Research Data")).toBe("CLEAN HISTORY RESEARCH DATA");
   });
 
   it("lists storage spaces through the canonical portal endpoint", async () => {

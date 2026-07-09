@@ -49,6 +49,7 @@ from app.models.portal import (
     PortalStorageSpaceShare,
     PortalStorageSpaceSummary,
     PortalUsage,
+    portal_storage_space_version_cleanup_confirmation_phrase,
 )
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers import portal as portal_router
@@ -1669,6 +1670,11 @@ def test_storage_space_version_cleanup_deletes_noncurrent_versions_and_orphan_ma
     assert progress[-1].bytes_freed == 50
 
 
+def test_storage_space_version_cleanup_confirmation_phrase_uses_displayed_uppercase():
+    assert portal_storage_space_version_cleanup_confirmation_phrase("Test1") == "CLEAN HISTORY TEST1"
+    assert portal_storage_space_version_cleanup_confirmation_phrase("Research Data") == "CLEAN HISTORY RESEARCH DATA"
+
+
 def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkeypatch, db_session):
     account = S3Account(name="portal-cleanup-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-cleanup-disabled@example.com", hashed_password="x", role="ui_user")
@@ -1698,7 +1704,7 @@ def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkey
             user,
             access,
             "research-data",
-            confirmation="CLEAN HISTORY Research Data",
+            confirmation="CLEAN HISTORY RESEARCH DATA",
         )
 
 
