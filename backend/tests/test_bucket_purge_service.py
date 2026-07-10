@@ -168,3 +168,34 @@ def test_purge_progress_continues_when_rgw_stats_are_unavailable(monkeypatch):
     assert progress_events[-1].stage == "completed"
     assert progress_events[-1].total_entries_estimate == 1
     assert progress_events[-1].total_entries_final is True
+
+
+def test_purge_service_forwards_individual_delete_strategy(monkeypatch):
+    class NoStatsBucketsService:
+        def list_buckets(self, account, *, with_stats=True):
+            return []
+
+    captured: dict[str, object] = {}
+
+    def fake_purge_bucket_contents(client, bucket_name, **kwargs):
+        captured["client"] = client
+        captured["bucket_name"] = bucket_name
+        captured.update(kwargs)
+        return bucket_purge_service.s3_client.BucketContentPurgeResult(bucket_name=bucket_name)
+
+    client = SimpleNamespace()
+    monkeypatch.setattr(bucket_purge_service, "BucketsService", NoStatsBucketsService)
+    monkeypatch.setattr(BucketPurgeService, "_build_client", lambda self, account: client)
+    monkeypatch.setattr(bucket_purge_service.s3_client, "purge_bucket_contents", fake_purge_bucket_contents)
+
+    result = BucketPurgeService().run(
+        [BucketPurgeResolvedTarget(account=SimpleNamespace(), bucket_name="bucket-a", context_id="ceph-admin-7")],
+        BucketPurgeOptions(parallelism=4, include_versions=True, individual_deletes=True),
+    )
+
+    assert result.status == "completed"
+    assert captured["client"] is client
+    assert captured["bucket_name"] == "bucket-a"
+    assert captured["parallelism"] == 4
+    assert captured["include_versions"] is True
+    assert captured["individual_deletes"] is True

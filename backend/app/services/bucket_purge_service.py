@@ -44,6 +44,7 @@ class BucketPurgeResolvedTarget:
 class BucketPurgeOptions:
     parallelism: int = 10
     include_versions: bool = True
+    individual_deletes: bool = False
 
 
 class BucketPurgeService:
@@ -357,6 +358,7 @@ class BucketPurgeService:
                 target.bucket_name,
                 parallelism=options.parallelism,
                 include_versions=options.include_versions,
+                individual_deletes=options.individual_deletes,
                 progress_callback=low_progress,
                 cancel_check=cancel_check,
             )
@@ -494,6 +496,7 @@ class BucketPurgeService:
                 target.bucket_name,
                 parallelism=options.parallelism,
                 include_versions=options.include_versions,
+                individual_deletes=options.individual_deletes,
                 progress_callback=low_progress,
                 cancel_check=cancel_check,
             )

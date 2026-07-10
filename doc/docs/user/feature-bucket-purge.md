@@ -36,9 +36,11 @@ Review the target list before typing the confirmation phrase. Bucket purge delet
 ## Expected result
 
 Selected buckets are emptied. Current objects, historical versions, and delete
-markers are deleted in parallel S3 `DeleteObjects` batches. Bucket metadata and
-configuration, including policies, lifecycle rules, CORS, notifications, and
-versioning settings, are kept.
+markers are deleted in parallel. Manager and Storage Ops use S3 `DeleteObjects`
+batches. Ceph Admin uses parallel individual `DeleteObject` requests so RGW
+applies the administrative authorization path to every object and version.
+Bucket metadata and configuration, including policies, lifecycle rules, CORS,
+notifications, and versioning settings, are kept.
 
 Deleting a bucket is a separate Manager bucket action. From **Manager >
 Buckets**, empty buckets use the normal delete confirmation. Deleting a

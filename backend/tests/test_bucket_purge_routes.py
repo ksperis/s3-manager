@@ -188,6 +188,7 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     assert targets[0].context_id == "s3u-1"
     assert captured["options"].parallelism == 4
     assert captured["options"].include_versions is True
+    assert captured["options"].individual_deletes is False
 
 
 def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch):
@@ -247,6 +248,7 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     assert target.bucket_name == "bucket-a"
     assert target.context_id == "s3u-1"
     assert captured["options"].parallelism == 4
+    assert captured["options"].individual_deletes is False
     assert "entry_limit" not in captured
 
 
@@ -293,6 +295,7 @@ def test_ceph_admin_purge_route_uses_dedicated_endpoint_credentials(monkeypatch)
     assert target.context_id == "ceph-admin-7"
     assert target.account.effective_rgw_credentials() == ("admin-ak", "admin-sk")
     assert captured["options"].include_versions is True
+    assert captured["options"].individual_deletes is True
 
 
 def test_storage_ops_purge_route_resolves_authorized_manager_contexts(monkeypatch):
@@ -338,3 +341,4 @@ def test_storage_ops_purge_route_resolves_authorized_manager_contexts(monkeypatc
     assert target.context_id == "s3u-1"
     assert target.context_name == "S3 User 1"
     assert captured["options"].parallelism == 10
+    assert captured["options"].individual_deletes is False

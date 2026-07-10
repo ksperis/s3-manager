@@ -1305,7 +1305,13 @@ def _delete_object_kwargs(bucket_name: str, item: dict) -> dict[str, str]:
     return kwargs
 
 
-def _delete_objects_individually(client, bucket_name: str, chunk: list[dict]) -> int:
+def _delete_objects_individually(
+    client,
+    bucket_name: str,
+    chunk: list[dict],
+    *,
+    after_batch_fallback: bool = False,
+) -> int:
     failures: list[str] = []
     for item in chunk:
         kwargs = _delete_object_kwargs(bucket_name, item)
@@ -1325,8 +1331,9 @@ def _delete_objects_individually(client, bucket_name: str, chunk: list[dict]) ->
     if failures:
         sample = failures[:3]
         extra = f" (+{len(failures) - 3} more)" if len(failures) > 3 else ""
+        context = " after batch fallback" if after_batch_fallback else ""
         raise RuntimeError(
-            f"Unable to delete {len(failures)} object(s) in bucket '{bucket_name}' after batch fallback: "
+            f"Unable to delete {len(failures)} object(s) in bucket '{bucket_name}'{context}: "
             f"{', '.join(sample)}{extra}"
         )
     return len(chunk)
@@ -1342,7 +1349,7 @@ def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> int:
             len(chunk),
             exc,
         )
-        return _delete_objects_individually(client, bucket_name, chunk)
+        return _delete_objects_individually(client, bucket_name, chunk, after_batch_fallback=True)
     except (ClientError, BotoCoreError) as exc:
         if _is_delete_objects_parse_error(exc):
             logger.warning(
@@ -1351,7 +1358,7 @@ def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> int:
                 len(chunk),
                 exc,
             )
-            return _delete_objects_individually(client, bucket_name, chunk)
+            return _delete_objects_individually(client, bucket_name, chunk, after_batch_fallback=True)
         raise
     errors = resp.get("Errors", []) if isinstance(resp, dict) else []
     if errors:
@@ -1507,6 +1514,7 @@ def purge_bucket_contents(
     *,
     parallelism: int = 10,
     include_versions: bool = True,
+    individual_deletes: bool = False,
     progress_callback: Callable[[BucketContentPurgeProgress], None] | None = None,
     cancel_check: Callable[[], None] | None = None,
     tolerate_missing_bucket: bool = False,
@@ -1558,7 +1566,10 @@ def purge_bucket_contents(
     def delete_batch(stage: str, items: list[dict]) -> tuple[str, int, list[dict] | None, Exception | None]:
         check_cancel()
         try:
-            deleted = _delete_objects_count(client, bucket_name, items)
+            if individual_deletes:
+                deleted = _delete_objects_individually(client, bucket_name, items)
+            else:
+                deleted = _delete_objects_count(client, bucket_name, items)
             return stage, deleted, None, None
         except Exception as exc:  # noqa: BLE001
             return stage, 0, items, exc
@@ -1590,6 +1601,12 @@ def purge_bucket_contents(
             pending = drain(pending)
         return pending
 
+    def submit_items(executor: ThreadPoolExecutor, pending: set, stage: str, items: list[dict]) -> set:
+        chunk_size = 1 if individual_deletes else 1000
+        for start in range(0, len(items), chunk_size):
+            pending = submit_or_wait(executor, pending, stage, items[start : start + chunk_size])
+        return pending
+
     emit("list", f"Listing objects in {bucket_name}...")
     with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-purge-delete") as executor:
         pending: set = set()
@@ -1609,7 +1626,7 @@ def purge_bucket_contents(
             objects = [{"Key": obj["Key"]} for obj in contents if obj.get("Key")]
             if objects:
                 listed_objects += len(objects)
-                pending = submit_or_wait(executor, pending, "objects", objects)
+                pending = submit_items(executor, pending, "objects", objects)
             continuation_token = page.get("NextContinuationToken")
             emit("list")
             if not continuation_token:
@@ -1648,8 +1665,7 @@ def purge_bucket_contents(
                         version_objects.append({"Key": key, "VersionId": version_id})
                 if version_objects:
                     listed_versions += len(version_objects)
-                    for start in range(0, len(version_objects), 1000):
-                        pending = submit_or_wait(executor, pending, "versions", version_objects[start : start + 1000])
+                    pending = submit_items(executor, pending, "versions", version_objects)
                 key_marker = page.get("NextKeyMarker")
                 version_marker = page.get("NextVersionIdMarker")
                 emit("versions")

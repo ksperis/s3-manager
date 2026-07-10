@@ -75,7 +75,11 @@ def stream_ceph_admin_bucket_purge(
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
     account = _build_endpoint_account(ctx)
-    options = BucketPurgeOptions(parallelism=payload.parallelism, include_versions=payload.include_versions)
+    options = BucketPurgeOptions(
+        parallelism=payload.parallelism,
+        include_versions=payload.include_versions,
+        individual_deletes=True,
+    )
     context_id = f"ceph-admin-{ctx.endpoint.id}"
     targets = [
         BucketPurgeResolvedTarget(
@@ -92,6 +96,7 @@ def stream_ceph_admin_bucket_purge(
         "bucket_sample": bucket_names[:20],
         "parallelism": options.parallelism,
         "include_versions": options.include_versions,
+        "delete_strategy": "individual",
         "endpoint_id": ctx.endpoint.id,
         "endpoint_name": ctx.endpoint.name,
     }

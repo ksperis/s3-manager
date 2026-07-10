@@ -313,6 +313,61 @@ def test_purge_bucket_contents_deletes_current_objects_versions_and_delete_marke
     assert {event.stage for event in progress_events} >= {"list", "delete", "versions", "completed"}
 
 
+def test_purge_bucket_contents_can_delete_entries_individually_in_parallel(monkeypatch):
+    class PurgeClient:
+        def __init__(self):
+            self.single_calls: list[dict] = []
+
+        def list_objects_v2(self, **kwargs):
+            return {"Contents": [{"Key": "current-a"}, {"Key": "current-b"}]}
+
+        def list_object_versions(self, **kwargs):
+            return {
+                "Versions": [
+                    {"Key": "versioned", "VersionId": "v1"},
+                    {"Key": "versioned", "VersionId": "v2"},
+                ],
+                "DeleteMarkers": [{"Key": "deleted", "VersionId": "marker-1"}],
+            }
+
+        def delete_objects(self, **kwargs):
+            raise AssertionError("DeleteObjects must not be used for individual purge mode")
+
+        def delete_object(self, **kwargs):
+            self.single_calls.append(kwargs)
+            return {"ResponseMetadata": {"HTTPStatusCode": 204}}
+
+    original_delete_individually = s3_client._delete_objects_individually
+    submitted_chunk_sizes: list[int] = []
+
+    def recording_delete_individually(client, bucket_name, chunk, **kwargs):
+        submitted_chunk_sizes.append(len(chunk))
+        return original_delete_individually(client, bucket_name, chunk, **kwargs)
+
+    monkeypatch.setattr(s3_client, "_delete_objects_individually", recording_delete_individually)
+    client = PurgeClient()
+
+    result = s3_client.purge_bucket_contents(
+        client,
+        "bucket-purge",
+        parallelism=3,
+        include_versions=True,
+        individual_deletes=True,
+    )
+
+    assert result.deleted_objects == 2
+    assert result.deleted_versions == 3
+    assert result.failed_count == 0
+    assert submitted_chunk_sizes == [1, 1, 1, 1, 1]
+    assert sorted((call["Key"], call.get("VersionId")) for call in client.single_calls) == [
+        ("current-a", None),
+        ("current-b", None),
+        ("deleted", "marker-1"),
+        ("versioned", "v1"),
+        ("versioned", "v2"),
+    ]
+
+
 def test_count_bucket_purge_entries_stops_after_limit_without_deleting():
     class CountClient:
         def __init__(self):
