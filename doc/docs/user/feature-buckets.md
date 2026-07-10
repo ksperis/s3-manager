@@ -34,7 +34,7 @@ Confirm the workspace and execution context first. Bucket names can repeat acros
    and apply lifecycle or notification configuration changes across selected
    buckets.
 7. When the purge tool is enabled, use **Manager > Tools > Purge** or
-   **Purge selected** from the Storage Ops bucket workbench to empty
+   **Purge selected** from Ceph Admin and Storage Ops bucket workbenches to empty
    selected buckets without deleting bucket configuration.
 8. From **Manager > Buckets**, empty buckets can be deleted from the normal
    confirmation dialog. Deleting a non-empty bucket requires bucket purge access

@@ -103,7 +103,6 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
     generalSettings: {
       browser_enabled: false,
       browser_ceph_admin_enabled: false,
-      bucket_purge_enabled: true,
     },
   }),
 }));
@@ -434,22 +433,6 @@ describe("BucketOpsWorkbench selection actions", () => {
     });
     expect(window.URL.createObjectURL).toHaveBeenCalled();
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
-  });
-
-  it("does not offer bucket purge from Ceph Admin", async () => {
-    const allBuckets = buildBuckets(1);
-    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
-
-    render(
-      <MemoryRouter>
-        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
-      </MemoryRouter>
-    );
-
-    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
-
-    expect(screen.queryByRole("button", { name: "Purge selected" })).not.toBeInTheDocument();
   });
 
   it("offers bulk notification configuration operations", async () => {

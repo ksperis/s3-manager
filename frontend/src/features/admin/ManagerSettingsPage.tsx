@@ -288,7 +288,7 @@ export default function ManagerSettingsPage() {
                 />
                 <SettingsItem
                   title="Bucket purge tool"
-                  description="Enables the Manager bucket purge tool and purge actions for Storage Ops."
+                  description="Enables the Manager bucket purge tool and purge actions for Ceph Admin and Storage Ops."
                   action={
                     <SettingsToggleAction
                       checked={Boolean(settings.general.bucket_purge_enabled)}

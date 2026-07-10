@@ -40,7 +40,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/manager/feature-rules` | `user/feature-buckets.md` + `developer/listings-feature-matrix.md` | Covered |
 | `/manager/bucket-compare` | `user/feature-bucket-compare.md` | Covered |
 | `/manager/bucket-integrity` | `user/feature-bucket-integrity-check.md` | Covered |
-| `/manager/bucket-purge`, `/storage-ops/buckets` purge action | `user/feature-bucket-purge.md` | Covered |
+| `/manager/bucket-purge`, `/ceph-admin/buckets` purge action, `/storage-ops/buckets` purge action | `user/feature-bucket-purge.md` | Covered |
 | `/manager/metrics`, `/ceph-admin/metrics`, and bucket usage stats tabs/actions | `user/feature-bucket-usage-stats.md` | Covered |
 | `/manager/migrations*` | `user/feature-bucket-migration.md` | Covered |
 | `/portal` and children | `user/workspace-portal.md` + Portal task pages | Covered |

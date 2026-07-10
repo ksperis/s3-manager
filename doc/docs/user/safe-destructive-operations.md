@@ -14,7 +14,7 @@ Use this page before deleting, purging, migrating, or applying configuration to 
 
 | Operation | Where | Main risk | Safety control |
 |---|---|---|---|
-| Empty buckets with Bucket purge | Manager, Storage Ops | Deletes current objects, versions, and delete markers while keeping the bucket. | Explicit target summary, parallelism control, exact confirmation phrase, progress counters. |
+| Empty buckets with Bucket purge | Manager, Ceph Admin, Storage Ops | Deletes current objects, versions, and delete markers while keeping the bucket. | Explicit target summary, parallelism control, exact confirmation phrase, progress counters. |
 | Delete a non-empty bucket | Manager | Deletes objects first, then deletes the bucket and its S3 configuration. | Requires purge access and a guarded delete confirmation flow. |
 | Apply lifecycle or notification changes in bulk | Ceph Admin, Storage Ops | Changes configuration on many buckets. | Preview/apply flow and visible progress. |
 | Migrate buckets | Manager | Copies data and may change target state. | Precheck, mode selection, integrity options, progress and failure states. |
