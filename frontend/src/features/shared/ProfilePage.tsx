@@ -304,10 +304,6 @@ export default function ProfilePage({
       (preferencesTouched && preferencesCurrentSignature !== preferencesInitialSignature));
 
   useEffect(() => {
-    onUnsavedChangesChange?.(settingsHaveUnsavedChanges);
-  }, [onUnsavedChangesChange, settingsHaveUnsavedChanges]);
-
-  useEffect(() => {
     if (!showSettingsCards || profileTouched) return;
     setProfileInitialSignature(profileCurrentSignature);
   }, [profileCurrentSignature, profileTouched, showSettingsCards]);
@@ -479,6 +475,14 @@ export default function ProfilePage({
     editConnectionInitialSignature,
     editingConnection,
   ]);
+
+  const connectionHasUnsavedChanges =
+    (showCreateConnectionModal && createConnectionCurrentSignature !== createConnectionInitialSignature) ||
+    (Boolean(editingConnection) && editConnectionCurrentSignature !== editConnectionInitialSignature);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(settingsHaveUnsavedChanges || connectionHasUnsavedChanges);
+  }, [connectionHasUnsavedChanges, onUnsavedChangesChange, settingsHaveUnsavedChanges]);
 
   const createConnectionCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: showCreateConnectionModal && createConnectionCurrentSignature !== createConnectionInitialSignature,

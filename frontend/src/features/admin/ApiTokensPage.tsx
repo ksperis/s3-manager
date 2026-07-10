@@ -89,9 +89,10 @@ function StatusBadge({ status }: { status: TokenStatus }) {
 
 type ApiTokensPageProps = {
   showPageHeader?: boolean;
+  onUnsavedChangesChange?: (dirty: boolean) => void;
 };
 
-export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPageProps) {
+export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesChange }: ApiTokensPageProps) {
   const [tokens, setTokens] = useState<ApiTokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,8 +173,12 @@ export default function ApiTokensPage({ showPageHeader = true }: ApiTokensPagePr
     () => stableSignature({ tokenName, expiresInDays }),
     [expiresInDays, tokenName]
   );
+  const createHasUnsavedChanges = showCreateModal && createCurrentSignature !== createInitialSignature;
+  useEffect(() => {
+    onUnsavedChangesChange?.(createHasUnsavedChanges);
+  }, [createHasUnsavedChanges, onUnsavedChangesChange]);
   const createCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showCreateModal && createCurrentSignature !== createInitialSignature,
+    hasUnsavedChanges: createHasUnsavedChanges,
     onClose: closeCreateModal,
     disabled: creating,
   });
