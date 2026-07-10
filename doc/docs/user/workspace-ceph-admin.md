@@ -29,6 +29,68 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    snapshot from the **Usage stats** tab.
 5. Bucket listings are cached for up to 30 minutes to reduce RGW load. Use **Refresh** in the bucket workbench to flush the cache and reload the current listing.
 
+## RGW Admin Ops actions
+
+The row action menus expose unitary RGW Admin Ops operations. Each operation
+shows the endpoint, target, impact, available options, required confirmation,
+and the result returned by RGW. The result stays open and includes the RGW HTTP
+status, the Ceph error code when present, and the JSON or text response body.
+
+### Accounts
+
+Use **Delete account** to remove an empty RGW Account. RGW Accounts require
+Ceph Squid or later. RGW rejects deletion while the Account still owns Users,
+Buckets, Roles, Groups, or other resources.
+
+Confirmation:
+
+```text
+DELETE ACCOUNT <account_id>
+```
+
+### Users
+
+Use **Delete user** to remove an empty RGW User. **Purge owned data** is off by
+default and passes `purge-data` to RGW when explicitly enabled. The RGW User
+whose credentials provide the active Ceph Admin connection cannot delete
+itself.
+
+Confirmations:
+
+```text
+DELETE USER <tenant$uid>
+PURGE USER <tenant$uid>
+```
+
+### Buckets
+
+The bucket row menu provides these operations:
+
+- **Delete bucket** removes an empty bucket. **Purge objects and versions**
+  passes `purge-objects` and permanently deletes the bucket and its contents.
+- **Unlink bucket** removes the current owner association while leaving the
+  bucket data in place.
+- **Link bucket** associates the bucket with a selected existing RGW User or
+  RGW Account. Link is not a `chown` and does not rewrite object ACLs.
+- **Check bucket index** runs a read-only index check by default. Enabling
+  **Check object state** requires **Fix detected index issues**.
+
+`bypass-gc` is hidden under **Advanced options**, disabled until
+`purge-objects` is enabled, and off by default. Use it only for exceptional
+operator recovery: it bypasses normal RGW garbage collection handling.
+
+Confirmations:
+
+```text
+DELETE BUCKET <tenant/bucket>
+PURGE AND DELETE BUCKET <tenant/bucket>
+UNLINK BUCKET <tenant/bucket>
+LINK BUCKET <tenant/bucket> TO <target_id>
+FIX BUCKET INDEX <tenant/bucket>
+```
+
+A read-only index check uses the confirmation button without a typed phrase.
+
 ## Expected result
 
 You can run Ceph cluster-wide tasks without switching to account-scoped Manager workflows.

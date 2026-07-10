@@ -14,6 +14,8 @@ def record_ceph_admin_action(
     entity_type: str,
     entity_id: str,
     metadata: dict[str, Any] | None = None,
+    status: str = "success",
+    message: str | None = None,
 ) -> None:
     actor = getattr(ctx, "actor", None)
     audit_service = getattr(ctx, "audit_service", None)
@@ -32,4 +34,6 @@ def record_ceph_admin_action(
         entity_type=entity_type,
         entity_id=entity_id,
         metadata=endpoint_metadata,
+        status=status,
+        message=message,
     )

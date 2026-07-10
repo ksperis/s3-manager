@@ -5,6 +5,7 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 
 import type { CephAdminBucket } from "../../api/cephAdmin";
+import type { BucketAdminOpsKind } from "../cephAdmin/CephAdminAdminOpsModal";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import { cx, uiMenuClass } from "../../components/ui/styles";
@@ -21,6 +22,7 @@ type BucketOpsRowActionsMenuProps = {
   cephAdminBrowserEnabled: boolean;
   onOpenInBrowser: (bucket: CephAdminBucket) => void;
   onConfigure: (bucket: CephAdminBucket) => void;
+  onAdminOps?: (bucket: CephAdminBucket, kind: BucketAdminOpsKind) => void;
   onOpenInManager?: (bucket: CephAdminBucket) => void;
 };
 
@@ -38,6 +40,7 @@ export default function BucketOpsRowActionsMenu({
   cephAdminBrowserEnabled,
   onOpenInBrowser,
   onConfigure,
+  onAdminOps,
   onOpenInManager,
 }: BucketOpsRowActionsMenuProps) {
   const menuOpen = activeActionMenuKey === actionMenuKey;
@@ -133,6 +136,50 @@ export default function BucketOpsRowActionsMenu({
                 }}
               >
                 Configure
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                onClick={() => {
+                  onAdminOps?.(bucket, "index-check");
+                  setActiveActionMenuKey(null);
+                }}
+              >
+                Check bucket index
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                onClick={() => {
+                  onAdminOps?.(bucket, "unlink-bucket");
+                  setActiveActionMenuKey(null);
+                }}
+              >
+                Unlink bucket
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                onClick={() => {
+                  onAdminOps?.(bucket, "link-bucket");
+                  setActiveActionMenuKey(null);
+                }}
+              >
+                Link bucket
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px] !text-rose-700 dark:!text-rose-300`}
+                onClick={() => {
+                  onAdminOps?.(bucket, "delete-bucket");
+                  setActiveActionMenuKey(null);
+                }}
+              >
+                Delete bucket
               </button>
             </>
           )}

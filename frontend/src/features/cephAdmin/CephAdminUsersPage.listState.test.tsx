@@ -65,6 +65,38 @@ describe("CephAdminUsersPage list states", () => {
     });
   });
 
+  it("opens delete User from the row menu and protects the active RGW identity", async () => {
+    listCephAdminUsersMock.mockResolvedValueOnce({
+      items: [
+        { uid: "alice", tenant: "tenant-a", full_name: "Alice" },
+        { uid: "ceph-admin", full_name: "Service identity" },
+      ],
+      total: 2,
+    });
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: 1,
+      selectedEndpoint: { id: 1, name: "Ceph Endpoint 1", capabilities: {} },
+      selectedEndpointAccess: {
+        can_metrics: true,
+        can_accounts: true,
+        active_rgw_uid: "ceph-admin",
+        active_rgw_tenant: null,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("alice")).toBeInTheDocument();
+    const menus = screen.getAllByLabelText("More actions");
+    fireEvent.click(menus[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete user" })[0]);
+    expect(screen.getByRole("heading", { name: "Delete RGW User" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
+    fireEvent.click(menus[1]);
+    expect(screen.getAllByRole("button", { name: "Delete user" }).at(-1)).toBeDisabled();
+  });
+
   it("shows loading state before displaying empty results", async () => {
     const pending = deferred<{ items: never[]; total: number }>();
     listCephAdminUsersMock.mockReturnValueOnce(pending.promise);

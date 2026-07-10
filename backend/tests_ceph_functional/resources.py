@@ -12,6 +12,17 @@ def _bool_param(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _require_cleanup_success(result: Any) -> None:
+    if getattr(result, "success", True):
+        return
+    if getattr(result, "status_code", None) == 404:
+        return
+    raise RuntimeError(
+        f"RGW cleanup failed with status={getattr(result, 'status_code', None)} "
+        f"code={getattr(result, 'error_code', None)}"
+    )
+
+
 class RgwCleanupClient(Protocol):
     def delete_user(self, uid: str, tenant: str | None = None) -> None:
         ...
@@ -39,6 +50,7 @@ class ResourceTracker:
     migrations: list[int] = field(default_factory=list)
     ceph_admin_users: list[tuple[str, str | None]] = field(default_factory=list)
     ceph_admin_accounts: list[str] = field(default_factory=list)
+    ceph_admin_buckets: list[tuple[str, str | None]] = field(default_factory=list)
 
     def track_account(
         self,
@@ -69,6 +81,11 @@ class ResourceTracker:
             return
         self.ceph_admin_accounts.append(account_id)
 
+    def track_ceph_admin_bucket(self, bucket: str, *, tenant: str | None = None) -> None:
+        if not bucket:
+            return
+        self.ceph_admin_buckets.append((bucket, tenant))
+
     def discard_bucket(self, account_id: int, bucket_name: str) -> None:
         self.buckets = [
             (aid, name)
@@ -98,6 +115,13 @@ class ResourceTracker:
 
     def discard_ceph_admin_account(self, account_id: str) -> None:
         self.ceph_admin_accounts = [tracked_id for tracked_id in self.ceph_admin_accounts if tracked_id != account_id]
+
+    def discard_ceph_admin_bucket(self, bucket: str, *, tenant: str | None = None) -> None:
+        self.ceph_admin_buckets = [
+            (tracked_bucket, tracked_tenant)
+            for tracked_bucket, tracked_tenant in self.ceph_admin_buckets
+            if not (tracked_bucket == bucket and tracked_tenant == tenant)
+        ]
 
     def cleanup(self, log: Callable[[str], None] | None = None) -> list[str]:
         errors: list[str] = []
@@ -182,15 +206,29 @@ class ResourceTracker:
                     errors.append(f"account {account_id}: {exc}")
         self.accounts.clear()
 
-        if self.ceph_admin_users or self.ceph_admin_accounts:
+        if self.ceph_admin_buckets or self.ceph_admin_users or self.ceph_admin_accounts:
             if self.rgw_admin_client is None:
                 errors.append(
                     "ceph-admin resources could not be cleaned up because RGW admin credentials are unavailable"
                 )
             else:
+                for bucket, tenant in reversed(self.ceph_admin_buckets):
+                    try:
+                        strict_delete = getattr(self.rgw_admin_client, "delete_bucket_operation", None)
+                        if callable(strict_delete):
+                            _require_cleanup_success(strict_delete(bucket, tenant=tenant, purge_objects=True))
+                        if log:
+                            tenant_suffix = f" (tenant={tenant})" if tenant else ""
+                            log(f"Deleted RGW bucket {bucket}{tenant_suffix}")
+                    except Exception as exc:  # pragma: no cover - network/cluster dependent
+                        errors.append(f"ceph-admin bucket {bucket} (tenant={tenant or '-'}) cleanup failed: {exc}")
                 for uid, tenant in reversed(self.ceph_admin_users):
                     try:
-                        self.rgw_admin_client.delete_user(uid, tenant=tenant)
+                        strict_delete = getattr(self.rgw_admin_client, "delete_user_operation", None)
+                        if callable(strict_delete):
+                            _require_cleanup_success(strict_delete(uid, tenant=tenant, purge_data=True))
+                        else:
+                            self.rgw_admin_client.delete_user(uid, tenant=tenant)
                         if log:
                             tenant_suffix = f" (tenant={tenant})" if tenant else ""
                             log(f"Deleted RGW user {uid}{tenant_suffix}")
@@ -199,13 +237,18 @@ class ResourceTracker:
                 for account_id in reversed(self.ceph_admin_accounts):
                     try:
                         self._cleanup_rgw_account_users(account_id, log=log)
-                        self.rgw_admin_client.delete_account(account_id)
+                        strict_delete = getattr(self.rgw_admin_client, "delete_account_operation", None)
+                        if callable(strict_delete):
+                            _require_cleanup_success(strict_delete(account_id))
+                        else:
+                            self.rgw_admin_client.delete_account(account_id)
                         if log:
                             log(f"Deleted RGW account {account_id}")
                     except Exception as exc:  # pragma: no cover - network/cluster dependent
                         errors.append(f"ceph-admin account {account_id} cleanup failed: {exc}")
         self.ceph_admin_users.clear()
         self.ceph_admin_accounts.clear()
+        self.ceph_admin_buckets.clear()
 
         return errors
 

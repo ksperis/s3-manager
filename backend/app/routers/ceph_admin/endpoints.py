@@ -37,6 +37,20 @@ def _normalize_optional_str(value: Any) -> str | None:
     return cleaned or None
 
 
+def _extract_rgw_user_identity(payload: Any) -> tuple[str | None, str | None]:
+    if not isinstance(payload, dict):
+        return None, None
+    nested = payload.get("user")
+    user_payload = nested if isinstance(nested, dict) else payload
+    raw_uid = _normalize_optional_str(user_payload.get("uid") or payload.get("uid"))
+    tenant = _normalize_optional_str(user_payload.get("tenant") or payload.get("tenant"))
+    if raw_uid and "$" in raw_uid:
+        embedded_tenant, uid = raw_uid.split("$", 1)
+        if embedded_tenant and uid:
+            return uid, tenant or embedded_tenant
+    return raw_uid, tenant
+
+
 def _extract_storage_classes(value: Any) -> set[str]:
     classes: set[str] = set()
     if isinstance(value, str):
@@ -189,6 +203,8 @@ def get_ceph_admin_endpoint_access(
     has_supervision_credentials = bool(endpoint.supervision_access_key and endpoint.supervision_secret_key)
     admin_warning = validate_ceph_admin_service_identity(endpoint)
     can_accounts = False
+    active_rgw_uid = None
+    active_rgw_tenant = None
     if admin_warning is None:
         admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
         if admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
@@ -200,6 +216,13 @@ def get_ceph_admin_endpoint_access(
                     region=endpoint.region,
                     verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                 )
+                identity_lookup = getattr(admin_client, "get_user_by_access_key", None)
+                if callable(identity_lookup):
+                    active_identity = identity_lookup(
+                        endpoint.ceph_admin_access_key,
+                        allow_not_found=True,
+                    )
+                    active_rgw_uid, active_rgw_tenant = _extract_rgw_user_identity(active_identity)
                 # Probe /admin/account directly; not_found still means the API is reachable.
                 admin_client.get_account(
                     "RGW00000000000000000",
@@ -215,6 +238,8 @@ def get_ceph_admin_endpoint_access(
         can_accounts=can_accounts,
         can_metrics=has_supervision_credentials,
         admin_warning=admin_warning,
+        active_rgw_uid=active_rgw_uid,
+        active_rgw_tenant=active_rgw_tenant,
     )
 
 

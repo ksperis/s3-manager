@@ -26,6 +26,63 @@ class CephAdminEndpointAccess(BaseModel):
     can_accounts: bool = False
     can_metrics: bool = False
     admin_warning: Optional[str] = None
+    active_rgw_uid: Optional[str] = None
+    active_rgw_tenant: Optional[str] = None
+
+
+class CephAdminAdminOpsResult(BaseModel):
+    operation: str
+    success: bool
+    rgw_status_code: Optional[int] = None
+    rgw_error_code: Optional[str] = None
+    message: str
+    result: Any = None
+
+
+class CephAdminAdminOpsConfirmation(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=512)
+
+
+class CephAdminAccountDeleteRequest(CephAdminAdminOpsConfirmation):
+    pass
+
+
+class CephAdminUserDeleteRequest(CephAdminAdminOpsConfirmation):
+    purge_data: bool = False
+
+
+class CephAdminBucketDeleteRequest(CephAdminAdminOpsConfirmation):
+    purge_objects: bool = False
+    bypass_gc: bool = False
+
+    @model_validator(mode="after")
+    def validate_bypass_gc(self):
+        if self.bypass_gc and not self.purge_objects:
+            raise ValueError("bypass_gc requires purge_objects.")
+        return self
+
+
+class CephAdminBucketUnlinkRequest(CephAdminAdminOpsConfirmation):
+    pass
+
+
+class CephAdminBucketLinkRequest(CephAdminAdminOpsConfirmation):
+    target_type: Literal["user", "account"]
+    target_id: str = Field(min_length=1, max_length=255)
+
+
+class CephAdminBucketIndexCheckRequest(BaseModel):
+    fix: bool = False
+    check_objects: bool = False
+    confirmation: Optional[str] = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def validate_check_objects(self):
+        if self.check_objects and not self.fix:
+            raise ValueError("check_objects requires fix.")
+        if self.fix and not (self.confirmation or "").strip():
+            raise ValueError("confirmation is required when fix is enabled.")
+        return self
 
 
 class CephAdminRgwAccountSummary(BaseModel):

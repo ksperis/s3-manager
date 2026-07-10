@@ -19,6 +19,7 @@ import { cx, uiButtonBaseClass, uiButtonVariants } from "../../components/ui/sty
 import UiButton from "../../components/ui/UiButton";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers, streamCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
+import CephAdminAdminOpsModal from "./CephAdminAdminOpsModal";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -291,6 +292,7 @@ export default function CephAdminUsersPage() {
   const [advancedProgress, setAdvancedProgress] = useState(INACTIVE_ADVANCED_PROGRESS);
   const [error, setError] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState<CephAdminRgwUser | null>(null);
+  const [deletingTarget, setDeletingTarget] = useState<CephAdminRgwUser | null>(null);
   const [filter, setFilter] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
@@ -913,6 +915,10 @@ export default function CephAdminUsersPage() {
   type ColumnDef = DataTableColumn<CephAdminRgwUser, SortField>;
 
   const detailPlaceholder = loadingDetails ? "Loading..." : "-";
+  const activeRgwUserId = selectedEndpointAccess?.active_rgw_uid
+    ? `${selectedEndpointAccess.active_rgw_tenant ? `${selectedEndpointAccess.active_rgw_tenant}$` : ""}${selectedEndpointAccess.active_rgw_uid}`
+    : null;
+
   const userTableColumns: ColumnDef[] = (() => {
     const cols: ColumnDef[] = [
       {
@@ -1055,6 +1061,25 @@ export default function CephAdminUsersPage() {
                 }}
               >
                 Owner buckets
+              </button>
+              <button
+                type="button"
+                disabled={bucketOwnerFilterForUser(user) === activeRgwUserId}
+                title={
+                  bucketOwnerFilterForUser(user) === activeRgwUserId
+                    ? "The active Ceph Admin service identity cannot delete itself"
+                    : "Delete this RGW User"
+                }
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px] !text-rose-700 dark:!text-rose-300`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (bucketOwnerFilterForUser(user) === activeRgwUserId) return;
+                  setDeletingTarget(user);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Delete user
               </button>
             </div>
           </details>
@@ -1483,6 +1508,16 @@ export default function CephAdminUsersPage() {
           onCreated={() => {
             setReloadNonce((prev) => prev + 1);
           }}
+        />
+      )}
+      {selectedEndpointId && deletingTarget && (
+        <CephAdminAdminOpsModal
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          action={{ kind: "delete-user", user: deletingTarget }}
+          canAccounts={Boolean(selectedEndpointAccess?.can_accounts)}
+          onClose={() => setDeletingTarget(null)}
+          onSuccess={() => setReloadNonce((prev) => prev + 1)}
         />
       )}
       {advancedFilterCloseGuard.confirmationDialog}

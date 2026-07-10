@@ -26,6 +26,7 @@ import {
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
+import CephAdminAdminOpsModal from "./CephAdminAdminOpsModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
@@ -313,6 +314,7 @@ export default function CephAdminAccountsPage() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<CephAdminRgwAccount | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const requestSeqRef = useRef(0);
@@ -960,6 +962,18 @@ export default function CephAdminAccountsPage() {
               >
                 Owner buckets
               </button>
+              <button
+                type="button"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px] !text-rose-700 dark:!text-rose-300`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setDeletingAccount(account);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Delete account
+              </button>
             </div>
           </details>
         </div>
@@ -1347,6 +1361,16 @@ export default function CephAdminAccountsPage() {
           onCreated={() => {
             setReloadNonce((prev) => prev + 1);
           }}
+        />
+      )}
+      {selectedEndpointId && deletingAccount && (
+        <CephAdminAdminOpsModal
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          action={{ kind: "delete-account", account: deletingAccount }}
+          canAccounts={Boolean(selectedEndpointAccess?.can_accounts)}
+          onClose={() => setDeletingAccount(null)}
+          onSuccess={() => setReloadNonce((prev) => prev + 1)}
         />
       )}
       {advancedFilterCloseGuard.confirmationDialog}

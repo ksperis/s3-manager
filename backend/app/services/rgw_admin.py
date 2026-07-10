@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 import re
 import secrets
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
 from threading import Lock
@@ -11,6 +13,7 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 from app.core.config import get_settings
+from app.core.sensitive_data import sanitize_error_detail
 from app.utils.quota_stats import extract_quota_limits
 
 settings = get_settings()
@@ -21,6 +24,15 @@ logger = logging.getLogger(__name__)
 
 class RGWAdminError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class RGWAdminOperationResponse:
+    status_code: int
+    success: bool
+    error_code: Optional[str]
+    message: Optional[str]
+    result: Any
 
 
 class RGWAdminClient:
@@ -70,17 +82,14 @@ class RGWAdminClient:
     def _mark_account_api_support(self, supported: bool) -> None:
         self._account_api_support_state = "supported" if supported else "unsupported"
 
-    def _request(
+    def _send_request(
         self,
         method: str,
         path: str,
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Dict[str, Any]] = None,
-        allow_conflict: bool = False,
-        allow_not_found: bool = False,
-        allow_not_implemented: bool = False,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> requests.Response:
         url = f"{self.endpoint}{path}"
         start = perf_counter()
         try:
@@ -115,6 +124,26 @@ class RGWAdminClient:
                 exc,
             )
             raise RGWAdminError(f"RGW admin request failed: {exc}") from exc
+        return resp
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        allow_conflict: bool = False,
+        allow_not_found: bool = False,
+        allow_not_implemented: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        resp = self._send_request(
+            method,
+            path,
+            params=params,
+            data=data,
+            timeout=timeout,
+        )
         if resp.status_code == 409 and allow_conflict:
             # Return minimal info; caller should handle fetching details
             return {"conflict": True, "status_code": resp.status_code, "text": resp.text}
@@ -131,6 +160,105 @@ class RGWAdminClient:
             return resp.json()
         except ValueError:
             raise RGWAdminError(f"Unexpected RGW admin response format: {resp.text}")
+
+    @staticmethod
+    def _xml_tag(value: str) -> str:
+        return value.rsplit("}", 1)[-1]
+
+    @classmethod
+    def _xml_to_value(cls, element: ET.Element) -> Any:
+        children = list(element)
+        if not children:
+            return (element.text or "").strip()
+        value: Dict[str, Any] = {}
+        for child in children:
+            key = cls._xml_tag(child.tag)
+            child_value = cls._xml_to_value(child)
+            existing = value.get(key)
+            if existing is None:
+                value[key] = child_value
+            elif isinstance(existing, list):
+                existing.append(child_value)
+            else:
+                value[key] = [existing, child_value]
+        return value
+
+    @classmethod
+    def _parse_operation_payload(cls, resp: requests.Response) -> Any:
+        if not resp.content and not resp.text:
+            return None
+        try:
+            return sanitize_error_detail(resp.json())
+        except ValueError:
+            pass
+        raw_text = resp.text.strip()
+        if raw_text.startswith("<"):
+            try:
+                root = ET.fromstring(raw_text)
+                return sanitize_error_detail(
+                    {cls._xml_tag(root.tag): cls._xml_to_value(root)}
+                )
+            except ET.ParseError:
+                pass
+        return sanitize_error_detail(raw_text)
+
+    @staticmethod
+    def _operation_error_details(payload: Any) -> tuple[Optional[str], Optional[str]]:
+        candidate = payload
+        if isinstance(candidate, dict) and len(candidate) == 1:
+            nested = next(iter(candidate.values()))
+            if isinstance(nested, dict):
+                candidate = nested
+        if isinstance(candidate, dict):
+            nested_error = candidate.get("Error") or candidate.get("error")
+            if isinstance(nested_error, dict):
+                candidate = nested_error
+        if not isinstance(candidate, dict):
+            return None, candidate if isinstance(candidate, str) and candidate else None
+        raw_code = (
+            candidate.get("Code")
+            or candidate.get("code")
+            or candidate.get("error_code")
+        )
+        raw_message = (
+            candidate.get("Message")
+            or candidate.get("message")
+            or candidate.get("error_message")
+        )
+        return (
+            str(raw_code).strip() if raw_code is not None else None,
+            str(raw_message).strip() if raw_message is not None else None,
+        )
+
+    def _request_operation(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+    ) -> RGWAdminOperationResponse:
+        resp = self._send_request(
+            method,
+            path,
+            params=params,
+            data=data,
+            timeout=timeout,
+        )
+        result = self._parse_operation_payload(resp)
+        error_code, upstream_message = self._operation_error_details(result)
+        success = 200 <= resp.status_code < 300
+        message = upstream_message
+        if not message:
+            message = "RGW Admin Ops operation completed." if success else "RGW Admin Ops operation failed."
+        return RGWAdminOperationResponse(
+            status_code=resp.status_code,
+            success=success,
+            error_code=None if success else error_code,
+            message=message,
+            result=result,
+        )
 
     def _sanitize_uid(self, name: str) -> str:
         uid = name.lower()
@@ -491,6 +619,13 @@ class RGWAdminClient:
         self._mark_account_api_support(True)
         return result
 
+    def delete_account_operation(self, account_id: str) -> RGWAdminOperationResponse:
+        return self._request_operation(
+            "DELETE",
+            "/admin/account",
+            params={"id": account_id, "format": "json"},
+        )
+
     def set_account_quota(
         self,
         account_id: str,
@@ -762,6 +897,82 @@ class RGWAdminClient:
             return None
         return result
 
+    @staticmethod
+    def _admin_bucket_identifier(bucket: str, tenant: Optional[str] = None) -> str:
+        if tenant and not bucket.startswith(f"{tenant}/"):
+            return f"{tenant}/{bucket}"
+        return bucket
+
+    def delete_bucket_operation(
+        self,
+        bucket: str,
+        *,
+        tenant: Optional[str] = None,
+        purge_objects: bool = False,
+        bypass_gc: bool = False,
+    ) -> RGWAdminOperationResponse:
+        params: Dict[str, Any] = {"bucket": bucket, "format": "json"}
+        if tenant:
+            params["tenant"] = tenant
+        if purge_objects:
+            params["purge-objects"] = "true"
+        if bypass_gc:
+            params["bypass-gc"] = "true"
+        return self._request_operation("DELETE", "/admin/bucket", params=params)
+
+    def unlink_bucket_operation(
+        self,
+        bucket: str,
+        *,
+        uid: str,
+        tenant: Optional[str] = None,
+    ) -> RGWAdminOperationResponse:
+        return self._request_operation(
+            "POST",
+            "/admin/bucket",
+            params={
+                "bucket": self._admin_bucket_identifier(bucket, tenant),
+                "uid": uid,
+                "format": "json",
+            },
+        )
+
+    def link_bucket_operation(
+        self,
+        bucket: str,
+        *,
+        uid: str,
+        bucket_id: Optional[str] = None,
+        tenant: Optional[str] = None,
+    ) -> RGWAdminOperationResponse:
+        params: Dict[str, Any] = {
+            "bucket": self._admin_bucket_identifier(bucket, tenant),
+            "uid": uid,
+            "format": "json",
+        }
+        if bucket_id:
+            params["bucket-id"] = bucket_id
+        return self._request_operation("PUT", "/admin/bucket", params=params)
+
+    def check_bucket_index_operation(
+        self,
+        bucket: str,
+        *,
+        tenant: Optional[str] = None,
+        check_objects: bool = False,
+        fix: bool = False,
+    ) -> RGWAdminOperationResponse:
+        params: Dict[str, Any] = {
+            "bucket": self._admin_bucket_identifier(bucket, tenant),
+            "index": "",
+            "format": "json",
+        }
+        if check_objects:
+            params["check-objects"] = "true"
+        if fix:
+            params["fix"] = "true"
+        return self._request_operation("GET", "/admin/bucket", params=params)
+
     def _format_usage_timestamp(self, value: Any) -> str:
         if isinstance(value, datetime):
             dt = value.astimezone(timezone.utc) if value.tzinfo else value
@@ -936,6 +1147,20 @@ class RGWAdminClient:
                 return
             except RGWAdminError:
                 continue
+
+    def delete_user_operation(
+        self,
+        uid: str,
+        *,
+        tenant: Optional[str] = None,
+        purge_data: bool = False,
+    ) -> RGWAdminOperationResponse:
+        params: Dict[str, Any] = {"uid": uid, "format": "json"}
+        if tenant:
+            params["tenant"] = tenant
+        if purge_data:
+            params["purge-data"] = "true"
+        return self._request_operation("DELETE", "/admin/user", params=params)
 
     def provision_user_keys(
         self,

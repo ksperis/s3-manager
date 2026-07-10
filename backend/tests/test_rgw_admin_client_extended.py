@@ -26,6 +26,7 @@ class _Resp:
         self.status_code = status_code
         self._payload = payload if payload is not None else {}
         self.text = text or str(payload or "")
+        self.content = self.text.encode()
 
     def json(self):
         if isinstance(self._payload, Exception):
@@ -75,6 +76,97 @@ def test_request_wraps_network_errors(monkeypatch):
     monkeypatch.setattr(client.session, "request", _raise)
     with pytest.raises(RGWAdminError, match="request failed"):
         client._request("GET", "/admin/info")
+
+
+def test_admin_ops_transport_preserves_empty_status_and_parses_json_xml_text(monkeypatch):
+    client = _client()
+
+    monkeypatch.setattr(client.session, "request", lambda *args, **kwargs: _Resp(status_code=204, text=""))
+    empty = client.delete_account_operation("RGW1")
+    assert empty.success is True
+    assert empty.status_code == 204
+    assert empty.result is None
+
+    monkeypatch.setattr(
+        client.session,
+        "request",
+        lambda *args, **kwargs: _Resp(
+            status_code=409,
+            payload={"Code": "AccountNotEmpty", "Message": "Account still owns resources"},
+            text='{"Code":"AccountNotEmpty","Message":"Account still owns resources"}',
+        ),
+    )
+    json_error = client.delete_account_operation("RGW1")
+    assert json_error.success is False
+    assert json_error.error_code == "AccountNotEmpty"
+    assert json_error.message == "Account still owns resources"
+
+    monkeypatch.setattr(
+        client.session,
+        "request",
+        lambda *args, **kwargs: _Resp(
+            status_code=409,
+            payload=ValueError("not json"),
+            text="<Error><Code>BucketNotEmpty</Code><Message>Not empty</Message></Error>",
+        ),
+    )
+    xml_error = client.delete_bucket_operation("bucket-a")
+    assert xml_error.error_code == "BucketNotEmpty"
+    assert xml_error.result == {"Error": {"Code": "BucketNotEmpty", "Message": "Not empty"}}
+
+    monkeypatch.setattr(
+        client.session,
+        "request",
+        lambda *args, **kwargs: _Resp(status_code=500, payload=ValueError("not json"), text="plain failure"),
+    )
+    text_error = client.check_bucket_index_operation("bucket-a")
+    assert text_error.status_code == 500
+    assert text_error.result == "plain failure"
+
+
+def test_admin_ops_methods_send_exact_methods_and_omit_false_booleans(monkeypatch):
+    client = _client()
+    calls: list[dict] = []
+
+    response = type("Response", (), {"status_code": 200, "success": True, "error_code": None, "message": "ok", "result": {}})()
+
+    def capture(method: str, path: str, **kwargs):
+        calls.append({"method": method, "path": path, "params": kwargs.get("params")})
+        return response
+
+    monkeypatch.setattr(client, "_request_operation", capture)
+
+    client.delete_user_operation("alice", tenant="tenant-a")
+    client.delete_user_operation("alice", purge_data=True)
+    client.delete_bucket_operation("bucket-a", tenant="tenant-a")
+    client.delete_bucket_operation("bucket-a", purge_objects=True, bypass_gc=True)
+    client.unlink_bucket_operation("bucket-a", tenant="tenant-a", uid="tenant-a$alice")
+    client.link_bucket_operation("bucket-a", uid="RGW1", bucket_id="bucket-id-1")
+    client.check_bucket_index_operation("bucket-a")
+    client.check_bucket_index_operation("bucket-a", fix=True, check_objects=True)
+
+    assert calls[0] == {
+        "method": "DELETE",
+        "path": "/admin/user",
+        "params": {"uid": "alice", "format": "json", "tenant": "tenant-a"},
+    }
+    assert "purge-data" not in calls[0]["params"]
+    assert calls[1]["params"]["purge-data"] == "true"
+    assert "purge-objects" not in calls[2]["params"]
+    assert "bypass-gc" not in calls[2]["params"]
+    assert calls[3]["params"]["purge-objects"] == "true"
+    assert calls[3]["params"]["bypass-gc"] == "true"
+    assert calls[4]["method"] == "POST"
+    assert calls[4]["params"]["bucket"] == "tenant-a/bucket-a"
+    assert calls[4]["params"]["uid"] == "tenant-a$alice"
+    assert calls[5]["method"] == "PUT"
+    assert calls[5]["params"]["bucket-id"] == "bucket-id-1"
+    assert calls[6]["method"] == "GET"
+    assert calls[6]["params"]["index"] == ""
+    assert "fix" not in calls[6]["params"]
+    assert "check-objects" not in calls[6]["params"]
+    assert calls[7]["params"]["fix"] == "true"
+    assert calls[7]["params"]["check-objects"] == "true"
 
 
 def test_create_user_and_account_conflict_fallback(monkeypatch):

@@ -120,6 +120,10 @@ import {
   stableStringify,
   type NotificationConfigurationTypeKey,
 } from "../cephAdmin/bucketJsonParsers";
+import CephAdminAdminOpsModal, {
+  type CephAdminAdminOpsAction,
+  type BucketAdminOpsKind,
+} from "../cephAdmin/CephAdminAdminOpsModal";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
@@ -2288,6 +2292,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const {
     selectedEndpointId: cephSelectedEndpointId,
     selectedEndpoint: cephSelectedEndpoint,
+    selectedEndpointAccess,
     endpoints,
   } = useCephAdminEndpoint();
   const surface = useMemo(() => resolveBucketOpsSurface(mode), [mode]);
@@ -2421,6 +2426,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">("any");
   const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(new Set());
   const [editingBucketName, setEditingBucketName] = useState<string | null>(null);
+  const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
   const [editingStorageOpsBucket, setEditingStorageOpsBucket] = useState<StorageOpsEditingBucket | null>(null);
   const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
   const [allFilteredBucketNamesKey, setAllFilteredBucketNamesKey] = useState<string | null>(null);
@@ -8052,6 +8058,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               }
               setEditingBucketName(currentBucket.name);
             }}
+            onAdminOps={(currentBucket, kind: BucketAdminOpsKind) => {
+              if (isStorageOps) return;
+              setAdminOpsAction({ kind, bucket: currentBucket });
+            }}
             onOpenInManager={(currentBucket) => {
               if (!isStorageOps) return;
               const contextId = getStorageOpsContextId(currentBucket);
@@ -9961,6 +9971,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         >
           <BucketDetailPage mode="ceph-admin" bucketNameOverride={editingBucketName} embedded />
         </WorkflowPage>
+      )}
+      {!isStorageOps && selectedEndpointId && adminOpsAction && (
+        <CephAdminAdminOpsModal
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          action={adminOpsAction}
+          canAccounts={Boolean(selectedEndpointAccess?.can_accounts)}
+          onClose={() => setAdminOpsAction(null)}
+          onSuccess={() => {
+            clearBucketListingUiCaches();
+            void refreshBuckets();
+          }}
+        />
       )}
       {isStorageOps && editingStorageOpsBucket && (
         <WorkflowPage
