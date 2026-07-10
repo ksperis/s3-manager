@@ -10,7 +10,7 @@ configuration.
 - `bucket_purge_enabled` enabled in **Admin > Settings > Manager**.
 - For Manager: access to `/manager/bucket-purge` and a UI user with
   **Manager tools > Bucket purge** access enabled.
-- For Ceph Admin or Storage Ops: access to the corresponding bucket workbench.
+- For Storage Ops: access to the bucket workbench.
 - Effective storage permissions for deleting current objects, object versions,
   and delete markers.
 
@@ -21,7 +21,7 @@ Review the target list before typing the confirmation phrase. Bucket purge delet
 ## Steps
 
 1. In Manager, open **Tools > Purge**, select the active context, and select buckets.
-2. In Ceph Admin or Storage Ops, select rows in the bucket workbench and click
+2. In Storage Ops, select rows in the bucket workbench and click
    **Purge selected**.
 3. Review the purge summary. It lists the surface, execution context, target
    buckets, and the exact effect.
@@ -71,10 +71,14 @@ Check `bucket_purge_enabled`, your Manager tool access, the selected workspace, 
     access also depends on the per-user or inherited `bucket_purge` Manager tool
     right.
 
+!!! note
+    Ceph Admin does not expose bucket purge. RGW admin credentials do not bypass
+    S3 IAM permissions or object ownership rules, so use a Manager or Storage Ops
+    execution context with effective delete permissions.
+
 ## Related pages
 
 - [Workspace: Manager](workspace-manager.md)
-- [Workspace: Ceph Admin](workspace-ceph-admin.md)
 - [Workspace: Storage Ops](workspace-storage-ops.md)
 - [Feature: Buckets](feature-buckets.md)
 - [Feature: Bucket integrity check](feature-bucket-integrity-check.md)

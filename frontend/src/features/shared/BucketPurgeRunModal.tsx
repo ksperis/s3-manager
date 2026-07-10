@@ -6,7 +6,6 @@ import { useMemo, useRef, useState } from "react";
 
 import {
   streamManagerBucketDeleteWithPurge,
-  streamCephAdminBucketPurge,
   streamManagerBucketPurge,
   streamStorageOpsBucketPurge,
   type BucketDeleteWithPurgePayload,
@@ -50,11 +49,6 @@ type BucketPurgeRunModalProps =
       contextName?: string | null;
     })
   | (CommonProps & {
-      mode: "ceph-admin";
-      endpointId: number;
-      endpointName?: string | null;
-    })
-  | (CommonProps & {
       mode: "storage-ops";
     });
 
@@ -77,13 +71,11 @@ function bucketStatusClasses(status: BucketPurgeBucketResult["status"]): string 
 
 function surfaceLabel(props: BucketPurgeRunModalProps): string {
   if (props.mode === "manager" || props.mode === "manager-delete") return "Manager";
-  if (props.mode === "ceph-admin") return "Ceph Admin";
   return "Storage Ops";
 }
 
 function contextLabel(props: BucketPurgeRunModalProps): string {
   if (props.mode === "manager" || props.mode === "manager-delete") return props.contextName || props.contextId;
-  if (props.mode === "ceph-admin") return props.endpointName || `Endpoint ${props.endpointId}`;
   return "All selected contexts";
 }
 
@@ -217,9 +209,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
           ? await streamManagerBucketDeleteWithPurge(props.contextId, deleteTarget, payload as BucketDeleteWithPurgePayload, streamOptions)
           : props.mode === "manager"
           ? await streamManagerBucketPurge(props.contextId, payload as BucketPurgePayload, streamOptions)
-          : props.mode === "ceph-admin"
-            ? await streamCephAdminBucketPurge(props.endpointId, payload as BucketPurgePayload, streamOptions)
-            : await streamStorageOpsBucketPurge(payload as BucketPurgePayload, streamOptions);
+          : await streamStorageOpsBucketPurge(payload as BucketPurgePayload, streamOptions);
       setResult(nextResult);
       props.onFinished?.(nextResult);
       setMessage(`${operationLabel} ${statusLabel(nextResult.status).toLowerCase()}.`);

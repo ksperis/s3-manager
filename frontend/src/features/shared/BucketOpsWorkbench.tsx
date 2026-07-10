@@ -9820,7 +9820,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             onShowCompareModal={() => setShowCompareModal(true)}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
             onShowPurgeModal={
-              generalSettings.bucket_purge_enabled ? () => setShowPurgeModal(true) : undefined
+              isStorageOps && generalSettings.bucket_purge_enabled ? () => setShowPurgeModal(true) : undefined
             }
             onShowUsageStatsModal={() => setShowUsageStatsModal(true)}
             openBulkUpdateModal={openBulkUpdateModal}
@@ -9988,15 +9988,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           mode="storage-ops"
           targets={selectedIntegrityTargets}
           onClose={() => setShowIntegrityModal(false)}
-        />
-      )}
-      {!isStorageOps && showPurgeModal && selectedEndpointId && selectedPurgeTargets.length > 0 && (
-        <BucketPurgeRunModal
-          mode="ceph-admin"
-          endpointId={selectedEndpointId}
-          endpointName={selectedEndpoint?.name}
-          targets={selectedPurgeTargets}
-          onClose={() => setShowPurgeModal(false)}
         />
       )}
       {isStorageOps && showPurgeModal && selectedPurgeTargets.length > 0 && (

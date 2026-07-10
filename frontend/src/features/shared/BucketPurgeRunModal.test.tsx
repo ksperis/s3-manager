@@ -7,7 +7,6 @@ import BucketPurgeRunModal from "./BucketPurgeRunModal";
 
 const streamManagerBucketPurgeMock = vi.fn();
 const streamManagerBucketDeleteWithPurgeMock = vi.fn();
-const streamCephAdminBucketPurgeMock = vi.fn();
 const streamStorageOpsBucketPurgeMock = vi.fn();
 
 vi.mock("../../api/bucketPurge", async () => {
@@ -16,7 +15,6 @@ vi.mock("../../api/bucketPurge", async () => {
     ...actual,
     streamManagerBucketPurge: (...args: unknown[]) => streamManagerBucketPurgeMock(...args),
     streamManagerBucketDeleteWithPurge: (...args: unknown[]) => streamManagerBucketDeleteWithPurgeMock(...args),
-    streamCephAdminBucketPurge: (...args: unknown[]) => streamCephAdminBucketPurgeMock(...args),
     streamStorageOpsBucketPurge: (...args: unknown[]) => streamStorageOpsBucketPurgeMock(...args),
   };
 });
@@ -135,7 +133,6 @@ describe("BucketPurgeRunModal", () => {
         ],
       });
     });
-    streamCephAdminBucketPurgeMock.mockResolvedValue(buildPurgeResult());
     streamStorageOpsBucketPurgeMock.mockResolvedValue(buildPurgeResult());
   });
 

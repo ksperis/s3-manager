@@ -129,21 +129,6 @@ export function streamManagerBucketDeleteWithPurge(
   });
 }
 
-export function streamCephAdminBucketPurge(
-  endpointId: number,
-  payload: BucketPurgePayload,
-  options?: BucketPurgeStreamOptions
-): Promise<BucketPurgeResult> {
-  const baseUrl = resolveApiBaseUrl();
-  return streamBucketsWithSse<BucketPurgeProgress, BucketPurgeResult>({
-    url: `${baseUrl}/ceph-admin/endpoints/${endpointId}/buckets/purge/stream`,
-    options,
-    requestInit: buildJsonPostInit(payload),
-    streamFailedLabel: "Bucket purge stream failed",
-    missingResultMessage: "Bucket purge stream ended without a result payload",
-  });
-}
-
 export function streamStorageOpsBucketPurge(
   payload: BucketPurgePayload,
   options?: BucketPurgeStreamOptions

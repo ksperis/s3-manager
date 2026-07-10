@@ -10,13 +10,11 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.db import StorageEndpoint, User, UserRole
+from app.db import User, UserRole
 from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.bucket_purge import BucketPurgeProgress, BucketPurgeRequest, BucketPurgeResult
 from app.routers import dependencies as dependencies_router
-from app.routers.ceph_admin import purge as ceph_purge
-from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import purge as manager_purge
 from app.routers.storage_ops import purge as storage_ops_purge
@@ -250,49 +248,11 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     assert "entry_limit" not in captured
 
 
-def test_ceph_admin_purge_route_uses_dedicated_endpoint_credentials(monkeypatch):
-    captured: dict[str, object] = {}
-
-    class FakeService:
-        def run(self, targets, options, *, progress_callback=None, cancel_check=None):
-            captured["targets"] = targets
-            captured["options"] = options
-            return _result()
-
-    def fake_stream(request, *, run_purge, logger, failure_message, **kwargs):
-        captured["stream_result"] = run_purge(lambda progress: None, lambda: None)
-        return "stream"
-
-    endpoint = StorageEndpoint(
-        id=7,
-        name="Ceph A",
-        endpoint_url="https://s3.example.test",
-        provider="ceph",
+def test_ceph_admin_purge_route_is_not_registered():
+    assert not any(
+        getattr(route, "path", None) == "/api/ceph-admin/endpoints/{endpoint_id}/buckets/purge/stream"
+        for route in app.routes
     )
-    ctx = CephAdminContext(
-        endpoint=endpoint,
-        rgw_admin=SimpleNamespace(),
-        s3_endpoint="https://s3.example.test",
-        region="us-east-1",
-        access_key="admin-ak",
-        secret_key="admin-sk",
-    )
-    monkeypatch.setattr(ceph_purge, "BucketPurgeService", FakeService)
-    monkeypatch.setattr(ceph_purge, "stream_bucket_purge", fake_stream)
-
-    response = ceph_purge.stream_ceph_admin_bucket_purge(
-        payload=BucketPurgeRequest(buckets=["bucket-a"], confirmation="PURGE 1 BUCKETS"),
-        request=_build_request(path="/api/ceph-admin/endpoints/7/buckets/purge/stream", query_string=b""),
-        user=SimpleNamespace(id=1, email="admin@example.test", role=UserRole.UI_ADMIN.value),
-        ctx=ctx,
-    )
-
-    assert response == "stream"
-    target = captured["targets"][0]
-    assert target.bucket_name == "bucket-a"
-    assert target.context_id == "ceph-admin-7"
-    assert target.account.effective_rgw_credentials() == ("admin-ak", "admin-sk")
-    assert captured["options"].include_versions is True
 
 
 def test_storage_ops_purge_route_resolves_authorized_manager_contexts(monkeypatch):

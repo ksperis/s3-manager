@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  streamCephAdminBucketPurge,
   streamManagerBucketDeleteWithPurge,
   streamManagerBucketPurge,
   streamStorageOpsBucketPurge,
@@ -62,7 +61,7 @@ describe("bucket purge streams", () => {
     );
   });
 
-  it("posts ceph admin and storage ops targets to their surfaces", async () => {
+  it("posts storage ops targets to its surface", async () => {
     const resultPayload =
       'event: result\ndata: {"status":"completed_with_errors","total_buckets":1,"completed_buckets":1,"listed_objects":0,"listed_versions":0,"deleted_objects":0,"deleted_versions":0,"failed_count":1,"started_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:01Z","buckets":[]}\n\n';
     const fetchMock = vi.fn(async () => {
@@ -73,19 +72,12 @@ describe("bucket purge streams", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await streamCephAdminBucketPurge(7, { buckets: ["bucket-a"], confirmation: "PURGE 1 BUCKETS" });
     await streamStorageOpsBucketPurge({
       targets: [{ context_id: "s3u-1", bucket_name: "bucket-a" }],
       confirmation: "PURGE 1 BUCKETS",
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/ceph-admin/endpoints/7/buckets/purge/stream",
-      expect.objectContaining({ method: "POST" })
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+    expect(fetchMock).toHaveBeenCalledWith(
       "/api/storage-ops/buckets/purge/stream",
       expect.objectContaining({
         method: "POST",
