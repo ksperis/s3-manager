@@ -6,7 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
-import Sidebar, { SidebarLink, SidebarSection, type SidebarBodyRenderArgs } from "./Sidebar";
+import Sidebar, { SidebarLink, SidebarSection, resolveWorkspaceProfilePath, type SidebarBodyRenderArgs } from "./Sidebar";
 import { useWorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import Topbar from "./Topbar";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
@@ -155,6 +155,7 @@ export default function Layout({
             onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
             showWorkspaceSwitcher
             workspaceSwitcher={workspaceSwitcher}
+            profilePath={resolveWorkspaceProfilePath(location.pathname)}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

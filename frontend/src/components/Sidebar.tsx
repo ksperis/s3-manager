@@ -8,6 +8,12 @@ import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
 export const SIDEBAR_CHROME_SLOT_ID = "app-sidebar-chrome-slot";
 export const SIDEBAR_CHROME_SLOT_EVENT = "s3-manager-sidebar-chrome-slot-change";
+const WORKSPACE_ROOTS = ["admin", "ceph-admin", "storage-ops", "manager", "browser", "portal"] as const;
+
+export function resolveWorkspaceProfilePath(pathname: string): string {
+  const workspace = WORKSPACE_ROOTS.find((root) => pathname === `/${root}` || pathname.startsWith(`/${root}/`));
+  return workspace ? `/${workspace}/profile` : "/profile";
+}
 
 export type SidebarLink = {
   to: string;
@@ -67,10 +73,11 @@ export default function Sidebar({
   onCollapseToggle,
 }: SidebarProps) {
   const effectiveSections: SidebarSection[] = useMemo(
-    () => (sections && sections.length > 0 ? sections : [{ label: "Navigation", links }]),
+    () => (sections && sections.length > 0 ? sections : links.length > 0 ? [{ label: "Navigation", links }] : []),
     [links, sections]
   );
   const location = useLocation();
+  const profilePath = resolveWorkspaceProfilePath(location.pathname);
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -277,6 +284,22 @@ export default function Sidebar({
           {footer ? <div className={`shrink-0 overflow-hidden border-t border-[color:var(--shell-border)] text-[var(--shell-text)] ${compact ? "p-2" : "p-3"}`}>{footer}</div> : null}
         </>
       )}
+      <div className={`shrink-0 border-t border-[color:var(--shell-border)] ${compact ? "p-2" : "p-2.5"}`}>
+        <NavLink
+          to={profilePath}
+          onClick={onNavigate}
+          aria-label={compact ? "Profile" : undefined}
+          title={compact ? "Profile" : undefined}
+          className={({ isActive }) =>
+            `group flex h-9 w-full items-center rounded-md text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              compact ? "justify-center px-2" : "gap-2 px-2.5"
+            } ${isActive ? "shell-sidebar-item-active" : "shell-sidebar-item"}`
+          }
+        >
+          <UserProfileIcon className="h-4 w-4 shrink-0" />
+          {!compact && <span>Profile</span>}
+        </NavLink>
+      </div>
       {variant === "desktop" && onCollapseToggle ? (
         <div className={`shrink-0 border-t border-[color:var(--shell-border)] ${compact ? "p-2" : "p-2.5"}`}>
           <button
@@ -319,6 +342,15 @@ function CollapseIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m12 5-5 5 5 5" />
       <path strokeLinecap="round" strokeWidth={1.7} d="M15 4.5v11" />
+    </svg>
+  );
+}
+
+function UserProfileIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
+      <circle cx="10" cy="6.5" r="3" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeWidth={1.6} d="M4.5 16c.7-3 2.5-4.5 5.5-4.5s4.8 1.5 5.5 4.5" />
     </svg>
   );
 }

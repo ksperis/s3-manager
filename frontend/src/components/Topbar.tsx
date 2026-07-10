@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   fetchUserNotifications,
   markUserNotificationsRead,
@@ -11,11 +11,9 @@ import {
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
-import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
-import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
 type TopbarProps = {
   projectName?: string;
@@ -31,6 +29,7 @@ type TopbarProps = {
   onMobileMenuToggle?: () => void;
   showWorkspaceSwitcher?: boolean;
   workspaceSwitcher?: WorkspaceSwitcherModel | null;
+  profilePath?: string;
 };
 
 type StoredAccountLink = {
@@ -43,9 +42,6 @@ type StoredTopbarUser = {
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
-
-const ProfilePage = lazy(() => import("../features/shared/ProfilePage"));
-const ApiTokensPage = lazy(() => import("../features/admin/ApiTokensPage"));
 
 function buildAccountInitial(value?: string | null): string {
   if (!value) return "U";
@@ -120,6 +116,7 @@ export default function Topbar({
   onMobileMenuToggle,
   showWorkspaceSwitcher = true,
   workspaceSwitcher,
+  profilePath = "/profile",
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
   const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
@@ -137,12 +134,6 @@ export default function Topbar({
   const [controlsAvailableWidth, setControlsAvailableWidth] = useState<number>(Number.POSITIVE_INFINITY);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileModalHasUnsavedChanges, setProfileModalHasUnsavedChanges] = useState(false);
-  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
-  const [connectionsModalHasUnsavedChanges, setConnectionsModalHasUnsavedChanges] = useState(false);
-  const [showApiTokensModal, setShowApiTokensModal] = useState(false);
-  const [apiTokensModalHasUnsavedChanges, setApiTokensModalHasUnsavedChanges] = useState(false);
   const accountMenuRootRef = useRef<HTMLDivElement | null>(null);
   const accountMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const accountMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -170,33 +161,6 @@ export default function Topbar({
   const accountDisplay = userEmail ?? "Session";
   const accountInitial = buildAccountInitial(accountDisplay);
   const showNotifications = !isS3Session;
-  const closeProfileModal = () => {
-    setShowProfileModal(false);
-    setProfileModalHasUnsavedChanges(false);
-  };
-  const profileCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showProfileModal && profileModalHasUnsavedChanges,
-    onClose: closeProfileModal,
-    zIndexClass: "z-[70]",
-  });
-  const closeConnectionsModal = () => {
-    setShowConnectionsModal(false);
-    setConnectionsModalHasUnsavedChanges(false);
-  };
-  const connectionsCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showConnectionsModal && connectionsModalHasUnsavedChanges,
-    onClose: closeConnectionsModal,
-    zIndexClass: "z-[70]",
-  });
-  const closeApiTokensModal = () => {
-    setShowApiTokensModal(false);
-    setApiTokensModalHasUnsavedChanges(false);
-  };
-  const apiTokensCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showApiTokensModal && apiTokensModalHasUnsavedChanges,
-    onClose: closeApiTokensModal,
-    zIndexClass: "z-[70]",
-  });
   const loadNotifications = useCallback(async () => {
     if (!showNotifications) return;
     setNotificationsLoading(true);
@@ -458,24 +422,6 @@ export default function Topbar({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [notificationsOpen]);
-
-  const openProfileModal = () => {
-    setAccountMenuOpen(false);
-    setProfileModalHasUnsavedChanges(false);
-    setShowProfileModal(true);
-  };
-
-  const openConnectionsModal = () => {
-    setAccountMenuOpen(false);
-    setConnectionsModalHasUnsavedChanges(false);
-    setShowConnectionsModal(true);
-  };
-
-  const openApiTokensModal = () => {
-    setAccountMenuOpen(false);
-    setApiTokensModalHasUnsavedChanges(false);
-    setShowApiTokensModal(true);
-  };
 
   const triggerLogout = () => {
     setAccountMenuOpen(false);
@@ -894,11 +840,11 @@ export default function Topbar({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
+                    <a
+                      href={`${profilePath}?tab=profile`}
                       role="menuitem"
                       data-account-menu-item="true"
-                      onClick={openProfileModal}
+                      onClick={() => setAccountMenuOpen(false)}
                       className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                     >
                       <UserIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
@@ -910,14 +856,14 @@ export default function Topbar({
                           Identity, password, preferences
                         </span>
                       </span>
-                    </button>
+                    </a>
 
                     {canManagePrivateConnections && (
-                      <button
-                        type="button"
+                      <a
+                        href={`${profilePath}?tab=connections`}
                         role="menuitem"
                         data-account-menu-item="true"
-                        onClick={openConnectionsModal}
+                        onClick={() => setAccountMenuOpen(false)}
                         className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                       >
                         <LinkIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
@@ -929,15 +875,15 @@ export default function Topbar({
                             Manage your endpoints and credentials
                           </span>
                         </span>
-                      </button>
+                      </a>
                     )}
 
                     {canManageApiTokens && (
-                      <button
-                        type="button"
+                      <a
+                        href={`${profilePath}?tab=api-tokens`}
                         role="menuitem"
                         data-account-menu-item="true"
-                        onClick={openApiTokensModal}
+                        onClick={() => setAccountMenuOpen(false)}
                         className="shell-menu-item flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left transition"
                       >
                         <ApiKeyIcon className="shell-icon-muted mt-0.5 h-4 w-4" />
@@ -949,7 +895,7 @@ export default function Topbar({
                             Manage admin automation tokens
                           </span>
                         </span>
-                      </button>
+                      </a>
                     )}
 
                     <div className="my-1 border-t border-[color:var(--shell-border-soft)]" />
@@ -971,63 +917,6 @@ export default function Topbar({
         </div>
       </div>
 
-      {showProfileModal && (
-        <Modal
-          title="User profile"
-          onClose={profileCloseGuard.requestClose}
-          maxWidthClass="max-w-6xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
-            <ProfilePage
-              showPageHeader={false}
-              showSettingsCards
-              showConnectionsSection={false}
-              onUnsavedChangesChange={setProfileModalHasUnsavedChanges}
-            />
-          </Suspense>
-          {profileCloseGuard.confirmationDialog}
-        </Modal>
-      )}
-
-      {showConnectionsModal && (
-        <Modal
-          title="Private S3 connections"
-          onClose={connectionsCloseGuard.requestClose}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
-            <ProfilePage
-              showPageHeader={false}
-              showSettingsCards={false}
-              showConnectionsSection
-              onUnsavedChangesChange={setConnectionsModalHasUnsavedChanges}
-            />
-          </Suspense>
-          {connectionsCloseGuard.confirmationDialog}
-        </Modal>
-      )}
-
-      {showApiTokensModal && (
-        <Modal
-          title="API tokens"
-          onClose={apiTokensCloseGuard.requestClose}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading API tokens...</div>}>
-            <ApiTokensPage
-              showPageHeader={false}
-              onUnsavedChangesChange={setApiTokensModalHasUnsavedChanges}
-            />
-          </Suspense>
-          {apiTokensCloseGuard.confirmationDialog}
-        </Modal>
-      )}
     </>
   );
 }

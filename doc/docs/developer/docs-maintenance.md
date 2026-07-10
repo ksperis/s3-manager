@@ -7,7 +7,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | Route / Feature | Target doc page | Status |
 |---|---|---|
 | First-run user orientation and workspace selection | `user/start-here.md` | Covered |
-| `/profile` | `user/profile.md` | Covered |
+| Workspace profile routes (`/*/profile`) | `user/profile.md` | Covered |
 | User/admin task journeys | `user/common-tasks-storage-user.md` + `user/common-tasks-storage-admin.md` | Covered |
 | Storage admin rollout and handover journey | `user/admin-runbook-storage-admin.md` | Covered |
 | Feature visibility and missing actions | `user/feature-availability.md` + `user/troubleshooting.md` | Covered |
@@ -22,7 +22,7 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/admin/metrics` | `user/feature-admin-metrics.md` + `ops/operations-observability.md` | Covered |
 | `/admin/billing` | `user/feature-billing-admin.md` + `ops/operations-billing.md` | Covered |
 | `/admin/usage-history` | `user/feature-usage-history-admin.md` + `ops/operations-quota-monitoring.md` | Covered |
-| API tokens (account menu modal) | `ops/operations-api-tokens.md` | Covered |
+| API tokens (profile page tab and admin route) | `ops/operations-api-tokens.md` | Covered |
 | `/admin/*-settings` | `ops/configuration.md` | Covered |
 | `/admin/key-rotation` | `user/feature-key-rotation-admin.md` + `ops/operations-security.md` | Covered |
 | `/ceph-admin` and children | `user/workspace-ceph-admin.md` | Covered |

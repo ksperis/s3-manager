@@ -1,8 +1,8 @@
-# User Profile and Private S3 Connections
+# User Profile, Private S3 Connections, and API Tokens
 
 ## When to use
 
-Use this page when you need to adjust personal UI preferences or manage your own private S3 connections.
+Use this page when you need to adjust personal UI preferences, manage your own private S3 connections, or administer API tokens when your role allows it.
 
 ## Prerequisites
 
@@ -11,17 +11,18 @@ Use this page when you need to adjust personal UI preferences or manage your own
 
 ## Steps
 
-1. Open `/profile`.
-2. In **Preferences**:
+1. Select **Profile** at the bottom of the sidebar, just above **Collapse**, or use the account menu in the topbar. The profile page opens inside your current workspace so its navigation and context remain available.
+2. Use the **Profile** tab to update identity and preferences:
    - choose language and theme,
    - set the default workspace after sign-in,
    - enable **Show tags in top selectors** if you want compact color-coded tags in the topbar context and endpoint selectors on this browser,
    - choose whether you receive quota alert emails.
-3. In **Private S3 connections**:
+3. Use the **Private S3 connections** tab when it is available:
    - create or edit your own private connection,
    - manage tags directly from the main form: add them inline, remove them with `×`, and click a tag badge to open its compact settings popover for color and `Standard` / `Administrative` scope,
    - search by name, endpoint, provider, or tag,
    - enable or disable access for `Manager` and `Browser`.
+4. Superadmins can use the **API tokens** tab for automation tokens. Other users do not see this tab.
 
 ## Expected result
 

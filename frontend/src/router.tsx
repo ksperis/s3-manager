@@ -106,7 +106,7 @@ const CephAdminBrowserPage = lazy(() => import("./features/cephAdmin/CephAdminBr
 const StorageOpsLayout = lazy(() => import("./features/storageOps/StorageOpsLayout"));
 const StorageOpsDashboard = lazy(() => import("./features/storageOps/StorageOpsDashboard"));
 const StorageOpsBucketsPage = lazy(() => import("./features/storageOps/StorageOpsBucketsPage"));
-const ProfilePage = lazy(() => import("./features/shared/ProfilePage"));
+const AccountProfilePage = lazy(() => import("./features/shared/AccountProfilePage"));
 
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
@@ -264,13 +264,12 @@ export function createAppRoutes() {
     <Route element={<Outlet />} errorElement={<RouteErrorPage />}>
       <Route element={<RequireAuth />}>
         <Route index element={<RoleRedirect />} />
-        <Route path="/profile" element={<Layout headerTitle="Profile" headerSubtitle="Account" hideSidebar />}>
-          <Route index element={<ProfilePage />} />
-        </Route>
+        <Route path="/profile" element={<Navigate to="/" replace />} />
 
         <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
           <Route path="/admin" element={<AdminLayoutShell />}>
             <Route index element={<AdminDashboard />} />
+            <Route path="profile" element={<AccountProfilePage />} />
             <Route path="s3-accounts" element={<S3AccountsPage />} />
             <Route path="accounts" element={<Navigate to="/admin/s3-accounts" replace />} />
             <Route path="s3-users" element={<S3UsersPage />} />
@@ -302,6 +301,7 @@ export function createAppRoutes() {
           <Route element={<RequireCephAdminFeature />}>
             <Route path="/ceph-admin" element={<CephAdminLayout />}>
               <Route index element={<CephAdminDashboard />} />
+              <Route path="profile" element={<AccountProfilePage />} />
               <Route path="metrics" element={<CephAdminMetricsPage />} />
               <Route path="accounts" element={<CephAdminAccountsPage />} />
               <Route path="users" element={<CephAdminUsersPage />} />
@@ -318,6 +318,7 @@ export function createAppRoutes() {
           <Route element={<RequireStorageOpsFeature />}>
             <Route path="/storage-ops" element={<StorageOpsLayout />}>
               <Route index element={<StorageOpsDashboard />} />
+              <Route path="profile" element={<AccountProfilePage />} />
               <Route path="buckets" element={<StorageOpsBucketsPage />} />
             </Route>
           </Route>
@@ -327,6 +328,7 @@ export function createAppRoutes() {
           <Route element={<RequireManagerFeature />}>
             <Route path="/manager" element={<ManagerLayout />}>
               <Route index element={<ManagerDashboard />} />
+              <Route path="profile" element={<AccountProfilePage />} />
               <Route path="buckets" element={<BucketsPage />} />
               <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
               <Route element={<RequireBrowserSurface surface="manager" />}>
@@ -369,6 +371,7 @@ export function createAppRoutes() {
           <Route element={<RequireBrowserSurface surface="root" />}>
             <Route path="/browser" element={<BrowserLayout />}>
               <Route index element={<BrowserPage />} />
+              <Route path="profile" element={<AccountProfilePage />} />
             </Route>
           </Route>
         </Route>
@@ -377,6 +380,7 @@ export function createAppRoutes() {
           <Route element={<RequirePortalAccess />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalDashboard />} />
+              <Route path="profile" element={<AccountProfilePage />} />
               <Route path="storage-spaces" element={<PortalStorageSpacesPage />} />
               <Route path="storage-spaces/:spaceId/objects/*" element={<PortalObjectDetailPage />} />
               <Route path="storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />

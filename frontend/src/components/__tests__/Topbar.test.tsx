@@ -20,31 +20,6 @@ vi.mock("../GeneralSettingsContext", () => ({
   }),
 }));
 
-vi.mock("../../features/admin/ApiTokensPage", () => ({
-  default: ({ showPageHeader = true }: { showPageHeader?: boolean }) => (
-    <div>{showPageHeader ? "API Tokens Page (header)" : "API Tokens Page (embedded)"}</div>
-  ),
-}));
-
-vi.mock("../../features/shared/ProfilePage", () => ({
-  default: ({
-    showSettingsCards = true,
-    showConnectionsSection = false,
-    onUnsavedChangesChange,
-  }: {
-    showSettingsCards?: boolean;
-    showConnectionsSection?: boolean;
-    onUnsavedChangesChange?: (dirty: boolean) => void;
-  }) => (
-    <div>
-      {showConnectionsSection ? "Private connections (embedded)" : "User profile (embedded)"}
-      {showSettingsCards && onUnsavedChangesChange ? (
-        <button type="button" onClick={() => onUnsavedChangesChange(true)}>Mark profile dirty</button>
-      ) : null}
-    </div>
-  ),
-}));
-
 vi.mock("../../api/userNotifications", () => notificationApiMock);
 
 const resolveAccountTrigger = (): HTMLButtonElement => {
@@ -138,7 +113,7 @@ describe("Topbar account menu", () => {
     expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toBeInTheDocument();
   });
 
-  it("opens the API tokens modal from the account menu", async () => {
+  it("links API tokens to the shared profile page", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
@@ -150,40 +125,24 @@ describe("Topbar account menu", () => {
 
     render(<Topbar userEmail="superadmin@example.com" />);
     await user.click(resolveAccountTrigger());
-    await user.click(await screen.findByRole("menuitem", { name: /api tokens/i }));
-
-    expect(await screen.findByRole("dialog", { name: "API tokens" })).toBeInTheDocument();
-    expect(await screen.findByText("API Tokens Page (embedded)")).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toHaveAttribute(
+      "href",
+      "/profile?tab=api-tokens"
+    );
+    expect(screen.queryByRole("dialog", { name: "API tokens" })).not.toBeInTheDocument();
   });
 
-  it("opens profile and private connections as contextual modals", async () => {
-    const user = userEvent.setup();
-    const profileRender = render(<Topbar userEmail="admin@example.com" />);
-
-    await user.click(resolveAccountTrigger());
-    await user.click(await screen.findByRole("menuitem", { name: /user profile/i }));
-    expect(await screen.findByRole("dialog", { name: "User profile" })).toBeInTheDocument();
-    expect(await screen.findByText("User profile (embedded)")).toBeInTheDocument();
-    profileRender.unmount();
-
-    render(<Topbar userEmail="admin@example.com" />);
-    await user.click(resolveAccountTrigger());
-    await user.click(await screen.findByRole("menuitem", { name: /private s3 connections/i }));
-    expect(await screen.findByRole("dialog", { name: "Private S3 connections" })).toBeInTheDocument();
-    expect(await screen.findByText("Private connections (embedded)")).toBeInTheDocument();
-  });
-
-  it("confirms before closing a dirty profile modal", async () => {
+  it("links profile and private connections to the shared profile page", async () => {
     const user = userEvent.setup();
     render(<Topbar userEmail="admin@example.com" />);
 
     await user.click(resolveAccountTrigger());
-    await user.click(await screen.findByRole("menuitem", { name: /user profile/i }));
-    await user.click(await screen.findByRole("button", { name: "Mark profile dirty" }));
-    await user.click(screen.getByRole("button", { name: "Close modal" }));
-
-    expect(await screen.findByRole("heading", { name: "Discard changes?" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "User profile" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /user profile/i })).toHaveAttribute("href", "/profile?tab=profile");
+    expect(screen.getByRole("menuitem", { name: /private s3 connections/i })).toHaveAttribute(
+      "href",
+      "/profile?tab=connections"
+    );
+    expect(screen.queryByRole("dialog", { name: /user profile|private s3 connections/i })).not.toBeInTheDocument();
   });
 
   it("opens an empty notifications panel", async () => {

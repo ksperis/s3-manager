@@ -144,6 +144,7 @@ describe("Sidebar", () => {
     const sidebar = container.querySelector('[data-sidebar-variant="desktop"]') as HTMLElement;
     expect(sidebar).toHaveStyle({ width: `${SIDEBAR_DEFAULT_WIDTH}px` });
     expect(screen.getByText("S3 Manager")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByRole("button", { name: /collapse sidebar|expand sidebar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
   });
@@ -198,6 +199,7 @@ describe("Sidebar", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Metrics" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "desktop expanded browser body" }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
@@ -285,6 +287,29 @@ describe("Sidebar", () => {
     );
 
     expect(screen.getByText("Mobile portal account footer")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Profile" })).toBeInTheDocument();
+  });
+
+  it("marks the fixed profile action active and keeps it accessible when compact", () => {
+    render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <Sidebar compact sections={[{ label: "Overview", links: [{ to: "/portal", label: "Dashboard" }] }]} />
+      </MemoryRouter>
+    );
+
+    const profileLink = screen.getByRole("link", { name: "Profile" });
+    expect(profileLink).toHaveClass("shell-sidebar-item-active");
+    expect(profileLink).toHaveAttribute("title", "Profile");
+  });
+
+  it("keeps profile navigation inside the current workspace", () => {
+    render(
+      <MemoryRouter initialEntries={["/manager/buckets"]}>
+        <Sidebar sections={[{ label: "Overview", links: [{ to: "/manager", label: "Dashboard" }] }]} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/manager/profile");
   });
 
   it("opens a collapsed section when parent navigation marks it expanded", () => {
