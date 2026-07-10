@@ -19,7 +19,7 @@ import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import AssociationSummary, {
@@ -1738,7 +1738,7 @@ export default function UsersPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCreateModal || (Boolean(editingUser) && showEditModal))}>
       <PageHeader
         title="UI Users"
         description={usersDescription}
@@ -1758,9 +1758,13 @@ export default function UsersPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {showCreateModal && (
-        <Modal
+        <WorkflowPage
           title="Create user"
-          onClose={createCloseGuard.requestClose}
+          description="Configure the identity, workspace access, groups and storage associations in one page-level workflow."
+          breadcrumbs={[...adminPageBreadcrumbs("users"), { label: "Create" }]}
+          backLabel="Back to users"
+          onBack={createCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -1979,7 +1983,7 @@ export default function UsersPage() {
             </div>
           </form>
           {createCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       <div className="ui-surface-card">
@@ -2040,9 +2044,13 @@ export default function UsersPage() {
       )}
 
       {editingUser && showEditModal && (
-        <Modal
+        <WorkflowPage
           title="Edit user"
-          onClose={editCloseGuard.requestClose}
+          description="Review direct access, inherited associations and Manager tools without a constrained dialog."
+          breadcrumbs={[...adminPageBreadcrumbs("users"), { label: "Edit" }]}
+          backLabel="Back to users"
+          onBack={editCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
         >
           <p className="mb-3 ui-body text-slate-500 dark:text-slate-300">{editingUser.email}</p>
           {actionError && (
@@ -2303,7 +2311,7 @@ export default function UsersPage() {
             </div>
           </form>
           {editCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

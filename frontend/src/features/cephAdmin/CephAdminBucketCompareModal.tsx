@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
@@ -677,7 +678,14 @@ export default function CephAdminBucketCompareModal({
   }, [pendingExplore]);
 
   return (
-    <Modal title="Compare buckets" onClose={handleClose} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <WorkflowPage
+      title="Compare buckets"
+      description="Map source and target buckets, run the comparison and review or export the resulting differences."
+      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Buckets", to: "/ceph-admin/buckets" }, { label: "Compare" }]}
+      onBack={handleClose}
+      backLabel={running ? "Stop and return" : "Back to buckets"}
+      contentClassName="min-w-0"
+    >
       <div className="space-y-4">
         <p className="ui-body text-slate-700 dark:text-slate-200">
           Compare <span className="font-semibold">{sortedSourceBuckets.length}</span> source bucket
@@ -1298,6 +1306,6 @@ export default function CephAdminBucketCompareModal({
           </div>
         </Modal>
       )}
-    </Modal>
+    </WorkflowPage>
   );
 }

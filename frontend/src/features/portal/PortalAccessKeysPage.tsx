@@ -19,6 +19,7 @@ import {
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -541,7 +542,7 @@ export default function PortalAccessKeysPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(createWizardOpen)}>
       <PageHeader
         title={t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" })}
         description={t({
@@ -952,14 +953,24 @@ export default function PortalAccessKeysPage() {
       ) : null}
 
       {createWizardOpen ? (
-        <Modal
+        <WorkflowPage
           title={t({ en: "Create tool access", fr: "Créer un accès outil", de: "Werkzeugzugriff erstellen" })}
-          onClose={closeCreateWizard}
-          closeOnBackdropClick={busy !== "create"}
-          closeOnEscape={busy !== "create"}
-          maxWidthClass="max-w-3xl"
+          description={t({
+            en: "Choose the recipient, scope and permissions, then keep the one-time secret visible until you are done.",
+            fr: "Choisissez le destinataire, le périmètre et les droits, puis conservez le secret à usage unique jusqu'à la fin.",
+            de: "Wählen Sie Empfänger, Umfang und Rechte und behalten Sie das einmalige Geheimnis bis zum Abschluss sichtbar.",
+          })}
+          breadcrumbs={[
+            { label: "Portal" },
+            { label: t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" }), to: "/portal/access-keys" },
+            { label: t({ en: "Create", fr: "Créer", de: "Erstellen" }) },
+          ]}
+          backLabel={t({ en: "Back to tool access", fr: "Retour aux accès outil", de: "Zurück zum Werkzeugzugriff" })}
+          onBack={busy === "create" ? undefined : closeCreateWizard}
+          contentClassName="mx-auto max-w-5xl"
         >
           <div className="space-y-4">
+            {error ? <PageBanner tone="error">{error}</PageBanner> : null}
             {storageSpacesError ? <PageBanner tone="warning">{storageSpacesError}</PageBanner> : null}
             <section className="space-y-2">
               <p className={uiLabelClass}>{t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" })}</p>
@@ -1094,7 +1105,7 @@ export default function PortalAccessKeysPage() {
               </dl>
             </section>
 
-            <div className="flex flex-wrap justify-end gap-2">
+            <WorkflowActions>
               <UiButton variant="secondary" onClick={closeCreateWizard} disabled={busy === "create"}>
                 {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
               </UiButton>
@@ -1103,9 +1114,9 @@ export default function PortalAccessKeysPage() {
                   ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." })
                   : t({ en: "Create access", fr: "Créer l'accès", de: "Zugriff erstellen" })}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       {pendingAction?.type === "disable" ? (

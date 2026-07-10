@@ -30,7 +30,7 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
@@ -261,6 +261,7 @@ export default function ManagerRolesPage() {
   };
 
   const openAdvancedModal = () => {
+    setError(null);
     setAdvancedName("");
     setAdvancedPath(DEFAULT_ROLE_PATH);
     setAssumeRolePolicyText(DEFAULT_ASSUME_ROLE_DOCUMENT);
@@ -482,7 +483,7 @@ export default function ManagerRolesPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showAdvancedModal || showEditModal)}>
       <PageHeader
         title="IAM Roles"
         description="Manage roles using the account root keys."
@@ -593,7 +594,15 @@ export default function ManagerRolesPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM role" onClose={advancedCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Create IAM role"
+          description="Configure the trust policy, path and attached policies without compressing the workflow into an overlay."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }, { label: "Create" }]}
+          backLabel="Back to roles"
+          onBack={advancedCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
+        >
+          {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Role name</label>
@@ -740,10 +749,18 @@ export default function ManagerRolesPage() {
             </div>
           </form>
           {advancedCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
       {showEditModal && (
-        <Modal title={editingRole ? `Edit IAM role: ${editingRole.name}` : "Edit IAM role"} onClose={editCloseGuard.requestClose}>
+        <WorkflowPage
+          title={editingRole ? `Edit IAM role: ${editingRole.name}` : "Edit IAM role"}
+          description="Review the immutable identity and update the role trust policy in a dedicated page."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }, { label: "Edit" }]}
+          backLabel="Back to roles"
+          onBack={editCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-4xl"
+        >
+          {error && <PageBanner tone="error">{error}</PageBanner>}
           {loadingRoleDetails ? (
             <p className="ui-body text-slate-500 dark:text-slate-300">Loading role details...</p>
           ) : (
@@ -802,7 +819,7 @@ export default function ManagerRolesPage() {
             </form>
           )}
           {editCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

@@ -15,8 +15,19 @@ const setThemeMock = vi.fn();
 const setLanguagePreferenceMock = vi.fn();
 const listPrivateConnectionTagDefinitionsMock = vi.fn();
 
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return { ...actual, useSearchParams: () => [new URLSearchParams(), vi.fn()] };
+});
+
 function expectBefore(first: Element, second: Element) {
   expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+}
+
+function getWorkflowPage(title: string): HTMLElement {
+  const page = screen.getByRole("heading", { name: title }).closest(".workflow-page");
+  if (!page) throw new Error(`Workflow page not found: ${title}`);
+  return page as HTMLElement;
 }
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -135,7 +146,7 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
     await screen.findByText("Add private S3 connection");
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Add private S3 connection");
     const nameInput = within(dialog).getByLabelText("Name");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
     const endpointHeading = within(dialog).getByText("Endpoint");
@@ -187,7 +198,7 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     await screen.findByText("Edit connection - managed-connection");
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Edit connection - managed-connection");
     const presetRadio = within(dialog).getByRole("radio", { name: "Configured endpoint" }) as HTMLInputElement;
     expect(presetRadio.checked).toBe(true);
     expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();
@@ -231,7 +242,7 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     await screen.findByText("Edit connection - managed-connection");
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Edit connection - managed-connection");
     fireEvent.click(within(dialog).getByLabelText("Custom endpoint"));
     const providerSelect = within(dialog).getByRole("combobox", { name: "Provider" });
     expect(providerSelect).toHaveValue("ceph");
@@ -274,7 +285,7 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     await screen.findByText("Edit connection - managed-connection");
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Edit connection - managed-connection");
     fireEvent.click(within(dialog).getByLabelText("Custom endpoint"));
     fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-ONLY" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -452,7 +463,7 @@ describe("ProfilePage live validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
     await screen.findByText("Add private S3 connection");
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Add private S3 connection");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
 
     fireEvent.focus(tagInput);

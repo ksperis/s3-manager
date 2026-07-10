@@ -5,6 +5,7 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
@@ -955,7 +956,19 @@ export default function ManagerBucketCompareModal({
     contextDisplayNameById.get(pendingActionTargetContextId) ?? pendingActionTargetContextId;
 
   return (
-    <Modal title="Compare buckets" onClose={handleClose} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <WorkflowPage
+      title="Compare buckets"
+      description="Configure the target mapping, run the comparison, and review or remediate differences without leaving the workflow."
+      breadcrumbs={[
+        { label: "Manager" },
+        { label: "Tools" },
+        { label: "Compare" },
+        { label: "Run" },
+      ]}
+      backLabel="Back to bucket selection"
+      onBack={handleClose}
+      contentClassName="space-y-4"
+    >
       <div className="space-y-4">
         <p className="ui-body text-slate-700 dark:text-slate-200">
           Compare <span className="font-semibold">{sortedSourceBuckets.length}</span> source bucket
@@ -1775,6 +1788,6 @@ export default function ManagerBucketCompareModal({
           </div>
         </Modal>
       )}
-    </Modal>
+    </WorkflowPage>
   );
 }

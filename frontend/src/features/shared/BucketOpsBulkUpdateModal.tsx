@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 
-import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 
 type BucketOpsBulkUpdateModalProps = {
   open: boolean;
@@ -16,8 +16,15 @@ export default function BucketOpsBulkUpdateModal({ open, onClose, children }: Bu
   if (!open) return null;
 
   return (
-    <Modal title="Bulk update" onClose={onClose} maxWidthClass="max-w-6xl">
+    <WorkflowPage
+      title="Bulk update"
+      description="Choose an operation, preview every selected bucket and keep the apply progress visible."
+      breadcrumbs={[{ label: "Buckets" }, { label: "Bulk update" }]}
+      onBack={onClose}
+      backLabel="Back to buckets"
+      contentClassName="min-w-0"
+    >
       {children}
-    </Modal>
+    </WorkflowPage>
   );
 }

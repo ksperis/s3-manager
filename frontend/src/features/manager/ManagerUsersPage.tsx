@@ -30,7 +30,7 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
@@ -288,6 +288,7 @@ export default function ManagerUsersPage() {
   };
 
   const openAdvancedModal = () => {
+    setError(null);
     setAdvancedName("");
     setCreateKey(true);
     setSelectedGroups([]);
@@ -419,7 +420,7 @@ export default function ManagerUsersPage() {
   }, [createdForUser, createdKey, selectedContext]);
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showAdvancedModal)}>
       <PageHeader
         title="Users"
         description="Create/delete via the account root credentials. Optionally generate an access key on creation."
@@ -621,7 +622,20 @@ export default function ManagerUsersPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM user" onClose={advancedCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Create IAM user"
+          description="Create the identity, attach managed or inline policies, and optionally generate its first access key."
+          breadcrumbs={[
+            { label: "Manager" },
+            { label: "IAM" },
+            { label: "Users" },
+            { label: "Create" },
+          ]}
+          backLabel="Back to users"
+          onBack={advancedCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
+        >
+          {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">User name</label>
@@ -794,7 +808,7 @@ export default function ManagerUsersPage() {
             </div>
           </form>
           {advancedCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {showAddConnectionModal && createdKey && createdForUser && createdKey.secret_access_key && addConnectionDefaults && (

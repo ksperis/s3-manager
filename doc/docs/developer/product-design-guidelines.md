@@ -49,8 +49,8 @@ workspace-specific visual themes when a shared product pattern fits.
 
 4. Reuse shared primitives before styling locally.
    Start from `PageHeader`, `PageTabs`, `ListToolbar`, `PageControlStrip`,
-   `ActiveFiltersBar`, `ManagerTable`, `Modal`, `UiButton`, and the shared
-   `ui-*` classes before adding page-specific class chains.
+   `ActiveFiltersBar`, `ManagerTable`, `WorkflowPage`, `Modal`, `UiButton`, and
+   the shared `ui-*` classes before adding page-specific class chains.
 
 5. Prefer progressive disclosure over busy first screens.
    Keep dashboards and list pages scannable. Move advanced filters, raw JSON,
@@ -87,11 +87,36 @@ workspace-specific visual themes when a shared product pattern fits.
 | Search, filters, and column controls | `ListToolbar`, `PageControlStrip`, `ActiveFiltersBar`, shared compact toolbar classes | Advanced filters should not introduce frontend-only behavior unless the backend data is already present and bounded. |
 | Cards, panels, and page sections | `uiCardClass`, `uiPanelClass`, `uiCardMutedClass`, `uiPanelMutedClass` | Standard cards use 8px radius and soft/no shadows. Avoid decorative nesting. |
 | Forms and settings | `ui-control`, `uiLabelClass`, `UiCheckboxField`, `UiDetails`, settings panels | Compute dirty state from saveable fields only. |
-| Dialogs, drawers, and overlays | `Modal`, shared menu classes, `AnchoredPortalMenu`, `useUnsavedChangesGuard` | Editable overlays must protect unapplied changes on every close path. |
+| Long operations and large forms | `WorkflowPage`, `WorkflowSection`, `WorkflowActions`, `workflowPageHostClass` | Replace the current list content with a focused in-page workflow. Keep progress and completion states on the same page. |
+| Dialogs, drawers, and overlays | `Modal`, `WorkflowSurface`, shared menu classes, `AnchoredPortalMenu`, `useUnsavedChangesGuard` | Reserve overlays for short, contextual tasks. Editable overlays must protect unapplied changes on every close path. |
 | Inline status, warnings, and capability gaps | `UiBadge`, `UiInlineMessage`, `PageBanner`, `PageEmptyState`, `MetricsUnavailableCard` | Distinguish missing data, disabled features, denied permissions, and unsupported backend capability. |
 | Destructive or high-risk operations | Explicit confirmation plus backend safeguards and audit logs | Never rely on color or UI gating alone for safety. |
 | Dashboards and metrics | Shared KPI, usage, traffic, and workspace dashboard components | Reuse chart language across Admin, Manager, Portal, and Ceph Admin while keeping labels surface-appropriate. |
 | Browser inside another workspace | `BrowserEmbed` with a locked or compact profile | Embedded Browser should reduce chrome and preserve the parent workspace's job. |
+
+## Page or modal decision
+
+Use a focused page when the task has any of these characteristics:
+
+- it runs long enough that progress, cancellation, retry, or a completion
+  summary must remain visible;
+- it contains multiple sections, tabs, validation groups, or enough fields to
+  require scrolling;
+- it is a bulk, destructive, import, purge, compare, integrity, or endpoint
+  configuration workflow;
+- the user benefits from a stable URL-sized surface, readable breadcrumbs, and
+  room for supporting context.
+
+Use a modal when the task is short and preserving the current page context is
+more valuable than extra space. This includes confirmations, one-time secret
+handoffs, compact create forms, small metadata edits, and Browser actions tied
+to the current bucket, prefix, or object selection.
+
+`WorkflowSurface` is the compatibility seam for a form that legitimately needs
+both presentations. Callers must choose the presentation explicitly; do not
+infer it from viewport size. When a workflow page is rendered inside an
+inventory component, apply `workflowPageHostClass` to the host so the inventory
+is visually replaced while confirmation modals can still appear above it.
 
 ## Vocabulary Rules
 

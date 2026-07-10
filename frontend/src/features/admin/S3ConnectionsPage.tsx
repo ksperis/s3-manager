@@ -7,6 +7,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -1098,7 +1099,7 @@ export default function S3ConnectionsPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCreateModal || Boolean(editing))}>
       <PageHeader
         title="Shared S3 Connections"
         description="Admin-managed S3 connections shared with linked UI users."
@@ -1199,7 +1200,14 @@ export default function S3ConnectionsPage() {
 
       {/* Create modal */}
       {showCreateModal && (
-        <Modal title="Add S3 Connection" onClose={createCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Add S3 connection"
+          description="Configure the endpoint, credentials, validation and workspace access in one page-level form."
+          breadcrumbs={[...adminPageBreadcrumbs("shared-connections"), { label: "Create" }]}
+          backLabel="Back to connections"
+          onBack={createCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-6xl"
+        >
           {createError && (
             <UiInlineMessage tone="error" className="mb-3">
               {createError}
@@ -1289,12 +1297,19 @@ export default function S3ConnectionsPage() {
             </div>
           </form>
           {createCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {/* Edit modal */}
       {editing && (
-        <Modal title={`Edit: ${editing.name}`} onClose={editCloseGuard.requestClose}>
+        <WorkflowPage
+          title={`Edit connection · ${editing.name}`}
+          description="Review endpoint identity, credentials and associations with enough room for validation feedback."
+          breadcrumbs={[...adminPageBreadcrumbs("shared-connections"), { label: "Edit" }]}
+          backLabel="Back to connections"
+          onBack={editCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
+        >
           {editError && (
             <UiInlineMessage tone="error" className="mb-3">
               {editError}
@@ -1618,7 +1633,7 @@ export default function S3ConnectionsPage() {
           </form>
           {editCloseGuard.confirmationDialog}
 
-        </Modal>
+        </WorkflowPage>
       )}
 
       {/* Bulk delete modal */}

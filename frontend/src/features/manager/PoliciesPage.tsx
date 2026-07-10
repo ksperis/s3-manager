@@ -17,7 +17,7 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
@@ -106,6 +106,7 @@ export default function PoliciesPage() {
   };
 
   const openAdvancedModal = () => {
+    setError(null);
     setAdvancedInitialSignature(stableSignature({ advancedName, documentText }));
     setShowAdvancedModal(true);
   };
@@ -139,7 +140,7 @@ export default function PoliciesPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showAdvancedModal)}>
       <PageHeader
         title="IAM Policies"
         description="List and create Ceph IAM policies for the selected account."
@@ -212,7 +213,15 @@ export default function PoliciesPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create policy" onClose={advancedCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Create IAM policy"
+          description="Name the policy and edit its complete JSON document with page-level space."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Policies" }, { label: "Create" }]}
+          backLabel="Back to policies"
+          onBack={advancedCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-4xl"
+        >
+          {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Policy name</label>
@@ -255,7 +264,7 @@ export default function PoliciesPage() {
             </div>
           </form>
           {advancedCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

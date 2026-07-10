@@ -21,6 +21,14 @@ function expectBefore(first: Element, second: Element) {
   expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 }
 
+function getWorkflowPage(title: string): HTMLElement {
+  const page = screen.getByRole("heading", { name: title }).closest(".workflow-page");
+  if (!page) {
+    throw new Error(`Workflow page not found: ${title}`);
+  }
+  return page as HTMLElement;
+}
+
 const makeTag = (id: number, label: string, color_key = "neutral", scope = "standard") => ({
   id,
   label,
@@ -158,7 +166,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     const generalTab = await screen.findByRole("button", { name: "General" });
     const usersTab = screen.getByRole("button", { name: "Linked UI users" });
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Edit connection · connection-1");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
     expect(tagInput).toBeInTheDocument();
     expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
@@ -270,7 +278,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    await within(screen.getByRole("dialog")).findByText("Endpoint");
+    await within(getWorkflowPage("Edit connection · connection-1")).findByText("Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "Linked UI users" }));
     expect(screen.getByRole("button", { name: "Add UI users" })).toBeInTheDocument();
@@ -281,9 +289,9 @@ describe("S3ConnectionsPage modal tabs", () => {
     render(<S3ConnectionsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Add connection" }));
-    await screen.findByText("Add S3 Connection");
+    await screen.findByRole("heading", { name: "Add S3 connection" });
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Add S3 connection");
     const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
     if (!nameInput) {
       throw new Error("Name input not found");
@@ -349,7 +357,7 @@ describe("S3ConnectionsPage modal tabs", () => {
     await screen.findByText("connection-7");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = getWorkflowPage("Edit connection · connection-7");
     await within(dialog).findByText("Endpoint");
     expect(within(dialog).getByRole("radio", { name: "Configured endpoint" })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();

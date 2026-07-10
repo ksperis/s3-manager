@@ -10,7 +10,7 @@ import {
   listCephAdminAccounts,
 } from "../../api/cephAdmin";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
-import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
@@ -270,11 +270,13 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
     : null;
 
   return (
-    <Modal
+    <WorkflowPage
       title="Create user"
-      onClose={closeGuard.requestClose}
-      maxWidthClass="max-w-5xl"
-      maxBodyHeightClass="max-h-[82vh]"
+      description="Configure identity, quotas, capabilities and the initial access key on a dedicated page."
+      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Users", to: "/ceph-admin/users" }, { label: "Create" }]}
+      backLabel="Back to users"
+      onBack={closeGuard.requestClose}
+      contentClassName="mx-auto max-w-6xl"
     >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
@@ -446,7 +448,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
             variant="secondary"
             size="sm"
           >
-            Close
+            Cancel
           </UiButton>
           <UiButton
             type="button"
@@ -483,6 +485,6 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
         />
       )}
       {closeGuard.confirmationDialog}
-    </Modal>
+    </WorkflowPage>
   );
 }

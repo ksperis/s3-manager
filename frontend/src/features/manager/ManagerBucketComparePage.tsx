@@ -9,6 +9,7 @@ import { listExecutionContexts, type ExecutionContext } from "../../api/executio
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { workflowPageHostClass } from "../../components/WorkflowPage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiButton from "../../components/ui/UiButton";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
@@ -146,7 +147,7 @@ export default function ManagerBucketComparePage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCompareModal)}>
       <PageHeader
         title="Bucket compare"
         description="Compare selected buckets across manager contexts."

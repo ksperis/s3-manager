@@ -91,7 +91,7 @@ describe("S3ConnectionsPage live validation", () => {
     await screen.findByRole("button", { name: "Add connection" });
 
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
-    await screen.findByText("Add S3 Connection");
+    await screen.findByRole("heading", { name: "Add S3 connection" });
     fireEvent.click(screen.getByLabelText("Custom endpoint"));
 
     const createButton = screen.getByRole("button", { name: "Create" });

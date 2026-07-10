@@ -30,6 +30,7 @@ import { listMinimalUsers, UserSummary } from "../../api/users";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import ListToolbar from "../../components/ListToolbar";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
@@ -1222,7 +1223,7 @@ export default function S3AccountsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showImportModal || Boolean(editingS3Account))}>
       <PageHeader
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
@@ -1467,7 +1468,14 @@ export default function S3AccountsPage() {
       )}
 
       {isSuperAdmin && showImportModal && (
-        <Modal title="Import accounts" onClose={importCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Import RGW accounts"
+          description="Validate and import multiple RGW tenant identifiers while keeping endpoint permissions and results visible."
+          breadcrumbs={[...adminPageBreadcrumbs("accounts"), { label: "Import" }]}
+          backLabel="Back to accounts"
+          onBack={importCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-4xl"
+        >
           <p className="mb-3 ui-body text-slate-500">
             Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys.
           </p>
@@ -1574,13 +1582,17 @@ export default function S3AccountsPage() {
             </UiButton>
           </div>
           {importCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {isSuperAdmin && editingS3Account && (
-        <Modal
+        <WorkflowPage
           title={`Edit ${editingS3Account.name}`}
-          onClose={editCloseGuard.requestClose}
+          description="Review usage, associations, privileged access and Portal overrides on a dedicated account page."
+          breadcrumbs={[...adminPageBreadcrumbs("accounts"), { label: "Edit" }]}
+          backLabel="Back to accounts"
+          onBack={editCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -2345,7 +2357,7 @@ export default function S3AccountsPage() {
               {editCloseGuard.confirmationDialog}
             </form>
           </div>
-        </Modal>
+        </WorkflowPage>
       )}
 
       <div className="ui-surface-card">

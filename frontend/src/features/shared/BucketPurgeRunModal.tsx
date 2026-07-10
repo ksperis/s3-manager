@@ -16,8 +16,8 @@ import {
   type BucketPurgeProgress,
   type BucketPurgeResult,
 } from "../../api/bucketPurge";
-import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import WorkflowPage from "../../components/WorkflowPage";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
@@ -244,8 +244,27 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
     props.onClose();
   };
 
+  const workspaceLabel = surfaceLabel(props);
+  const bucketsPath =
+    props.mode === "manager" || props.mode === "manager-delete"
+      ? "/manager/buckets"
+      : props.mode === "ceph-admin"
+        ? "/ceph-admin/buckets"
+        : "/storage-ops/buckets";
+
   return (
-    <Modal title={isDeleteMode ? "Delete bucket" : "Purge buckets"} onClose={closeModal} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <WorkflowPage
+      title={isDeleteMode ? "Purge and delete bucket" : "Purge buckets"}
+      description={
+        isDeleteMode
+          ? "Review the target, confirm the destructive operation and follow deletion through completion."
+          : "Review the selected buckets, confirm the destructive operation and keep progress visible through completion."
+      }
+      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: isDeleteMode ? "Purge and delete" : "Purge" }]}
+      onBack={closeModal}
+      backLabel={running ? "Stop and return" : "Back to buckets"}
+      contentClassName="min-w-0"
+    >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {message && (
@@ -472,6 +491,6 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
           </div>
         )}
       </div>
-    </Modal>
+    </WorkflowPage>
   );
 }

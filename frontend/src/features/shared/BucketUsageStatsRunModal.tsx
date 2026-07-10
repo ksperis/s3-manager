@@ -11,8 +11,8 @@ import {
   type BucketUsageStatsProgress,
   type BucketUsageStatsResult,
 } from "../../api/bucketUsageStats";
-import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import WorkflowPage from "../../components/WorkflowPage";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
@@ -153,8 +153,18 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
     props.onClose();
   };
 
+  const workspaceLabel = props.mode === "ceph-admin" ? "Ceph Admin" : "Storage Ops";
+  const bucketsPath = props.mode === "ceph-admin" ? "/ceph-admin/buckets" : "/storage-ops/buckets";
+
   return (
-    <Modal title="Calculate bucket usage stats" onClose={closeModal} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
+    <WorkflowPage
+      title="Calculate bucket usage stats"
+      description="Run the calculation as a page-level task and keep progress and per-bucket results visible."
+      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: "Usage stats" }]}
+      onBack={closeModal}
+      backLabel={running ? "Stop and return" : "Back to buckets"}
+      contentClassName="min-w-0"
+    >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {message && <PageBanner tone={result?.status === "completed" ? "success" : result?.status === "failed" ? "error" : "warning"}>{message}</PageBanner>}
@@ -268,6 +278,6 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
           </div>
         )}
       </div>
-    </Modal>
+    </WorkflowPage>
   );
 }

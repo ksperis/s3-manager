@@ -19,7 +19,7 @@ import {
   updateCephAdminUserKeyStatus,
 } from "../../api/cephAdmin";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
-import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
@@ -854,11 +854,13 @@ export default function CephAdminUserEditModal({
   }, [createdKey, detail?.account_id, tenant, uid]);
 
   return (
-    <Modal
+    <WorkflowPage
       title={`Configure user · ${identityLabel}`}
-      onClose={closeGuard.requestClose}
-      maxWidthClass="max-w-6xl"
-      maxBodyHeightClass="max-h-[85vh]"
+      description="Review configuration, key management, capabilities and metrics on a full workspace page."
+      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Users", to: "/ceph-admin/users" }, { label: identityLabel }]}
+      backLabel="Back to users"
+      onBack={closeGuard.requestClose}
+      contentClassName="min-w-0"
     >
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
       {showAddConnectionModal && createdKey && addConnectionDefaults && (
@@ -885,6 +887,6 @@ export default function CephAdminUserEditModal({
         />
       )}
       {closeGuard.confirmationDialog}
-    </Modal>
+    </WorkflowPage>
   );
 }

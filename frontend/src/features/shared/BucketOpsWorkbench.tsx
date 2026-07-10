@@ -10,7 +10,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
@@ -8078,7 +8078,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   });
 
   return (
-    <div className="space-y-4">
+    <div
+      className={workflowPageHostClass(
+        Boolean(
+          editingBucketName ||
+            editingStorageOpsBucket ||
+            showCompareModal ||
+            showIntegrityModal ||
+            showPurgeModal ||
+            showUsageStatsModal ||
+            showBulkUpdateModal
+        )
+      )}
+    >
       <PageHeader
         title="Buckets"
         description={shell.pageDescription}
@@ -9939,21 +9951,25 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         />
       </div>
       {!isStorageOps && editingBucketName && (
-        <Modal
+        <WorkflowPage
           title={`Configure bucket · ${editingBucketName}`}
-          onClose={() => setEditingBucketName(null)}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
+          description="Review and update the complete bucket configuration without embedding a page in a dialog."
+          breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
+          backLabel="Back to buckets"
+          onBack={() => setEditingBucketName(null)}
+          contentVariant="plain"
         >
           <BucketDetailPage mode="ceph-admin" bucketNameOverride={editingBucketName} embedded />
-        </Modal>
+        </WorkflowPage>
       )}
       {isStorageOps && editingStorageOpsBucket && (
-        <Modal
+        <WorkflowPage
           title={`Configure bucket · ${editingStorageOpsBucket.bucketName}`}
-          onClose={() => setEditingStorageOpsBucket(null)}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
+          description="Review and update the complete bucket configuration for its selected execution context."
+          breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
+          backLabel="Back to buckets"
+          onBack={() => setEditingStorageOpsBucket(null)}
+          contentVariant="plain"
         >
           <BucketDetailPage
             mode="manager"
@@ -9963,7 +9979,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             embedded
             hideObjectsTab
           />
-        </Modal>
+        </WorkflowPage>
       )}
       {!isStorageOps && showCompareModal && selectedEndpointId && (
         <CephAdminBucketCompareModal

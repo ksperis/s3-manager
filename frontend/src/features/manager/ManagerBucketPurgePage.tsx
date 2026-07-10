@@ -8,6 +8,7 @@ import { type Bucket, listBuckets } from "../../api/buckets";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { workflowPageHostClass } from "../../components/WorkflowPage";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiButton from "../../components/ui/UiButton";
 import { extractApiError } from "../../utils/apiError";
@@ -113,7 +114,7 @@ export default function ManagerBucketPurgePage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showPurgeModal)}>
       <PageHeader
         title="Bucket purge"
         description="Empty selected buckets without deleting bucket configuration."

@@ -107,7 +107,10 @@ describe("TopicsPage", () => {
     expect(await screen.findByText("topic-events")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Attributes" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Topic attributes · topic-events" });
+    const dialog = (await screen.findByRole("heading", { name: "Topic attributes · topic-events" })).closest(
+      ".workflow-page"
+    );
+    if (!dialog) throw new Error("Topic attributes workflow page not found");
     const endpointInput = within(dialog).getByPlaceholderText("https://example.com/webhook");
     await waitFor(() => expect(endpointInput).toHaveValue("https://notify.example.test/hooks/current"));
     expect(within(dialog).getByRole("checkbox", { name: "Verify SSL certificates" })).not.toBeChecked();

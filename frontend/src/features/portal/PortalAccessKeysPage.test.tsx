@@ -65,6 +65,12 @@ async function openSetupDialog(user: ReturnType<typeof userEvent.setup>) {
   return screen.getByRole("dialog", { name: "Download setup details" });
 }
 
+function getCreateWorkflowPage(): HTMLElement {
+  const page = screen.getByRole("heading", { name: "Create tool access" }).closest(".workflow-page");
+  if (!page) throw new Error("Create tool access workflow page not found");
+  return page as HTMLElement;
+}
+
 describe("PortalAccessKeysPage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -203,7 +209,7 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "New tool access" }));
-    const dialog = screen.getByRole("dialog", { name: "Create tool access" });
+    const dialog = getCreateWorkflowPage();
     await user.click(within(dialog).getByRole("button", { name: "Create access" }));
 
     expect(mocks.createPortalAccessKey).toHaveBeenCalledWith("101", { target_type: "self" });
@@ -230,7 +236,7 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "New tool access" }));
-    const dialog = screen.getByRole("dialog", { name: "Create tool access" });
+    const dialog = getCreateWorkflowPage();
     await user.click(within(dialog).getByLabelText("For an external user"));
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     await user.type(within(dialog).getByPlaceholderText("name@example.org"), "partner@example.org");
@@ -259,12 +265,13 @@ describe("PortalAccessKeysPage", () => {
     const user = userEvent.setup();
     renderPage("/portal/access-keys?space_id=research-data-internal&create=external");
 
-    const dialog = await screen.findByRole("dialog", { name: "Create tool access" });
+    await screen.findByRole("heading", { name: "Create tool access" });
+    const dialog = getCreateWorkflowPage();
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     expect(within(dialog).getByLabelText("For an external user")).toBeChecked();
     expect(within(dialog).getByLabelText("Space")).toHaveValue("research-data");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("dialog", { name: "Create tool access" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create tool access" })).not.toBeInTheDocument();
   });
 
   it("never offers a secret-inclusive download for existing keys", async () => {

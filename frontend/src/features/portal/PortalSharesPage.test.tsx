@@ -78,6 +78,12 @@ vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: () => mocks.hookResult,
 }));
 
+function getInviteWorkflowPage(): HTMLElement {
+  const page = document.querySelector(".workflow-page");
+  if (!page) throw new Error("Invite people workflow page not found");
+  return page as HTMLElement;
+}
+
 vi.mock("../../api/portal", () => ({
   listPortalStorageSpacePublicLinks: (...args: unknown[]) =>
     mocks.listPublicLinksMock(...args),
@@ -308,7 +314,7 @@ describe("PortalSharesPage", () => {
     ).toHaveValue("Viewer");
     await user.click(screen.getByRole("button", { name: "Invite" }));
     await user.click(screen.getByRole("button", { name: "Invite people" }));
-    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
+    const inviteDialog = getInviteWorkflowPage();
     expect(within(inviteDialog).getByLabelText("Space to share")).toHaveClass(
       "ui-control",
     );
@@ -470,7 +476,7 @@ describe("PortalSharesPage", () => {
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );
-    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
+    const inviteDialog = getInviteWorkflowPage();
     await waitFor(() => {
       expect(
         within(inviteDialog).getAllByText("Editor User").length,
@@ -508,7 +514,7 @@ describe("PortalSharesPage", () => {
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );
-    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
+    const inviteDialog = getInviteWorkflowPage();
     await user.type(
       await within(inviteDialog).findByPlaceholderText(
         "Search people by name or email...",
@@ -633,7 +639,7 @@ describe("PortalSharesPage", () => {
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );
-    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
+    const inviteDialog = getInviteWorkflowPage();
     await waitFor(() => {
       expect(
         within(inviteDialog).getAllByText("Editor User").length,

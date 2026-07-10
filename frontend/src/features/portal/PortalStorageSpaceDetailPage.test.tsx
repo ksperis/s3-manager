@@ -466,7 +466,9 @@ describe("PortalStorageSpaceDetailPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add people" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add people" });
+    await screen.findAllByRole("heading", { name: "Add people" });
+    const dialog = document.querySelector(".workflow-page");
+    if (!dialog) throw new Error("Add people workflow page not found");
     expect(within(dialog).getByLabelText("People")).toHaveClass("ui-control");
     expect(within(dialog).getByText("Editor User")).toBeInTheDocument();
 
@@ -506,7 +508,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
-    expect(screen.getByRole("dialog", { name: "Clean up history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Clean up history" }).closest(".workflow-page")).toBeInTheDocument();
     expect(screen.getByText(/deletes older file versions/i)).toBeInTheDocument();
     const startButton = screen.getByRole("button", { name: "Start cleanup" });
     expect(startButton).toBeDisabled();

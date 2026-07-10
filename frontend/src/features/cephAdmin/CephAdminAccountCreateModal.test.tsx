@@ -28,7 +28,10 @@ describe("CephAdminAccountCreateModal", () => {
     const onCreated = vi.fn();
     render(<CephAdminAccountCreateModal endpointId={7} onClose={vi.fn()} onCreated={onCreated} />);
 
-    const dialog = screen.getByRole("dialog", { name: "Create account" });
+    const dialog = screen.getByRole("heading", { name: "Create account" }).closest(".workflow-page");
+    if (!dialog) {
+      throw new Error("Create account workflow page not found");
+    }
     expect(within(dialog).getByLabelText("Account name *")).toHaveClass("ui-control");
     expect(within(dialog).getByLabelText("Email")).toHaveClass("ui-control");
     expect(within(dialog).getByLabelText("Max access keys")).toHaveClass("ui-control");

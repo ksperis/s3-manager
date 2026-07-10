@@ -122,7 +122,7 @@ export default function Modal({
 
   return (
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6`}
+      className={`modal-surface fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6`}
       role="presentation"
       onMouseDown={(event) => {
         if (!isTopModal(modalId)) return;

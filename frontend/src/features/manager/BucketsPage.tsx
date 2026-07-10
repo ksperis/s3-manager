@@ -30,7 +30,7 @@ import { S3AccountSelector } from "../../api/accountParams";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import ManagerTable, { type ManagerTableColumn } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -924,6 +924,7 @@ export default function BucketsPage() {
   });
 
   const openAdvancedModal = () => {
+    setActionError(null);
     setBucketForm(buildDefaultForm());
     setWizardStep(0);
     setUseCustomLocationConstraint(false);
@@ -932,7 +933,7 @@ export default function BucketsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(Boolean(showWizard || pendingDeleteWithPurgeBucketName))}>
       <PageHeader
         title="Buckets"
         description="Bucket inventory and configuration for the active manager context."
@@ -1107,7 +1108,19 @@ export default function BucketsPage() {
       )}
 
       {showWizard && (
-        <Modal title="Create bucket" onClose={wizardCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Create bucket"
+          description="Define the bucket identity and initial protection settings for the active manager context."
+          breadcrumbs={[
+            { label: "Manager" },
+            { label: "Buckets" },
+            { label: "Create" },
+          ]}
+          backLabel="Back to buckets"
+          onBack={wizardCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-3xl"
+        >
+          {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
           <form className="space-y-4" onSubmit={handleCreate}>
             <div className="flex items-center gap-3">
               {stepTitles.map((title, index) => (
@@ -1251,7 +1264,7 @@ export default function BucketsPage() {
             </div>
           </form>
           {wizardCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

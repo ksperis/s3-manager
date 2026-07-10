@@ -24,6 +24,7 @@ import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -819,7 +820,7 @@ export default function S3UsersPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showImportModal || Boolean(editingUser))}>
       <PageHeader
         title="Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
@@ -1029,7 +1030,14 @@ export default function S3UsersPage() {
       )}
 
       {showImportModal && (
-        <Modal title="Import users" onClose={importCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Import RGW users"
+          description="Import multiple RGW identities and keep endpoint validation and generated-key results visible."
+          breadcrumbs={adminBreadcrumbs({ label: "RGW Users", to: "/admin/s3-users" }, { label: "Import" })}
+          backLabel="Back to RGW users"
+          onBack={importCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-4xl"
+        >
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {importError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1098,13 +1106,17 @@ export default function S3UsersPage() {
             </UiButton>
           </div>
           {importCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {editingUser && (
-        <Modal
+        <WorkflowPage
           title={`Edit ${editingUser.name}`}
-          onClose={editCloseGuard.requestClose}
+          description="Review quotas, UI associations and privileged access without an overlay or nested scrolling."
+          breadcrumbs={adminBreadcrumbs({ label: "RGW Users", to: "/admin/s3-users" }, { label: "Edit" })}
+          backLabel="Back to RGW users"
+          onBack={editCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
         >
           {editError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1499,7 +1511,7 @@ export default function S3UsersPage() {
             </div>
             {editCloseGuard.confirmationDialog}
           </form>
-        </Modal>
+        </WorkflowPage>
       )}
 
       {userToDelete && (

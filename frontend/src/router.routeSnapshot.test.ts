@@ -46,6 +46,7 @@ describe("route snapshot", () => {
       "/admin/portal-settings",
       "/admin/browser-settings",
       "/admin/key-rotation",
+      "/admin/api-tokens",
       "/ceph-admin",
       "/ceph-admin#index",
       "/ceph-admin/metrics",

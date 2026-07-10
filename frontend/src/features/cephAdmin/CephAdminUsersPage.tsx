@@ -9,6 +9,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
@@ -912,7 +913,6 @@ export default function CephAdminUsersPage() {
   type ColumnDef = DataTableColumn<CephAdminRgwUser, SortField>;
 
   const detailPlaceholder = loadingDetails ? "Loading..." : "-";
-
   const userTableColumns: ColumnDef[] = (() => {
     const cols: ColumnDef[] = [
       {
@@ -1071,7 +1071,7 @@ export default function CephAdminUsersPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCreateModal || Boolean(editingTarget))}>
       <PageHeader
         title="RGW Users"
         description="Complete list of RGW users (admin ops)."

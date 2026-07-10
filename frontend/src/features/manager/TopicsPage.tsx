@@ -19,6 +19,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
@@ -560,7 +561,7 @@ export default function TopicsPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(attributesModalOpen || policyModalOpen)}>
       <PageHeader
         title="SNS Topics"
         description="List, create, and secure account-owned SNS topics."
@@ -675,7 +676,14 @@ export default function TopicsPage() {
       )}
 
       {attributesModalOpen && (
-        <Modal title={`Topic attributes · ${attributesTopicName ?? ""}`} onClose={attributesCloseGuard.requestClose}>
+        <WorkflowPage
+          title={`Topic attributes · ${attributesTopicName ?? ""}`}
+          description="Configure the push endpoint, TLS verification and provider-specific attributes on a dedicated page."
+          breadcrumbs={[{ label: "Manager" }, { label: "SNS Topics" }, { label: "Attributes" }]}
+          backLabel="Back to topics"
+          onBack={attributesCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
+        >
           <div className="space-y-4">
             {attributesError && (
               <UiInlineMessage tone="error">{attributesError}</UiInlineMessage>
@@ -793,11 +801,18 @@ export default function TopicsPage() {
             </div>
           </div>
           {attributesCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {policyModalOpen && (
-        <Modal title={`Topic policy · ${policyTopicName ?? ""}`} onClose={policyCloseGuard.requestClose}>
+        <WorkflowPage
+          title={`Topic policy · ${policyTopicName ?? ""}`}
+          description="Edit and validate the complete SNS topic policy without a constrained dialog viewport."
+          breadcrumbs={[{ label: "Manager" }, { label: "SNS Topics" }, { label: "Policy" }]}
+          backLabel="Back to topics"
+          onBack={policyCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
+        >
           <div className="space-y-3">
             {policyError && (
               <UiInlineMessage tone="error">{policyError}</UiInlineMessage>
@@ -896,7 +911,7 @@ export default function TopicsPage() {
             </div>
           </div>
           {policyCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

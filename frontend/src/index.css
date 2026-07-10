@@ -6,6 +6,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* A workflow page replaces its owning list while preserving the list state in
+ * memory. This keeps long forms and processes out of overlays without forcing
+ * every workspace to duplicate route and selection plumbing. */
+.workflow-page-host--active > :not(.workflow-page):not(.modal-surface) {
+  display: none !important;
+}
+
 :root {
   color-scheme: light;
   color: #0f172a;

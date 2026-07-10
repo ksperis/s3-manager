@@ -26,11 +26,11 @@ Review the target list before typing the confirmation phrase. Bucket purge delet
 3. Review the purge summary. It lists the surface, execution context, target
    buckets, and the exact effect.
 4. Set **Parallelism** if needed.
-5. Type the exact confirmation phrase shown by the modal, for example
+5. Type the exact confirmation phrase shown by the purge page, for example
    `PURGE 2 BUCKETS`.
 6. Start the purge and monitor progress until a result is displayed.
    When RGW bucket stats are available, progress starts from that object-count
-   estimate. If the exact total is still being discovered, the modal marks the
+   estimate. If the exact total is still being discovered, the page marks the
    denominator as non-final until listing has completed.
 
 ## Expected result
@@ -85,6 +85,6 @@ Check `bucket_purge_enabled`, your Manager tool access, the selected workspace, 
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-purge.light.png" alt="Bucket purge confirmation modal showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-purge.dark.png" alt="Bucket purge confirmation modal showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/feature-bucket-purge.light.png" alt="Bucket purge page showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/feature-bucket-purge.dark.png" alt="Bucket purge page showing selected targets, parallelism, and the required confirmation phrase" loading="lazy">
 </div>

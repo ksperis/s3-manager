@@ -4,9 +4,10 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import Modal from "../../components/Modal";
+import { useSearchParams } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PaginationControls from "../../components/PaginationControls";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
@@ -178,10 +179,14 @@ type ProfilePageProps = {
 
 export default function ProfilePage({
   showPageHeader = true,
-  showSettingsCards = true,
-  showConnectionsSection = false,
+  showSettingsCards: showSettingsCardsProp = true,
+  showConnectionsSection: showConnectionsSectionProp = false,
   onUnsavedChangesChange,
 }: ProfilePageProps) {
+  const [searchParams] = useSearchParams();
+  const profileView = searchParams.get("view");
+  const showConnectionsSection = showConnectionsSectionProp || profileView === "connections";
+  const showSettingsCards = showSettingsCardsProp && profileView !== "connections";
   const storedUser = useMemo<SessionUser | null>(() => readStoredUser(), []);
   const authType = storedUser?.authType ?? null;
   const isS3Session = authType === "s3_session";
@@ -1200,11 +1205,11 @@ export default function ProfilePage({
   const sectionDescriptionClasses = "ui-caption text-slate-500 dark:text-slate-400";
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showConnectionsSection && (showCreateConnectionModal || Boolean(editingConnection)))}>
       {showPageHeader && (
         <PageHeader
-          title="User profile"
-          description="Configure your account and preferences."
+          title={showConnectionsSection && !showSettingsCards ? "Private S3 connections" : "User profile"}
+          description={showConnectionsSection && !showSettingsCards ? "Manage your personal storage connections and credentials." : "Configure your account and preferences."}
           breadcrumbs={[{ label: "Profile" }]}
         />
       )}
@@ -1661,10 +1666,13 @@ export default function ProfilePage({
       </section>}
 
       {showConnectionsSection && showCreateConnectionModal && (
-        <Modal
+        <WorkflowPage
           title="Add private S3 connection"
-          onClose={createConnectionCloseGuard.requestClose}
-          maxWidthClass="max-w-3xl"
+          description="Configure endpoint identity, credentials and workspace access on a dedicated page."
+          breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Create" }]}
+          backLabel="Back to connections"
+          onBack={createConnectionCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
         >
           {connectionsError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1758,14 +1766,17 @@ export default function ProfilePage({
             </div>
           </form>
           {createConnectionCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
 
       {showConnectionsSection && editingConnection && (
-        <Modal
+        <WorkflowPage
           title={`Edit connection - ${editingConnection.name}`}
-          onClose={editConnectionCloseGuard.requestClose}
-          maxWidthClass="max-w-3xl"
+          description="Review endpoint identity, credentials and access without a constrained overlay."
+          breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Edit" }]}
+          backLabel="Back to connections"
+          onBack={editConnectionCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
         >
           {connectionsError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1883,7 +1894,7 @@ export default function ProfilePage({
             </div>
           </form>
           {editConnectionCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

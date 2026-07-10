@@ -18,6 +18,7 @@ import {
   updateStorageEndpointTags,
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
+import { WorkflowSurface, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
@@ -1336,7 +1337,7 @@ export default function StorageEndpointsPage() {
   }, [form.features.healthcheck.mode, signedProbeBlockedReason, updateFeatures]);
 
   return (
-    <div className="space-y-4 ui-caption leading-relaxed">
+    <div className={workflowPageHostClass(showForm && !tagsOnlyMode, "space-y-4 ui-caption leading-relaxed")}>
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
@@ -1387,7 +1388,15 @@ export default function StorageEndpointsPage() {
       </div>
 
       {showForm && (
-        <Modal title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit endpoint") : "New endpoint"} onClose={formCloseGuard.requestClose}>
+        <WorkflowSurface
+          presentation={tagsOnlyMode ? "modal" : "page"}
+          title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit storage endpoint") : "New storage endpoint"}
+          description="Configure provider identity, credentials, capability detection and health checks in one page-level workflow."
+          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: editingId ? "Edit" : "Create" }]}
+          backLabel="Back to endpoints"
+          onClose={formCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-7xl"
+        >
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && <PageBanner tone="error">{formError}</PageBanner>}
             {tagsOnlyMode && (
@@ -1954,7 +1963,7 @@ export default function StorageEndpointsPage() {
             </div>
             {formCloseGuard.confirmationDialog}
           </form>
-        </Modal>
+        </WorkflowSurface>
       )}
 
       {deleteTarget && (

@@ -8,7 +8,7 @@ import {
   createCephAdminAccount,
   CreateCephAdminAccountPayload,
 } from "../../api/cephAdmin";
-import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
@@ -201,11 +201,13 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
   };
 
   return (
-    <Modal
+    <WorkflowPage
       title="Create account"
-      onClose={closeGuard.requestClose}
-      maxWidthClass="max-w-5xl"
-      maxBodyHeightClass="max-h-[82vh]"
+      description="Define the RGW account identity and quotas in a dedicated Ceph Admin workflow."
+      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Accounts", to: "/ceph-admin/accounts" }, { label: "Create" }]}
+      backLabel="Back to accounts"
+      onBack={closeGuard.requestClose}
+      contentClassName="mx-auto max-w-5xl"
     >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
@@ -308,7 +310,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
 
         <div className="sticky bottom-0 z-10 -mx-6 -mb-4 flex items-center justify-end gap-2 border-t border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] px-6 py-3">
           <UiButton variant="secondary" size="sm" onClick={closeGuard.requestClose}>
-            Close
+            Cancel
           </UiButton>
           <UiButton size="sm" onClick={submit} disabled={saving}>
             {saving ? "Creating..." : "Create account"}
@@ -316,6 +318,6 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
         </div>
       </div>
       {closeGuard.confirmationDialog}
-    </Modal>
+    </WorkflowPage>
   );
 }

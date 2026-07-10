@@ -2,7 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   fetchUserNotifications,
   markUserNotificationsRead,
@@ -11,11 +12,9 @@ import {
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
-import Modal from "./Modal";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
-import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
 type TopbarProps = {
   projectName?: string;
@@ -43,9 +42,6 @@ type StoredTopbarUser = {
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
-
-const ProfilePage = lazy(() => import("../features/shared/ProfilePage"));
-const ApiTokensPage = lazy(() => import("../features/admin/ApiTokensPage"));
 
 function buildAccountInitial(value?: string | null): string {
   if (!value) return "U";
@@ -122,6 +118,7 @@ export default function Topbar({
   workspaceSwitcher,
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
+  const navigate = useNavigate();
   const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
   const isS3Session = storedUser?.authType === "s3_session";
   const canManagePrivateConnections =
@@ -137,10 +134,6 @@ export default function Topbar({
   const [controlsAvailableWidth, setControlsAvailableWidth] = useState<number>(Number.POSITIVE_INFINITY);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileModalHasUnsavedChanges, setProfileModalHasUnsavedChanges] = useState(false);
-  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
-  const [showApiTokensModal, setShowApiTokensModal] = useState(false);
   const accountMenuRootRef = useRef<HTMLDivElement | null>(null);
   const accountMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const accountMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -168,16 +161,6 @@ export default function Topbar({
   const accountDisplay = userEmail ?? "Session";
   const accountInitial = buildAccountInitial(accountDisplay);
   const showNotifications = !isS3Session;
-  const closeProfileModal = () => {
-    setShowProfileModal(false);
-    setProfileModalHasUnsavedChanges(false);
-  };
-  const profileCloseGuard = useUnsavedChangesGuard({
-    hasUnsavedChanges: showProfileModal && profileModalHasUnsavedChanges,
-    onClose: closeProfileModal,
-    zIndexClass: "z-[70]",
-  });
-
   const loadNotifications = useCallback(async () => {
     if (!showNotifications) return;
     setNotificationsLoading(true);
@@ -442,18 +425,17 @@ export default function Topbar({
 
   const openProfileModal = () => {
     setAccountMenuOpen(false);
-    setProfileModalHasUnsavedChanges(false);
-    setShowProfileModal(true);
+    navigate("/profile");
   };
 
   const openConnectionsModal = () => {
     setAccountMenuOpen(false);
-    setShowConnectionsModal(true);
+    navigate("/profile?view=connections");
   };
 
   const openApiTokensModal = () => {
     setAccountMenuOpen(false);
-    setShowApiTokensModal(true);
+    navigate("/admin/api-tokens");
   };
 
   const triggerLogout = () => {
@@ -950,53 +932,6 @@ export default function Topbar({
         </div>
       </div>
 
-      {showProfileModal && (
-        <Modal
-          title="User profile"
-          onClose={profileCloseGuard.requestClose}
-          maxWidthClass="max-w-6xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
-            <ProfilePage
-              showPageHeader={false}
-              showSettingsCards
-              showConnectionsSection={false}
-              onUnsavedChangesChange={setProfileModalHasUnsavedChanges}
-            />
-          </Suspense>
-          {profileCloseGuard.confirmationDialog}
-        </Modal>
-      )}
-
-      {showConnectionsModal && (
-        <Modal
-          title="Private S3 connections"
-          onClose={() => setShowConnectionsModal(false)}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading profile...</div>}>
-            <ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />
-          </Suspense>
-        </Modal>
-      )}
-
-      {showApiTokensModal && (
-        <Modal
-          title="API tokens"
-          onClose={() => setShowApiTokensModal(false)}
-          maxWidthClass="max-w-7xl"
-          maxBodyHeightClass="max-h-[85vh]"
-          zIndexClass="z-[46]"
-        >
-          <Suspense fallback={<div className="ui-caption text-slate-500 dark:text-slate-400">Loading API tokens...</div>}>
-            <ApiTokensPage showPageHeader={false} />
-          </Suspense>
-        </Modal>
-      )}
     </>
   );
 }

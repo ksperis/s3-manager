@@ -1253,7 +1253,7 @@ describe("manager shell pages", () => {
     );
   });
 
-  it("opens the delete-with-purge modal for a non-empty bucket when purge access is enabled", async () => {
+  it("opens the delete-with-purge page for a non-empty bucket when purge access is enabled", async () => {
     bucketPurgeEnabled = true;
     window.localStorage.setItem(
       "user",
@@ -1280,7 +1280,7 @@ describe("manager shell pages", () => {
     expect(await screen.findByText("bucket-a")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Purge and Delete" }));
 
-    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Purge and delete bucket" })).toBeInTheDocument();
     expect(screen.getByLabelText("Type DELETE BUCKET bucket-a")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -1393,7 +1393,7 @@ describe("manager shell pages", () => {
     expect(deleteButton).toBeEnabled();
     fireEvent.click(deleteButton);
 
-    expect(await screen.findByRole("dialog", { name: "Delete bucket" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Purge and delete bucket" })).toBeInTheDocument();
     expect(screen.getByLabelText("Type DELETE BUCKET bucket-huge")).toBeInTheDocument();
   });
 

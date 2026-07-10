@@ -12,7 +12,7 @@ import {
   getCephAdminAccountMetrics,
   updateCephAdminAccountConfig,
 } from "../../api/cephAdmin";
-import Modal from "../../components/Modal";
+import WorkflowPage from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
@@ -616,14 +616,16 @@ export default function CephAdminAccountEditModal({
   ];
 
   return (
-    <Modal
+    <WorkflowPage
       title={`Configure account · ${accountId}`}
-      onClose={closeGuard.requestClose}
-      maxWidthClass="max-w-6xl"
-      maxBodyHeightClass="max-h-[85vh]"
+      description="Review configuration, quotas and metrics without nested dialog scrolling."
+      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Accounts", to: "/ceph-admin/accounts" }, { label: accountId }]}
+      backLabel="Back to accounts"
+      onBack={closeGuard.requestClose}
+      contentClassName="min-w-0"
     >
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
       {closeGuard.confirmationDialog}
-    </Modal>
+    </WorkflowPage>
   );
 }

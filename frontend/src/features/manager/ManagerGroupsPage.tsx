@@ -21,7 +21,7 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
@@ -193,6 +193,7 @@ export default function ManagerGroupsPage() {
   };
 
   const openAdvancedModal = () => {
+    setError(null);
     setAdvancedName("");
     setSelectedPolicies([]);
     setPolicySearch("");
@@ -321,7 +322,7 @@ export default function ManagerGroupsPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showAdvancedModal)}>
       <PageHeader
         title="IAM Groups"
         description="Manage groups using the account root keys."
@@ -427,7 +428,15 @@ export default function ManagerGroupsPage() {
       )}
 
       {showAdvancedModal && (
-        <Modal title="Create IAM group" onClose={advancedCloseGuard.requestClose}>
+        <WorkflowPage
+          title="Create IAM group"
+          description="Define the group and attach its managed and inline policies in one focused workflow."
+          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }, { label: "Create" }]}
+          backLabel="Back to groups"
+          onBack={advancedCloseGuard.requestClose}
+          contentClassName="mx-auto max-w-5xl"
+        >
+          {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
               <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Group name</label>
@@ -551,7 +560,7 @@ export default function ManagerGroupsPage() {
             </div>
           </form>
           {advancedCloseGuard.confirmationDialog}
-        </Modal>
+        </WorkflowPage>
       )}
     </div>
   );

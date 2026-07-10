@@ -15,8 +15,8 @@ import {
   type BucketIntegrityProgress,
   type BucketIntegrityResult,
 } from "../../api/bucketIntegrity";
-import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import WorkflowPage from "../../components/WorkflowPage";
 import UiButton from "../../components/ui/UiButton";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInput from "../../components/ui/UiInput";
@@ -239,8 +239,18 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
     props.onClose();
   };
 
+  const workspaceLabel = props.mode === "manager" ? "Manager" : props.mode === "ceph-admin" ? "Ceph Admin" : "Storage Ops";
+  const bucketsPath = props.mode === "manager" ? "/manager/bucket-integrity" : props.mode === "ceph-admin" ? "/ceph-admin/buckets" : "/storage-ops/buckets";
+
   return (
-    <Modal title="Check bucket integrity" onClose={closeModal} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <WorkflowPage
+      title="Check bucket integrity"
+      description="Configure the read strategy, follow progress and review every affected bucket without blocking the bucket list."
+      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: "Integrity check" }]}
+      onBack={closeModal}
+      backLabel={running ? "Stop and return" : "Back to bucket selection"}
+      contentClassName="min-w-0"
+    >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {message && <PageBanner tone={result?.status === "passed" ? "success" : result?.status === "failed" ? "error" : "warning"}>{message}</PageBanner>}
@@ -497,6 +507,6 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
           </div>
         )}
       </div>
-    </Modal>
+    </WorkflowPage>
   );
 }

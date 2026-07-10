@@ -41,7 +41,10 @@ describe("CephAdminUserCreateModal", () => {
     const onCreated = vi.fn();
     render(<CephAdminUserCreateModal endpointId={7} onClose={vi.fn()} onCreated={onCreated} />);
 
-    const dialog = screen.getByRole("dialog", { name: "Create user" });
+    const dialog = screen.getByRole("heading", { name: "Create user" }).closest(".workflow-page");
+    if (!dialog) {
+      throw new Error("Create user workflow page not found");
+    }
     const accountSelect = within(dialog).getByLabelText("Account (optional)");
     expect(accountSelect).toHaveClass("ui-control");
     expect(within(dialog).getByLabelText("UID *")).toHaveClass("ui-control");
@@ -112,7 +115,10 @@ describe("CephAdminUserCreateModal", () => {
 
     render(<CephAdminUserCreateModal endpointId={7} onClose={vi.fn()} />);
 
-    const dialog = screen.getByRole("dialog", { name: "Create user" });
+    const dialog = screen.getByRole("heading", { name: "Create user" }).closest(".workflow-page");
+    if (!dialog) {
+      throw new Error("Create user workflow page not found");
+    }
     fireEvent.change(within(dialog).getByLabelText("UID *"), { target: { value: "bob" } });
     fireEvent.change(within(dialog).getByLabelText("Display name"), { target: { value: "Bob Ops" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));

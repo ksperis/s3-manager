@@ -7,6 +7,12 @@ const notificationApiMock = vi.hoisted(() => ({
   fetchUserNotifications: vi.fn(),
   markUserNotificationsRead: vi.fn(),
 }));
+const navigateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return { ...actual, useNavigate: () => navigateMock };
+});
 
 vi.mock("../ThemeToggle", () => ({
   default: () => <button type="button">Theme</button>,
@@ -44,6 +50,7 @@ describe("Topbar account menu", () => {
     notificationApiMock.fetchUserNotifications.mockResolvedValue({ items: [], unread_count: 0 });
     notificationApiMock.markUserNotificationsRead.mockReset();
     notificationApiMock.markUserNotificationsRead.mockResolvedValue({ updated_count: 0, unread_count: 0 });
+    navigateMock.mockReset();
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -119,7 +126,7 @@ describe("Topbar account menu", () => {
     expect(await screen.findByRole("menuitem", { name: /api tokens/i })).toBeInTheDocument();
   });
 
-  it("opens API tokens modal from account menu", async () => {
+  it("navigates to the API tokens page from the account menu", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "user",
@@ -133,8 +140,7 @@ describe("Topbar account menu", () => {
     await user.click(resolveAccountTrigger());
     await user.click(await screen.findByRole("menuitem", { name: /api tokens/i }));
 
-    expect(await screen.findByRole("dialog", { name: "API tokens" })).toBeInTheDocument();
-    expect(await screen.findByText("API Tokens Page (embedded)")).toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith("/admin/api-tokens");
   });
 
   it("opens an empty notifications panel", async () => {

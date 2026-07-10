@@ -17,7 +17,7 @@ import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListToolbar from "../../components/ListToolbar";
-import Modal from "../../components/Modal";
+import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
@@ -701,7 +701,7 @@ export default function GroupsPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showModal)}>
       <PageHeader
         title="UI Groups"
         description="Create reusable UI access groups for workspace, Manager tool, and execution context access."
@@ -756,7 +756,14 @@ export default function GroupsPage() {
       </div>
 
       {showModal && (
-        <Modal title={editingGroup ? "Edit group" : "Create group"} onClose={closeModal}>
+        <WorkflowPage
+          title={editingGroup ? "Edit UI group" : "Create UI group"}
+          description="Manage members, associations and inherited workspace permissions in one dedicated page."
+          breadcrumbs={[...adminPageBreadcrumbs("groups"), { label: editingGroup ? "Edit" : "Create" }]}
+          backLabel="Back to groups"
+          onBack={closeModal}
+          contentClassName="mx-auto max-w-7xl"
+        >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
@@ -890,7 +897,7 @@ export default function GroupsPage() {
               </button>
             </div>
           </form>
-        </Modal>
+        </WorkflowPage>
       )}
 
       {pendingDeleteGroup && (

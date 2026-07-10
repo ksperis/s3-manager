@@ -26,6 +26,7 @@ import {
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -981,7 +982,7 @@ export default function PortalStorageSpaceDetailPage() {
   ) : null;
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(accessPeopleDialogOpen || historyCleanupDialogOpen)}>
       <PageHeader
         title={space.name}
         description={pageDescription}
@@ -1301,14 +1302,20 @@ export default function PortalStorageSpaceDetailPage() {
       ) : null}
 
       {accessPeopleDialogOpen && accessSummary?.can_manage_access && savedAccessMode === "restricted" ? (
-        <Modal
+        <WorkflowPage
           title={t({ en: "Add people", fr: "Ajouter des personnes", de: "Personen hinzufügen" })}
-          onClose={closeAccessPeopleDialog}
-          closeOnBackdropClick={!accessBusy}
-          closeOnEscape={!accessBusy}
-          maxWidthClass="max-w-4xl"
+          description={t({
+            en: "Choose collaborators and assign the role they need for this space.",
+            fr: "Choisissez les collaborateurs et attribuez-leur le rôle nécessaire pour cet espace.",
+            de: "Wählen Sie Mitwirkende aus und vergeben Sie die passende Rolle für diesen Bereich.",
+          })}
+          breadcrumbs={[{ label: "Portal" }, { label: space.name }, { label: t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" }) }]}
+          backLabel={t({ en: "Back to the space", fr: "Retour à l'espace", de: "Zurück zum Bereich" })}
+          onBack={accessBusy ? undefined : closeAccessPeopleDialog}
+          contentClassName="mx-auto max-w-6xl"
         >
           <div className="space-y-4">
+            {accessError ? <PageBanner tone="error">{accessError}</PageBanner> : null}
             <p className={cx("ui-caption", uiMutedTextClass)}>
               {t({
                 en: "Choose collaborators and assign the role they need for this space.",
@@ -1336,7 +1343,7 @@ export default function PortalStorageSpaceDetailPage() {
                 });
               }}
             />
-            <div className="flex flex-wrap justify-end gap-2">
+            <WorkflowActions>
               <UiButton
                 variant="secondary"
                 disabled={accessBusy}
@@ -1351,18 +1358,23 @@ export default function PortalStorageSpaceDetailPage() {
               >
                 {t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" })}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       {historyCleanupDialogOpen ? (
-        <Modal
+        <WorkflowPage
           title={t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
-          onClose={closeHistoryCleanupDialog}
-          closeOnBackdropClick={!historyCleanupRunning}
-          closeOnEscape={!historyCleanupRunning}
-          maxWidthClass="max-w-3xl"
+          description={t({
+            en: "Review the impact, follow the complete scan and keep the cleanup result visible.",
+            fr: "Vérifiez l'impact, suivez l'analyse complète et conservez le résultat du nettoyage visible.",
+            de: "Prüfen Sie die Auswirkungen, verfolgen Sie den vollständigen Scan und behalten Sie das Ergebnis sichtbar.",
+          })}
+          breadcrumbs={[{ label: "Portal" }, { label: space.name }, { label: t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historienbereinigung" }) }]}
+          backLabel={t({ en: "Back to the space", fr: "Retour à l'espace", de: "Zurück zum Bereich" })}
+          onBack={historyCleanupRunning ? undefined : closeHistoryCleanupDialog}
+          contentClassName="mx-auto max-w-5xl"
         >
           <div className="space-y-4">
             {historyCleanupError ? <PageBanner tone="warning">{historyCleanupError}</PageBanner> : null}
@@ -1475,7 +1487,7 @@ export default function PortalStorageSpaceDetailPage() {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap justify-end gap-2">
+            <WorkflowActions>
               <UiButton variant="secondary" onClick={closeHistoryCleanupDialog} disabled={historyCleanupRunning}>
                 {historyCleanupResult
                   ? t({ en: "Done", fr: "Terminer", de: "Fertig" })
@@ -1498,9 +1510,9 @@ export default function PortalStorageSpaceDetailPage() {
                   {t({ en: "Start cleanup", fr: "Démarrer le nettoyage", de: "Bereinigung starten" })}
                 </UiButton>
               )}
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       {settingsDialogOpen && space.role === "Owner" ? (

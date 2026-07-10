@@ -9,6 +9,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { workflowPageHostClass } from "../../components/WorkflowPage";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
@@ -974,7 +975,7 @@ export default function CephAdminAccountsPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCreateModal || Boolean(editingAccountId))}>
       <PageHeader
         title="RGW Accounts"
         description="Complete list of RGW accounts (admin ops)."

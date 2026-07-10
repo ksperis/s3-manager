@@ -32,6 +32,7 @@ import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -1095,7 +1096,7 @@ export default function PortalSharesPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(inviteDialogOpen)}>
       <PageHeader
         title={t({
           en: "Collaborators",
@@ -1607,18 +1608,24 @@ export default function PortalSharesPage() {
       ) : null}
 
       {inviteDialogOpen && activeOwnerSpaces.length > 0 ? (
-        <Modal
+        <WorkflowPage
           title={t({
             en: "Invite people",
             fr: "Inviter des personnes",
             de: "Personen einladen",
           })}
-          onClose={() => setInviteDialogOpen(false)}
-          maxWidthClass="max-w-4xl"
-          closeOnBackdropClick={busyShareId !== "new"}
-          closeOnEscape={busyShareId !== "new"}
+          description={t({
+            en: "Select a space, choose collaborators and assign their roles in one focused workflow.",
+            fr: "Sélectionnez un espace, choisissez les collaborateurs et attribuez leurs rôles dans un seul parcours.",
+            de: "Wählen Sie einen Bereich, Mitwirkende und deren Rollen in einem fokussierten Ablauf.",
+          })}
+          breadcrumbs={[{ label: "Portal" }, { label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), to: "/portal/shares" }, { label: t({ en: "Invite", fr: "Inviter", de: "Einladen" }) }]}
+          backLabel={t({ en: "Back to shares", fr: "Retour aux partages", de: "Zurück zu Freigaben" })}
+          onBack={busyShareId === "new" ? undefined : () => setInviteDialogOpen(false)}
+          contentClassName="mx-auto max-w-6xl"
         >
           <div className="space-y-4">
+            {sharesError ? <PageBanner tone="error">{sharesError}</PageBanner> : null}
             <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)] md:items-end">
               <UiSelect
                 label={t({ en: "Space", fr: "Espace", de: "Bereich" })}
@@ -1672,7 +1679,7 @@ export default function PortalSharesPage() {
               }}
               onRequestPerson={handleRequestCollaboratorAccess}
             />
-            <div className="flex flex-wrap justify-end gap-2">
+            <WorkflowActions>
               <UiButton
                 variant="secondary"
                 onClick={() => setInviteDialogOpen(false)}
@@ -1698,9 +1705,9 @@ export default function PortalSharesPage() {
                     })
                   : t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       {pendingAction?.type === "revoke-share" ? (

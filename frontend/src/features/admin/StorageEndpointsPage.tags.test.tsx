@@ -203,7 +203,10 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByRole("heading", { name: "New storage endpoint" }).closest(".workflow-page");
+    if (!dialog) {
+      throw new Error("New storage endpoint workflow page not found");
+    }
     const storageName = within(dialog).getByLabelText("Storage name");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this endpoint" });
     expect(tagInput).toBeInTheDocument();

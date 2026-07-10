@@ -22,9 +22,12 @@ import {
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
-import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
+import WorkflowPage, {
+  WorkflowActions,
+  workflowPageHostClass,
+} from "../../components/WorkflowPage";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -545,7 +548,7 @@ export default function PortalStorageSpacesPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className={workflowPageHostClass(showCreate || showImport)}>
       <PageHeader
         title={t({ en: "Spaces", fr: "Espaces", de: "Bereiche" })}
         description={t({
@@ -785,14 +788,28 @@ export default function PortalStorageSpacesPage() {
       ) : null}
 
       {showCreate ? (
-        <Modal
+        <WorkflowPage
           title={t({
             en: "Create a space",
             fr: "Créer un espace",
             de: "Bereich erstellen",
           })}
-          onClose={() => setShowCreate(false)}
-          maxWidthClass="max-w-4xl"
+          description={t({
+            en: "Define the space, its storage identity, and who can work there.",
+            fr: "Définissez l'espace, son identité de stockage et les personnes qui peuvent y travailler.",
+            de: "Legen Sie den Bereich, seine Speicheridentität und die berechtigten Personen fest.",
+          })}
+          breadcrumbs={portalBreadcrumbs(
+            {
+              label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
+              to: "/portal/storage-spaces",
+            },
+            {
+              label: t({ en: "Create", fr: "Créer", de: "Erstellen" }),
+            },
+          )}
+          backLabel={t({ en: "Back to spaces", fr: "Retour aux espaces", de: "Zurück zu Bereichen" })}
+          onBack={createBusy ? undefined : () => setShowCreate(false)}
         >
           <div className="space-y-4">
             <p className={cx("ui-caption", uiMutedTextClass)}>
@@ -945,7 +962,7 @@ export default function PortalStorageSpacesPage() {
             {createError ? (
               <UiInlineMessage tone="error">{createError}</UiInlineMessage>
             ) : null}
-            <div className="flex justify-end gap-2">
+            <WorkflowActions>
               <UiButton
                 variant="secondary"
                 onClick={() => setShowCreate(false)}
@@ -960,20 +977,34 @@ export default function PortalStorageSpacesPage() {
               >
                 {t({ en: "Create", fr: "Créer", de: "Erstellen" })}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       {showImport ? (
-        <Modal
+        <WorkflowPage
           title={t({
             en: "Add existing space",
             fr: "Ajouter un espace existant",
             de: "Vorhandenen Bereich hinzufügen",
           })}
-          onClose={() => setShowImport(false)}
-          maxWidthClass="max-w-4xl"
+          description={t({
+            en: "Attach existing storage to Portal and define its initial access.",
+            fr: "Rattachez un stockage existant à Portal et définissez ses accès initiaux.",
+            de: "Binden Sie vorhandenen Speicher an Portal an und legen Sie den anfänglichen Zugriff fest.",
+          })}
+          breadcrumbs={portalBreadcrumbs(
+            {
+              label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }),
+              to: "/portal/storage-spaces",
+            },
+            {
+              label: t({ en: "Add existing", fr: "Ajouter un existant", de: "Vorhandenen hinzufügen" }),
+            },
+          )}
+          backLabel={t({ en: "Back to spaces", fr: "Retour aux espaces", de: "Zurück zu Bereichen" })}
+          onBack={importBusy ? undefined : () => setShowImport(false)}
         >
           <div className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr]">
@@ -1058,7 +1089,7 @@ export default function PortalStorageSpacesPage() {
             {importError ? (
               <UiInlineMessage tone="error">{importError}</UiInlineMessage>
             ) : null}
-            <div className="flex justify-end gap-2">
+            <WorkflowActions>
               <UiButton
                 variant="secondary"
                 onClick={() => setShowImport(false)}
@@ -1073,9 +1104,9 @@ export default function PortalStorageSpacesPage() {
               >
                 {t({ en: "Add", fr: "Ajouter", de: "Hinzufügen" })}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </div>
-        </Modal>
+        </WorkflowPage>
       ) : null}
 
       <PageTabs

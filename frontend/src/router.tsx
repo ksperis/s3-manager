@@ -44,6 +44,7 @@ const AdminMetricsPage = lazy(() => import("./features/admin/AdminMetricsPage"))
 const AdminPortalRequestsPage = lazy(() => import("./features/admin/AdminPortalRequestsPage"));
 const BillingPage = lazy(() => import("./features/admin/BillingPage"));
 const UsageHistoryPage = lazy(() => import("./features/admin/UsageHistoryPage"));
+const ApiTokensPage = lazy(() => import("./features/admin/ApiTokensPage"));
 const S3UsersPage = lazy(() => import("./features/admin/S3UsersPage"));
 const S3UserKeysPage = lazy(() => import("./features/admin/S3UserKeysPage"));
 const S3ConnectionsPage = lazy(() => import("./features/admin/S3ConnectionsPage"));
@@ -292,6 +293,7 @@ export function createAppRoutes() {
               <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
               <Route path="key-rotation" element={<KeyRotationPage />} />
+              <Route path="api-tokens" element={<ApiTokensPage />} />
             </Route>
           </Route>
         </Route>
