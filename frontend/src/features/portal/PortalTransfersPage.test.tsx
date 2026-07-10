@@ -104,15 +104,15 @@ describe("PortalTransfersPage", () => {
     ];
   });
 
-  it("shows recent Portal transfers first and keeps server logs in a separate enabled tab", async () => {
+  it("shows recent transfers first and keeps detailed access history in a separate enabled tab", async () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "Operation logs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
-    expect(screen.getByRole("button", { name: "Recent Portal transfers" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Server logs" })).toBeInTheDocument();
-    expect(screen.getAllByText("Recent Portal transfers").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Latest Portal transfer history")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Access history" })).toBeInTheDocument();
+    expect(screen.getAllByText("Recent transfers").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Latest transfer history")).toBeInTheDocument();
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
     expect(screen.getByText("Retry from the related space")).toBeInTheDocument();
     expect(screen.getByText("report.csv")).toBeInTheDocument();
@@ -124,14 +124,14 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByText("Quota reached.")).toBeInTheDocument();
     expect(screen.getAllByRole("table")[0]).toHaveClass("responsive-data-table");
     expect(screen.getByText("report.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
-    expect(screen.queryByText("Server-side operations")).not.toBeInTheDocument();
+    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
 
-    expect(screen.getByText("Server-side operations")).toBeInTheDocument();
+    expect(screen.getByText("Detailed access history")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retrieve logs" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Raw logs" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export logs" })).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalledWith(
         "101",
@@ -140,29 +140,29 @@ describe("PortalTransfersPage", () => {
     });
   });
 
-  it("points an empty recent Portal transfer history back to spaces", () => {
+  it("points an empty recent transfer history back to spaces", () => {
     mocks.transfers = [];
 
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "Operation logs" })).toBeInTheDocument();
-    expect(screen.getByText("No recent Portal transfer yet")).toBeInTheDocument();
-    expect(screen.getByText("The latest transfers started from this Portal session appear here automatically.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
+    expect(screen.getByText("No recent transfer yet")).toBeInTheDocument();
+    expect(screen.getByText("The latest uploads and downloads started from your spaces appear here automatically.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Start from spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
   });
 
-  it("hides server logs when server access logging is disabled for the active account", () => {
+  it("hides access history when detailed logging is disabled for the active account", () => {
     mocks.serverAccessLoggingEnabled = false;
 
     renderPage();
 
-    expect(screen.getByRole("button", { name: "Recent Portal transfers" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Server logs" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Server-side operations")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
-  it("automatically loads server logs for the selected date and page", async () => {
+  it("automatically loads access history for the selected date and page", async () => {
     mocks.fetchPortalServerAccessLogPage.mockResolvedValue({
       entries: [
         {
@@ -210,7 +210,7 @@ describe("PortalTransfersPage", () => {
           object_size: 128,
           requester: "unknown-rgw-uid",
           requester_identity: {
-            label: "Unknown S3 identity",
+            label: "Unknown identity",
             kind: "unknown",
             detail: "unkn...-uid",
             resolved: false,
@@ -225,7 +225,7 @@ describe("PortalTransfersPage", () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
     fireEvent.change(screen.getByLabelText("Go to date"), { target: { value: "2026-07-08" } });
 
     await waitFor(() => {
@@ -234,7 +234,7 @@ describe("PortalTransfersPage", () => {
         expect.objectContaining({ date: "2026-07-08", mode: "operations", limit: 25, offset: 0 })
       );
     });
-    expect(await screen.findByText("Added an object")).toBeInTheDocument();
+    expect(await screen.findByText("Added a file")).toBeInTheDocument();
     expect(screen.getByText("Added external.csv")).toBeInTheDocument();
     expect(screen.getByText("REST.POST.OBJECT")).toBeInTheDocument();
     expect(screen.getByText("Succeeded (204)")).toBeInTheDocument();
@@ -242,14 +242,14 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByText("External access")).toBeInTheDocument();
     expect(screen.getByText("External access · portal-ext-partner · Research Data · read/write")).toBeInTheDocument();
     expect(screen.getByText("UID exte...m-id · key EXTK...3456")).toBeInTheDocument();
-    expect(screen.getByText("Unknown S3 identity")).toBeInTheDocument();
+    expect(screen.getByText("Unknown identity")).toBeInTheDocument();
     expect(screen.getByText("Unknown")).toBeInTheDocument();
     expect(screen.getByText("UID unkn...-uid")).toBeInTheDocument();
     expect(screen.getByText("Failed (403)")).toBeInTheDocument();
     expect(screen.getByText("AccessDenied · 128 B")).toBeInTheDocument();
     expect(screen.getByText("IP 10.0.0.5 · aws-cli/2")).toBeInTheDocument();
     expect(screen.queryByText("Portal live")).not.toBeInTheDocument();
-    expect(screen.getByText("2 of 26 server operations shown")).toBeInTheDocument();
+    expect(screen.getByText("2 of 26 access events shown")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => {
@@ -260,9 +260,9 @@ describe("PortalTransfersPage", () => {
     });
   });
 
-  it("sends advanced server log filters to the backend", async () => {
+  it("sends advanced access history filters to the backend", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
 
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe("PortalTransfersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
     fireEvent.change(screen.getByLabelText("Action"), { target: { value: "upload" } });
     fireEvent.change(screen.getByLabelText("Path"), { target: { value: "captures/" } });
-    fireEvent.change(screen.getByLabelText("Identity"), { target: { value: "portal-6-1" } });
+    fireEvent.change(screen.getByLabelText("Person or key"), { target: { value: "portal-6-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
 
     await waitFor(() => {
@@ -292,19 +292,19 @@ describe("PortalTransfersPage", () => {
       });
     });
     expect(screen.getByText(/Action: Uploads/)).toBeInTheDocument();
-    expect(screen.getByText(/Identity contains: portal-6-1/)).toBeInTheDocument();
+    expect(screen.getByText(/Person or key contains: portal-6-1/)).toBeInTheDocument();
   });
 
-  it("downloads raw server logs for a selected date range and storage space", async () => {
+  it("exports raw access logs for a selected date range and storage space", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Server logs" }));
-    fireEvent.click(screen.getByRole("button", { name: "Raw logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
-    const dialog = screen.getByRole("dialog", { name: "Retrieve raw server logs" });
+    const dialog = screen.getByRole("dialog", { name: "Export raw access logs" });
     fireEvent.change(within(dialog).getByLabelText("From"), { target: { value: "2026-07-07" } });
     fireEvent.change(within(dialog).getByLabelText("To"), { target: { value: "2026-07-08" } });
     fireEvent.change(within(dialog).getByLabelText("Storage space"), { target: { value: "research-data" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Download raw logs" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Download export" }));
 
     await waitFor(() => {
       expect(mocks.downloadPortalServerAccessRawLogs).toHaveBeenCalledWith(

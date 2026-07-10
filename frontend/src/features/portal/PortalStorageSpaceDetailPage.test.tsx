@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ComponentProps } from "react";
@@ -341,6 +341,18 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
   });
 
+  it("does not show the start guide when collaborators are known only from access details", async () => {
+    mocks.hookResult.workspace.spaces[0].objectCount = 0;
+    mocks.hookResult.workspace.spaces[0].shareCount = null;
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(mocks.fetchAccessSummaryMock).toHaveBeenCalledWith("101", "research-data");
+    });
+    expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
+  });
+
   it("hides write Browser actions for read-only Viewer spaces", () => {
     mocks.hookResult.workspace.spaces[0].role = "Viewer";
     mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
@@ -443,6 +455,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox", { name: "Access for viewer@example.com" })).toHaveClass("ui-control");
+    expect(screen.queryByLabelText("People")).not.toBeInTheDocument();
     expect(screen.getByText("2 public links")).toHaveAttribute(
       "href",
       "/portal/shares?space_id=research-data&tab=links"
@@ -451,6 +464,25 @@ describe("PortalStorageSpaceDetailPage", () => {
       "href",
       "/portal/shares?space_id=research-data&tab=by"
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add people" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add people" });
+    expect(within(dialog).getByLabelText("People")).toHaveClass("ui-control");
+    expect(within(dialog).getByText("Editor User")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByLabelText(/Editor User/i));
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Access for editor@example.com" }), {
+      target: { value: "Editor" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add people" }));
+
+    await waitFor(() => {
+      expect(mocks.grantShareMock).toHaveBeenCalledWith("101", "research-data", {
+        user_id: 13,
+        role: "Editor",
+      });
+    });
+    expect(await screen.findByText("People added.")).toBeInTheDocument();
   });
 
   it("shows external-tool mapping without replacing the space name", async () => {
@@ -459,7 +491,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
     expect(screen.getByText("research-data-internal")).toBeInTheDocument();
-    expect(screen.getByText(/Use this only when an external S3 tool asks for a bucket/i)).toBeInTheDocument();
+    expect(screen.getByText("Manual storage name")).toBeInTheDocument();
+    expect(screen.getByText(/Use this only when an external app asks for a storage or bucket name/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Connection details" })).toHaveAttribute(
       "href",
       "/portal/access-keys?space_id=research-data-internal&create=external"
@@ -474,7 +507,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
     expect(screen.getByRole("dialog", { name: "Clean up history" })).toBeInTheDocument();
-    expect(screen.getByText(/deletes historical object versions/i)).toBeInTheDocument();
+    expect(screen.getByText(/deletes older file versions/i)).toBeInTheDocument();
     const startButton = screen.getByRole("button", { name: "Start cleanup" });
     expect(startButton).toBeDisabled();
 

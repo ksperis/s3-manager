@@ -67,9 +67,13 @@ describe("PortalActivityPage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
-    expect(screen.getByText("Recent workspace history")).toBeInTheDocument();
-    expect(screen.getByText("People active")).toBeInTheDocument();
-    expect(screen.getByText("Spaces touched")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Timeline" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Audit details" })).toBeInTheDocument();
+    expect(screen.getByText("Recent changes")).toBeInTheDocument();
+    expect(screen.queryByText("Recent workspace history")).not.toBeInTheDocument();
+    expect(screen.queryByText("People active")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "File or item" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
     expect(screen.getByText("Visible spaces only")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.getByLabelText("Action")).toHaveClass("ui-control");
@@ -77,7 +81,7 @@ describe("PortalActivityPage", () => {
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("alice@example.com").closest("table")).toHaveClass("responsive-data-table");
     expect(screen.getAllByText("Uploaded").length).toBeGreaterThan(0);
-    expect(screen.getByText("report.csv")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com").closest("td")).toHaveTextContent("report.csv");
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
     expect(screen.getByRole("columnheader", { name: "Next step" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Open space" })[0]).toHaveAttribute(
@@ -94,6 +98,13 @@ describe("PortalActivityPage", () => {
     await user.click(screen.getAllByRole("button", { name: "Show details" })[0]);
     expect(screen.getByText("IP address")).toBeInTheDocument();
     expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Audit details" }));
+    expect(screen.getByText("Recent workspace history")).toBeInTheDocument();
+    expect(screen.getByText("People active")).toBeInTheDocument();
+    expect(screen.getByText("Spaces touched")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "File or item" })).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader", { name: "Action" }).length).toBeGreaterThan(0);
   });
 
   it("points empty activity back to spaces", () => {

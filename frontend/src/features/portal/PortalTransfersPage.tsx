@@ -182,9 +182,9 @@ function serverLogIdentityKindLabel(kind: PortalServerAccessRequesterIdentity["k
     case "external_access":
       return t({ en: "External access", fr: "Accès externe", de: "Externer Zugriff" });
     case "rgw_user":
-      return t({ en: "S3 user", fr: "Utilisateur S3", de: "S3-Benutzer" });
+      return t({ en: "Storage user", fr: "Utilisateur stockage", de: "Speicherbenutzer" });
     case "rgw_account":
-      return t({ en: "S3 account", fr: "Compte S3", de: "S3-Konto" });
+      return t({ en: "Storage account", fr: "Compte stockage", de: "Speicherkonto" });
     default:
       return t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" });
   }
@@ -200,17 +200,17 @@ function serverLogIdentityTone(kind: PortalServerAccessRequesterIdentity["kind"]
 function serverLogOperationLabel(entry: PortalServerAccessLogEntry, t: ReturnType<typeof useI18n>["t"]): string {
   switch (entry.operation_category) {
     case "upload":
-      return t({ en: "Added an object", fr: "Objet ajouté", de: "Objekt hinzugefügt" });
+      return t({ en: "Added a file", fr: "Fichier ajouté", de: "Datei hinzugefügt" });
     case "download":
-      return t({ en: "Downloaded an object", fr: "Objet téléchargé", de: "Objekt heruntergeladen" });
+      return t({ en: "Downloaded a file", fr: "Fichier téléchargé", de: "Datei heruntergeladen" });
     case "delete":
-      return t({ en: "Deleted an object", fr: "Objet supprimé", de: "Objekt gelöscht" });
+      return t({ en: "Deleted a file", fr: "Fichier supprimé", de: "Datei gelöscht" });
     case "list":
       return t({ en: "Listed content", fr: "Contenu listé", de: "Inhalt aufgelistet" });
     case "metadata":
       return t({ en: "Read or changed settings", fr: "Paramètres consultés ou modifiés", de: "Einstellungen gelesen oder geändert" });
     default:
-      return t({ en: "Performed an S3 operation", fr: "Opération S3 effectuée", de: "S3-Vorgang ausgeführt" });
+      return t({ en: "Recorded an access event", fr: "Événement d'accès enregistré", de: "Zugriffsereignis aufgezeichnet" });
   }
 }
 
@@ -235,7 +235,7 @@ function serverLogOperationDetail(entry: PortalServerAccessLogEntry, objectLabel
     case "metadata":
       return t({ en: `Checked or changed ${objectLabel}`, fr: `Consultation ou modification de ${objectLabel}`, de: `${objectLabel} geprüft oder geändert` });
     default:
-      return t({ en: `S3 operation on ${objectLabel}`, fr: `Opération S3 sur ${objectLabel}`, de: `S3-Vorgang auf ${objectLabel}` });
+      return t({ en: `Access event for ${objectLabel}`, fr: `Événement d'accès pour ${objectLabel}`, de: `Zugriffsereignis für ${objectLabel}` });
   }
 }
 
@@ -279,11 +279,11 @@ export default function PortalTransfersPage() {
     const tabs: Array<{ id: LogsTab; label: string }> = [
       {
         id: "live",
-        label: t({ en: "Recent Portal transfers", fr: "Derniers transferts portail", de: "Letzte Portal-Transfers" }),
+        label: t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" }),
       },
     ];
     if (serverAccessLoggingEnabled) {
-      tabs.push({ id: "server", label: t({ en: "Server logs", fr: "Logs serveur", de: "Serverlogs" }) });
+      tabs.push({ id: "server", label: t({ en: "Access history", fr: "Historique des accès", de: "Zugriffsverlauf" }) });
     }
     return tabs;
   }, [serverAccessLoggingEnabled, t]);
@@ -471,7 +471,7 @@ export default function PortalTransfersPage() {
       { value: "delete", label: t({ en: "Deletes", fr: "Suppressions", de: "Löschungen" }) },
       { value: "list", label: t({ en: "Listings", fr: "Listages", de: "Auflistungen" }) },
       { value: "metadata", label: t({ en: "Metadata/settings", fr: "Métadonnées/paramètres", de: "Metadaten/Einstellungen" }) },
-      { value: "other", label: t({ en: "Other S3 operations", fr: "Autres opérations S3", de: "Andere S3-Vorgänge" }) },
+      { value: "other", label: t({ en: "Other access events", fr: "Autres événements d'accès", de: "Andere Zugriffsereignisse" }) },
     ],
     [t]
   ) as Array<{ value: ServerLogActionFilter; label: string }>;
@@ -564,7 +564,7 @@ export default function PortalTransfersPage() {
       : null;
     if (pathLabel) items.push({ id: "path", label: pathLabel, remove: { type: "advanced", field: "path" } });
     const identityLabel = serverLogAdvancedApplied
-      ? formatTextFilterSummary(t({ en: "Identity", fr: "Identité", de: "Identität" }), serverLogAdvancedApplied.identity, identityAppliedMode)
+      ? formatTextFilterSummary(t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" }), serverLogAdvancedApplied.identity, identityAppliedMode)
       : null;
     if (identityLabel) items.push({ id: "identity", label: identityLabel, remove: { type: "advanced", field: "identity" } });
     return items;
@@ -580,7 +580,7 @@ export default function PortalTransfersPage() {
     }
     const pathLabel = formatTextFilterSummary(t({ en: "Path", fr: "Chemin", de: "Pfad" }), serverLogAdvancedDraft.path, pathDraftMode);
     if (pathLabel) items.push({ id: "path", label: pathLabel });
-    const identityLabel = formatTextFilterSummary(t({ en: "Identity", fr: "Identité", de: "Identität" }), serverLogAdvancedDraft.identity, identityDraftMode);
+    const identityLabel = formatTextFilterSummary(t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" }), serverLogAdvancedDraft.identity, identityDraftMode);
     if (identityLabel) items.push({ id: "identity", label: identityLabel });
     return items;
   }, [identityDraftMode, pathDraftMode, serverLogActionLabel, serverLogAdvancedDraft, t]);
@@ -623,9 +623,9 @@ export default function PortalTransfersPage() {
           extractApiError(
             err,
             t({
-              en: "Unable to retrieve server operation logs.",
-              fr: "Impossible de récupérer les logs d'opérations serveur.",
-              de: "Server-Vorgangslogs können nicht abgerufen werden.",
+              en: "Unable to retrieve access history.",
+              fr: "Impossible de récupérer l'historique d'accès.",
+              de: "Zugriffsverlauf kann nicht abgerufen werden.",
             })
           )
         );
@@ -680,9 +680,9 @@ export default function PortalTransfersPage() {
         extractApiError(
           err,
           t({
-            en: "Unable to retrieve raw server logs.",
-            fr: "Impossible de récupérer les logs serveur bruts.",
-            de: "Rohe Serverlogs können nicht abgerufen werden.",
+            en: "Unable to export raw access logs.",
+            fr: "Impossible d'exporter les logs d'accès bruts.",
+            de: "Rohe Zugriffslogs können nicht exportiert werden.",
           })
         )
       );
@@ -724,7 +724,9 @@ export default function PortalTransfersPage() {
           statusLabel: serverLogStatusLabel(entry, t),
           statusDetail: statusDetailParts.join(" · ") || "-",
           statusTone: serverLogStatusTone(entry.status_code),
-          identityLabel: identity?.label || t({ en: "Unknown S3 identity", fr: "Identité S3 inconnue", de: "Unbekannte S3-Identität" }),
+          identityLabel: identity?.resolved
+            ? identity.label
+            : t({ en: "Unknown identity", fr: "Identité inconnue", de: "Unbekannte Identität" }),
           identityDetail: identity?.detail || t({ en: "Requester was not resolved", fr: "Le demandeur n'a pas été résolu", de: "Requester wurde nicht aufgelöst" }),
           identityKeyLabel: identityKeyParts.join(" · ") || "-",
           identityKindLabel: serverLogIdentityKindLabel(identityKind, t),
@@ -754,7 +756,7 @@ export default function PortalTransfersPage() {
       },
       {
         id: "target",
-        label: t({ en: "Space / object", fr: "Espace / objet", de: "Bereich / Objekt" }),
+        label: t({ en: "Space / file", fr: "Espace / fichier", de: "Bereich / Datei" }),
         cellClassName: "min-w-[14rem] break-words",
         render: (entry) => (
           <div className="min-w-0">
@@ -765,7 +767,7 @@ export default function PortalTransfersPage() {
       },
       {
         id: "identity",
-        label: t({ en: "Identity", fr: "Identité", de: "Identität" }),
+        label: t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" }),
         cellClassName: "min-w-[14rem] break-words",
         render: (entry) => (
           <div className="min-w-0">
@@ -818,19 +820,19 @@ export default function PortalTransfersPage() {
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading logs...", fr: "Chargement des logs...", de: "Logs werden geladen..." }),
-    noAccountMessage: t({ en: "Select a project to view logs.", fr: "Sélectionnez un projet pour voir les logs.", de: "Wählen Sie ein Projekt aus, um Logs anzuzeigen." }),
+    loadingMessage: t({ en: "Loading transfer history...", fr: "Chargement de l'historique des transferts...", de: "Transferverlauf wird geladen..." }),
+    noAccountMessage: t({ en: "Select a project to view transfer history.", fr: "Sélectionnez un projet pour voir l'historique des transferts.", de: "Wählen Sie ein Projekt aus, um den Transferverlauf anzuzeigen." }),
   });
   if (pageState) return pageState;
 
   const liveTransfersContent = workspace.transfers.length === 0 ? (
     <PageEmptyState
       eyebrow={t({ en: "Nothing moving", fr: "Aucun mouvement", de: "Keine Bewegung" })}
-      title={t({ en: "No recent Portal transfer yet", fr: "Aucun transfert portail récent", de: "Noch kein aktueller Portal-Transfer" })}
+      title={t({ en: "No recent transfer yet", fr: "Aucun transfert récent", de: "Noch kein aktueller Transfer" })}
       description={t({
-        en: "The latest transfers started from this Portal session appear here automatically.",
-        fr: "Les derniers transferts lancés depuis cette session portail apparaissent ici automatiquement.",
-        de: "Die neuesten Transfers aus dieser Portal-Sitzung erscheinen hier automatisch.",
+        en: "The latest uploads and downloads started from your spaces appear here automatically.",
+        fr: "Les derniers envois et téléchargements lancés depuis vos espaces apparaissent ici automatiquement.",
+        de: "Die neuesten Uploads und Downloads aus Ihren Bereichen erscheinen hier automatisch.",
       })}
       primaryAction={{ label: t({ en: "Start from spaces", fr: "Commencer depuis les espaces", de: "In Bereichen starten" }), to: "/portal/storage-spaces" }}
     />
@@ -838,11 +840,11 @@ export default function PortalTransfersPage() {
     <>
       <UiCard
         muted
-        title={t({ en: "Recent Portal transfers", fr: "Derniers transferts via le portail", de: "Letzte Portal-Transfers" })}
+        title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" })}
         description={t({
-          en: "These are only the latest uploads and downloads started from this Portal session.",
-          fr: "Il s'agit uniquement des derniers envois et téléchargements lancés depuis cette session portail.",
-          de: "Dies sind nur die neuesten Uploads und Downloads aus dieser Portal-Sitzung.",
+          en: "These are the latest uploads and downloads started from the spaces you can access.",
+          fr: "Voici les derniers envois et téléchargements lancés depuis les espaces auxquels vous avez accès.",
+          de: "Dies sind die neuesten Uploads und Downloads aus den Bereichen, auf die Sie zugreifen können.",
         })}
       >
         <div className="grid gap-4 sm:grid-cols-3">
@@ -880,11 +882,11 @@ export default function PortalTransfersPage() {
       </UiCard>
 
       <UiCard
-        title={t({ en: "Latest Portal transfer history", fr: "Historique des derniers transferts portail", de: "Verlauf der neuesten Portal-Transfers" })}
+        title={t({ en: "Latest transfer history", fr: "Historique des derniers transferts", de: "Verlauf der neuesten Transfers" })}
         description={t({
-          en: "Filter the uploads and downloads recently started from the Portal.",
-          fr: "Filtrez les envois et téléchargements récemment lancés depuis le portail.",
-          de: "Filtern Sie die zuletzt aus dem Portal gestarteten Uploads und Downloads.",
+          en: "Filter recent uploads and downloads by direction.",
+          fr: "Filtrez les envois et téléchargements récents par sens.",
+          de: "Filtern Sie aktuelle Uploads und Downloads nach Richtung.",
         })}
       >
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
@@ -919,13 +921,13 @@ export default function PortalTransfersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Operation logs", fr: "Logs des opérations", de: "Vorgangslogs" })}
+        title={t({ en: "Transfer history", fr: "Historique des transferts", de: "Transferverlauf" })}
         description={t({
-          en: "Review the latest transfers started from the Portal, and server-side S3 audit logs when access logging is enabled for this project.",
-          fr: "Consultez les derniers transferts lancés depuis le portail, ainsi que les logs d'audit S3 côté serveur lorsque l'audit est activé pour ce projet.",
-          de: "Prüfen Sie die neuesten aus dem Portal gestarteten Transfers sowie serverseitige S3-Auditlogs, wenn Access Logging für dieses Projekt aktiviert ist.",
+          en: "Review recent uploads, downloads, and detailed access history for the spaces you can use.",
+          fr: "Consultez les envois, téléchargements et l'historique d'accès détaillé des espaces que vous pouvez utiliser.",
+          de: "Prüfen Sie aktuelle Uploads, Downloads und den detaillierten Zugriffsverlauf Ihrer Bereiche.",
         })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Logs", fr: "Logs", de: "Logs" }) })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }) })}
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
       />
 
@@ -938,11 +940,11 @@ export default function PortalTransfersPage() {
 
       {activeLogsTab === "server" && serverAccessLoggingEnabled ? (
         <UiCard
-          title={t({ en: "Server-side operations", fr: "Opérations côté serveur", de: "Serverseitige Vorgänge" })}
+          title={t({ en: "Detailed access history", fr: "Historique d'accès détaillé", de: "Detaillierter Zugriffsverlauf" })}
           description={t({
-            en: "Server Access Logging entries load automatically for the selected date and page.",
-            fr: "Les entrées Server Access Logging se chargent automatiquement pour la date et la page sélectionnées.",
-            de: "Server-Access-Logging-Einträge werden automatisch für das ausgewählte Datum und die Seite geladen.",
+            en: "Access entries load automatically for the selected date and space.",
+            fr: "Les entrées d'accès se chargent automatiquement pour la date et l'espace sélectionnés.",
+            de: "Zugriffseinträge werden automatisch für das ausgewählte Datum und den Bereich geladen.",
           })}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -984,7 +986,7 @@ export default function PortalTransfersPage() {
                 {t({ en: "Next day", fr: "Jour suivant", de: "Nächster Tag" })}
               </UiButton>
               <UiButton variant="secondary" onClick={openRawLogsModal} disabled={!accountIdForApi}>
-                {t({ en: "Raw logs", fr: "Logs bruts", de: "Rohe Logs" })}
+                {t({ en: "Export logs", fr: "Exporter les logs", de: "Logs exportieren" })}
               </UiButton>
               <UiButton
                 variant="secondary"
@@ -1095,7 +1097,7 @@ export default function PortalTransfersPage() {
                         <div className={advancedFilterFieldCardClass("md:col-span-3")}>
                           <div className="flex items-center justify-between gap-2">
                             <label className={cx(uiLabelClass, identityFieldState.labelClass)} htmlFor="portal-server-log-identity-filter">
-                              {t({ en: "Identity", fr: "Identité", de: "Identität" })}
+                              {t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" })}
                             </label>
                             <div className="flex gap-1">
                               <button
@@ -1149,12 +1151,12 @@ export default function PortalTransfersPage() {
               rows={serverLogRows}
               rowKey={(entry) => entry.id}
               status={serverLogsTableStatus}
-              loadingMessage={t({ en: "Retrieving server logs...", fr: "Récupération des logs serveur...", de: "Serverlogs werden abgerufen..." })}
-              errorMessage={serverLogsError ?? t({ en: "Unable to retrieve server logs.", fr: "Impossible de récupérer les logs serveur.", de: "Serverlogs können nicht abgerufen werden." })}
+              loadingMessage={t({ en: "Retrieving access history...", fr: "Récupération de l'historique d'accès...", de: "Zugriffsverlauf wird abgerufen..." })}
+              errorMessage={serverLogsError ?? t({ en: "Unable to retrieve access history.", fr: "Impossible de récupérer l'historique d'accès.", de: "Zugriffsverlauf kann nicht abgerufen werden." })}
               emptyMessage={
                 serverLogsLoaded
-                  ? t({ en: "No server operation log for this selection.", fr: "Aucun log d'opération serveur pour cette sélection.", de: "Kein Server-Vorgangslog für diese Auswahl." })
-                  : t({ en: "Logs load automatically for the selected date.", fr: "Les logs se chargent automatiquement pour la date sélectionnée.", de: "Logs werden automatisch für das ausgewählte Datum geladen." })
+                  ? t({ en: "No access event for this selection.", fr: "Aucun événement d'accès pour cette sélection.", de: "Kein Zugriffsereignis für diese Auswahl." })
+                  : t({ en: "Access history loads automatically for the selected date.", fr: "L'historique d'accès se charge automatiquement pour la date sélectionnée.", de: "Der Zugriffsverlauf wird automatisch für das ausgewählte Datum geladen." })
               }
               pagination={{
                 page: safeServerLogPage,
@@ -1173,14 +1175,14 @@ export default function PortalTransfersPage() {
             <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
               {serverLogsLoaded
                 ? t({
-                    en: `${serverLogRows.length} of ${serverLogsTotal} server operations shown`,
-                    fr: `${serverLogRows.length} sur ${serverLogsTotal} opérations serveur affichées`,
-                    de: `${serverLogRows.length} von ${serverLogsTotal} Servervorgängen angezeigt`,
+                    en: `${serverLogRows.length} of ${serverLogsTotal} access events shown`,
+                    fr: `${serverLogRows.length} sur ${serverLogsTotal} événements d'accès affichés`,
+                    de: `${serverLogRows.length} von ${serverLogsTotal} Zugriffsereignissen angezeigt`,
                   })
                 : t({
-                    en: "Server logs may arrive a few minutes after the S3 operation.",
-                    fr: "Les logs serveur peuvent arriver quelques minutes après l'opération S3.",
-                    de: "Serverlogs können einige Minuten nach dem S3-Vorgang eintreffen.",
+                    en: "Detailed access history may arrive a few minutes after the event.",
+                    fr: "L'historique d'accès détaillé peut arriver quelques minutes après l'événement.",
+                    de: "Der detaillierte Zugriffsverlauf kann einige Minuten nach dem Ereignis eintreffen.",
                   })}
             </div>
           </div>
@@ -1189,7 +1191,7 @@ export default function PortalTransfersPage() {
 
       {rawLogsModalOpen ? (
         <Modal
-          title={t({ en: "Retrieve raw server logs", fr: "Récupérer les logs serveur bruts", de: "Rohe Serverlogs abrufen" })}
+          title={t({ en: "Export raw access logs", fr: "Exporter les logs d'accès bruts", de: "Rohe Zugriffslogs exportieren" })}
           onClose={() => {
             if (!rawLogsLoading) setRawLogsModalOpen(false);
           }}
@@ -1243,7 +1245,7 @@ export default function PortalTransfersPage() {
               <UiButton type="submit" loading={rawLogsLoading}>
                 {rawLogsLoading
                   ? t({ en: "Retrieving...", fr: "Récupération...", de: "Wird abgerufen..." })
-                  : t({ en: "Download raw logs", fr: "Télécharger les logs bruts", de: "Rohe Logs herunterladen" })}
+                  : t({ en: "Download export", fr: "Télécharger l'export", de: "Export herunterladen" })}
               </UiButton>
             </div>
           </form>

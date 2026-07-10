@@ -78,6 +78,8 @@ export default function PortalSettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [fullName, setFullName] = useState("");
   const [languageDraft, setLanguageDraft] = useState<UiLanguagePreference>(languagePreference);
@@ -146,6 +148,7 @@ export default function PortalSettingsPage() {
       setUser(updated);
       setFullName(updated.full_name ?? "");
       persistStoredUser(updated);
+      setProfileDialogOpen(false);
       setMessage(t({ en: "Profile updated.", fr: "Profil mis à jour.", de: "Profil aktualisiert." }));
     } catch (err) {
       console.error(err);
@@ -180,6 +183,7 @@ export default function PortalSettingsPage() {
         localStorage.setItem("selectedPortalAccountId", updated.ui_preferences.selected_portal_account_id);
         setSelectedAccountId(updated.ui_preferences.selected_portal_account_id);
       }
+      setPreferencesDialogOpen(false);
       setMessage(t({ en: "Preferences updated.", fr: "Préférences mises à jour.", de: "Einstellungen aktualisiert." }));
     } catch (err) {
       console.error(err);
@@ -228,6 +232,55 @@ export default function PortalSettingsPage() {
     setConfirmPassword("");
   };
 
+  const openProfileDialog = () => {
+    setError(null);
+    setFullName(user?.full_name ?? "");
+    setProfileDialogOpen(true);
+  };
+
+  const closeProfileDialog = () => {
+    if (saving === "profile") return;
+    setFullName(user?.full_name ?? "");
+    setProfileDialogOpen(false);
+  };
+
+  const openPreferencesDialog = () => {
+    setError(null);
+    const preferences = normalizeUiPreferences(user?.ui_preferences);
+    setLanguageDraft(user?.ui_language ?? "auto");
+    setThemeDraft(preferences.theme ?? theme);
+    setQuotaAlertsEnabled(user?.quota_alerts_enabled !== false);
+    setDefaultPortalAccountId(preferences.selected_portal_account_id ?? selectedAccountId ?? accounts[0]?.id ?? "");
+    setPreferencesDialogOpen(true);
+  };
+
+  const closePreferencesDialog = () => {
+    if (saving === "preferences") return;
+    const preferences = normalizeUiPreferences(user?.ui_preferences);
+    setLanguageDraft(user?.ui_language ?? "auto");
+    setThemeDraft(preferences.theme ?? theme);
+    setQuotaAlertsEnabled(user?.quota_alerts_enabled !== false);
+    setDefaultPortalAccountId(preferences.selected_portal_account_id ?? selectedAccountId ?? accounts[0]?.id ?? "");
+    setPreferencesDialogOpen(false);
+  };
+
+  const profileDisplayName = user?.full_name || user?.display_name || t({ en: "Not set", fr: "Non défini", de: "Nicht festgelegt" });
+  const profileEmail = user?.email ?? storedUser?.email ?? "-";
+  const savedPreferences = normalizeUiPreferences(user?.ui_preferences);
+  const savedLanguageLabel = user?.ui_language === "en"
+    ? "English"
+    : user?.ui_language === "fr"
+      ? "Français"
+      : user?.ui_language === "de"
+        ? "Deutsch"
+        : t({ en: "Auto", fr: "Auto", de: "Automatisch" });
+  const savedThemeLabel = (savedPreferences.theme ?? theme) === "dark"
+    ? t({ en: "Dark", fr: "Sombre", de: "Dunkel" })
+    : t({ en: "Light", fr: "Clair", de: "Hell" });
+  const savedDefaultProject = accounts.find(
+    (account) => account.id === (savedPreferences.selected_portal_account_id ?? selectedAccountId)
+  )?.name ?? selectedAccount?.name ?? t({ en: "No project", fr: "Aucun projet", de: "Kein Projekt" });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -253,101 +306,69 @@ export default function PortalSettingsPage() {
       />
 
       {activeTab === "profile" ? (
-        <form onSubmit={saveProfile}>
-          <UiCard
-            title={t({ en: "Profile", fr: "Profil", de: "Profil" })}
-            description={t({
-              en: "Choose the name collaborators see in this workspace.",
-              fr: "Choisissez le nom que les collaborateurs voient dans cet espace de travail.",
-              de: "Wählen Sie den Namen, den Mitwirkende in diesem Arbeitsbereich sehen.",
-            })}
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <UiInput
-                label={t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}
-                className="h-9"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                disabled={loading}
-                autoComplete="name"
-              />
-              <UiInput
-                label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
-                className="h-9"
-                value={user?.email ?? storedUser?.email ?? ""}
-                readOnly
-              />
+        <UiCard
+          title={t({ en: "Profile", fr: "Profil", de: "Profil" })}
+          description={t({
+            en: "The name and email collaborators see in this workspace.",
+            fr: "Le nom et l'email visibles par les collaborateurs dans cet espace de travail.",
+            de: "Name und E-Mail, die Mitwirkende in diesem Arbeitsbereich sehen.",
+          })}
+          actions={
+            <UiButton type="button" onClick={openProfileDialog} disabled={loading} className="h-9 px-3 py-1.5">
+              {t({ en: "Edit profile", fr: "Modifier le profil", de: "Profil bearbeiten" })}
+            </UiButton>
+          }
+        >
+          <dl className="grid gap-4 text-xs md:grid-cols-2">
+            <div>
+              <dt className={labelClasses}>{t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{profileDisplayName}</dd>
             </div>
-            <div className="mt-4">
-              <UiButton type="submit" disabled={saving === "profile" || loading} className="h-9 px-3 py-1.5">
-                {saving === "profile" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save profile", fr: "Enregistrer le profil", de: "Profil speichern" })}
-              </UiButton>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Email", fr: "Email", de: "E-Mail" })}</dt>
+              <dd className={cx("mt-1 break-all font-semibold", uiTitleTextClass)}>{profileEmail}</dd>
             </div>
-          </UiCard>
-        </form>
+          </dl>
+        </UiCard>
       ) : null}
 
       {activeTab === "preferences" ? (
-        <form onSubmit={savePreferences}>
-          <UiCard
-            title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}
-            description={t({
-              en: "Set the language, theme and default project used when you open the Portal.",
-              fr: "Définissez la langue, le thème et le projet par défaut utilisés à l'ouverture du Portal.",
-              de: "Legen Sie Sprache, Design und Standardprojekt beim Öffnen des Portals fest.",
-            })}
-          >
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <UiSelect
-                label={t({ en: "Language", fr: "Langue", de: "Sprache" })}
-                className="h-9"
-                value={languageDraft}
-                onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
-              >
-                <option value="en">English</option>
-                <option value="fr">Français</option>
-                <option value="de">Deutsch</option>
-                <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
-              </UiSelect>
-              <UiSelect
-                label={t({ en: "Theme", fr: "Thème", de: "Design" })}
-                className="h-9"
-                value={themeDraft}
-                onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
-              >
-                <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
-                <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
-              </UiSelect>
-              <UiSelect
-                label={t({ en: "Default project", fr: "Projet par défaut", de: "Standardprojekt" })}
-                fieldClassName="md:col-span-2"
-                className="h-9"
-                value={defaultPortalAccountId}
-                onChange={(event) => setDefaultPortalAccountId(event.target.value)}
-                disabled={accounts.length === 0}
-              >
-                {accounts.length === 0 ? <option value="">{t({ en: "No project", fr: "Aucun projet", de: "Kein Projekt" })}</option> : null}
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </UiSelect>
+        <UiCard
+          title={t({ en: "Preferences", fr: "Préférences", de: "Einstellungen" })}
+          description={t({
+            en: "Personal defaults used when you open the Portal.",
+            fr: "Préférences personnelles utilisées à l'ouverture du Portal.",
+            de: "Persönliche Vorgaben beim Öffnen des Portals.",
+          })}
+          actions={
+            <UiButton type="button" variant="secondary" onClick={openPreferencesDialog} disabled={loading} className="h-9 px-3 py-1.5">
+              {t({ en: "Edit preferences", fr: "Modifier les préférences", de: "Einstellungen bearbeiten" })}
+            </UiButton>
+          }
+        >
+          <dl className="grid gap-4 text-xs md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <dt className={labelClasses}>{t({ en: "Language", fr: "Langue", de: "Sprache" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{savedLanguageLabel}</dd>
             </div>
-            <UiCheckboxField
-              className="mt-4 flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
-              checked={quotaAlertsEnabled}
-              onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
-            >
-              <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
-            </UiCheckboxField>
-            <div className="mt-4">
-              <UiButton type="submit" disabled={saving === "preferences" || loading} className="h-9 px-3 py-1.5">
-                {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
-              </UiButton>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Theme", fr: "Thème", de: "Design" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{savedThemeLabel}</dd>
             </div>
-          </UiCard>
-        </form>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Default project", fr: "Projet par défaut", de: "Standardprojekt" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{savedDefaultProject}</dd>
+            </div>
+            <div>
+              <dt className={labelClasses}>{t({ en: "Quota alerts", fr: "Alertes de quota", de: "Quotenwarnungen" })}</dt>
+              <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>
+                {user?.quota_alerts_enabled === false
+                  ? t({ en: "Off", fr: "Désactivées", de: "Aus" })
+                  : t({ en: "On", fr: "Activées", de: "Ein" })}
+              </dd>
+            </div>
+          </dl>
+        </UiCard>
       ) : null}
 
       {activeTab === "security" ? (
@@ -478,6 +499,105 @@ export default function PortalSettingsPage() {
                 loading={saving === "password"}
               >
                 {saving === "password" ? t({ en: "Updating...", fr: "Mise à jour...", de: "Wird aktualisiert..." }) : t({ en: "Update password", fr: "Mettre à jour le mot de passe", de: "Passwort aktualisieren" })}
+              </UiButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {profileDialogOpen ? (
+        <Modal
+          title={t({ en: "Edit profile", fr: "Modifier le profil", de: "Profil bearbeiten" })}
+          onClose={closeProfileDialog}
+          closeOnBackdropClick={saving !== "profile"}
+          closeOnEscape={saving !== "profile"}
+        >
+          <form onSubmit={saveProfile} className="space-y-4">
+            <UiInput
+              label={t({ en: "Display name", fr: "Nom affiché", de: "Anzeigename" })}
+              className="h-9"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              disabled={loading}
+              autoComplete="name"
+            />
+            <UiInput
+              label={t({ en: "Email", fr: "Email", de: "E-Mail" })}
+              className="h-9"
+              value={profileEmail}
+              readOnly
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton type="button" variant="secondary" onClick={closeProfileDialog} disabled={saving === "profile"}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton type="submit" disabled={saving === "profile" || loading} loading={saving === "profile"}>
+                {saving === "profile" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save profile", fr: "Enregistrer le profil", de: "Profil speichern" })}
+              </UiButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {preferencesDialogOpen ? (
+        <Modal
+          title={t({ en: "Edit preferences", fr: "Modifier les préférences", de: "Einstellungen bearbeiten" })}
+          onClose={closePreferencesDialog}
+          closeOnBackdropClick={saving !== "preferences"}
+          closeOnEscape={saving !== "preferences"}
+          maxWidthClass="max-w-3xl"
+        >
+          <form onSubmit={savePreferences} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <UiSelect
+                label={t({ en: "Language", fr: "Langue", de: "Sprache" })}
+                className="h-9"
+                value={languageDraft}
+                onChange={(event) => setLanguageDraft(event.target.value as UiLanguagePreference)}
+              >
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="auto">{t({ en: "Auto", fr: "Auto", de: "Automatisch" })}</option>
+              </UiSelect>
+              <UiSelect
+                label={t({ en: "Theme", fr: "Thème", de: "Design" })}
+                className="h-9"
+                value={themeDraft}
+                onChange={(event) => setThemeDraft(event.target.value as "light" | "dark")}
+              >
+                <option value="light">{t({ en: "Light", fr: "Clair", de: "Hell" })}</option>
+                <option value="dark">{t({ en: "Dark", fr: "Sombre", de: "Dunkel" })}</option>
+              </UiSelect>
+              <UiSelect
+                label={t({ en: "Default project", fr: "Projet par défaut", de: "Standardprojekt" })}
+                fieldClassName="md:col-span-2"
+                className="h-9"
+                value={defaultPortalAccountId}
+                onChange={(event) => setDefaultPortalAccountId(event.target.value)}
+                disabled={accounts.length === 0}
+              >
+                {accounts.length === 0 ? <option value="">{t({ en: "No project", fr: "Aucun projet", de: "Kein Projekt" })}</option> : null}
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </UiSelect>
+            </div>
+            <UiCheckboxField
+              className="flex rounded-md border border-[color:var(--ui-border)] px-3 py-2"
+              checked={quotaAlertsEnabled}
+              onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
+            >
+              <span className="ui-body text-[var(--ui-text)]">{t({ en: "Receive quota alert emails", fr: "Recevoir les emails d'alerte de quota", de: "E-Mails zu Quotenwarnungen erhalten" })}</span>
+            </UiCheckboxField>
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton type="button" variant="secondary" onClick={closePreferencesDialog} disabled={saving === "preferences"}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton type="submit" disabled={saving === "preferences" || loading} loading={saving === "preferences"}>
+                {saving === "preferences" ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." }) : t({ en: "Save preferences", fr: "Enregistrer les préférences", de: "Einstellungen speichern" })}
               </UiButton>
             </div>
           </form>

@@ -24,6 +24,7 @@ import DataTableShell, {
 } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -64,6 +65,8 @@ import {
   portalStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+
+type SpacesTab = "active" | "archived";
 
 function visibleStatus(space: { status: string }) {
   if (space.status === "Active") return null;
@@ -124,6 +127,7 @@ export default function PortalStorageSpacesPage() {
   );
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState("name");
+  const [activeTab, setActiveTab] = useState<SpacesTab>("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [startGuideDismissed, setStartGuideDismissed] = useState(false);
@@ -161,9 +165,18 @@ export default function PortalStorageSpacesPage() {
     useState<PortalStorageSpaceAccountMemberRole>("Editor");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const activeSpaces = useMemo(
+    () => workspace.spaces.filter((space) => space.status !== "Archived"),
+    [workspace.spaces],
+  );
+  const archivedSpaces = useMemo(
+    () => workspace.spaces.filter((space) => space.status === "Archived"),
+    [workspace.spaces],
+  );
+  const visibleSpaces = activeTab === "archived" ? archivedSpaces : activeSpaces;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredSpaces = useMemo(() => {
-    const filtered = workspace.spaces.filter((space) => {
+    const filtered = visibleSpaces.filter((space) => {
       if (roleFilter !== "all" && space.role !== roleFilter) return false;
       if (statusFilter !== "all" && space.status !== statusFilter) return false;
       if (!normalizedQuery) return true;
@@ -194,7 +207,7 @@ export default function PortalStorageSpacesPage() {
         return (b.objectCount ?? -1) - (a.objectCount ?? -1);
       return a.name.localeCompare(b.name);
     });
-  }, [normalizedQuery, roleFilter, sort, statusFilter, t, workspace.spaces]);
+  }, [normalizedQuery, roleFilter, sort, statusFilter, t, visibleSpaces]);
   const tableStatus = filteredSpaces.length === 0 ? "empty" : "ready";
   const storageSpaceColumns = useMemo<DataTableColumn<PortalWorkspaceSpace>[]>(
     () => [
@@ -290,9 +303,6 @@ export default function PortalStorageSpacesPage() {
     Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
   const canChooseVisibility = state?.account_role === "portal_manager";
-  const activeSpaces = workspace.spaces.filter(
-    (space) => space.status !== "Archived",
-  );
   const firstWritableSpace =
     activeSpaces.find(
       (space) => space.role === "Owner" || space.role === "Editor",
@@ -336,6 +346,10 @@ export default function PortalStorageSpacesPage() {
       window.localStorage.getItem(startGuideStorageKey) === "1",
     );
   }, [startGuideStorageKey]);
+
+  useEffect(() => {
+    setStatusFilter("all");
+  }, [activeTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,7 +538,11 @@ export default function PortalStorageSpacesPage() {
         ]
       : []),
   ];
-  const showStartGuide = activeSpaces.length === 0 && !startGuideDismissed;
+  const showStartGuide = workspace.spaces.length === 0 && !startGuideDismissed;
+  const statusOptions = [
+    { value: "Active", label: portalStatusLabel("Active", t) },
+    { value: "Attention", label: portalStatusLabel("Attention", t) },
+  ];
 
   return (
     <div className="space-y-4">
@@ -795,9 +813,9 @@ export default function PortalStorageSpacesPage() {
               {canUseNamedBucket ? (
                 <UiSelect
                   label={t({
-                    en: "Storage setup",
-                    fr: "Configuration du stockage",
-                    de: "Speicher-Einrichtung",
+                    en: "Space setup",
+                    fr: "Configuration de l'espace",
+                    de: "Bereich einrichten",
                   })}
                   size="compact"
                   className="h-9"
@@ -810,16 +828,16 @@ export default function PortalStorageSpacesPage() {
                 >
                   <option value="generic_uuid">
                     {t({
-                      en: "Automatic space",
-                      fr: "Espace automatique",
-                      de: "Automatischer Bereich",
+                      en: "Let Portal choose the ID",
+                      fr: "Laisser Portal choisir l'identifiant",
+                      de: "Portal wählt die ID",
                     })}
                   </option>
                   <option value="named_bucket">
                     {t({
-                      en: "Named storage",
-                      fr: "Stockage nommé",
-                      de: "Benannter Speicher",
+                      en: "Use a custom tool ID",
+                      fr: "Utiliser un identifiant d'outil",
+                      de: "Eigene Werkzeug-ID nutzen",
                     })}
                   </option>
                 </UiSelect>
@@ -828,9 +846,9 @@ export default function PortalStorageSpacesPage() {
                 label={
                   effectiveNamingMode === "named_bucket"
                     ? t({
-                        en: "Space and storage name",
-                        fr: "Nom de l'espace et du stockage",
-                        de: "Name von Bereich und Speicher",
+                        en: "Space name and tool ID",
+                        fr: "Nom de l'espace et identifiant d'outil",
+                        de: "Bereichsname und Werkzeug-ID",
                       })
                     : t({
                         en: "Space name",
@@ -845,9 +863,9 @@ export default function PortalStorageSpacesPage() {
                 placeholder={
                   effectiveNamingMode === "named_bucket"
                     ? t({
-                        en: "Space and storage name",
-                        fr: "Nom de l'espace et du stockage",
-                        de: "Name von Bereich und Speicher",
+                        en: "Project or dataset ID",
+                        fr: "Identifiant du projet ou du jeu de données",
+                        de: "Projekt- oder Datensatz-ID",
                       })
                     : t({
                         en: "Project, team, or dataset name",
@@ -961,18 +979,18 @@ export default function PortalStorageSpacesPage() {
             <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr]">
               <UiInput
                 label={t({
-                  en: "Existing storage name",
-                  fr: "Nom du stockage existant",
-                  de: "Name des vorhandenen Speichers",
+                  en: "Existing technical ID",
+                  fr: "Identifiant technique existant",
+                  de: "Vorhandene technische ID",
                 })}
                 size="compact"
                 className="h-9"
                 value={importBucketName}
                 onChange={(event) => setImportBucketName(event.target.value)}
                 placeholder={t({
-                  en: "Existing storage name",
-                  fr: "Nom du stockage existant",
-                  de: "Name des vorhandenen Speichers",
+                  en: "Existing technical ID",
+                  fr: "Identifiant technique existant",
+                  de: "Vorhandene technische ID",
                 })}
               />
               <UiInput
@@ -1060,8 +1078,39 @@ export default function PortalStorageSpacesPage() {
         </Modal>
       ) : null}
 
+      <PageTabs
+        tabs={[
+          {
+            id: "active",
+            label: t({
+              en: `Active spaces (${activeSpaces.length})`,
+              fr: `Espaces actifs (${activeSpaces.length})`,
+              de: `Aktive Bereiche (${activeSpaces.length})`,
+            }),
+          },
+          {
+            id: "archived",
+            label: t({
+              en: `Archived (${archivedSpaces.length})`,
+              fr: `Archivés (${archivedSpaces.length})`,
+              de: `Archiviert (${archivedSpaces.length})`,
+            }),
+          },
+        ]}
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId as SpacesTab)}
+        variant="bar"
+      />
+
       <UiCard>
-        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]">
+        <div
+          className={cx(
+            "mb-4 grid gap-3",
+            activeTab === "archived"
+              ? "lg:grid-cols-[minmax(220px,1fr)_160px_180px]"
+              : "lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]",
+          )}
+        >
           <UiInput
             label={t({ en: "Search", fr: "Recherche", de: "Suche" })}
             type="search"
@@ -1093,22 +1142,24 @@ export default function PortalStorageSpacesPage() {
             <option value="Editor">{portalRoleLabel("Editor", t)}</option>
             <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
           </UiSelect>
-          <UiSelect
-            label={t({ en: "Status", fr: "Statut", de: "Status" })}
-            size="compact"
-            className="h-9"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">
-              {t({ en: "All states", fr: "Tous les états", de: "Alle Status" })}
-            </option>
-            <option value="Active">{portalStatusLabel("Active", t)}</option>
-            <option value="Attention">
-              {portalStatusLabel("Attention", t)}
-            </option>
-            <option value="Archived">{portalStatusLabel("Archived", t)}</option>
-          </UiSelect>
+          {activeTab === "active" ? (
+            <UiSelect
+              label={t({ en: "Status", fr: "Statut", de: "Status" })}
+              size="compact"
+              className="h-9"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">
+                {t({ en: "All states", fr: "Tous les états", de: "Alle Status" })}
+              </option>
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </UiSelect>
+          ) : null}
           <UiSelect
             label={t({ en: "Sort by", fr: "Trier par", de: "Sortieren nach" })}
             size="compact"
@@ -1146,7 +1197,13 @@ export default function PortalStorageSpacesPage() {
             de: "Bereiche können nicht geladen werden.",
           })}
           emptyMessage={
-            canCreate
+            activeTab === "archived"
+              ? t({
+                  en: "No archived spaces.",
+                  fr: "Aucun espace archivé.",
+                  de: "Keine archivierten Bereiche.",
+                })
+              : canCreate
               ? t({
                   en: "No spaces yet. Create one to start storing files.",
                   fr: "Aucun espace pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
@@ -1168,9 +1225,9 @@ export default function PortalStorageSpacesPage() {
         >
           <span>
             {t({
-              en: `${filteredSpaces.length} of ${workspace.spaces.length}`,
-              fr: `${filteredSpaces.length} sur ${workspace.spaces.length}`,
-              de: `${filteredSpaces.length} von ${workspace.spaces.length}`,
+              en: `${filteredSpaces.length} of ${visibleSpaces.length}`,
+              fr: `${filteredSpaces.length} sur ${visibleSpaces.length}`,
+              de: `${filteredSpaces.length} von ${visibleSpaces.length}`,
             })}
           </span>
         </div>

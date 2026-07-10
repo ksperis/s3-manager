@@ -160,6 +160,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [accessRolesByUserId, setAccessRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
   const [accessCandidatesLoading, setAccessCandidatesLoading] = useState(false);
   const [accessBusy, setAccessBusy] = useState(false);
+  const [accessPeopleDialogOpen, setAccessPeopleDialogOpen] = useState(false);
   const [pendingAccessChange, setPendingAccessChange] = useState<PendingAccessChange | null>(null);
   const [pendingAccessRevoke, setPendingAccessRevoke] = useState<PortalStorageSpaceShare | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -302,6 +303,13 @@ export default function PortalStorageSpaceDetailPage() {
     setPendingAccessChange({ mode: accessMode, accountMemberRole: accessAccountMemberRole });
   };
 
+  const closeAccessPeopleDialog = () => {
+    if (accessBusy) return;
+    setAccessPeopleDialogOpen(false);
+    setAccessRolesByUserId({});
+    setAccessCandidateQuery("");
+  };
+
   const confirmAccessChange = async (change: PendingAccessChange) => {
     if (!space || !accountIdForApi) return;
     setAccessBusy(true);
@@ -338,6 +346,7 @@ export default function PortalStorageSpaceDetailPage() {
       );
       setAccessRolesByUserId({});
       setAccessCandidateQuery("");
+      setAccessPeopleDialogOpen(false);
       await loadAccessSummary();
       setMessage(t({ en: "People added.", fr: "Personnes ajoutées.", de: "Personen hinzugefügt." }));
     } catch (err) {
@@ -447,8 +456,18 @@ export default function PortalStorageSpaceDetailPage() {
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
   const accessKeysPath = `/portal/access-keys?space_id=${encodeURIComponent(lockedBucketName)}&create=external`;
   const canInvitePeople = !isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access);
-  const spaceHasStarted = (space.objectCount ?? 0) > 0 || (space.shareCount ?? 0) > 0;
-  const showStartSpacePanel = canModifyObjects && !startGuideDismissed && !spaceHasStarted && (showSpaceReadyBanner || space.objectCount === 0);
+  const knownCollaboratorCount = Math.max(
+    space.shareCount ?? 0,
+    accessSummary?.explicit_shares.length ?? 0
+  );
+  const collaboratorsUnknown = space.shareCount == null && !accessSummary;
+  const spaceHasStarted = (space.objectCount ?? 0) > 0 || knownCollaboratorCount > 0;
+  const showStartSpacePanel =
+    canModifyObjects &&
+    !startGuideDismissed &&
+    !collaboratorsUnknown &&
+    !spaceHasStarted &&
+    (showSpaceReadyBanner || space.objectCount === 0);
   const canCreatePublicLinks = Boolean(
     canBrowse &&
     space.role === "Owner" &&
@@ -875,7 +894,7 @@ export default function PortalStorageSpaceDetailPage() {
         </div>
         <div>
           <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-            {t({ en: "Name for S3 tools", fr: "Nom pour les outils S3", de: "Name für S3-Werkzeuge" })}
+            {t({ en: "Manual storage name", fr: "Nom de stockage manuel", de: "Manueller Speichername" })}
           </div>
           <div className={cx("mt-1 break-all font-mono text-sm font-bold", uiTitleTextClass)}>{lockedBucketName}</div>
         </div>
@@ -896,9 +915,9 @@ export default function PortalStorageSpaceDetailPage() {
         {isArchived
           ? t({ en: "Archived spaces have no active external-tool access.", fr: "Les espaces archivés n'ont aucun accès actif pour les outils externes.", de: "Archivierte Bereiche haben keinen aktiven Zugriff für externe Werkzeuge." })
           : t({
-              en: "Use this only when an external S3 tool asks for a bucket name. The Portal keeps showing the space name everywhere else.",
-              fr: "Utilisez ce nom uniquement lorsqu'un outil S3 externe demande un nom de bucket. Le Portal continue d'afficher le nom de l'espace partout ailleurs.",
-              de: "Verwenden Sie dies nur, wenn ein externes S3-Werkzeug nach einem Bucket-Namen fragt. Das Portal zeigt sonst überall den Bereichsnamen.",
+              en: "Use this only when an external app asks for a storage or bucket name. Portal keeps showing the space name everywhere else.",
+              fr: "Utilisez ce nom uniquement lorsqu'une application externe demande un nom de stockage ou de bucket. Portal continue d'afficher le nom de l'espace partout ailleurs.",
+              de: "Verwenden Sie dies nur, wenn eine externe App nach einem Speicher- oder Bucket-Namen fragt. Portal zeigt sonst überall den Bereichsnamen.",
             })}
       </p>
     </UiCard>
@@ -908,9 +927,9 @@ export default function PortalStorageSpaceDetailPage() {
     <UiCard
       title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}
       description={t({
-        en: "Remove historical object versions and orphan delete markers when a space needs to reclaim storage.",
-        fr: "Supprimez les versions historiques des objets et les delete markers orphelins lorsqu'un espace doit récupérer du stockage.",
-        de: "Entfernen Sie historische Objektversionen und verwaiste Delete Marker, wenn Speicher zurückgewonnen werden soll.",
+        en: "Remove older file history and leftover deletion records when a space needs to reclaim storage.",
+        fr: "Supprimez l'ancien historique des fichiers et les traces de suppression restantes lorsqu'un espace doit récupérer du stockage.",
+        de: "Entfernen Sie ältere Dateihistorie und verbliebene Löschvermerke, wenn ein Bereich Speicher zurückgewinnen muss.",
       })}
       actions={
         <UiButton
@@ -951,9 +970,9 @@ export default function PortalStorageSpaceDetailPage() {
         ) : (
           <p className={cx("ui-caption", uiMutedTextClass)}>
             {t({
-              en: "Current files stay available. The cleanup only removes older object versions and orphan delete markers.",
-              fr: "Les fichiers courants restent disponibles. Le nettoyage retire uniquement les anciennes versions d'objets et les delete markers orphelins.",
-              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt nur ältere Objektversionen und verwaiste Delete Marker.",
+              en: "Current files stay available. The cleanup only removes older file history and leftover deletion records.",
+              fr: "Les fichiers courants restent disponibles. Le nettoyage retire uniquement l'ancien historique des fichiers et les traces de suppression restantes.",
+              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt nur ältere Dateihistorie und verbliebene Löschvermerke.",
             })}
           </p>
         )}
@@ -1175,14 +1194,23 @@ export default function PortalStorageSpaceDetailPage() {
 
             {accessSummary.can_manage_access && savedAccessMode === "restricted" ? (
               <div className="space-y-3 border-t border-[color:var(--ui-border-soft)] pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className={cx("text-sm font-bold", uiTitleTextClass)}>
-                    {t({ en: "Add people", fr: "Ajouter des personnes", de: "Personen hinzufügen" })}
-                  </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className={cx("text-sm font-bold", uiTitleTextClass)}>
+                      {t({ en: "Add people", fr: "Ajouter des personnes", de: "Personen hinzufügen" })}
+                    </h3>
+                    <p className={cx("mt-1 text-xs font-semibold", uiMutedTextClass)}>
+                      {t({
+                        en: "Invite collaborators when this space is ready to share.",
+                        fr: "Invitez des collaborateurs lorsque cet espace est prêt à être partagé.",
+                        de: "Laden Sie Mitwirkende ein, wenn dieser Bereich bereit zum Teilen ist.",
+                      })}
+                    </p>
+                  </div>
                   <UiButton
                     size="sm"
-                    disabled={accessBusy || accessChanged || selectedAccessShareEntries.length === 0 || isArchived}
-                    onClick={handleAddAccessPeople}
+                    disabled={accessBusy || accessChanged || isArchived}
+                    onClick={() => setAccessPeopleDialogOpen(true)}
                   >
                     {t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" })}
                   </UiButton>
@@ -1191,28 +1219,7 @@ export default function PortalStorageSpaceDetailPage() {
                   <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
                     {t({ en: "Save the access mode before editing direct collaborators.", fr: "Enregistrez le mode d'accès avant de modifier les collaborateurs directs.", de: "Speichern Sie den Zugriffsmodus, bevor Sie direkte Mitwirkende bearbeiten." })}
                   </div>
-                ) : (
-                  <PortalShareCandidatePicker
-                    candidates={accessCandidates}
-                    selectedRolesByUserId={accessRolesByUserId}
-                    query={accessCandidateQuery}
-                    loading={accessCandidatesLoading}
-                    error={null}
-                    includeAlreadyShared
-                    onQueryChange={setAccessCandidateQuery}
-                    onRoleChange={(userId, role) => {
-                      setAccessRolesByUserId((current) => {
-                        const next = { ...current };
-                        if (role) {
-                          next[userId] = role;
-                        } else {
-                          delete next[userId];
-                        }
-                        return next;
-                      });
-                    }}
-                  />
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1293,6 +1300,62 @@ export default function PortalStorageSpaceDetailPage() {
         </Modal>
       ) : null}
 
+      {accessPeopleDialogOpen && accessSummary?.can_manage_access && savedAccessMode === "restricted" ? (
+        <Modal
+          title={t({ en: "Add people", fr: "Ajouter des personnes", de: "Personen hinzufügen" })}
+          onClose={closeAccessPeopleDialog}
+          closeOnBackdropClick={!accessBusy}
+          closeOnEscape={!accessBusy}
+          maxWidthClass="max-w-4xl"
+        >
+          <div className="space-y-4">
+            <p className={cx("ui-caption", uiMutedTextClass)}>
+              {t({
+                en: "Choose collaborators and assign the role they need for this space.",
+                fr: "Choisissez les collaborateurs et attribuez-leur le rôle nécessaire pour cet espace.",
+                de: "Wählen Sie Mitwirkende aus und vergeben Sie die passende Rolle für diesen Bereich.",
+              })}
+            </p>
+            <PortalShareCandidatePicker
+              candidates={accessCandidates}
+              selectedRolesByUserId={accessRolesByUserId}
+              query={accessCandidateQuery}
+              loading={accessCandidatesLoading}
+              error={null}
+              includeAlreadyShared
+              onQueryChange={setAccessCandidateQuery}
+              onRoleChange={(userId, role) => {
+                setAccessRolesByUserId((current) => {
+                  const next = { ...current };
+                  if (role) {
+                    next[userId] = role;
+                  } else {
+                    delete next[userId];
+                  }
+                  return next;
+                });
+              }}
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton
+                variant="secondary"
+                disabled={accessBusy}
+                onClick={closeAccessPeopleDialog}
+              >
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton
+                loading={accessBusy}
+                disabled={accessBusy || accessChanged || selectedAccessShareEntries.length === 0 || isArchived}
+                onClick={handleAddAccessPeople}
+              >
+                {t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
       {historyCleanupDialogOpen ? (
         <Modal
           title={t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
@@ -1305,9 +1368,9 @@ export default function PortalStorageSpaceDetailPage() {
             {historyCleanupError ? <PageBanner tone="warning">{historyCleanupError}</PageBanner> : null}
             <PageBanner tone="warning">
               {t({
-                en: "This scans the entire Storage Space, deletes historical object versions, then removes orphan delete markers left behind. Current files are kept, but deleted history cannot be restored from the Portal.",
-                fr: "Cette opération parcourt tout l'espace, supprime les versions historiques des objets, puis retire les delete markers orphelins restants. Les fichiers courants sont conservés, mais l'historique supprimé ne pourra pas être restauré depuis le portail.",
-                de: "Diese Aktion durchsucht den gesamten Bereich, löscht historische Objektversionen und entfernt danach verwaiste Delete Marker. Aktuelle Dateien bleiben erhalten, gelöschte Historie kann im Portal aber nicht wiederhergestellt werden.",
+                en: "This scans the entire space, deletes older file versions, then removes leftover deletion records. Current files are kept, but deleted history cannot be restored from Portal.",
+                fr: "Cette opération parcourt tout l'espace, supprime les anciennes versions de fichiers, puis retire les traces de suppression restantes. Les fichiers courants sont conservés, mais l'historique supprimé ne pourra pas être restauré depuis Portal.",
+                de: "Diese Aktion durchsucht den gesamten Bereich, löscht ältere Dateiversionen und entfernt verbliebene Löschvermerke. Aktuelle Dateien bleiben erhalten, gelöschte Historie kann in Portal aber nicht wiederhergestellt werden.",
               })}
             </PageBanner>
 

@@ -60,6 +60,11 @@ function renderPage(initialEntry = "/portal/access-keys") {
   );
 }
 
+async function openSetupDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Download setup" }));
+  return screen.getByRole("dialog", { name: "Download setup details" });
+}
+
 describe("PortalAccessKeysPage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -116,6 +121,12 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("heading", { name: "Connect an external tool" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByText(/Use external-tool access only when someone cannot work through Portal sharing/i)).toBeInTheDocument();
+    expect(screen.getByText("1. Select access")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download setup" })).toBeInTheDocument();
+    expect(screen.queryByText("Manual setup details")).not.toBeInTheDocument();
+    const setupDialog = await openSetupDialog(user);
+    expect(within(setupDialog).getByText("Manual setup details")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Tool access (1)" }));
     expect(await screen.findByText("AK-USER")).toBeInTheDocument();
@@ -125,12 +136,12 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByRole("button", { name: "Disable" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "New tool access" })).toBeEnabled();
-    expect(screen.getByText(/Connection downloads include the service address https:\/\/s3\.example\.test/i)).toBeInTheDocument();
     expect(mocks.fetchPortalAccessKeysState).toHaveBeenCalledWith("101");
   });
 
   it("shows the starter guide only before the first tool access and lets users dismiss it", async () => {
     mocks.state = { ...mocks.state, access_keys: [] };
+    mocks.listPortalStorageSpaces.mockResolvedValue([]);
     const user = userEvent.setup();
     renderPage();
 
@@ -144,18 +155,30 @@ describe("PortalAccessKeysPage", () => {
     expect(window.localStorage.getItem("portal.access-keys.start-guide.dismissed.101")).toBe("1");
   });
 
+  it("does not repeat the starter guide once a space exists", async () => {
+    mocks.state = { ...mocks.state, access_keys: [] };
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Connect an external tool" })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
+
+    expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download setup" })).toBeInTheDocument();
+  });
+
   it("downloads generic and Cyberduck connection details without a secret", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByRole("heading", { name: "Connect an external tool" });
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
-    await user.click(screen.getByRole("button", { name: "Connection details" }));
+    const setupDialog = await openSetupDialog(user);
+    await user.click(within(setupDialog).getByRole("button", { name: "Connection details" }));
     const details = await readDownloadedBlobText(downloadedBlobs.at(-1));
-    expect(details).toContain("Bucket name: research-data-internal");
-    expect(details).toContain("Secret key: Not included in this file");
+    expect(details).toContain("Storage name for external tools: research-data-internal");
+    expect(details).toContain("Secret: Not included in this file");
 
-    await user.click(screen.getByRole("button", { name: "Cyberduck bookmark" }));
+    await user.click(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" }));
     const bookmark = await readDownloadedBlobText(downloadedBlobs.at(-1));
     expect(bookmark).toContain("<string>s3.example.test</string>");
     expect(bookmark).toContain("<string>AK-USER</string>");
@@ -168,9 +191,10 @@ describe("PortalAccessKeysPage", () => {
     renderPage();
 
     await screen.findByRole("heading", { name: "Connect an external tool" });
-    expect(screen.getByRole("button", { name: "Cyberduck bookmark" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Connection details" })).toBeEnabled();
-    expect(screen.getByText(/Cyberduck bookmark download is unavailable/i)).toBeInTheDocument();
+    const setupDialog = await openSetupDialog(userEvent.setup());
+    expect(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" })).toBeDisabled();
+    expect(within(setupDialog).getByRole("button", { name: "Connection details" })).toBeEnabled();
+    expect(within(setupDialog).getByText(/Cyberduck bookmark download is unavailable/i)).toBeInTheDocument();
   });
 
   it("creates a key and shows the secret only in the creation banner", async () => {
@@ -227,7 +251,7 @@ describe("PortalAccessKeysPage", () => {
     expect(screen.getByText("SK-EXT")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Download with secret" }).length).toBeGreaterThan(0);
     await user.click(screen.getAllByRole("button", { name: "Download with secret" })[0]);
-    expect(await readDownloadedBlobText(downloadedBlobs.at(-1))).toContain("Secret key: SK-EXT");
+    expect(await readDownloadedBlobText(downloadedBlobs.at(-1))).toContain("Secret: SK-EXT");
   });
 
   it("opens external key creation from a preselected space link", async () => {
@@ -264,8 +288,9 @@ describe("PortalAccessKeysPage", () => {
     };
     renderPage();
 
-    expect(await screen.findByText("Not shown again")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Details with secret" })).not.toBeInTheDocument();
+    const setupDialog = await openSetupDialog(userEvent.setup());
+    expect(await within(setupDialog).findByText("Not shown again")).toBeInTheDocument();
+    expect(within(setupDialog).queryByRole("button", { name: "Details with secret" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Tool access (1)" }));
     expect(await screen.findByText("AK-EXT-OLD")).toBeInTheDocument();
   });

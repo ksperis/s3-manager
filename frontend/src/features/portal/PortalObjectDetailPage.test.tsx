@@ -123,23 +123,28 @@ describe("PortalObjectDetailPage", () => {
       link.getAttribute("href") === "/portal/storage-spaces/research-data"
     )).toBe(true);
     expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sharing" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Details" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Events" })).toBeInTheDocument();
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(await screen.findByText("hello content")).toBeInTheDocument();
+    expect(screen.queryByText("Public links")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sharing" }));
     expect(screen.getByText("Public links")).toBeInTheDocument();
     expect(screen.getByText("Share this file outside the workspace only when anyone with the link should have access.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Preview" }));
     expect(screen.queryByLabelText("Public link expiration")).not.toBeInTheDocument();
-    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByText("General information")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Share" }));
     expect(mocks.createPublicLinkMock).not.toHaveBeenCalled();
     let dialog = screen.getByRole("dialog", { name: "Create public link" });
+    expect(screen.getByText("Public links")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Public link expiration")).toHaveClass("ui-control");
     expect(within(dialog).getByText("raw-data/2024/03/sample_001.fastq.gz")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog", { name: "Create public link" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Set up public link" }));
+    await user.click(screen.getByRole("button", { name: "Create link" }));
     expect(mocks.createPublicLinkMock).not.toHaveBeenCalled();
     dialog = screen.getByRole("dialog", { name: "Create public link" });
     await user.click(within(dialog).getByRole("button", { name: "Create link" }));
@@ -152,6 +157,7 @@ describe("PortalObjectDetailPage", () => {
     });
     expect(screen.queryByRole("dialog", { name: "Create public link" })).not.toBeInTheDocument();
     expect(await screen.findByText("https://public.example.test/new-link")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     await user.click(screen.getByRole("button", { name: "Copy link" }));
     expect(writeText).toHaveBeenCalledWith("https://public.example.test/new-link");
     expect(await screen.findByText("Public link copied.")).toBeInTheDocument();
@@ -187,6 +193,11 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Set up public link" })).toBeDisabled();
     expect(screen.getAllByText("Only Owners can create public links.").length).toBeGreaterThan(1);
+    await user.click(screen.getByRole("button", { name: "Sharing" }));
+    expect(screen.getByText("Public links")).toBeInTheDocument();
+    expect(screen.getAllByText("Only Owners can create public links.").length).toBeGreaterThan(1);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Preview" }));
     expect(screen.getByRole("button", { name: "Delete file" })).toBeDisabled();
     expect(screen.getByText("Viewers cannot delete files.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy file location" })).toBeInTheDocument();
@@ -222,13 +233,16 @@ describe("PortalObjectDetailPage", () => {
 
     expect(await screen.findByText("hello content")).toBeInTheDocument();
     expect(screen.getByText("1 active public link")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sharing" }));
     expect(screen.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Preview" }));
     await user.click(screen.getByRole("button", { name: "Delete file" }));
     const deleteDialog = screen.getByRole("dialog", { name: "Delete file" });
     expect(within(deleteDialog).getByText("raw-data/2024/03/sample_001.fastq.gz")).toBeInTheDocument();
     expect(within(deleteDialog).getByText("This action cannot be undone from the Portal.")).toBeInTheDocument();
     await user.click(within(deleteDialog).getByRole("button", { name: "Cancel" }));
 
+    await user.click(screen.getByRole("button", { name: "Sharing" }));
     await user.click(await screen.findByRole("button", { name: "Revoke" }));
     const revokeDialog = screen.getByRole("dialog", { name: "Revoke public link" });
     expect(within(revokeDialog).getByText("sample_001.fastq.gz")).toBeInTheDocument();

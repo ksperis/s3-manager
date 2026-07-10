@@ -118,7 +118,7 @@ export default function BrowserFoldersPanel({
         </button>
       </div>
 
-      <section className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1" aria-label="Current bucket">
+      <section className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1" aria-label={`Current ${normalizedWorkspaceNoun}`}>
         <div className="min-w-0">
           <button
             type="button"

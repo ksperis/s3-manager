@@ -874,6 +874,9 @@ describe("BrowserPage interactions", () => {
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
     expect(screen.getByRole("button", { name: "Selected storage space" })).toHaveTextContent("Research Data");
+    expect(screen.getByRole("textbox", { name: "Search files" })).toHaveAttribute("placeholder", "Search files");
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Bucket" })).not.toBeInTheDocument();
     expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
     expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
     expect(listBrowserObjectsMock).toHaveBeenCalledWith(
@@ -933,6 +936,33 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
+  });
+
+  it("uses Portal storage-space labels in the embedded inspector", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "full",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+      defaultShowInspector: true,
+    });
+
+    await findRowByLabel("a.txt");
+    expect(screen.getByRole("tab", { name: "Storage Space" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Bucket" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Storage Space" }));
+    const storageSpacePanel = screen.getByRole("tabpanel", { name: "Storage Space" });
+    expect(within(storageSpacePanel).getByText("Storage Space overview")).toBeInTheDocument();
+    expect(await within(storageSpacePanel).findByText("File count")).toBeInTheDocument();
+    expect(within(storageSpacePanel).queryByText("Object count")).not.toBeInTheDocument();
+    expect(within(storageSpacePanel).getByRole("button", { name: "Multipart uploads" })).toBeInTheDocument();
+    expect(
+      await within(storageSpacePanel).findByText("Only user-facing storage details are shown in this Portal view."),
+    ).toBeInTheDocument();
   });
 
   it("keeps root Browser bucket labels while preserving Portal-scoped requests", async () => {

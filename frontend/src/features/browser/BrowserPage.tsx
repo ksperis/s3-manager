@@ -947,7 +947,10 @@ export default function BrowserPage({
   const usePortalWorkspaceLabels = isPortalBrowserSurface && !isMainBrowserPath;
   const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
   const workspaceNounPlural = `${workspaceNoun}s`;
+  const workspaceNounCapitalized = usePortalWorkspaceLabels ? "Storage Space" : "Bucket";
   const workspaceNounTitle = usePortalWorkspaceLabels ? "Storage Spaces" : "Buckets";
+  const workspaceObjectNoun = usePortalWorkspaceLabels ? "file" : "object";
+  const workspaceObjectNounPlural = `${workspaceObjectNoun}s`;
   const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
   const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
   const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
@@ -8066,7 +8069,7 @@ export default function BrowserPage({
     const files = await collectDroppedFiles(event.dataTransfer);
     if (files.length === 0) return;
     if (!bucketName || !hasS3AccountContext) {
-      setStatusMessage("Select a bucket before uploading.");
+      setStatusMessage(`Select a ${workspaceNoun} before uploading.`);
       return;
     }
     handleUploadFiles(files);
@@ -12422,8 +12425,8 @@ export default function BrowserPage({
           type="text"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Search objects"
-          aria-label="Search objects"
+          placeholder={`Search ${workspaceObjectNounPlural}`}
+          aria-label={`Search ${workspaceObjectNounPlural}`}
           className={`${browserSearchInputClasses} pl-9 ${
             isPortalBasicProfile ? "pr-3" : "pr-9"
           } normal-case`}
@@ -13346,7 +13349,7 @@ export default function BrowserPage({
                               disabled={!bucketName || !hasS3AccountContext}
                               title={
                                 !bucketName
-                                  ? "Select a bucket to configure it."
+                                  ? `Select a ${workspaceNoun} to configure it.`
                                   : undefined
                               }
                             >
@@ -13569,7 +13572,7 @@ export default function BrowserPage({
                       <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
                         {bucketName
                           ? `${bucketName}/${normalizedPrefix}`
-                          : "Select a bucket first"}
+                          : `Select a ${workspaceNoun} first`}
                       </div>
                     </div>
                   </div>
@@ -13736,14 +13739,14 @@ export default function BrowserPage({
                       {objectsLoading && listItems.length === 0 && (
                         <TableEmptyState
                           colSpan={objectTableColSpan}
-                          message="Loading objects..."
+                          message={`Loading ${workspaceObjectNounPlural}...`}
                           className="py-10 text-center"
                         />
                       )}
                       {!objectsLoading && !bucketName && (
                         <TableEmptyState
                           colSpan={objectTableColSpan}
-                          message="Select a bucket to browse objects."
+                          message={`Select a ${workspaceNoun} to browse ${workspaceObjectNounPlural}.`}
                           className="py-10 text-center"
                         />
                       )}
@@ -14096,7 +14099,7 @@ export default function BrowserPage({
                           : inspectorTabInactiveClasses
                       }`}
                     >
-                      Bucket
+                      {workspaceNounCapitalized}
                     </button>
                     <button
                       type="button"
@@ -14128,7 +14131,7 @@ export default function BrowserPage({
                             Current location
                           </p>
                           <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
-                            {currentPath || "Select a bucket to get started."}
+                            {currentPath || `Select a ${workspaceNoun} to get started.`}
                           </p>
                         </div>
                         <div className="space-y-3">
@@ -14212,7 +14215,9 @@ export default function BrowserPage({
                             )}
                             {!isVersioningEnabled && (
                               <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                                Versioning is disabled for this bucket.
+                                {usePortalWorkspaceLabels
+                                  ? "File history is not available in this view."
+                                  : "Versioning is disabled for this bucket."}
                               </p>
                             )}
                             <div className="mt-2 grid gap-2">
@@ -14299,10 +14304,10 @@ export default function BrowserPage({
                         <div className="space-y-3">
                           <div className={inspectorSectionCardClasses}>
                             <p className={inspectorSectionTitleClasses}>
-                              Bucket overview
+                              {`${workspaceNounCapitalized} overview`}
                             </p>
                             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                              {bucketName || "Select a bucket to inspect."}
+                              {bucketName || `Select a ${workspaceNoun} to inspect.`}
                             </p>
                           </div>
 
@@ -14324,15 +14329,17 @@ export default function BrowserPage({
                                   Configure
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                className={chromeBulkActionClasses}
-                                onClick={openMultipartUploadsModal}
-                                disabled={!bucketName || !hasS3AccountContext}
-                              >
-                                <UploadIcon className="h-3.5 w-3.5" />
-                                Multipart uploads
-                              </button>
+                              {!isPortalBasicProfile && (
+                                <button
+                                  type="button"
+                                  className={chromeBulkActionClasses}
+                                  onClick={openMultipartUploadsModal}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <UploadIcon className="h-3.5 w-3.5" />
+                                  Multipart uploads
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className={chromeBulkActionClasses}
@@ -14355,14 +14362,14 @@ export default function BrowserPage({
 
                           {!bucketName || !hasS3AccountContext ? (
                             <div className={inspectorEmptyStateClasses}>
-                              Select a bucket to load bucket stats and features.
+                              {`Select a ${workspaceNoun} to load ${workspaceNoun} stats and features.`}
                             </div>
                           ) : (
                             <div className="space-y-3">
                               {bucketInspectorLoading &&
                                 !bucketInspectorData && (
                                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                    Loading bucket overview...
+                                    {`Loading ${workspaceNoun} overview...`}
                                   </p>
                                 )}
                               {bucketInspectorError && (
@@ -14399,7 +14406,9 @@ export default function BrowserPage({
                                   </div>
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-slate-500">
-                                      Object count
+                                      {usePortalWorkspaceLabels
+                                        ? "File count"
+                                        : "Object count"}
                                     </span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">
                                       {bucketInspectorData?.object_count != null
@@ -14475,8 +14484,9 @@ export default function BrowserPage({
                                   Features
                                 </p>
                                 <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                  States mirror the Manager bucket overview when
-                                  available.
+                                  {usePortalWorkspaceLabels
+                                    ? "Only user-facing storage details are shown in this Portal view."
+                                    : "States mirror the Manager bucket overview when available."}
                                 </p>
                                 <div className="mt-2 space-y-2">
                                   {bucketInspectorFeatures.length === 0 ? (

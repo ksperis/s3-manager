@@ -228,10 +228,19 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
-    expect(screen.getByText("Loading collaborators...")).toBeInTheDocument();
     expect(
       await screen.findByRole("heading", { name: "Collaborators" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Invite" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Invite people" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Review access" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: "Workspace members" }),
+    );
     const workspaceMembers = screen
       .getByRole("heading", { name: "Workspace members" })
       .closest("section");
@@ -275,9 +284,7 @@ describe("PortalSharesPage", () => {
     expect(
       screen.queryByRole("button", { name: "1 active link" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Share a space" }),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Review access" }));
     expect(
       screen.getByRole("heading", { name: "Review access" }),
     ).toBeInTheDocument();
@@ -288,17 +295,31 @@ describe("PortalSharesPage", () => {
       (await screen.findAllByText("viewer@example.com")).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { name: "Share a space" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Space to share")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("People")).toHaveClass("ui-control");
+      screen.queryByRole("heading", { name: "Invite people" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Space to share")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("People")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Access for editor@example.com" }),
-    ).toHaveClass("ui-control");
+      screen.queryByRole("combobox", { name: "Access for editor@example.com" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Expires")).not.toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Access for viewer@example.com" }),
     ).toHaveValue("Viewer");
+    await user.click(screen.getByRole("button", { name: "Invite" }));
+    await user.click(screen.getByRole("button", { name: "Invite people" }));
+    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
+    expect(within(inviteDialog).getByLabelText("Space to share")).toHaveClass(
+      "ui-control",
+    );
+    expect(within(inviteDialog).getByLabelText("People")).toHaveClass(
+      "ui-control",
+    );
+    expect(
+      within(inviteDialog).getByRole("combobox", {
+        name: "Access for editor@example.com",
+      }),
+    ).toHaveClass("ui-control");
     await waitFor(() => {
       expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
     });
@@ -310,8 +331,8 @@ describe("PortalSharesPage", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
-  it("shows the collaboration guide before first sharing and lets users dismiss it", async () => {
-    const user = userEvent.setup();
+  it("shows the collaboration guide only before the first space", async () => {
+    mocks.hookResult.workspace.spaces = [];
     mocks.listSharesMock.mockResolvedValue([]);
     mocks.listPublicLinksMock.mockResolvedValue([]);
 
@@ -323,11 +344,44 @@ describe("PortalSharesPage", () => {
     expect(
       screen.getByRole("heading", { name: "Pick a space" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Choose people" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Create a space" })).toHaveAttribute(
       "href",
-      "#share-space",
+      "/portal/storage-spaces?create=1",
     );
+    expect(
+      screen.queryByRole("button", { name: "Choose people" }),
+    ).not.toBeInTheDocument();
+  });
 
+  it("does not repeat the collaboration guide once a space exists", async () => {
+    mocks.hookResult.workspace.spaces[0].shareCount = 0;
+    mocks.listSharesMock.mockResolvedValue([]);
+    mocks.listPublicLinksMock.mockResolvedValue([]);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Invite people" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Start collaborating" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Pick a space" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets users dismiss the collaboration guide", async () => {
+    const user = userEvent.setup();
+    mocks.hookResult.workspace.spaces = [];
+    mocks.listSharesMock.mockResolvedValue([]);
+    mocks.listPublicLinksMock.mockResolvedValue([]);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "Start collaborating" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Dismiss guide" }));
 
     expect(
@@ -345,6 +399,9 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Workspace members" }),
+    );
     const workspaceMembers = (
       await screen.findByRole("heading", { name: "Workspace members" })
     ).closest("section");
@@ -375,8 +432,18 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Share a space" }),
+      await screen.findByRole("heading", { name: "Review access" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "People with access" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Invite" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Invite people" }),
+    );
+    expect(screen.getByLabelText("Space to share")).toHaveValue(
+      "research-data",
+    );
     await waitFor(() => {
       expect(mocks.listShareCandidatesMock).toHaveBeenCalledWith(
         "101",
@@ -401,18 +468,25 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: "People with access" }),
+      await screen.findByRole("button", { name: "Invite people" }),
     );
+    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
     await waitFor(() => {
-      expect(screen.getAllByText("Editor User").length).toBeGreaterThan(0);
+      expect(
+        within(inviteDialog).getAllByText("Editor User").length,
+      ).toBeGreaterThan(0);
     });
-    const checkboxes = screen.getAllByRole("checkbox");
+    const checkboxes = within(inviteDialog).getAllByRole("checkbox");
     await user.click(checkboxes[1]);
     await user.selectOptions(
-      screen.getByRole("combobox", { name: "Access for editor@example.com" }),
+      within(inviteDialog).getByRole("combobox", {
+        name: "Access for editor@example.com",
+      }),
       "Owner",
     );
-    await user.click(screen.getByRole("button", { name: "Invite people" }));
+    await user.click(
+      within(inviteDialog).getByRole("button", { name: "Invite people" }),
+    );
 
     await waitFor(() => {
       expect(mocks.grantShareMock).toHaveBeenCalledWith(
@@ -432,10 +506,13 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: "People with access" }),
+      await screen.findByRole("button", { name: "Invite people" }),
     );
+    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
     await user.type(
-      await screen.findByPlaceholderText("Search people by name or email..."),
+      await within(inviteDialog).findByPlaceholderText(
+        "Search people by name or email...",
+      ),
       "missing@example.org",
     );
 
@@ -444,7 +521,9 @@ describe("PortalSharesPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "Request collaborator access" }),
+      within(inviteDialog).getByRole("button", {
+        name: "Request collaborator access",
+      }),
     );
     const dialog = screen.getByRole("dialog", {
       name: "Request collaborator access",
@@ -552,18 +631,25 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     await user.click(
-      await screen.findByRole("button", { name: "People with access" }),
+      await screen.findByRole("button", { name: "Invite people" }),
     );
+    const inviteDialog = screen.getByRole("dialog", { name: "Invite people" });
     await waitFor(() => {
-      expect(screen.getAllByText("Editor User").length).toBeGreaterThan(0);
+      expect(
+        within(inviteDialog).getAllByText("Editor User").length,
+      ).toBeGreaterThan(0);
     });
-    const checkboxes = screen.getAllByRole("checkbox");
+    const checkboxes = within(inviteDialog).getAllByRole("checkbox");
     await user.click(checkboxes[1]);
     await user.selectOptions(
-      screen.getByRole("combobox", { name: "Access for editor@example.com" }),
+      within(inviteDialog).getByRole("combobox", {
+        name: "Access for editor@example.com",
+      }),
       "Editor",
     );
-    await user.click(screen.getByRole("button", { name: "Invite people" }));
+    await user.click(
+      within(inviteDialog).getByRole("button", { name: "Invite people" }),
+    );
 
     await waitFor(() => {
       expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith(
@@ -593,6 +679,9 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Review access" }),
+    );
     await user.click(
       await screen.findByRole("button", { name: "Public links" }),
     );
@@ -645,6 +734,9 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     await user.click(
+      await screen.findByRole("button", { name: "Review access" }),
+    );
+    await user.click(
       await screen.findByRole("button", { name: "People with access" }),
     );
     expect(
@@ -674,6 +766,9 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     await user.click(
+      await screen.findByRole("button", { name: "Review access" }),
+    );
+    await user.click(
       await screen.findByRole("button", { name: "Public links" }),
     );
     expect(
@@ -691,6 +786,9 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Review access" }),
+    );
     await user.click(
       await screen.findByRole("button", { name: "People with access" }),
     );

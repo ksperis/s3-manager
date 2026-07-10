@@ -99,6 +99,7 @@ export default function PortalAccessKeysPage() {
   const [activeTab, setActiveTab] = useState<AccessKeysTab>("connect");
   const [guideDismissed, setGuideDismissed] = useState(false);
   const [createWizardOpen, setCreateWizardOpen] = useState(false);
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<CreateTarget>("self");
   const [externalEmail, setExternalEmail] = useState("");
   const [externalPermission, setExternalPermission] = useState<ExternalPermission>("read_only");
@@ -264,6 +265,14 @@ export default function PortalAccessKeysPage() {
     : connectionSpaceId;
   const connectionEndpointLabel = selectedConnection?.endpoint?.original || state?.s3_endpoint || t({ en: "Configured storage service", fr: "Service de stockage configuré", de: "Konfigurierter Speicherdienst" });
   const cyberduckBookmarkUnavailable = Boolean(selectedConnection && !selectedConnection.endpoint);
+  const showStarterGuide =
+    Boolean(state) &&
+    hasAccountContext &&
+    !connectionSpacesLoading &&
+    !connectionSpacesError &&
+    visibleKeys.length === 0 &&
+    connectionSpaces.length === 0 &&
+    !guideDismissed;
 
   useEffect(() => {
     if (!selectedConnectionKey && activeKeys[0]) {
@@ -560,9 +569,9 @@ export default function PortalAccessKeysPage() {
       {state && canManageAccessKeys && (
         <PageBanner tone="info">
           {t({
-            en: `Connection downloads include the service address ${state.s3_endpoint || "for the configured storage service"}. Disabling pauses access for external tools; deleting removes it permanently.`,
-            fr: `Les téléchargements de connexion incluent l'adresse du service ${state.s3_endpoint || "de stockage configuré"}. La désactivation suspend l'accès des outils externes; la suppression le retire définitivement.`,
-            de: `Verbindungsdownloads enthalten die Serviceadresse ${state.s3_endpoint || "des konfigurierten Speicherdienstes"}. Deaktivieren pausiert den Zugriff für externe Werkzeuge; Löschen entfernt ihn dauerhaft.`,
+            en: "Use external-tool access only when someone cannot work through Portal sharing. Each access can be paused or removed without changing the space itself.",
+            fr: "Utilisez l'accès aux outils externes uniquement lorsqu'une personne ne peut pas travailler via le partage Portal. Chaque accès peut être suspendu ou supprimé sans modifier l'espace lui-même.",
+            de: "Nutzen Sie Zugriff für externe Werkzeuge nur, wenn jemand nicht über Portal-Freigaben arbeiten kann. Jeder Zugriff kann pausiert oder entfernt werden, ohne den Bereich selbst zu ändern.",
           })}
         </PageBanner>
       )}
@@ -590,7 +599,7 @@ export default function PortalAccessKeysPage() {
         variant="bar"
       />
 
-      {activeTab === "connect" && state && hasAccountContext && visibleKeys.length === 0 && !guideDismissed ? (
+      {activeTab === "connect" && showStarterGuide ? (
         <section className="ui-surface-muted p-4" aria-labelledby="portal-external-tool-guide">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
@@ -698,73 +707,141 @@ export default function PortalAccessKeysPage() {
               </h2>
               <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
                 {t({
-                  en: "Choose tool access and a space, then download ready-to-use connection details.",
-                  fr: "Choisissez un accès outil et un espace, puis téléchargez les informations de connexion prêtes à l'emploi.",
-                  de: "Wählen Sie Werkzeugzugriff und Bereich aus und laden Sie fertige Verbindungsdetails herunter.",
+                  en: "Choose who the external app represents, pick the space it should reach, then download setup details for the app.",
+                  fr: "Choisissez qui l'application externe représente, l'espace qu'elle doit atteindre, puis téléchargez les détails de configuration.",
+                  de: "Wählen Sie, wen die externe App vertritt, welchen Bereich sie erreichen soll, und laden Sie dann die Einrichtungsdetails herunter.",
                 })}
               </p>
             </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
+              <div className={uiLabelClass}>{t({ en: "1. Select access", fr: "1. Sélectionner l'accès", de: "1. Zugriff wählen" })}</div>
+              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                {t({
+                  en: "Use your own access for personal apps, or create a limited access for a collaborator or partner.",
+                  fr: "Utilisez votre propre accès pour vos applications, ou créez un accès limité pour un collaborateur ou partenaire.",
+                  de: "Nutzen Sie Ihren eigenen Zugriff für persönliche Apps oder erstellen Sie begrenzten Zugriff für Mitwirkende oder Partner.",
+                })}
+              </p>
+            </div>
+            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
+              <div className={uiLabelClass}>{t({ en: "2. Choose space", fr: "2. Choisir l'espace", de: "2. Bereich wählen" })}</div>
+              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                {t({
+                  en: "Keep the app focused on the files it needs instead of exposing the whole project.",
+                  fr: "Gardez l'application centrée sur les fichiers nécessaires plutôt que d'exposer tout le projet.",
+                  de: "Beschränken Sie die App auf die benötigten Dateien, statt das ganze Projekt offenzulegen.",
+                })}
+              </p>
+            </div>
+            <div className={cx("min-w-0 p-3", uiPanelMutedClass)}>
+              <div className={uiLabelClass}>{t({ en: "3. Download setup", fr: "3. Télécharger la configuration", de: "3. Einrichtung laden" })}</div>
+              <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                {t({
+                  en: "Use the ready-made file when possible; open manual details only when the app asks for them.",
+                  fr: "Utilisez le fichier prêt à l'emploi si possible; ouvrez les détails manuels seulement si l'application les demande.",
+                  de: "Nutzen Sie möglichst die fertige Datei; öffnen Sie manuelle Details nur, wenn die App danach fragt.",
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className={cx("flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between", uiPanelMutedClass)}>
+            <div className="min-w-0">
+              <p className={cx("ui-body font-semibold", uiTitleTextClass)}>
+                {t({ en: "Ready to set up an app?", fr: "Prêt à configurer une application ?", de: "Bereit, eine App einzurichten?" })}
+              </p>
+              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                {t({
+                  en: "Open a focused dialog to pick the access, choose the space, and download the setup file.",
+                  fr: "Ouvrez une fenêtre dédiée pour choisir l'accès, sélectionner l'espace et télécharger le fichier de configuration.",
+                  de: "Öffnen Sie einen fokussierten Dialog, um Zugriff und Bereich auszuwählen und die Einrichtung herunterzuladen.",
+                })}
+              </p>
+            </div>
+            <UiButton type="button" onClick={() => setConnectionDialogOpen(true)}>
+              {t({ en: "Download setup", fr: "Télécharger la configuration", de: "Einrichtung herunterladen" })}
+            </UiButton>
+          </div>
+        </section>
+      ) : null}
+
+      {connectionDialogOpen && activeTab === "connect" && state && hasAccountContext ? (
+        <Modal
+          title={t({ en: "Download setup details", fr: "Télécharger les détails de configuration", de: "Einrichtungsdetails herunterladen" })}
+          onClose={() => setConnectionDialogOpen(false)}
+          maxWidthClass="max-w-3xl"
+        >
+          <div className="space-y-4">
+            <p className={cx("ui-caption", uiMutedTextClass)}>
+              {t({
+                en: "Choose who the external app represents, pick the space it should reach, then download the file or details the app needs.",
+                fr: "Choisissez qui l'application externe représente, l'espace qu'elle doit atteindre, puis téléchargez le fichier ou les détails nécessaires.",
+                de: "Wählen Sie, wen die externe App vertritt, welchen Bereich sie erreichen soll, und laden Sie die benötigten Dateien oder Details herunter.",
+              })}
+            </p>
             {selectedConnectionKeyBucket ? (
-              <span className={cx("rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
+              <span className={cx("inline-flex rounded-md px-2 py-1 ui-caption font-semibold", uiPanelMutedClass)}>
                 {t({ en: "Space fixed for this access", fr: "Espace fixé pour cet accès", de: "Bereich für diesen Zugriff festgelegt" })}
               </span>
             ) : null}
-          </div>
+            {connectionSpacesError ? <PageBanner tone="warning">{connectionSpacesError}</PageBanner> : null}
 
-          {connectionSpacesError ? <PageBanner tone="warning">{connectionSpacesError}</PageBanner> : null}
+            <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)]">
+              <label className="space-y-1">
+                <span className={uiLabelClass}>{t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}</span>
+                <select
+                  className={uiInputClass}
+                  value={selectedConnectionKey?.access_key_id ?? ""}
+                  onChange={(event) => setConnectionKeyId(event.target.value)}
+                  aria-label={t({ en: "Connection tool access", fr: "Accès outil de connexion", de: "Werkzeugzugriff für Verbindung" })}
+                  disabled={activeKeys.length === 0}
+                >
+                  {activeKeys.length === 0 ? (
+                    <option value="">{t({ en: "No active access", fr: "Aucun accès actif", de: "Kein aktiver Zugriff" })}</option>
+                  ) : (
+                    activeKeys.map((key) => (
+                      <option key={key.access_key_id} value={key.access_key_id}>
+                        {key.access_key_id} - {keyScopeLabel(key, t)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className={uiLabelClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</span>
+                <select
+                  className={uiInputClass}
+                  value={connectionSpaceSelectValue}
+                  onChange={(event) => setConnectionSpaceId(event.target.value)}
+                  aria-label={t({ en: "Connection space", fr: "Espace de connexion", de: "Verbindungsbereich" })}
+                  disabled={connectionSpacesLoading || connectionSpaces.length === 0 || Boolean(selectedConnectionKeyBucket)}
+                >
+                  {connectionSpacesLoading ? (
+                    <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
+                  ) : selectedConnectionKeyBucket && !selectedConnectionSpace ? (
+                    <option value={selectedConnectionKeyBucket}>{selectedConnectionKey?.storage_space_name || selectedConnectionKeyBucket}</option>
+                  ) : connectionSpaces.length === 0 ? (
+                    <option value="">{t({ en: "No space", fr: "Aucun espace", de: "Kein Bereich" })}</option>
+                  ) : (
+                    connectionSpaces.map((space) => (
+                      <option key={space.id} value={space.id}>
+                        {space.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+            </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto] lg:items-end">
-            <label className="space-y-1">
-              <span className={uiLabelClass}>{t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}</span>
-              <select
-                className={uiInputClass}
-                value={selectedConnectionKey?.access_key_id ?? ""}
-                onChange={(event) => setConnectionKeyId(event.target.value)}
-                aria-label={t({ en: "Connection tool access", fr: "Accès outil de connexion", de: "Werkzeugzugriff für Verbindung" })}
-                disabled={activeKeys.length === 0}
-              >
-                {activeKeys.length === 0 ? (
-                  <option value="">{t({ en: "No active access", fr: "Aucun accès actif", de: "Kein aktiver Zugriff" })}</option>
-                ) : (
-                  activeKeys.map((key) => (
-                    <option key={key.access_key_id} value={key.access_key_id}>
-                      {key.access_key_id} - {keyScopeLabel(key, t)}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className={uiLabelClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</span>
-              <select
-                className={uiInputClass}
-                value={connectionSpaceSelectValue}
-                onChange={(event) => setConnectionSpaceId(event.target.value)}
-                aria-label={t({ en: "Connection space", fr: "Espace de connexion", de: "Verbindungsbereich" })}
-                disabled={connectionSpacesLoading || connectionSpaces.length === 0 || Boolean(selectedConnectionKeyBucket)}
-              >
-                {connectionSpacesLoading ? (
-                  <option value="">{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</option>
-                ) : selectedConnectionKeyBucket && !selectedConnectionSpace ? (
-                  <option value={selectedConnectionKeyBucket}>{selectedConnectionKey?.storage_space_name || selectedConnectionKeyBucket}</option>
-                ) : connectionSpaces.length === 0 ? (
-                  <option value="">{t({ en: "No space", fr: "Aucun espace", de: "Kein Bereich" })}</option>
-                ) : (
-                  connectionSpaces.map((space) => (
-                    <option key={space.id} value={space.id}>
-                      {space.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
             <div className="flex flex-wrap gap-2">
               <UiButton
                 type="button"
                 variant="secondary"
                 onClick={handleDownloadCyberduckBookmark}
                 disabled={!selectedConnection || !selectedConnection.endpoint}
-                className="h-9"
               >
                 {t({ en: "Cyberduck bookmark", fr: "Favori Cyberduck", de: "Cyberduck-Bookmark" })}
               </UiButton>
@@ -773,53 +850,64 @@ export default function PortalAccessKeysPage() {
                 variant="secondary"
                 onClick={() => handleDownloadConnectionSheet(false)}
                 disabled={!selectedConnection}
-                className="h-9"
               >
                 {t({ en: "Connection details", fr: "Détails de connexion", de: "Verbindungsdetails" })}
               </UiButton>
               {showSecretConnectionDownload ? (
-                <UiButton type="button" variant="warning" onClick={() => handleDownloadConnectionSheet(true)} className="h-9">
+                <UiButton type="button" variant="warning" onClick={() => handleDownloadConnectionSheet(true)}>
                   {t({ en: "Details with secret", fr: "Détails avec secret", de: "Details mit Secret" })}
                 </UiButton>
               ) : null}
             </div>
+
+            {cyberduckBookmarkUnavailable ? (
+              <PageBanner tone="info">
+                {t({
+                  en: "Cyberduck bookmark download is unavailable because this storage service does not expose a valid service address here. Generic connection details are still available.",
+                  fr: "Le téléchargement du favori Cyberduck est indisponible car ce service de stockage n'expose pas d'adresse de service valide ici. Les détails de connexion génériques restent disponibles.",
+                  de: "Der Cyberduck-Bookmark ist nicht verfügbar, weil hier keine gültige Serviceadresse bereitsteht. Allgemeine Verbindungsdetails sind weiterhin verfügbar.",
+                })}
+              </PageBanner>
+            ) : null}
+
+            <details className={cx("group p-3", uiPanelMutedClass)}>
+              <summary className={cx("cursor-pointer ui-body font-semibold", uiTitleTextClass)}>
+                {t({ en: "Manual setup details", fr: "Détails de configuration manuelle", de: "Manuelle Einrichtungsdetails" })}
+              </summary>
+              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                {t({
+                  en: "Open these only when an app asks for a service address, storage name, access ID, or secret.",
+                  fr: "Ouvrez-les uniquement lorsqu'une application demande une adresse de service, un nom de stockage, un ID d'accès ou un secret.",
+                  de: "Öffnen Sie dies nur, wenn eine App nach Serviceadresse, Speichername, Zugriffs-ID oder Secret fragt.",
+                })}
+              </p>
+              <dl className="mt-3 grid gap-3 ui-caption md:grid-cols-4">
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Service address", fr: "Adresse du service", de: "Serviceadresse" })}</dt>
+                  <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
+                </div>
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
+                  <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
+                </div>
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Storage name", fr: "Nom de stockage", de: "Speichername" })}</dt>
+                  <dd className={cx("break-all font-mono font-semibold", uiTitleTextClass)}>{selectedConnection?.bucketName ?? "-"}</dd>
+                </div>
+                <div>
+                  <dt className={uiMutedTextClass}>{t({ en: "Secret", fr: "Secret", de: "Secret" })}</dt>
+                  <dd className={cx("font-semibold", uiTitleTextClass)}>
+                    {!selectedConnection
+                      ? t({ en: "Create or enable access first", fr: "Créez ou activez d'abord un accès", de: "Erstellen oder aktivieren Sie zuerst einen Zugriff" })
+                      : showSecretConnectionDownload
+                      ? t({ en: "Available once for this new access", fr: "Disponible une fois pour ce nouvel accès", de: "Einmalig für diesen neuen Zugriff verfügbar" })
+                      : t({ en: "Not shown again", fr: "Non réaffiché", de: "Wird nicht erneut angezeigt" })}
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </div>
-
-          {cyberduckBookmarkUnavailable ? (
-            <PageBanner tone="info">
-              {t({
-                en: "Cyberduck bookmark download is unavailable because this storage service does not expose a valid service address here. Generic connection details are still available.",
-                fr: "Le téléchargement du favori Cyberduck est indisponible car ce service de stockage n'expose pas d'adresse de service valide ici. Les détails de connexion génériques restent disponibles.",
-                de: "Der Cyberduck-Bookmark ist nicht verfügbar, weil hier keine gültige Serviceadresse bereitsteht. Allgemeine Verbindungsdetails sind weiterhin verfügbar.",
-              })}
-            </PageBanner>
-          ) : null}
-
-          <dl className="grid gap-3 ui-caption md:grid-cols-4">
-            <div>
-              <dt className={uiMutedTextClass}>{t({ en: "Service address", fr: "Adresse du service", de: "Serviceadresse" })}</dt>
-              <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
-            </div>
-            <div>
-              <dt className={uiMutedTextClass}>{t({ en: "Space", fr: "Espace", de: "Bereich" })}</dt>
-              <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className={uiMutedTextClass}>{t({ en: "Storage name for external tools", fr: "Nom de stockage pour outils externes", de: "Speichername für externe Werkzeuge" })}</dt>
-              <dd className={cx("break-all font-mono font-semibold", uiTitleTextClass)}>{selectedConnection?.bucketName ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className={uiMutedTextClass}>{t({ en: "Secret", fr: "Secret", de: "Secret" })}</dt>
-              <dd className={cx("font-semibold", uiTitleTextClass)}>
-                {!selectedConnection
-                  ? t({ en: "Create or enable access first", fr: "Créez ou activez d'abord un accès", de: "Erstellen oder aktivieren Sie zuerst einen Zugriff" })
-                  : showSecretConnectionDownload
-                  ? t({ en: "Available once for this new access", fr: "Disponible une fois pour ce nouvel accès", de: "Einmalig für diesen neuen Zugriff verfügbar" })
-                  : t({ en: "Not shown again", fr: "Non réaffiché", de: "Wird nicht erneut angezeigt" })}
-              </dd>
-            </div>
-          </dl>
-        </section>
+        </Modal>
       ) : null}
 
       {activeTab === "access-list" && accountLoading ? (
@@ -835,9 +923,11 @@ export default function PortalAccessKeysPage() {
           <ListToolbar
             title={t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}
             description={
-              state?.s3_endpoint
-                ? t({ en: `Connection downloads include ${state.s3_endpoint}. Store secrets when they are created; they cannot be shown again. The Portal runtime access is hidden from this list.`, fr: `Les téléchargements de connexion incluent ${state.s3_endpoint}. Enregistrez les secrets à la création; ils ne pourront plus être affichés. L'accès runtime de Portal est masqué dans cette liste.`, de: `Verbindungsdownloads enthalten ${state.s3_endpoint}. Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Laufzeitzugriff ist in dieser Liste ausgeblendet.` })
-                : t({ en: "Store secrets when they are created; they cannot be shown again. The Portal runtime access is hidden from this list.", fr: "Enregistrez les secrets à la création; ils ne pourront plus être affichés. L'accès runtime de Portal est masqué dans cette liste.", de: "Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Der Portal-Laufzeitzugriff ist in dieser Liste ausgeblendet." })
+              t({
+                en: "Store secrets when they are created; they cannot be shown again. Portal's own runtime access is hidden from this list.",
+                fr: "Enregistrez les secrets à la création; ils ne pourront plus être affichés. L'accès runtime propre à Portal est masqué dans cette liste.",
+                de: "Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Portals eigener Laufzeitzugriff ist in dieser Liste ausgeblendet.",
+              })
             }
             showHeading={false}
             countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} access`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} accès`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Zugriffe` })}

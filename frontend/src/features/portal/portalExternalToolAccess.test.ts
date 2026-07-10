@@ -75,9 +75,10 @@ describe("portalExternalToolAccess", () => {
     const withoutSecret = buildGenericConnectionSheet(connection());
     const withSecret = buildGenericConnectionSheet(connection(), { secretAccessKey: "SK-EXT" });
 
-    expect(withoutSecret).toContain("Secret key: Not included in this file");
+    expect(withoutSecret).toContain("Storage name for external tools: research-data-bucket");
+    expect(withoutSecret).toContain("Secret: Not included in this file");
     expect(withoutSecret).not.toContain("SK-EXT");
     expect(withSecret).toContain("This file contains a one-time secret.");
-    expect(withSecret).toContain("Secret key: SK-EXT");
+    expect(withSecret).toContain("Secret: SK-EXT");
   });
 });

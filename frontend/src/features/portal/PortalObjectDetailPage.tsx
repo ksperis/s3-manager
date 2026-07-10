@@ -40,7 +40,7 @@ import { portalDateTimeLabel, portalPublicLinkStatusLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
-type ObjectTab = "preview" | "details" | "events";
+type ObjectTab = "preview" | "sharing" | "details" | "events";
 
 type PendingObjectAction =
   | { type: "delete-object" }
@@ -258,7 +258,7 @@ export default function PortalObjectDetailPage() {
   const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const openPublicLinkDialog = () => {
     if (!canCreatePublicLink) return;
-    setActiveTab("preview");
+    setActiveTab("sharing");
     setLinkExpiration("");
     setPublicLinkDialogOpen(true);
   };
@@ -486,6 +486,7 @@ export default function PortalObjectDetailPage() {
         <PageTabs
           tabs={[
             { id: "preview", label: t({ en: "Preview", fr: "Aperçu", de: "Vorschau" }) },
+            { id: "sharing", label: t({ en: "Sharing", fr: "Partage", de: "Freigabe" }) },
             { id: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
             { id: "events", label: t({ en: "Events", fr: "Événements", de: "Ereignisse" }) },
           ]}
@@ -527,40 +528,42 @@ export default function PortalObjectDetailPage() {
               </div>
             </UiCard>
           </section>
-
-          {space.role === "Owner" ? (
-            <UiCard
-              title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
-              description={t({
-                en: "Share this file outside the workspace only when anyone with the link should have access.",
-                fr: "Partagez ce fichier hors de l'espace uniquement lorsque toute personne avec le lien peut y accéder.",
-                de: "Geben Sie diese Datei außerhalb des Workspace nur frei, wenn alle mit dem Link Zugriff haben dürfen.",
-              })}
-              actions={
-                <UiButton size="sm" variant="secondary" onClick={openPublicLinkDialog} disabled={!canCreatePublicLink || linkBusy}>
-                  {t({ en: "Create link", fr: "Créer un lien", de: "Link erstellen" })}
-                </UiButton>
-              }
-            >
-              <div id="portal-file-public-links" className="scroll-mt-24" />
-              {publicLinkUnavailableReason ? (
-                <div className={cx("mb-3 text-[11px] font-semibold", uiMutedTextClass)}>
-                  {t({ en: `Sharing note: ${publicLinkUnavailableReason}`, fr: `Note de partage : ${publicLinkUnavailableReason}`, de: `Freigabehinweis: ${publicLinkUnavailableReason}` })}
-                </div>
-              ) : null}
-              <DataTableShell
-                columns={publicLinkColumns}
-                rows={publicLinks}
-                rowKey={(link) => link.id}
-                status={publicLinksTableStatus}
-                loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
-                errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
-                emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
-                responsiveCards
-              />
-            </UiCard>
-          ) : null}
         </div>
+      ) : null}
+
+      {activeTab === "sharing" ? (
+        <UiCard
+          title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
+          description={t({
+            en: "Share this file outside the workspace only when anyone with the link should have access.",
+            fr: "Partagez ce fichier hors de l'espace uniquement lorsque toute personne avec le lien peut y accéder.",
+            de: "Geben Sie diese Datei außerhalb des Workspace nur frei, wenn alle mit dem Link Zugriff haben dürfen.",
+          })}
+          actions={
+            <UiButton size="sm" variant="secondary" onClick={openPublicLinkDialog} disabled={!canCreatePublicLink || linkBusy}>
+              {t({ en: "Create link", fr: "Créer un lien", de: "Link erstellen" })}
+            </UiButton>
+          }
+        >
+          <div id="portal-file-public-links" className="scroll-mt-24" />
+          {publicLinkUnavailableReason ? (
+            <div className={cx(uiCardMutedClass, "mb-3 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
+              {publicLinkUnavailableReason}
+            </div>
+          ) : null}
+          {space.role === "Owner" ? (
+            <DataTableShell
+              columns={publicLinkColumns}
+              rows={publicLinks}
+              rowKey={(link) => link.id}
+              status={publicLinksTableStatus}
+              loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
+              errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
+              emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
+              responsiveCards
+            />
+          ) : null}
+        </UiCard>
       ) : null}
 
       {activeTab === "details" ? (

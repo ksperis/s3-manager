@@ -31,6 +31,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
+import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -76,6 +77,7 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 const roles: PortalStorageSpaceRole[] = ["Viewer", "Editor", "Owner"];
 
 type ShareTab = "with" | "by" | "links";
+type CollaboratorsViewTab = "invite" | "members" | "access";
 type PendingShareAction =
   | { type: "revoke-share"; share: ShareRow }
   | { type: "revoke-public-link"; link: PortalPublicLink };
@@ -448,6 +450,8 @@ function CollaboratorsInventory({
 
 export default function PortalSharesPage() {
   const { locale, t } = useI18n();
+  const [activeViewTab, setActiveViewTab] =
+    useState<CollaboratorsViewTab>("invite");
   const [activeTab, setActiveTab] = useState<ShareTab>("with");
   const [apiShares, setApiShares] = useState<PortalStorageSpaceShare[] | null>(
     null,
@@ -470,6 +474,7 @@ export default function PortalSharesPage() {
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(
     null,
   );
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [collaborationGuideDismissed, setCollaborationGuideDismissed] =
     useState(false);
   const {
@@ -537,6 +542,15 @@ export default function PortalSharesPage() {
       requestedTab === "links"
     ) {
       setActiveTab(requestedTab);
+      setActiveViewTab("access");
+    }
+    const requestedView = params.get("view");
+    if (
+      requestedView === "invite" ||
+      requestedView === "members" ||
+      requestedView === "access"
+    ) {
+      setActiveViewTab(requestedView);
     }
     if (
       requestedSpaceId &&
@@ -773,6 +787,7 @@ export default function PortalSharesPage() {
           de: "Personen eingeladen.",
         }),
       );
+      setInviteDialogOpen(false);
       setActiveTab("by");
     } catch (err) {
       console.error(err);
@@ -972,6 +987,7 @@ export default function PortalSharesPage() {
   const invitedCollaboratorCount = rows.by.length;
   const sharedWithMeCount = rows.with.length;
   const collaborationStarted =
+    activeCollaboratorSpaces.length > 0 ||
     invitedCollaboratorCount > 0 ||
     sharedWithMeCount > 0 ||
     activePublicLinkCount > 0;
@@ -1164,8 +1180,9 @@ export default function PortalSharesPage() {
               })}
               action={
                 activeOwnerSpaces.length > 0 ? (
-                  <a
-                    href="#share-space"
+                  <button
+                    type="button"
+                    onClick={() => setInviteDialogOpen(true)}
                     className={cx(
                       uiButtonBaseClass,
                       uiButtonVariants.primary,
@@ -1177,7 +1194,7 @@ export default function PortalSharesPage() {
                       fr: "Choisir des personnes",
                       de: "Personen wählen",
                     })}
-                  </a>
+                  </button>
                 ) : (
                   <Link
                     to="/portal/storage-spaces?create=1"
@@ -1299,133 +1316,123 @@ export default function PortalSharesPage() {
         </section>
       ) : null}
 
-      {activeOwnerSpaces.length > 0 ? (
-        <div id="share-space">
-          <UiCard
-            title={t({
-              en: "Share a space",
-              fr: "Partager un espace",
-              de: "Bereich teilen",
-            })}
-          >
-            <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
-                <UiSelect
-                  label={t({ en: "Space", fr: "Espace", de: "Bereich" })}
-                  size="compact"
-                  className="h-9"
-                  value={selectedInviteSpace?.id ?? ""}
-                  onChange={(event) => setSelectedSpaceId(event.target.value)}
-                  aria-label={t({
-                    en: "Space to share",
-                    fr: "Espace à partager",
-                    de: "Zu teilender Bereich",
-                  })}
-                >
-                  {activeOwnerSpaces.map((space) => (
-                    <option key={space.id} value={space.id}>
-                      {space.name}
-                    </option>
-                  ))}
-                </UiSelect>
-                <div
-                  className={cx(
-                    "self-center text-xs font-medium",
-                    uiMutedTextClass,
-                  )}
-                >
-                  {t({
-                    en: "Choose people already added to this workspace, then decide whether they can view, edit, or manage the space.",
-                    fr: "Choisissez des personnes déjà ajoutées à ce workspace, puis décidez si elles peuvent consulter, modifier ou gérer l'espace.",
-                    de: "Wählen Sie Personen aus diesem Workspace aus und legen Sie fest, ob sie den Bereich ansehen, bearbeiten oder verwalten können.",
-                  })}
-                </div>
-                <UiButton
-                  disabled={
-                    !accountIdForApi ||
-                    !selectedInviteSpace ||
-                    selectedShareEntries.length === 0 ||
-                    busyShareId === "new"
-                  }
-                  onClick={handleCreateShare}
-                  className="h-9 px-3 py-1.5"
-                >
-                  {busyShareId === "new"
-                    ? t({
-                        en: "Inviting...",
-                        fr: "Invitation...",
-                        de: "Einladung läuft...",
-                      })
-                    : t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
-                </UiButton>
-              </div>
-              <PortalShareCandidatePicker
-                candidates={shareCandidates}
-                selectedRolesByUserId={selectedShareRolesByUserId}
-                query={shareCandidateQuery}
-                loading={shareCandidatesLoading}
-                error={null}
-                includeAlreadyShared
-                onQueryChange={setShareCandidateQuery}
-                onRoleChange={(userId, role) => {
-                  setSelectedShareRolesByUserId((current) => {
-                    const next = { ...current };
-                    if (role) {
-                      next[userId] = role;
-                    } else {
-                      delete next[userId];
-                    }
-                    return next;
-                  });
-                }}
-                onRequestPerson={handleRequestCollaboratorAccess}
-              />
-            </div>
-          </UiCard>
-        </div>
-      ) : (
-        <PageBanner tone="info">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {t({
-                en: "You do not own an active space yet. Create a space or ask an Owner to invite people.",
-                fr: "Vous ne possédez pas encore d'espace actif. Créez un espace ou demandez à un Owner d'inviter des personnes.",
-                de: "Sie besitzen noch keinen aktiven Bereich. Erstellen Sie einen Bereich oder bitten Sie einen Owner, Personen einzuladen.",
-              })}
-            </span>
-            <Link
-              to="/portal/storage-spaces"
-              className={cx(
-                uiButtonBaseClass,
-                uiButtonVariants.secondary,
-                "h-8 px-3 py-1 text-xs",
-              )}
-            >
-              {t({
-                en: "Open spaces",
-                fr: "Ouvrir les espaces",
-                de: "Bereiche öffnen",
-              })}
-            </Link>
-          </div>
-        </PageBanner>
-      )}
-
-      <CollaboratorsInventory
-        collaborators={collaborators?.collaborators ?? []}
-        loading={collaboratorsLoading}
-        error={collaboratorsError}
-        query={collaboratorQuery}
-        onQueryChange={setCollaboratorQuery}
+      <PageTabs
+        tabs={[
+          {
+            id: "invite",
+            label: t({
+              en: "Invite",
+              fr: "Inviter",
+              de: "Einladen",
+            }),
+          },
+          {
+            id: "members",
+            label: t({
+              en: "Workspace members",
+              fr: "Membres du workspace",
+              de: "Workspace-Mitglieder",
+            }),
+          },
+          {
+            id: "access",
+            label: t({
+              en: "Review access",
+              fr: "Vérifier les accès",
+              de: "Zugriff prüfen",
+            }),
+          },
+        ]}
+        activeTab={activeViewTab}
+        onChange={(tab) => setActiveViewTab(tab as CollaboratorsViewTab)}
+        variant="bar"
       />
 
-      <UiCard
-        title={t({
-          en: "Review access",
-          fr: "Vérifier les accès",
-          de: "Zugriff prüfen",
-        })}
-      >
+      {activeViewTab === "invite" ? (
+        activeOwnerSpaces.length > 0 ? (
+          <div id="share-space" className="scroll-mt-6">
+            <UiCard
+              title={t({
+                en: "Invite people",
+                fr: "Inviter des personnes",
+                de: "Personen einladen",
+              })}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="max-w-2xl">
+                  <p className={cx("ui-caption", uiMutedTextClass)}>
+                    {t({
+                      en: "Choose a space, pick the people who should work there, and assign the right level of access in a focused dialog.",
+                      fr: "Choisissez un espace, sélectionnez les personnes qui doivent y travailler et donnez le bon niveau d'accès dans une fenêtre dédiée.",
+                      de: "Wählen Sie einen Bereich, die Personen, die dort arbeiten sollen, und die passende Zugriffsstufe in einem fokussierten Dialog.",
+                    })}
+                  </p>
+                  <p
+                    className={cx(
+                      "mt-1 text-xs font-semibold",
+                      uiMutedTextClass,
+                    )}
+                  >
+                    {t({
+                      en: `${activeOwnerSpaces.length} space${activeOwnerSpaces.length === 1 ? "" : "s"} available`,
+                      fr: `${activeOwnerSpaces.length} espace${activeOwnerSpaces.length > 1 ? "s" : ""} disponible${activeOwnerSpaces.length > 1 ? "s" : ""}`,
+                      de: `${activeOwnerSpaces.length} Bereich${activeOwnerSpaces.length === 1 ? "" : "e"} verfügbar`,
+                    })}
+                  </p>
+                </div>
+                <UiButton onClick={() => setInviteDialogOpen(true)}>
+                  {t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
+                </UiButton>
+              </div>
+            </UiCard>
+          </div>
+        ) : (
+          <PageBanner tone="info">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                {t({
+                  en: "You do not own an active space yet. Create a space or ask an Owner to invite people.",
+                  fr: "Vous ne possédez pas encore d'espace actif. Créez un espace ou demandez à un Owner d'inviter des personnes.",
+                  de: "Sie besitzen noch keinen aktiven Bereich. Erstellen Sie einen Bereich oder bitten Sie einen Owner, Personen einzuladen.",
+                })}
+              </span>
+              <Link
+                to="/portal/storage-spaces"
+                className={cx(
+                  uiButtonBaseClass,
+                  uiButtonVariants.secondary,
+                  "h-8 px-3 py-1 text-xs",
+                )}
+              >
+                {t({
+                  en: "Open spaces",
+                  fr: "Ouvrir les espaces",
+                  de: "Bereiche öffnen",
+                })}
+              </Link>
+            </div>
+          </PageBanner>
+        )
+      ) : null}
+
+      {activeViewTab === "members" ? (
+        <CollaboratorsInventory
+          collaborators={collaborators?.collaborators ?? []}
+          loading={collaboratorsLoading}
+          error={collaboratorsError}
+          query={collaboratorQuery}
+          onQueryChange={setCollaboratorQuery}
+        />
+      ) : null}
+
+      {activeViewTab === "access" ? (
+        <UiCard
+          title={t({
+            en: "Review access",
+            fr: "Vérifier les accès",
+            de: "Zugriff prüfen",
+          })}
+        >
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
           <PageTabs
             tabs={[
@@ -1596,7 +1603,105 @@ export default function PortalSharesPage() {
                 })}
           </span>
         </div>
-      </UiCard>
+        </UiCard>
+      ) : null}
+
+      {inviteDialogOpen && activeOwnerSpaces.length > 0 ? (
+        <Modal
+          title={t({
+            en: "Invite people",
+            fr: "Inviter des personnes",
+            de: "Personen einladen",
+          })}
+          onClose={() => setInviteDialogOpen(false)}
+          maxWidthClass="max-w-4xl"
+          closeOnBackdropClick={busyShareId !== "new"}
+          closeOnEscape={busyShareId !== "new"}
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)] md:items-end">
+              <UiSelect
+                label={t({ en: "Space", fr: "Espace", de: "Bereich" })}
+                size="compact"
+                className="h-9"
+                value={selectedInviteSpace?.id ?? ""}
+                onChange={(event) => setSelectedSpaceId(event.target.value)}
+                aria-label={t({
+                  en: "Space to share",
+                  fr: "Espace à partager",
+                  de: "Zu teilender Bereich",
+                })}
+              >
+                {activeOwnerSpaces.map((space) => (
+                  <option key={space.id} value={space.id}>
+                    {space.name}
+                  </option>
+                ))}
+              </UiSelect>
+              <p
+                className={cx(
+                  "self-center text-xs font-medium",
+                  uiMutedTextClass,
+                )}
+              >
+                {t({
+                  en: "Choose people already added to this workspace, then decide whether they can view, edit, or manage the space.",
+                  fr: "Choisissez des personnes déjà ajoutées à ce workspace, puis décidez si elles peuvent consulter, modifier ou gérer l'espace.",
+                  de: "Wählen Sie Personen aus diesem Workspace aus und legen Sie fest, ob sie den Bereich ansehen, bearbeiten oder verwalten können.",
+                })}
+              </p>
+            </div>
+            <PortalShareCandidatePicker
+              candidates={shareCandidates}
+              selectedRolesByUserId={selectedShareRolesByUserId}
+              query={shareCandidateQuery}
+              loading={shareCandidatesLoading}
+              error={null}
+              includeAlreadyShared
+              onQueryChange={setShareCandidateQuery}
+              onRoleChange={(userId, role) => {
+                setSelectedShareRolesByUserId((current) => {
+                  const next = { ...current };
+                  if (role) {
+                    next[userId] = role;
+                  } else {
+                    delete next[userId];
+                  }
+                  return next;
+                });
+              }}
+              onRequestPerson={handleRequestCollaboratorAccess}
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <UiButton
+                variant="secondary"
+                onClick={() => setInviteDialogOpen(false)}
+                disabled={busyShareId === "new"}
+              >
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton
+                disabled={
+                  !accountIdForApi ||
+                  !selectedInviteSpace ||
+                  selectedShareEntries.length === 0 ||
+                  busyShareId === "new"
+                }
+                loading={busyShareId === "new"}
+                onClick={handleCreateShare}
+              >
+                {busyShareId === "new"
+                  ? t({
+                      en: "Inviting...",
+                      fr: "Invitation...",
+                      de: "Einladung läuft...",
+                    })
+                  : t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
+              </UiButton>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {pendingAction?.type === "revoke-share" ? (
         <ConfirmActionDialog

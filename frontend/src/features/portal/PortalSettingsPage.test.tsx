@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalSettingsPage from "./PortalSettingsPage";
@@ -82,23 +82,38 @@ describe("PortalSettingsPage", () => {
     });
   });
 
-  it("splits real settings into tabs and opens password changes in a modal", async () => {
+  it("splits real settings into tabs and moves short setting forms into modals", async () => {
     const user = userEvent.setup();
     render(<PortalSettingsPage />);
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Portal User")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("portal@example.com")).toBeInTheDocument();
-    expect(screen.getByLabelText("Display name")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Email")).toHaveClass("ui-control");
+    expect(await screen.findByText("Portal User")).toBeInTheDocument();
+    expect(screen.getByText("portal@example.com")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Language")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Edit profile" }));
+    const profileDialog = screen.getByRole("dialog", { name: "Edit profile" });
+    expect(within(profileDialog).getByLabelText("Display name")).toHaveClass("ui-control");
+    expect(within(profileDialog).getByLabelText("Email")).toHaveClass("ui-control");
+    await user.click(within(profileDialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Edit profile" })).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Preferences" }));
-    expect(screen.getByLabelText("Language")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Theme")).toHaveClass("ui-control");
-    expect(screen.getByLabelText("Default project")).toHaveClass("ui-control");
-    expect(screen.getByRole("checkbox", { name: "Receive quota alert emails" })).toHaveClass("text-primary");
+    expect(screen.getByText("Français")).toBeInTheDocument();
+    expect(screen.getByText("Dark")).toBeInTheDocument();
+    expect(screen.getByText("Research Account")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Language")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit preferences" }));
+    const preferencesDialog = screen.getByRole("dialog", { name: "Edit preferences" });
+    expect(within(preferencesDialog).getByLabelText("Language")).toHaveClass("ui-control");
+    expect(within(preferencesDialog).getByLabelText("Theme")).toHaveClass("ui-control");
+    expect(within(preferencesDialog).getByLabelText("Default project")).toHaveClass("ui-control");
+    expect(within(preferencesDialog).getByRole("checkbox", { name: "Receive quota alert emails" })).toHaveClass("text-primary");
+    await user.click(within(preferencesDialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Edit preferences" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Security" }));
     expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();

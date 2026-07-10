@@ -148,6 +148,12 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Active spaces (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Archived (0)" }),
+    ).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({
       includeArchived: true,
     });
@@ -314,7 +320,45 @@ describe("PortalStorageSpacesPage", () => {
     );
   });
 
-  it("shows distinct states inside the visibility column", () => {
+  it("keeps archived spaces in a separate tab", async () => {
+    const user = userEvent.setup();
+    mocks.hookResult.workspace.spaces = [
+      {
+        ...mocks.hookResult.workspace.spaces[0],
+        id: "active-data",
+        name: "Active Data",
+        status: "Active",
+      },
+      {
+        ...mocks.hookResult.workspace.spaces[0],
+        id: "archived-data",
+        name: "Archived Data",
+        visibility: "private",
+        status: "Archived",
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Active Data")).toBeInTheDocument();
+    expect(screen.queryByText("Archived Data")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Archived (1)" }));
+
+    expect(screen.queryByText("Active Data")).not.toBeInTheDocument();
+    const archivedRow = screen.getByText("Archived Data").closest("tr");
+    expect(archivedRow).not.toBeNull();
+    expect(within(archivedRow!).getByText("Private")).toBeInTheDocument();
+    expect(within(archivedRow!).getByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the start guide once only archived spaces exist", () => {
     mocks.hookResult.workspace.spaces = [
       {
         ...mocks.hookResult.workspace.spaces[0],
@@ -331,10 +375,12 @@ describe("PortalStorageSpacesPage", () => {
       </MemoryRouter>,
     );
 
-    const archivedRow = screen.getByText("Archived Data").closest("tr");
-    expect(archivedRow).not.toBeNull();
-    expect(within(archivedRow!).getByText("Private")).toBeInTheDocument();
-    expect(within(archivedRow!).getByText("Archived")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Create, fill, and share a space",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("No spaces yet. Create one to start storing files.")).toBeInTheDocument();
   });
 
   it("shows the named bucket creation mode only when allowed by portal state", () => {
@@ -353,13 +399,13 @@ describe("PortalStorageSpacesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create space" }));
 
-    const namingMode = screen.getByLabelText("Storage setup");
+    const namingMode = screen.getByLabelText("Space setup");
     expect(namingMode).toHaveClass("ui-control");
     expect(
-      within(namingMode).getByRole("option", { name: "Automatic space" }),
+      within(namingMode).getByRole("option", { name: "Let Portal choose the ID" }),
     ).toBeInTheDocument();
     expect(
-      within(namingMode).getByRole("option", { name: "Named storage" }),
+      within(namingMode).getByRole("option", { name: "Use a custom tool ID" }),
     ).toBeInTheDocument();
   });
 
@@ -372,9 +418,9 @@ describe("PortalStorageSpacesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create space" }));
 
-    expect(screen.queryByLabelText("Storage setup")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Space setup")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: "Automatic space" }),
+      screen.queryByRole("option", { name: "Let Portal choose the ID" }),
     ).not.toBeInTheDocument();
   });
 
@@ -537,10 +583,10 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add existing space" }));
-    expect(screen.getByLabelText("Existing storage name")).toHaveClass(
+    expect(screen.getByLabelText("Existing technical ID")).toHaveClass(
       "ui-control",
     );
-    fireEvent.change(screen.getByLabelText("Existing storage name"), {
+    fireEvent.change(screen.getByLabelText("Existing technical ID"), {
       target: { value: "existing-research" },
     });
     fireEvent.change(screen.getByLabelText("Who can access this space?"), {
@@ -568,7 +614,7 @@ describe("PortalStorageSpacesPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add existing space" }));
-    fireEvent.change(screen.getByLabelText("Existing storage name"), {
+    fireEvent.change(screen.getByLabelText("Existing technical ID"), {
       target: { value: "existing-restricted" },
     });
     fireEvent.change(screen.getByLabelText("Who can access this space?"), {
