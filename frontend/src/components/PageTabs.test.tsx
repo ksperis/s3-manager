@@ -1,0 +1,45 @@
+/*
+ * Copyright (c) 2026 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { describe, expect, it } from "vitest";
+
+import PageTabs from "./PageTabs";
+
+function SemanticTabs() {
+  const [activeTab, setActiveTab] = useState("connection");
+  return (
+    <PageTabs
+      tabs={[
+        { id: "connection", label: "Connection" },
+        { id: "disabled", label: "Disabled", disabled: true },
+        { id: "credentials", label: "Credentials" },
+      ]}
+      activeTab={activeTab}
+      onChange={setActiveTab}
+      ariaLabel="Endpoint sections"
+      idPrefix="endpoint-editor"
+      variant="bar"
+    />
+  );
+}
+
+describe("PageTabs", () => {
+  it("links semantic tabs to their panels and supports arrow-key navigation", () => {
+    render(<SemanticTabs />);
+
+    const connectionTab = screen.getByRole("tab", { name: "Connection" });
+    expect(connectionTab).toHaveAttribute("id", "endpoint-editor-tab-connection");
+    expect(connectionTab).toHaveAttribute("aria-controls", "endpoint-editor-panel-connection");
+    expect(connectionTab).toHaveAttribute("tabindex", "0");
+
+    fireEvent.keyDown(connectionTab, { key: "ArrowRight" });
+
+    const credentialsTab = screen.getByRole("tab", { name: "Credentials" });
+    expect(credentialsTab).toHaveAttribute("aria-selected", "true");
+    expect(credentialsTab).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Disabled" })).toBeDisabled();
+  });
+});

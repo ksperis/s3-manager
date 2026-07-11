@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode } from "react";
 import { cx, uiCardClass, uiDividerClass } from "./ui/styles";
 
 type Tab = {
@@ -19,9 +19,39 @@ type PageTabsProps = {
   headerActions?: ReactNode;
   variant?: "card" | "bar";
   ariaLabel?: string;
+  idPrefix?: string;
 };
 
-export default function PageTabs({ tabs, activeTab, onChange, headerActions, variant = "card", ariaLabel }: PageTabsProps) {
+export default function PageTabs({
+  tabs,
+  activeTab,
+  onChange,
+  headerActions,
+  variant = "card",
+  ariaLabel,
+  idPrefix,
+}: PageTabsProps) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => {
+    if (!ariaLabel || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+
+    const enabledTabs = tabs.filter((tab) => !tab.disabled);
+    const currentIndex = enabledTabs.findIndex((tab) => tab.id === tabId);
+    if (currentIndex < 0) return;
+
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = enabledTabs.length - 1;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + enabledTabs.length) % enabledTabs.length;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % enabledTabs.length;
+
+    event.preventDefault();
+    onChange(enabledTabs[nextIndex].id);
+    const enabledButtons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+      '[role="tab"]:not(:disabled)'
+    );
+    enabledButtons?.[nextIndex]?.focus();
+  };
+
   const tabList = (
     <div className="flex flex-wrap gap-2" role={ariaLabel ? "tablist" : undefined} aria-label={ariaLabel}>
       {tabs.map((tab) => {
@@ -32,8 +62,12 @@ export default function PageTabs({ tabs, activeTab, onChange, headerActions, var
             type="button"
             role={ariaLabel ? "tab" : undefined}
             aria-selected={ariaLabel ? isActive : undefined}
+            aria-controls={ariaLabel && idPrefix ? `${idPrefix}-panel-${tab.id}` : undefined}
+            id={ariaLabel && idPrefix ? `${idPrefix}-tab-${tab.id}` : undefined}
+            tabIndex={ariaLabel ? (isActive ? 0 : -1) : undefined}
             disabled={tab.disabled}
             onClick={() => onChange(tab.id)}
+            onKeyDown={(event) => handleKeyDown(event, tab.id)}
             className={[
               "rounded-md px-2.5 py-1.5 ui-caption font-semibold transition",
               isActive

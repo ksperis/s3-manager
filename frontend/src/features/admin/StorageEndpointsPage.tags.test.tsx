@@ -168,9 +168,13 @@ describe("StorageEndpointsPage tags", () => {
     expect(endpointRow.getByText("supervision-key")).toBeInTheDocument();
     expect(endpointRow.getByText("ceph-admin-key")).toBeInTheDocument();
     expect(endpointRow.getAllByText("(secret stored)")).toHaveLength(3);
+    expect(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" })).toBeInTheDocument();
     expect(endpointRow.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(endpointRow.getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
     expect(endpointRow.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+
+    fireEvent.click(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" }));
+    expect(await screen.findByRole("heading", { name: "Edit storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
   });
 
   it("lets superadmin edit endpoint tags even when endpoints are env-managed", async () => {
@@ -181,7 +185,7 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "View" }));
-    await screen.findByRole("heading", { name: "Storage endpoint" });
+    await screen.findByRole("heading", { name: "Storage endpoint · Ceph Endpoint" });
     fireEvent.focus(await screen.findByRole("textbox", { name: "Add a tag for this endpoint" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add tag rgw-a" }));
     fireEvent.click(screen.getByRole("button", { name: "Save tags" }));
@@ -210,15 +214,19 @@ describe("StorageEndpointsPage tags", () => {
 
     renderPage("/admin/storage-endpoints/7");
 
-    expect(await screen.findByRole("heading", { name: "Storage endpoint" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByLabelText("Storage name")).toBeDisabled();
+    expect(await screen.findByRole("heading", { name: "Storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Endpoint name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Endpoint name")).toBeEnabled();
     expect(screen.getByRole("textbox", { name: "Add a tag for this endpoint" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Save tags" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save tags" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
-    expect(screen.getByLabelText("Admin access key")).toBeDisabled();
-    expect(screen.getByLabelText("Supervision access key")).toBeDisabled();
+    expect(screen.getByLabelText("Admin access key")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Admin access key")).toBeEnabled();
+    expect(screen.getAllByText("Stored — value hidden", { selector: "div" })).toHaveLength(2);
+    expect(screen.queryByLabelText("Admin secret key")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Supervision access key")).toHaveAttribute("readonly");
 
     fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
     expect(screen.getByLabelText("SNS topics enabled")).toBeDisabled();
@@ -231,10 +239,10 @@ describe("StorageEndpointsPage tags", () => {
 
     renderPage("/admin/storage-endpoints/7");
 
-    expect(await screen.findByRole("heading", { name: "Storage endpoint" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Add a tag for this endpoint" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save tags" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to endpoints" })).toBeInTheDocument();
   });
 
   it("keeps endpoint tags visible but hides editing from ui_admin", async () => {
@@ -261,14 +269,14 @@ describe("StorageEndpointsPage tags", () => {
     if (!dialog) {
       throw new Error("New storage endpoint workflow page not found");
     }
-    const storageName = within(dialog).getByLabelText("Storage name");
+    const storageName = within(dialog).getByLabelText("Endpoint name");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this endpoint" });
     expect(tagInput).toBeInTheDocument();
     expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
     expect(within(dialog).getByText("Endpoint tags")).toBeInTheDocument();
     expectBefore(storageName, tagInput);
-    expectBefore(tagInput, within(dialog).getByText("Type"));
-    expectBefore(within(dialog).getByText("Type"), within(dialog).getByText("Endpoint S3"));
+    expectBefore(tagInput, within(dialog).getByText("Provider"));
+    expectBefore(within(dialog).getByText("Provider"), within(dialog).getByText("S3 endpoint URL"));
   });
 
   it("submits Ceph bucket replication feature when enabled", async () => {
@@ -278,8 +286,8 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Ceph Replication" } });
-    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://ceph-repl.example.test" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "Ceph Replication" } });
+    fireEvent.change(screen.getByLabelText("S3 endpoint URL"), { target: { value: "https://ceph-repl.example.test" } });
     fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
     fireEvent.click(screen.getByLabelText("Bucket replication enabled"));
     fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
@@ -304,10 +312,10 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Regional" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "AWS Regional" } });
     fireEvent.click(screen.getByLabelText("AWS"));
 
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.us-east-1.amazonaws.com");
+    expect(screen.getByLabelText("S3 endpoint URL")).toHaveValue("https://s3.us-east-1.amazonaws.com");
     expect(screen.getByLabelText("Region (optional)")).toHaveValue("us-east-1");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(39.0438);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(-77.4874);
@@ -349,7 +357,7 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.click(screen.getByLabelText("AWS"));
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
 
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("S3 endpoint URL")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
     fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
@@ -365,9 +373,9 @@ describe("StorageEndpointsPage tags", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Locked" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "AWS Locked" } });
     fireEvent.click(screen.getByLabelText("AWS"));
-    expect(screen.getByLabelText("Endpoint S3")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("S3 endpoint URL")).toHaveAttribute("readonly");
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
     fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
     expect(screen.getByLabelText("STS endpoint")).toHaveAttribute("readonly");
@@ -381,9 +389,9 @@ describe("StorageEndpointsPage tags", () => {
     });
     expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
-    fireEvent.click(screen.getByRole("tab", { name: "General" }));
-    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://s3.proxy.example.test" } });
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
+    fireEvent.click(screen.getByRole("tab", { name: "Connection" }));
+    fireEvent.change(screen.getByLabelText("S3 endpoint URL"), { target: { value: "https://s3.proxy.example.test" } });
+    expect(screen.getByLabelText("S3 endpoint URL")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
 
@@ -415,11 +423,11 @@ describe("StorageEndpointsPage tags", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     await waitFor(() => expect(listAdminTagDefinitionsMock).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Unknown" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "AWS Unknown" } });
     fireEvent.click(screen.getByLabelText("AWS"));
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "moon-west-1" } });
 
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.moon-west-1.amazonaws.com");
+    expect(screen.getByLabelText("S3 endpoint URL")).toHaveValue("https://s3.moon-west-1.amazonaws.com");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(null);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(null);
 
@@ -460,8 +468,8 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Path Style" } });
-    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://path-style.example.test" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "Path Style" } });
+    fireEvent.change(screen.getByLabelText("S3 endpoint URL"), { target: { value: "https://path-style.example.test" } });
     fireEvent.click(screen.getByLabelText("Force path style"));
     fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
@@ -483,8 +491,8 @@ describe("StorageEndpointsPage tags", () => {
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
-    fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Geo Endpoint" } });
-    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://geo.example.test" } });
+    fireEvent.change(screen.getByLabelText("Endpoint name"), { target: { value: "Geo Endpoint" } });
+    fireEvent.change(screen.getByLabelText("S3 endpoint URL"), { target: { value: "https://geo.example.test" } });
     fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "48.8566" } });
     fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "2.3522" } });
     fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
