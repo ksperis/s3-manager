@@ -276,6 +276,7 @@ export function createAppRoutes() {
             <Route path="s3-connections" element={<S3ConnectionsPage />} />
             <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
             <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
+            <Route path="storage-endpoints/:endpointId" element={<StorageEndpointsPage />} />
             <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
             <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
             <Route path="users" element={<UsersPage />} />

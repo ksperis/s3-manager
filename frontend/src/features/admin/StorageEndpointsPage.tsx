@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { cx, uiCheckboxClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
@@ -18,8 +19,9 @@ import {
   updateStorageEndpointTags,
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
-import { WorkflowSurface, workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, { WorkflowSection } from "../../components/WorkflowPage";
 import PageHeader from "../../components/PageHeader";
+import PageTabs from "../../components/PageTabs";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import ListToolbar from "../../components/ListToolbar";
@@ -59,6 +61,8 @@ type FormState = {
   has_supervision_secret: boolean;
   features: FeaturesState;
 };
+
+type EndpointEditorTab = "general" | "credentials" | "capabilities";
 
 type HealthcheckMode = "http" | "s3";
 type FeatureKey =
@@ -552,6 +556,8 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
 }
 
 export default function StorageEndpointsPage() {
+  const navigate = useNavigate();
+  const { endpointId: endpointIdParam } = useParams();
   const { generalSettings } = useGeneralSettings();
   const currentUser = useMemo(() => readStoredUser(), []);
   const canEditEndpoints = isSuperAdminRole(currentUser?.role);
@@ -560,7 +566,7 @@ export default function StorageEndpointsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [formMode, setFormMode] = useState<"full" | "tags_only">("full");
+  const [activeTab, setActiveTab] = useState<EndpointEditorTab>("general");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formInitialSignature, setFormInitialSignature] = useState("");
   const [showOpsHelp, setShowOpsHelp] = useState(false);
@@ -584,7 +590,7 @@ export default function StorageEndpointsPage() {
 
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
-    setFormMode("full");
+    setActiveTab("general");
     setFormInitialSignature("");
     setShowOpsHelp(false);
     setFormError(null);
@@ -616,8 +622,22 @@ export default function StorageEndpointsPage() {
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
   const cephAdminConfigEnabled = Boolean(generalSettings.ceph_admin_enabled);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
+  const editingEndpoint = useMemo(
+    () => (editingId == null ? null : endpoints.find((endpoint) => endpoint.id === editingId) ?? null),
+    [editingId, endpoints]
+  );
+  const routeEndpointId = Number(endpointIdParam ?? "");
+  const hasEndpointRoute = endpointIdParam !== undefined;
+  const hasValidEndpointRoute = Number.isFinite(routeEndpointId) && routeEndpointId > 0;
+  const routeEndpointMissing = Boolean(
+    hasEndpointRoute && !loading && (!hasValidEndpointRoute || !endpoints.some((endpoint) => endpoint.id === routeEndpointId))
+  );
+  const routeEndpointLoading = hasEndpointRoute && !routeEndpointMissing && !showForm;
+  const configurationReadOnly = Boolean(
+    editingId != null && (envManaged || editingEndpoint?.is_editable === false || !canEditEndpoints)
+  );
   useEffect(() => {
-    if (!showForm || !cephMode || !canEditEndpoints) {
+    if (!showForm || !cephMode || !canEditEndpoints || configurationReadOnly) {
       setFeatureDetectBusy(false);
       setFeatureDetectError(null);
       setFeatureDetectWarnings([]);
@@ -756,6 +776,7 @@ export default function StorageEndpointsPage() {
     form.supervision_secret_key,
     showForm,
     canEditEndpoints,
+    configurationReadOnly,
   ]);
 
   const awsMode = form.provider === "aws";
@@ -835,8 +856,8 @@ export default function StorageEndpointsPage() {
     if (envManaged || !canEditEndpoints) return;
     const nextForm = createEmptyForm();
     setForm(nextForm);
-    setFormMode("full");
-    setFormInitialSignature(stableSignature({ formMode: "full", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
+    setActiveTab("general");
+    setFormInitialSignature(stableSignature({ form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
     setShowOpsHelp(false);
     setFormError(null);
     setFeatureDetectBusy(false);
@@ -846,35 +867,49 @@ export default function StorageEndpointsPage() {
     setShowForm(true);
   };
 
-  const startEdit = (endpoint: StorageEndpoint) => {
-    if (envManaged || !canEditEndpoints) return;
+  const openEndpointPage = useCallback((endpoint: StorageEndpoint) => {
     const nextForm = createFormFromEndpoint(endpoint);
     setEditingId(endpoint.id);
-    setFormMode("full");
+    setActiveTab("general");
     setForm(nextForm);
-    setFormInitialSignature(stableSignature({ formMode: "full", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
+    setFormInitialSignature(stableSignature({ form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
     setFormError(null);
     setShowForm(true);
+  }, []);
+
+  const startEdit = (endpoint: StorageEndpoint) => {
+    openEndpointPage(endpoint);
+    navigate(`/admin/storage-endpoints/${endpoint.id}`);
   };
 
-  const openTagsOnly = (endpoint: StorageEndpoint) => {
-    if (!canEditEndpoints) return;
-    const nextForm = createFormFromEndpoint(endpoint);
-    setEditingId(endpoint.id);
-    setFormMode("tags_only");
-    setForm(nextForm);
-    setFormInitialSignature(stableSignature({ formMode: "tags_only", form: { ...nextForm, tags: normalizeUiTags(nextForm.tags) } }));
-    setFormError(null);
-    setShowForm(true);
-  };
+  useEffect(() => {
+    if (!hasEndpointRoute || loading || !hasValidEndpointRoute) return;
+    if (editingId === routeEndpointId && showForm) return;
+    const endpoint = endpoints.find((candidate) => candidate.id === routeEndpointId);
+    if (endpoint) {
+      openEndpointPage(endpoint);
+    }
+  }, [
+    editingId,
+    endpoints,
+    hasEndpointRoute,
+    hasValidEndpointRoute,
+    loading,
+    openEndpointPage,
+    routeEndpointId,
+    showForm,
+  ]);
 
   const onCloseForm = () => {
     setShowForm(false);
     resetForm();
+    if (hasEndpointRoute) {
+      navigate("/admin/storage-endpoints");
+    }
   };
   const formCurrentSignature = useMemo(
-    () => stableSignature({ formMode, form: { ...form, tags: normalizeUiTags(form.tags) } }),
-    [form, formMode]
+    () => stableSignature({ form: { ...form, tags: normalizeUiTags(form.tags) } }),
+    [form]
   );
   const formCloseGuard = useUnsavedChangesGuard({
     hasUnsavedChanges: Boolean(formInitialSignature) && formCurrentSignature !== formInitialSignature,
@@ -1029,7 +1064,7 @@ export default function StorageEndpointsPage() {
     try {
       const normalizedTags = normalizeUiTags(form.tags);
       if (editingId) {
-        if (formMode === "full") {
+        if (!configurationReadOnly) {
           const payload = buildPayload();
           if (!payload) {
             setSaving(false);
@@ -1038,7 +1073,7 @@ export default function StorageEndpointsPage() {
           await updateStorageEndpoint(editingId, payload);
         }
         await updateStorageEndpointTags(editingId, { tags: normalizedTags });
-        setActionMessage(formMode === "tags_only" ? "Endpoint tags updated." : "Endpoint updated.");
+        setActionMessage(configurationReadOnly ? "Endpoint tags updated." : "Endpoint updated.");
       } else {
         if (envManaged) return;
         const payload = buildPayload();
@@ -1055,6 +1090,9 @@ export default function StorageEndpointsPage() {
       setShowForm(false);
       resetForm();
       await loadEndpoints();
+      if (hasEndpointRoute) {
+        navigate("/admin/storage-endpoints");
+      }
     } catch (err) {
       setFormError(extractError(err));
     } finally {
@@ -1220,15 +1258,15 @@ export default function StorageEndpointsPage() {
             {settingDefault ? "Setting..." : "Set as default"}
           </button>
         )}
+        <button
+          className={tableActionButtonClasses}
+          onClick={() => startEdit(endpoint)}
+          type="button"
+        >
+          {readOnly ? "View" : "Edit"}
+        </button>
         {!readOnly ? (
           <>
-            <button
-              className={tableActionButtonClasses}
-              onClick={() => startEdit(endpoint)}
-              type="button"
-            >
-              Edit
-            </button>
             <button
               className={tableDeleteActionClasses}
               onClick={() => {
@@ -1241,20 +1279,9 @@ export default function StorageEndpointsPage() {
             </button>
           </>
         ) : (
-          <>
-            {canEditEndpoints && (
-              <button
-                className={tableActionButtonClasses}
-                onClick={() => openTagsOnly(endpoint)}
-                type="button"
-              >
-                Edit tags
-              </button>
-            )}
-            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              {canEditEndpoints ? "Config read-only" : "Read-only"}
-            </span>
-          </>
+          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            {canEditEndpoints ? "Config read-only" : "Read-only"}
+          </span>
         )}
       </div>
     );
@@ -1317,7 +1344,11 @@ export default function StorageEndpointsPage() {
   const hasSupervisionCredentialsForSignedProbe = Boolean(
     form.supervision_access_key.trim() && (form.supervision_secret_key.trim() || form.has_supervision_secret)
   );
-  const tagsOnlyMode = formMode === "tags_only";
+  const editorTabs = [
+    { id: "general", label: "General" },
+    { id: "credentials", label: "Credentials" },
+    { id: "capabilities", label: "Capabilities & health" },
+  ];
   const signedProbeBlockedReason = !cephMode
     ? "S3 signed probe is available only for Ceph endpoints."
     : !hasSupervisionCredentialsForSignedProbe
@@ -1337,7 +1368,29 @@ export default function StorageEndpointsPage() {
   }, [form.features.healthcheck.mode, signedProbeBlockedReason, updateFeatures]);
 
   return (
-    <div className={workflowPageHostClass(showForm && !tagsOnlyMode, "space-y-4 ui-caption leading-relaxed")}>
+    <div className="space-y-4 ui-caption leading-relaxed">
+      {routeEndpointLoading ? (
+        <WorkflowPage
+          title="Loading storage endpoint"
+          description="Retrieving endpoint configuration and access mode."
+          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: "Loading" }]}
+          contentClassName="mx-auto max-w-3xl"
+        >
+          <PageBanner tone="info">Loading endpoint configuration...</PageBanner>
+        </WorkflowPage>
+      ) : routeEndpointMissing ? (
+        <WorkflowPage
+          title="Storage endpoint not found"
+          description="The requested endpoint does not exist or is no longer available."
+          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: "Not found" }]}
+          backLabel="Back to endpoints"
+          onBack={() => navigate("/admin/storage-endpoints")}
+          contentClassName="mx-auto max-w-3xl"
+        >
+          <PageBanner tone="warning">Select an endpoint from the current storage endpoint list.</PageBanner>
+        </WorkflowPage>
+      ) : !showForm ? (
+        <>
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
@@ -1386,50 +1439,78 @@ export default function StorageEndpointsPage() {
           containerClassName="rounded-t-none border-x-0 border-b-0"
         />
       </div>
+        </>
+      ) : null}
 
       {showForm && (
-        <WorkflowSurface
-          presentation={tagsOnlyMode ? "modal" : "page"}
-          title={editingId ? (tagsOnlyMode ? "Edit endpoint tags" : "Edit storage endpoint") : "New storage endpoint"}
-          description="Configure provider identity, credentials, capability detection and health checks in one page-level workflow."
-          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: editingId ? "Edit" : "Create" }]}
+        <WorkflowPage
+          title={editingId ? (configurationReadOnly ? "Storage endpoint" : "Edit storage endpoint") : "New storage endpoint"}
+          description="Review connection settings, operational credentials, capabilities and health checks in dedicated sections."
+          breadcrumbs={[
+            ...adminPageBreadcrumbs("storage-endpoints"),
+            { label: editingId ? editingEndpoint?.name ?? "Endpoint" : "Create" },
+          ]}
           backLabel="Back to endpoints"
-          onClose={formCloseGuard.requestClose}
+          onBack={formCloseGuard.requestClose}
           contentClassName="mx-auto max-w-7xl"
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && <PageBanner tone="error">{formError}</PageBanner>}
-            {tagsOnlyMode && (
+            {configurationReadOnly && (
               <PageBanner tone="info">
-                Endpoint configuration is read-only in this view. You can still update the tags associated with this endpoint.
+                Endpoint configuration is read-only. {canEditEndpoints
+                  ? "You can still update the tags associated with this endpoint."
+                  : "All settings and tags are available for consultation only."}
               </PageBanner>
             )}
             {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "opacity-70" : undefined}>
-                <UiInput
-                  label="Storage name"
-                  value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  required
-                />
-              </fieldset>
-
-              <div className="sm:pt-6">
-                <UiTagEditor
-                  label="Endpoint tags"
-                  tags={form.tags}
-                  catalog={endpointTagCatalog}
-                  onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
-                  placeholder="Add a tag for this endpoint"
-                  hint={endpointTagCatalogLoading ? "Loading existing endpoint tags..." : undefined}
-                  hideLabel
-                  compact
-                />
-              </div>
+            <div className="border-b border-[color:var(--ui-border)] pb-3">
+              <PageTabs
+                tabs={editorTabs}
+                activeTab={activeTab}
+                onChange={(tab) => setActiveTab(tab as EndpointEditorTab)}
+                variant="bar"
+                ariaLabel="Endpoint configuration sections"
+              />
             </div>
 
-            <fieldset disabled={tagsOnlyMode} className={tagsOnlyMode ? "space-y-4 opacity-70" : "space-y-4"}>
+            {activeTab === "general" && (
+              <WorkflowSection
+                title="Identity and connection"
+                description="Name the backend, identify its provider and define how S3 Manager reaches it."
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <fieldset disabled={configurationReadOnly} className={configurationReadOnly ? "opacity-70" : undefined}>
+                    <UiInput
+                      label="Storage name"
+                      value={form.name}
+                      onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </fieldset>
+
+                  <div>
+                    <p className="mb-1 ui-caption font-semibold text-[var(--ui-text-muted)]">Endpoint tags</p>
+                    {canEditEndpoints ? (
+                      <UiTagEditor
+                        label="Endpoint tags"
+                        tags={form.tags}
+                        catalog={endpointTagCatalog}
+                        onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
+                        placeholder="Add a tag for this endpoint"
+                        hint={endpointTagCatalogLoading ? "Loading existing endpoint tags..." : undefined}
+                        hideLabel
+                        compact
+                      />
+                    ) : (
+                      <div className="min-h-10 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-2">
+                        <UiTagBadgeList items={buildUiTagItems(form.tags)} emptyLabel="No tags" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <fieldset disabled={configurationReadOnly} className={configurationReadOnly ? "space-y-4 opacity-70" : "space-y-4"}>
             <div className="space-y-2">
               <span className="ui-body font-semibold text-slate-700 dark:text-slate-100">Type</span>
               <div className="flex gap-3">
@@ -1537,7 +1618,17 @@ export default function StorageEndpointsPage() {
               )}
             </div>
 
-            {cephMode && (
+                </fieldset>
+              </WorkflowSection>
+            )}
+
+            {activeTab === "credentials" && (
+              <WorkflowSection
+                title="Operational credentials"
+                description="Keep administrative, monitoring and cluster-wide identities isolated by purpose."
+              >
+                <fieldset disabled={configurationReadOnly} className={configurationReadOnly ? "space-y-4 opacity-70" : "space-y-4"}>
+            {cephMode ? (
               <div className="space-y-4">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100">
                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Management</p>
@@ -1595,15 +1686,17 @@ export default function StorageEndpointsPage() {
                     <p className="ui-body font-semibold text-slate-700 dark:text-slate-100">
                       What are Admin Ops and Supervision Ops?
                     </p>
-                    <UiButton
-                      size="xs"
-                      variant="secondary"
-                      onClick={() => setShowOpsHelp((prev) => !prev)}
-                    >
-                      {showOpsHelp ? "Hide" : "Show"}
-                    </UiButton>
+                    {!configurationReadOnly && (
+                      <UiButton
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => setShowOpsHelp((prev) => !prev)}
+                      >
+                        {showOpsHelp ? "Hide" : "Show"}
+                      </UiButton>
+                    )}
                   </div>
-                  {showOpsHelp && (
+                  {(configurationReadOnly || showOpsHelp) && (
                     <>
                       <p className="mt-2">
                         <span className="font-semibold">Admin Ops</span> keys let S3-Manager create RGW accounts and S3 users. If you do not
@@ -1644,18 +1737,17 @@ export default function StorageEndpointsPage() {
                       <code> admin.enabled</code> endpoint feature flag.
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <input
-                        type="text"
+                      <UiInput
+                        label="Ceph Admin access key"
                         value={form.ceph_admin_access_key}
                         onChange={(e) => setForm((prev) => ({ ...prev, ceph_admin_access_key: e.target.value }))}
-                        className="w-full rounded-lg border border-amber-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-amber-900/40 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Ceph Admin access key"
                       />
-                      <input
+                      <UiInput
+                        label="Ceph Admin secret key"
                         type="password"
                         value={form.ceph_admin_secret_key}
                         onChange={(e) => setForm((prev) => ({ ...prev, ceph_admin_secret_key: e.target.value }))}
-                        className="w-full rounded-lg border border-amber-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-amber-900/40 dark:bg-slate-800 dark:text-slate-100"
                         placeholder={editingId ? "Ceph Admin secret key (leave blank to keep)" : "Ceph Admin secret key"}
                       />
                     </div>
@@ -1671,8 +1763,23 @@ export default function StorageEndpointsPage() {
                   </div>
                 )}
               </div>
+            ) : (
+              <PageBanner tone="info">
+                {form.provider === "aws"
+                  ? "AWS endpoints use the active execution identity and do not require dedicated management credentials here."
+                  : "This provider does not use dedicated operational credentials in S3 Manager."}
+              </PageBanner>
+            )}
+                </fieldset>
+              </WorkflowSection>
             )}
 
+            {activeTab === "capabilities" && (
+              <WorkflowSection
+                title="Capabilities and health"
+                description="Review detected Ceph services, S3 capabilities and the probe used to monitor this endpoint."
+              >
+                <fieldset disabled={configurationReadOnly} className={configurationReadOnly ? "space-y-4 opacity-70" : "space-y-4"}>
             <div className="space-y-4">
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
@@ -1946,24 +2053,28 @@ export default function StorageEndpointsPage() {
               </div>
 
             </div>
-            </fieldset>
+                </fieldset>
+              </WorkflowSection>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <UiButton variant="secondary" size="sm" onClick={formCloseGuard.requestClose}>
-                Cancel
+                {configurationReadOnly ? "Back" : "Cancel"}
               </UiButton>
-              <UiButton
-                type="submit"
-                size="sm"
-                disabled={saving}
-                title={saving ? "Save in progress." : undefined}
-              >
-                {saving ? "Saving..." : editingId ? (tagsOnlyMode ? "Save tags" : "Update") : "Create"}
-              </UiButton>
+              {(!configurationReadOnly || canEditEndpoints) && (
+                <UiButton
+                  type="submit"
+                  size="sm"
+                  disabled={saving}
+                  title={saving ? "Save in progress." : undefined}
+                >
+                  {saving ? "Saving..." : editingId ? (configurationReadOnly ? "Save tags" : "Update endpoint") : "Create endpoint"}
+                </UiButton>
+              )}
             </div>
             {formCloseGuard.confirmationDialog}
           </form>
-        </WorkflowSurface>
+        </WorkflowPage>
       )}
 
       {deleteTarget && (

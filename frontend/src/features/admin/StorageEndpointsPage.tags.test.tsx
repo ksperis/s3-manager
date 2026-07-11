@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StorageEndpointsPage from "./StorageEndpointsPage";
 
@@ -18,6 +19,17 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
 
 function expectBefore(first: Element, second: Element) {
   expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+}
+
+function renderPage(initialEntry = "/admin/storage-endpoints") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path="/admin/storage-endpoints" element={<StorageEndpointsPage />} />
+        <Route path="/admin/storage-endpoints/:endpointId" element={<StorageEndpointsPage />} />
+      </Routes>
+    </MemoryRouter>
+  );
 }
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -123,7 +135,7 @@ describe("StorageEndpointsPage tags", () => {
       }),
     ]);
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     const table = screen.getByRole("table");
@@ -165,10 +177,11 @@ describe("StorageEndpointsPage tags", () => {
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
     fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    await screen.findByRole("heading", { name: "Storage endpoint" });
     fireEvent.focus(await screen.findByRole("textbox", { name: "Add a tag for this endpoint" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add tag rgw-a" }));
     fireEvent.click(screen.getByRole("button", { name: "Save tags" }));
@@ -183,21 +196,62 @@ describe("StorageEndpointsPage tags", () => {
     });
   });
 
+  it("opens an env-managed endpoint as a tabbed read-only page while keeping tags editable", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
+    fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
+    listStorageEndpointsMock.mockResolvedValue([
+      makeEndpoint({
+        admin_access_key: "admin-key",
+        has_admin_secret: true,
+        supervision_access_key: "supervision-key",
+        has_supervision_secret: true,
+      }),
+    ]);
+
+    renderPage("/admin/storage-endpoints/7");
+
+    expect(await screen.findByRole("heading", { name: "Storage endpoint" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Storage name")).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Add a tag for this endpoint" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save tags" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Credentials" }));
+    expect(screen.getByLabelText("Admin access key")).toBeDisabled();
+    expect(screen.getByLabelText("Supervision access key")).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
+    expect(screen.getByLabelText("SNS topics enabled")).toBeDisabled();
+    expect(screen.getByLabelText("Healthcheck mode")).toBeDisabled();
+  });
+
+  it("keeps tags read-only for a non-superadmin on the endpoint page", async () => {
+    localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
+    fetchStorageEndpointsMetaMock.mockResolvedValue({ managed_by_env: true });
+
+    renderPage("/admin/storage-endpoints/7");
+
+    expect(await screen.findByRole("heading", { name: "Storage endpoint" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Add a tag for this endpoint" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+  });
+
   it("keeps endpoint tags visible but hides editing from ui_admin", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 2, role: "ui_admin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     expect(screen.getByText("prod")).toBeInTheDocument();
     expect(screen.getByText("prod").parentElement?.className).toContain("text-[10px]");
-    expect(screen.queryByRole("button", { name: "Edit tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
   });
 
   it("keeps endpoint tag editing visible on the identity row", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 3, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -211,7 +265,7 @@ describe("StorageEndpointsPage tags", () => {
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this endpoint" });
     expect(tagInput).toBeInTheDocument();
     expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
-    expect(within(dialog).queryByText("Endpoint tags")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Endpoint tags")).toBeInTheDocument();
     expectBefore(storageName, tagInput);
     expectBefore(tagInput, within(dialog).getByText("Type"));
     expectBefore(within(dialog).getByText("Type"), within(dialog).getByText("Endpoint S3"));
@@ -220,14 +274,15 @@ describe("StorageEndpointsPage tags", () => {
   it("submits Ceph bucket replication feature when enabled", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 4, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Ceph Replication" } });
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://ceph-repl.example.test" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
     fireEvent.click(screen.getByLabelText("Bucket replication enabled"));
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -245,7 +300,7 @@ describe("StorageEndpointsPage tags", () => {
   it("preconfigures AWS endpoint defaults and submits AWS features", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -258,7 +313,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(-77.4874);
     expect(screen.queryByText("Management")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -286,7 +341,7 @@ describe("StorageEndpointsPage tags", () => {
   it("syncs AWS generated endpoints when the region changes", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 5, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -295,16 +350,17 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
 
     expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
-    expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
-    expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
+    expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
+    expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
   });
 
   it("keeps AWS endpoint fields read-only and submits computed values", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -312,25 +368,26 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "AWS Locked" } });
     fireEvent.click(screen.getByLabelText("AWS"));
     expect(screen.getByLabelText("Endpoint S3")).toHaveAttribute("readonly");
+    fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Capabilities & health" }));
     expect(screen.getByLabelText("STS endpoint")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("IAM endpoint")).toHaveAttribute("readonly");
 
-    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://s3.proxy.example.test" } });
     fireEvent.change(screen.getByLabelText("STS endpoint"), {
       target: { value: "https://sts.proxy.example.test" },
     });
     fireEvent.change(screen.getByLabelText("IAM endpoint"), {
       target: { value: "https://iam.proxy.example.test" },
     });
-    fireEvent.change(screen.getByLabelText("Region (optional)"), { target: { value: "eu-west-3" } });
-
-    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("STS endpoint")).toHaveValue("https://sts.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("IAM endpoint")).toHaveValue("https://iam.amazonaws.com");
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://s3.proxy.example.test" } });
+    expect(screen.getByLabelText("Endpoint S3")).toHaveValue("https://s3.eu-west-3.amazonaws.com");
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(48.8566);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(2.3522);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -353,7 +410,7 @@ describe("StorageEndpointsPage tags", () => {
   it("clears AWS coordinates when the region is unknown", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -366,7 +423,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByLabelText("Latitude (optional)")).toHaveValue(null);
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(null);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -383,7 +440,7 @@ describe("StorageEndpointsPage tags", () => {
   it("does not auto-fill coordinates for non-AWS providers", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -399,14 +456,14 @@ describe("StorageEndpointsPage tags", () => {
   it("submits force path style when creating an endpoint", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
     fireEvent.change(screen.getByLabelText("Storage name"), { target: { value: "Path Style" } });
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://path-style.example.test" } });
     fireEvent.click(screen.getByLabelText("Force path style"));
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -422,7 +479,7 @@ describe("StorageEndpointsPage tags", () => {
   it("submits GPS coordinates when creating an endpoint", async () => {
     localStorage.setItem("user", JSON.stringify({ id: 6, role: "ui_superadmin" }));
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
 
     fireEvent.click(screen.getByRole("button", { name: "New endpoint" }));
@@ -430,7 +487,7 @@ describe("StorageEndpointsPage tags", () => {
     fireEvent.change(screen.getByLabelText("Endpoint S3"), { target: { value: "https://geo.example.test" } });
     fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "48.8566" } });
     fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "2.3522" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create endpoint" }));
 
     await waitFor(() => {
       expect(createStorageEndpointMock).toHaveBeenCalledWith(
@@ -448,14 +505,14 @@ describe("StorageEndpointsPage tags", () => {
     localStorage.setItem("user", JSON.stringify({ id: 7, role: "ui_superadmin" }));
     listStorageEndpointsMock.mockResolvedValue([makeEndpoint({ force_path_style: true })]);
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
     expect(screen.getByText("Forced")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByLabelText("Force path style")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Force path style"));
-    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update endpoint" }));
 
     await waitFor(() => {
       expect(updateStorageEndpointMock).toHaveBeenCalledWith(
@@ -473,7 +530,7 @@ describe("StorageEndpointsPage tags", () => {
       makeEndpoint({ latitude: 43.6047, longitude: 1.4442 }),
     ]);
 
-    render(<StorageEndpointsPage />);
+    renderPage();
     await screen.findByText("Ceph Endpoint");
     expect(screen.getByText("43.6047, 1.4442")).toBeInTheDocument();
 
@@ -482,7 +539,7 @@ describe("StorageEndpointsPage tags", () => {
     expect(screen.getByLabelText("Longitude (optional)")).toHaveValue(1.4442);
     fireEvent.change(screen.getByLabelText("Latitude (optional)"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Longitude (optional)"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update endpoint" }));
 
     await waitFor(() => {
       expect(updateStorageEndpointMock).toHaveBeenCalledWith(

@@ -18,17 +18,20 @@ type PageTabsProps = {
   onChange: (id: string) => void;
   headerActions?: ReactNode;
   variant?: "card" | "bar";
+  ariaLabel?: string;
 };
 
-export default function PageTabs({ tabs, activeTab, onChange, headerActions, variant = "card" }: PageTabsProps) {
+export default function PageTabs({ tabs, activeTab, onChange, headerActions, variant = "card", ariaLabel }: PageTabsProps) {
   const tabList = (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" role={ariaLabel ? "tablist" : undefined} aria-label={ariaLabel}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
           <button
             key={tab.id}
             type="button"
+            role={ariaLabel ? "tab" : undefined}
+            aria-selected={ariaLabel ? isActive : undefined}
             disabled={tab.disabled}
             onClick={() => onChange(tab.id)}
             className={[
