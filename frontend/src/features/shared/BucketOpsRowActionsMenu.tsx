@@ -2,20 +2,13 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
-
 import type { CephAdminBucket } from "../../api/cephAdmin";
+import { tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
+import UiActionMenu, { type UiActionMenuSection } from "../../components/ui/UiActionMenu";
 import type { BucketAdminOpsKind } from "../cephAdmin/CephAdminAdminOpsModal";
-import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from "../../components/tableActionClasses";
-import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import { cx, uiMenuClass } from "../../components/ui/styles";
+import { bucketAction, BUCKET_ACTION_GROUP_LABELS } from "./bucketActionCatalog";
 
 type BucketOpsRowActionsMenuProps = {
-  actionMenuKey: string;
-  activeActionMenuKey: string | null;
-  setActiveActionMenuKey: Dispatch<SetStateAction<string | null>>;
-  actionMenuAnchorRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>;
-  actionMenuSurfaceRef: MutableRefObject<HTMLDivElement | null>;
   bucket: CephAdminBucket;
   isStorageOps: boolean;
   selectedEndpointId: number | null | undefined;
@@ -26,14 +19,7 @@ type BucketOpsRowActionsMenuProps = {
   onOpenInManager?: (bucket: CephAdminBucket) => void;
 };
 
-const toAnchorRef = (node: HTMLElement | null): RefObject<HTMLElement | null> => ({ current: node });
-
 export default function BucketOpsRowActionsMenu({
-  actionMenuKey,
-  activeActionMenuKey,
-  setActiveActionMenuKey,
-  actionMenuAnchorRefs,
-  actionMenuSurfaceRef,
   bucket,
   isStorageOps,
   selectedEndpointId,
@@ -43,148 +29,70 @@ export default function BucketOpsRowActionsMenu({
   onAdminOps,
   onOpenInManager,
 }: BucketOpsRowActionsMenuProps) {
-  const menuOpen = activeActionMenuKey === actionMenuKey;
+  const sections: UiActionMenuSection[] = isStorageOps
+    ? [
+        {
+          id: "navigation",
+          label: BUCKET_ACTION_GROUP_LABELS.navigation,
+          items: [
+            {
+              ...bucketAction("open-manager"),
+              disabled: !onOpenInManager,
+              disabledReason: "Manager action unavailable for this bucket context.",
+              onSelect: () => onOpenInManager?.(bucket),
+            },
+          ],
+        },
+        {
+          id: "s3",
+          label: BUCKET_ACTION_GROUP_LABELS.s3,
+          items: [{ ...bucketAction("configure-one"), onSelect: () => onConfigure(bucket) }],
+        },
+      ]
+    : [
+        {
+          id: "navigation",
+          label: BUCKET_ACTION_GROUP_LABELS.navigation,
+          items: [
+            {
+              ...bucketAction("open-browser"),
+              disabled: !selectedEndpointId || !cephAdminBrowserEnabled,
+              disabledReason: "Ceph Admin Browser is disabled in application settings.",
+              onSelect: () => onOpenInBrowser(bucket),
+            },
+          ],
+        },
+        {
+          id: "s3",
+          label: BUCKET_ACTION_GROUP_LABELS.s3,
+          items: [{ ...bucketAction("configure-one"), onSelect: () => onConfigure(bucket) }],
+        },
+        {
+          id: "rgw",
+          label: BUCKET_ACTION_GROUP_LABELS.rgw,
+          items: [
+            { ...bucketAction("check-index-one"), onSelect: () => onAdminOps?.(bucket, "index-check") },
+            { ...bucketAction("link-bucket"), onSelect: () => onAdminOps?.(bucket, "link-bucket") },
+          ],
+        },
+        {
+          id: "destructive-rgw",
+          label: BUCKET_ACTION_GROUP_LABELS["destructive-rgw"],
+          items: [
+            { ...bucketAction("unlink-bucket"), onSelect: () => onAdminOps?.(bucket, "unlink-bucket") },
+            { ...bucketAction("delete-bucket"), onSelect: () => onAdminOps?.(bucket, "delete-bucket") },
+          ],
+        },
+      ];
 
   return (
-    <div className="inline-flex items-center">
-      <button
-        ref={(node) => {
-          actionMenuAnchorRefs.current[actionMenuKey] = node;
-        }}
-        type="button"
-        className={tableCompactIconActionButtonClasses}
-        aria-label="More actions"
-        title="More actions"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        onClick={() => {
-          setActiveActionMenuKey((prev) => (prev === actionMenuKey ? null : actionMenuKey));
-        }}
-      >
-        ⋮
-      </button>
-      <AnchoredPortalMenu
-        open={menuOpen}
-        anchorRef={toAnchorRef(actionMenuAnchorRefs.current[actionMenuKey])}
-        placement="bottom-end"
-        offset={4}
-        minWidth={176}
-        className={cx(uiMenuClass, "w-44 p-1")}
-      >
-        <div
-          ref={(node) => {
-            if (menuOpen) actionMenuSurfaceRef.current = node;
-          }}
-          role="menu"
-          aria-label={`Actions for bucket ${bucket.name}`}
-        >
-          {isStorageOps ? (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={() => {
-                  onConfigure(bucket);
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Configure
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!onOpenInManager}
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                title={onOpenInManager ? "Open this bucket context in Manager" : "Manager action unavailable"}
-                onClick={() => {
-                  if (!onOpenInManager) return;
-                  onOpenInManager(bucket);
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Open in Manager
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!selectedEndpointId || !cephAdminBrowserEnabled}
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                title={
-                  selectedEndpointId && cephAdminBrowserEnabled
-                    ? "Open this bucket in Ceph Admin Browser"
-                    : "Ceph Admin Browser is disabled in application settings"
-                }
-                onClick={() => {
-                  if (!selectedEndpointId || !cephAdminBrowserEnabled) return;
-                  onOpenInBrowser(bucket);
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Open in Browser
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={() => {
-                  onConfigure(bucket);
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Configure
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={() => {
-                  onAdminOps?.(bucket, "index-check");
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Check bucket index
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={() => {
-                  onAdminOps?.(bucket, "unlink-bucket");
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Unlink bucket
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={() => {
-                  onAdminOps?.(bucket, "link-bucket");
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Link bucket
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px] !text-rose-700 dark:!text-rose-300`}
-                onClick={() => {
-                  onAdminOps?.(bucket, "delete-bucket");
-                  setActiveActionMenuKey(null);
-                }}
-              >
-                Delete bucket
-              </button>
-            </>
-          )}
-        </div>
-      </AnchoredPortalMenu>
-    </div>
+    <UiActionMenu
+      ariaLabel={`Actions for bucket ${bucket.name}`}
+      trigger={<span aria-hidden="true">⋮</span>}
+      triggerClassName={`${tableCompactIconActionButtonClasses} !h-8 !w-8`}
+      sections={sections}
+      minWidth={240}
+      menuClassName="w-60"
+    />
   );
 }

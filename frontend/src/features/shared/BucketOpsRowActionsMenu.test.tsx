@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
@@ -7,14 +6,8 @@ import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 describe("BucketOpsRowActionsMenu", () => {
   it("exposes each unitary RGW Admin Ops bucket action in Ceph Admin", () => {
     const onAdminOps = vi.fn();
-    const anchorRefs = { current: {} };
     render(
       <BucketOpsRowActionsMenu
-        actionMenuKey="bucket-a:actions"
-        activeActionMenuKey="bucket-a:actions"
-        setActiveActionMenuKey={vi.fn()}
-        actionMenuAnchorRefs={anchorRefs}
-        actionMenuSurfaceRef={createRef<HTMLDivElement>()}
         bucket={{ name: "bucket-a" }}
         isStorageOps={false}
         selectedEndpointId={7}
@@ -25,10 +18,18 @@ describe("BucketOpsRowActionsMenu", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Check bucket index" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Unlink bucket" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Link bucket" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete bucket" }));
+    const openMenu = () => fireEvent.click(screen.getByRole("button", { name: "Actions for bucket bucket-a" }));
+    openMenu();
+    expect(screen.getByText("S3 API")).toBeInTheDocument();
+    expect(screen.getByText("RGW Admin Ops")).toBeInTheDocument();
+    expect(screen.getByText("Destructive RGW Admin Ops")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Check bucket index…" }));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unlink bucket…" }));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Link bucket…" }));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete bucket…" }));
 
     expect(onAdminOps.mock.calls).toEqual([
       [{ name: "bucket-a" }, "index-check"],

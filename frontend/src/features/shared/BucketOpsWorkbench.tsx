@@ -104,6 +104,7 @@ import {
   updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
+import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
 import { ChevronDownIcon, RefreshIcon } from "../browser/browserIcons";
 import {
   deleteNotificationConfigurations,
@@ -126,6 +127,7 @@ import CephAdminAdminOpsModal, {
 } from "../cephAdmin/CephAdminAdminOpsModal";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
+import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexCheckPage";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
@@ -138,7 +140,7 @@ import BucketConfigBackupModal from "./BucketConfigBackupModal";
 import type { BucketConfigBackupFeatureOption } from "./BucketConfigBackupModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "./BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "./BucketFeatureSummaryTooltip";
-import BucketOpsBulkUpdateModal from "./BucketOpsBulkUpdateModal";
+import BucketOpsBulkUpdatePage from "./BucketOpsBulkUpdatePage";
 import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import ActionProgressCard from "./ActionProgressCard";
@@ -2438,6 +2440,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [showUsageStatsModal, setShowUsageStatsModal] = useState(false);
   const [showConfigBackupModal, setShowConfigBackupModal] = useState(false);
+  const [indexCheckTargets, setIndexCheckTargets] = useState<BucketIndexCheckTarget[] | null>(null);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(() =>
     loadBulkConfigClipboard(bulkClipboardStorageKey)
@@ -2524,9 +2527,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
   const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
   const [activeTagsTooltipKey, setActiveTagsTooltipKey] = useState<string | null>(null);
-  const [activeActionMenuKey, setActiveActionMenuKey] = useState<string | null>(null);
-  const actionMenuAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const actionMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
@@ -2745,41 +2745,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       canceled = true;
     };
   }, [isStorageOps]);
-
-  useEffect(() => {
-    if (!activeActionMenuKey) {
-      actionMenuSurfaceRef.current = null;
-      return;
-    }
-    const closeMenu = () => setActiveActionMenuKey(null);
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      const trigger = actionMenuAnchorRefs.current[activeActionMenuKey];
-      if (trigger?.contains(target)) return;
-      if (actionMenuSurfaceRef.current?.contains(target)) return;
-      closeMenu();
-    };
-    const handleFocusIn = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      const trigger = actionMenuAnchorRefs.current[activeActionMenuKey];
-      if (trigger?.contains(target)) return;
-      if (actionMenuSurfaceRef.current?.contains(target)) return;
-      closeMenu();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMenu();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("focusin", handleFocusIn);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("focusin", handleFocusIn);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeActionMenuKey]);
 
   useEffect(() => {
     setVisibleColumns((prev) => {
@@ -3636,6 +3601,44 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       return (a.tenant ?? "").localeCompare(b.tenant ?? "");
     });
     return { targets, missingNames };
+  };
+
+  const openSelectedBucketIndexChecks = async () => {
+    if (isStorageOps || !selectedEndpointId || selectedBucketList.length === 0 || selectedBucketList.length > 200) return;
+    setSelectionActionProgress({
+      label: "Resolving RGW bucket identities",
+      completed: 0,
+      total: selectedBucketList.length,
+      failed: 0,
+    });
+    try {
+      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList, {
+        onProgress: (progress) => {
+          setSelectionActionProgress({
+            label: "Resolving RGW bucket identities",
+            completed: progress.completed,
+            total: progress.total,
+            failed: progress.failed,
+          });
+        },
+      });
+      if (missingNames.length > 0) {
+        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
+      }
+      if (targets.length === 0) {
+        setError("Unable to resolve selected buckets for the RGW index check.");
+        return;
+      }
+      if (targets.length > 200) {
+        setError("Bucket index checks are limited to 200 resolved buckets. Narrow the selection to continue.");
+        return;
+      }
+      setIndexCheckTargets(targets.map((target) => ({ name: target.name, tenant: target.tenant })));
+    } catch (resolveError) {
+      setError(extractError(resolveError));
+    } finally {
+      setSelectionActionProgress(null);
+    }
   };
 
   const applyUiTagsToTargets = (
@@ -7697,6 +7700,21 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return "-";
   };
 
+  const openBucketConfiguration = (bucket: CephAdminBucket) => {
+    if (isStorageOps) {
+      const contextId = getStorageOpsContextId(bucket);
+      const bucketName = getStorageOpsBucketName(bucket);
+      if (!contextId || !bucketName) return;
+      setEditingStorageOpsBucket({
+        bucketName,
+        contextId,
+        bucketQuotaAvailable: Boolean((bucket as StorageOpsBucket).bucket_quota_available),
+      });
+      return;
+    }
+    setEditingBucketName(bucket.name);
+  };
+
   const bucketTableColumns: ColumnDef[] = (() => {
     const cols: ColumnDef[] = [
       {
@@ -7720,6 +7738,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         render: (bucket) => (
           <input
             type="checkbox"
+            aria-label={`Select bucket ${getBucketDisplayName(bucket, useExplicitBucketName)}${
+              isStorageOps && (bucket as StorageOpsBucket).context_name
+                ? ` in ${(bucket as StorageOpsBucket).context_name}`
+                : ""
+            }`}
             checked={selectedBuckets.has(bucket.name)}
             onChange={() => toggleSelection(bucket.name)}
             className={uiCheckboxClass}
@@ -7732,21 +7755,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         field: "name",
         headerClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
         cellClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
-        render: (bucket) =>
-          isStorageOps ? (
-            <span className="block w-full truncate" title={getBucketDisplayName(bucket, useExplicitBucketName)}>
-              {getBucketDisplayName(bucket, useExplicitBucketName)}
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingBucketName(bucket.name)}
-              className="block w-full truncate text-left hover:text-primary-700 dark:hover:text-primary-200"
-              title={bucket.name}
-            >
-              {bucket.name}
-            </button>
-          ),
+        render: (bucket) => (
+          <button
+            type="button"
+            onClick={() => openBucketConfiguration(bucket)}
+            className="block w-full truncate text-left hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:text-primary-200"
+            title={`Configure ${getBucketDisplayName(bucket, useExplicitBucketName)} with the S3 API`}
+          >
+            {getBucketDisplayName(bucket, useExplicitBucketName)}
+          </button>
+        ),
       },
     ];
 
@@ -8019,20 +8037,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
     cols.push({
       id: "actions",
-      label: "Act.",
+      label: "Actions",
       field: null,
       align: "right",
       headerClassName: "w-16",
       cellClassName: "!py-1.5",
       render: (bucket) => {
-        const actionMenuKey = `${bucketTooltipCacheKey(bucket)}:actions`;
         return (
           <BucketOpsRowActionsMenu
-            actionMenuKey={actionMenuKey}
-            activeActionMenuKey={activeActionMenuKey}
-            setActiveActionMenuKey={setActiveActionMenuKey}
-            actionMenuAnchorRefs={actionMenuAnchorRefs}
-            actionMenuSurfaceRef={actionMenuSurfaceRef}
             bucket={bucket}
             isStorageOps={isStorageOps}
             selectedEndpointId={selectedEndpointId}
@@ -8044,20 +8056,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               params.set("bucket", currentBucket.name);
               navigate({ pathname: "/ceph-admin/browser", search: `?${params.toString()}` });
             }}
-            onConfigure={(currentBucket) => {
-              if (isStorageOps) {
-                const contextId = getStorageOpsContextId(currentBucket);
-                const bucketName = getStorageOpsBucketName(currentBucket);
-                if (!contextId || !bucketName) return;
-                setEditingStorageOpsBucket({
-                  bucketName,
-                  contextId,
-                  bucketQuotaAvailable: Boolean((currentBucket as StorageOpsBucket).bucket_quota_available),
-                });
-                return;
-              }
-              setEditingBucketName(currentBucket.name);
-            }}
+            onConfigure={openBucketConfiguration}
             onAdminOps={(currentBucket, kind: BucketAdminOpsKind) => {
               if (isStorageOps) return;
               setAdminOpsAction({ kind, bucket: currentBucket });
@@ -8097,7 +8096,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             showIntegrityModal ||
             showPurgeModal ||
             showUsageStatsModal ||
-            showBulkUpdateModal
+            showBulkUpdateModal ||
+            Boolean(indexCheckTargets)
         )
       )}
     >
@@ -9840,6 +9840,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             isStorageOps={isStorageOps}
             onShowConfigBackupModal={!isStorageOps ? () => setShowConfigBackupModal(true) : undefined}
             onShowCompareModal={() => setShowCompareModal(true)}
+            onShowIndexCheckModal={!isStorageOps ? () => void openSelectedBucketIndexChecks() : undefined}
             onShowIntegrityModal={() => setShowIntegrityModal(true)}
             onShowPurgeModal={
               generalSettings.bucket_purge_enabled ? () => setShowPurgeModal(true) : undefined
@@ -9963,7 +9964,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       {!isStorageOps && editingBucketName && (
         <WorkflowPage
           title={`Configure bucket · ${editingBucketName}`}
-          description="Review and update the complete bucket configuration without embedding a page in a dialog."
+          description="Review and update the complete bucket configuration through the S3 API."
           breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
           backLabel="Back to buckets"
           onBack={() => setEditingBucketName(null)}
@@ -9988,7 +9989,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       {isStorageOps && editingStorageOpsBucket && (
         <WorkflowPage
           title={`Configure bucket · ${editingStorageOpsBucket.bucketName}`}
-          description="Review and update the complete bucket configuration for its selected execution context."
+          description="Review and update the complete S3 API configuration for its selected execution context."
           breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
           backLabel="Back to buckets"
           onBack={() => setEditingStorageOpsBucket(null)}
@@ -10011,6 +10012,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           sourceBuckets={selectedBucketList}
           endpoints={endpoints}
           onClose={() => setShowCompareModal(false)}
+        />
+      )}
+      {!isStorageOps && indexCheckTargets && selectedEndpointId && (
+        <CephAdminBucketIndexCheckPage
+          endpointId={selectedEndpointId}
+          endpointName={selectedEndpoint?.name}
+          targets={indexCheckTargets}
+          onClose={() => setIndexCheckTargets(null)}
         />
       )}
       {!isStorageOps && showIntegrityModal && selectedEndpointId && selectedIntegrityTargets.length > 0 && (
@@ -10069,7 +10078,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           onCreate={createConfigBackup}
         />
       )}
-      <BucketOpsBulkUpdateModal open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>
+      <BucketOpsBulkUpdatePage open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>
         <div className="space-y-4">
             <p className="ui-body text-slate-700 dark:text-slate-200">
               Apply configuration to{" "}
@@ -10088,36 +10097,44 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                   onChange={(e) => setBulkOperation(e.target.value as BulkOperation)}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 >
-                  <option value="">Select an operation</option>
-                  <option value="copy_configs">Copy configs</option>
-                  <option value="paste_configs" disabled={!bulkConfigClipboard}>
-                    {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
-                  </option>
-                  <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
-                    {quotaOperationDisabledReason
-                      ? `Set bucket quota (${quotaOperationDisabledReason})`
-                      : "Set bucket quota"}
-                  </option>
-                  <option value="add_public_access_block">Add block public access</option>
-                  <option value="remove_public_access_block">Remove block public access</option>
-                  <option value="enable_versioning">Enable versioning</option>
-                  <option value="disable_versioning">Disable versioning</option>
-                  <option value="add_lifecycle">Add or update lifecycle rules</option>
-                  <option value="delete_lifecycle">Delete lifecycle rules</option>
-                  <option value="add_notifications" disabled={!snsFeatureEnabled}>
-                    {snsFeatureEnabled
-                      ? "Add or update notification configurations"
-                      : "Add or update notification configurations (SNS unavailable)"}
-                  </option>
-                  <option value="delete_notifications" disabled={!snsFeatureEnabled}>
-                    {snsFeatureEnabled
-                      ? "Delete notification configurations"
-                      : "Delete notification configurations (SNS unavailable)"}
-                  </option>
-                  <option value="add_cors">Add or update CORS rules</option>
-                  <option value="delete_cors">Delete CORS rules</option>
-                  <option value="add_policy">Add or update policy statements</option>
-                  <option value="delete_policy">Delete policy statements</option>
+                  <option value="">Select an S3 API operation</option>
+                  <optgroup label="Configuration transfer">
+                    <option value="copy_configs">Copy configurations</option>
+                    <option value="paste_configs" disabled={!bulkConfigClipboard}>
+                      {bulkConfigClipboard ? "Paste copied configurations" : "Paste copied configurations (nothing copied)"}
+                    </option>
+                  </optgroup>
+                  <optgroup label="Access and quota">
+                    <option value="set_quota" disabled={Boolean(quotaOperationDisabledReason)}>
+                      {quotaOperationDisabledReason
+                        ? `Set bucket quota (${quotaOperationDisabledReason})`
+                        : "Set bucket quota"}
+                    </option>
+                    <option value="add_public_access_block">Add block public access</option>
+                    <option value="remove_public_access_block">Remove block public access</option>
+                  </optgroup>
+                  <optgroup label="Versioning">
+                    <option value="enable_versioning">Enable versioning</option>
+                    <option value="disable_versioning">Disable versioning</option>
+                  </optgroup>
+                  <optgroup label="Rules and policies">
+                    <option value="add_lifecycle">Add or update lifecycle rules</option>
+                    <option value="delete_lifecycle">Delete lifecycle rules</option>
+                    <option value="add_notifications" disabled={!snsFeatureEnabled}>
+                      {snsFeatureEnabled
+                        ? "Add or update notification configurations"
+                        : "Add or update notification configurations (SNS unavailable)"}
+                    </option>
+                    <option value="delete_notifications" disabled={!snsFeatureEnabled}>
+                      {snsFeatureEnabled
+                        ? "Delete notification configurations"
+                        : "Delete notification configurations (SNS unavailable)"}
+                    </option>
+                    <option value="add_cors">Add or update CORS rules</option>
+                    <option value="delete_cors">Delete CORS rules</option>
+                    <option value="add_policy">Add or update policy statements</option>
+                    <option value="delete_policy">Delete policy statements</option>
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -10826,7 +10843,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
               )}
             </div>
         </div>
-      </BucketOpsBulkUpdateModal>
+      </BucketOpsBulkUpdatePage>
       {advancedFilterCloseGuard.confirmationDialog}
     </div>
   );

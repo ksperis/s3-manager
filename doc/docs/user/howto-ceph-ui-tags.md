@@ -17,10 +17,10 @@ Use UI tags for local operational grouping, not as backend S3 tags. They help yo
 
 1. Open **Ceph Admin > Buckets**.
 2. Select one or more buckets in the table.
-3. Use **+ Tag selection** to apply tags:
+3. Open **Actions… > Selection > Manage UI tags…**, then choose **Add tags**:
    - Pick an existing suggestion, or
    - Add a custom tag with the `new-tag` input.
-4. Use **- Tag selection** to remove tags from the current selection.
+4. In the same dialog, choose **Remove tags** to remove tags from the current selection.
 5. Reuse UI tags to filter and manage recurring operational groups.
 
 ## Expected result

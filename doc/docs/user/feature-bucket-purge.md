@@ -21,8 +21,8 @@ Review the target list before typing the confirmation phrase. Bucket purge delet
 ## Steps
 
 1. In Manager, open **Tools > Purge**, select the active context, and select buckets.
-2. In Ceph Admin or Storage Ops, select rows in the bucket workbench and click
-   **Purge selected**.
+2. In Ceph Admin or Storage Ops, select rows in the bucket workbench and open
+   **Actions… > Destructive S3 operations > Purge bucket contents…**.
 3. Review the purge summary. It lists the surface, execution context, target
    buckets, and the exact effect.
 4. Set **Parallelism** if needed.

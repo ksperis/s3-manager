@@ -85,6 +85,73 @@ class CephAdminBucketIndexCheckRequest(BaseModel):
         return self
 
 
+class CephAdminBucketIndexCheckTarget(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    tenant: Optional[str] = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def normalize_target(self):
+        self.name = self.name.strip()
+        self.tenant = (self.tenant or "").strip() or None
+        if not self.name:
+            raise ValueError("name is required.")
+        return self
+
+
+class CephAdminBucketIndexCheckBatchRequest(BaseModel):
+    targets: list[CephAdminBucketIndexCheckTarget] = Field(min_length=1, max_length=200)
+    parallelism: int = Field(default=4, ge=1, le=16)
+
+    @model_validator(mode="after")
+    def deduplicate_targets(self):
+        deduped: list[CephAdminBucketIndexCheckTarget] = []
+        seen: set[tuple[Optional[str], str]] = set()
+        for target in self.targets:
+            key = (target.tenant, target.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(target)
+        self.targets = deduped
+        return self
+
+
+CephAdminBucketIndexCheckBatchStatus = Literal["completed", "completed_with_errors", "failed", "canceled"]
+
+
+class CephAdminBucketIndexCheckBatchBucketResult(BaseModel):
+    name: str
+    tenant: Optional[str] = None
+    status: Literal["completed", "failed"]
+    duration_seconds: float = 0
+    operation: str = "check_bucket_index"
+    rgw_status_code: Optional[int] = None
+    rgw_error_code: Optional[str] = None
+    message: str
+    result: Any = None
+
+
+class CephAdminBucketIndexCheckBatchProgress(BaseModel):
+    request_id: Optional[str] = None
+    stage: Literal["prepare", "completed"] = "prepare"
+    bucket_name: Optional[str] = None
+    tenant: Optional[str] = None
+    total_buckets: int = 0
+    completed_buckets: int = 0
+    failed_buckets: int = 0
+    message: Optional[str] = None
+
+
+class CephAdminBucketIndexCheckBatchResult(BaseModel):
+    status: CephAdminBucketIndexCheckBatchStatus
+    total_buckets: int = 0
+    completed_buckets: int = 0
+    failed_buckets: int = 0
+    started_at: datetime
+    finished_at: datetime
+    buckets: list[CephAdminBucketIndexCheckBatchBucketResult] = Field(default_factory=list)
+
+
 class CephAdminRgwAccountSummary(BaseModel):
     account_id: str
     account_name: Optional[str] = None

@@ -3,33 +3,39 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.core.database import SessionLocal
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.ceph_admin import (
     CephAdminAccountDeleteRequest,
     CephAdminAdminOpsResult,
     CephAdminBucketDeleteRequest,
+    CephAdminBucketIndexCheckBatchRequest,
     CephAdminBucketIndexCheckRequest,
     CephAdminBucketLinkRequest,
     CephAdminBucketUnlinkRequest,
     CephAdminUserDeleteRequest,
 )
+from app.routers.bucket_index_check_stream import stream_bucket_index_checks
 from app.routers.ceph_admin import accounts as account_routes
 from app.routers.ceph_admin import buckets as bucket_routes
 from app.routers.ceph_admin import users as user_routes
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
+from app.services.bucket_index_check_service import BucketIndexCheckService, execute_bucket_index_check_operation
 from app.services.rgw_admin import RGWAdminError, RGWAdminOperationResponse
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}",
     tags=["ceph-admin-admin-ops"],
 )
+logger = logging.getLogger(__name__)
 
 
 def _optional_str(value: Any) -> Optional[str]:
@@ -595,8 +601,9 @@ def check_bucket_index(
         action=action,
         entity_type="rgw_bucket",
         entity_id=target,
-        call=lambda: ctx.rgw_admin.check_bucket_index_operation(
-            bucket,
+        call=lambda: execute_bucket_index_check_operation(
+            ctx.rgw_admin,
+            bucket=bucket,
             tenant=tenant,
             fix=payload.fix,
             check_objects=payload.check_objects,
@@ -604,3 +611,30 @@ def check_bucket_index(
         metadata={"options": options},
         invalidate=_invalidate_bucket_admin_ops_caches,
     )
+
+
+@router.post("/bucket-index-check/stream")
+def stream_bucket_index_check_batch(
+    payload: CephAdminBucketIndexCheckBatchRequest,
+    request: Request,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> StreamingResponse:
+    service = BucketIndexCheckService(SessionLocal)
+
+    def run_check(progress_callback, cancel_check):
+        result = service.run(
+            ctx.rgw_admin,
+            payload.targets,
+            endpoint_id=int(ctx.endpoint.id),
+            endpoint_name=ctx.endpoint.name,
+            parallelism=payload.parallelism,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+            actor_user=ctx.actor,
+            actor_email=getattr(ctx.actor, "email", None),
+            actor_role=getattr(ctx.actor, "role", None),
+        )
+        _invalidate_bucket_admin_ops_caches(int(ctx.endpoint.id))
+        return result
+
+    return stream_bucket_index_checks(request, run_check=run_check, logger=logger)

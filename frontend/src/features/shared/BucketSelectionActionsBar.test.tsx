@@ -26,6 +26,10 @@ const baseProps = {
 };
 
 describe("BucketSelectionActionsBar progress", () => {
+  const openActions = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Actions for 2 selected buckets" }));
+  };
+
   it("renders selection action progress with percent and failures", () => {
     render(
       <BucketSelectionActionsBar
@@ -57,33 +61,57 @@ describe("BucketSelectionActionsBar progress", () => {
   it("keeps existing actions usable", () => {
     const openBulkUpdateModal = vi.fn();
     render(<BucketSelectionActionsBar {...baseProps} openBulkUpdateModal={openBulkUpdateModal} />);
-    fireEvent.click(screen.getByRole("button", { name: "Bulk update" }));
+    openActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Configure selected buckets…" }));
     expect(openBulkUpdateModal).toHaveBeenCalledTimes(1);
   });
 
   it("opens the integrity action from selection", () => {
     const onShowIntegrityModal = vi.fn();
     render(<BucketSelectionActionsBar {...baseProps} onShowIntegrityModal={onShowIntegrityModal} />);
-    fireEvent.click(screen.getByRole("button", { name: "Check integrity" }));
+    openActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Check object integrity…" }));
     expect(onShowIntegrityModal).toHaveBeenCalledTimes(1);
   });
 
   it("opens the purge action from selection when available", () => {
     const onShowPurgeModal = vi.fn();
     render(<BucketSelectionActionsBar {...baseProps} onShowPurgeModal={onShowPurgeModal} />);
-    fireEvent.click(screen.getByRole("button", { name: "Purge selected" }));
+    openActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Purge bucket contents…" }));
     expect(onShowPurgeModal).toHaveBeenCalledTimes(1);
   });
 
   it("opens the config backup action for ceph-admin selections", () => {
     const onShowConfigBackupModal = vi.fn();
     render(<BucketSelectionActionsBar {...baseProps} onShowConfigBackupModal={onShowConfigBackupModal} />);
-    fireEvent.click(screen.getByRole("button", { name: "Backup configs" }));
+    openActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Back up bucket configurations…" }));
     expect(onShowConfigBackupModal).toHaveBeenCalledTimes(1);
   });
 
   it("hides config backup for storage-ops selections", () => {
     render(<BucketSelectionActionsBar {...baseProps} isStorageOps onShowConfigBackupModal={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: "Backup configs" })).not.toBeInTheDocument();
+    openActions();
+    expect(screen.queryByRole("menuitem", { name: "Back up bucket configurations…" })).not.toBeInTheDocument();
+  });
+
+  it("moves focus through the grouped action menu and returns it on Escape", () => {
+    render(<BucketSelectionActionsBar {...baseProps} />);
+    const trigger = screen.getByRole("button", { name: "Actions for 2 selected buckets" });
+    fireEvent.click(trigger);
+    const firstItem = screen.getByRole("menuitem", { name: "Manage UI tags…" });
+    expect(firstItem).toHaveFocus();
+    fireEvent.keyDown(firstItem, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Export selection…" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(trigger).toHaveFocus();
+  });
+
+  it("disables RGW bulk index checks above the 200 bucket limit", () => {
+    render(<BucketSelectionActionsBar {...baseProps} selectedCount={201} onShowIndexCheckModal={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for 201 selected buckets" }));
+    expect(screen.getByRole("menuitem", { name: /Check bucket indexes…/ })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/limited to 200 buckets/i)).toBeInTheDocument();
   });
 });

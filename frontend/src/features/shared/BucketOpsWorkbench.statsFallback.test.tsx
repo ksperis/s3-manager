@@ -111,7 +111,7 @@ vi.mock("../manager/BucketDetailPage", () => ({
   default: () => null,
 }));
 
-vi.mock("./BucketOpsBulkUpdateModal", () => ({
+vi.mock("./BucketOpsBulkUpdatePage", () => ({
   default: () => null,
 }));
 

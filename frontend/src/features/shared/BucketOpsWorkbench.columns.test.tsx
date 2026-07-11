@@ -118,7 +118,7 @@ vi.mock("../manager/BucketDetailPage", () => ({
   default: () => null,
 }));
 
-vi.mock("./BucketOpsBulkUpdateModal", () => ({
+vi.mock("./BucketOpsBulkUpdatePage", () => ({
   default: () => null,
 }));
 
@@ -141,6 +141,7 @@ const baseResponse = {
 const baseBucket = {
   name: "bucket-a",
   bucket_name: "bucket-a",
+  context_id: "account-1",
   context_name: "Account A",
   owner: "owner-a",
   used_bytes: 5120,
@@ -234,6 +235,20 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       writable: true,
       value: vi.fn(),
     });
+  });
+
+  it("makes Storage Ops bucket names actionable and labels row selection with its context", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({ items: [baseBucket], ...baseResponse });
+
+    renderStorageOps();
+
+    const bucketButton = await screen.findByRole("button", { name: "bucket-a" });
+    const row = bucketButton.closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByRole("checkbox", { name: "Select bucket bucket-a in Account A" })).toBeInTheDocument();
+
+    fireEvent.click(bucketButton);
+    expect(await screen.findByRole("heading", { name: "Configure bucket · bucket-a" })).toBeInTheDocument();
   });
 
   it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {
@@ -634,8 +649,10 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(bucketRow).not.toBeNull();
     fireEvent.click(within(bucketRow as HTMLElement).getByRole("checkbox"));
 
-    fireEvent.click(screen.getByText("Export list"));
-    fireEvent.click(await screen.findByRole("button", { name: "CSV (selected columns)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for 1 selected bucket" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Export selection…" }));
+    const firstExportDialog = await screen.findByRole("dialog", { name: "Export selection" });
+    fireEvent.click(within(firstExportDialog).getByText("CSV").closest("button") as HTMLButtonElement);
 
     await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(3));
     expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(
@@ -746,8 +763,10 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(bucketRow).not.toBeNull();
     fireEvent.click(within(bucketRow as HTMLElement).getByRole("checkbox"));
 
-    fireEvent.click(screen.getByText("Export list"));
-    fireEvent.click(await screen.findByRole("button", { name: "CSV (selected columns)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for 1 selected bucket" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Export selection…" }));
+    const secondExportDialog = await screen.findByRole("dialog", { name: "Export selection" });
+    fireEvent.click(within(secondExportDialog).getByText("CSV").closest("button") as HTMLButtonElement);
 
     await waitFor(() => expect(mocks.listStorageOpsBuckets.mock.calls.length).toBeGreaterThanOrEqual(3));
     expect(mocks.listStorageOpsBuckets.mock.calls.at(-1)?.[1]).toEqual(

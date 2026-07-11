@@ -111,11 +111,19 @@ vi.mock("../cephAdmin/CephAdminBucketCompareModal", () => ({
   default: () => null,
 }));
 
+vi.mock("../cephAdmin/CephAdminBucketIndexCheckPage", () => ({
+  default: ({ targets }: { targets: Array<{ name: string; tenant?: string | null }> }) => (
+    <div role="region" aria-label="Bulk bucket index checks">
+      {targets.map((target) => `${target.tenant ? `${target.tenant}/` : ""}${target.name}`).join(", ")}
+    </div>
+  ),
+}));
+
 vi.mock("../manager/BucketDetailPage", () => ({
   default: () => null,
 }));
 
-vi.mock("./BucketOpsBulkUpdateModal", () => ({
+vi.mock("./BucketOpsBulkUpdatePage", () => ({
   default: ({
     open,
     children,
@@ -133,11 +141,13 @@ vi.mock("./BucketSelectionActionsBar", () => ({
   default: ({
     exportSelectedBuckets,
     onShowConfigBackupModal,
+    onShowIndexCheckModal,
     selectionActionProgress,
     openBulkUpdateModal,
   }: {
     exportSelectedBuckets: (format: "text" | "csv" | "json") => Promise<void> | void;
     onShowConfigBackupModal?: () => void;
+    onShowIndexCheckModal?: () => void;
     selectionActionProgress?: { label: string; completed: number; total: number } | null;
     openBulkUpdateModal: () => void;
   }) => (
@@ -151,6 +161,11 @@ vi.mock("./BucketSelectionActionsBar", () => ({
       {onShowConfigBackupModal ? (
         <button type="button" onClick={onShowConfigBackupModal}>
           Trigger config backup
+        </button>
+      ) : null}
+      {onShowIndexCheckModal ? (
+        <button type="button" onClick={onShowIndexCheckModal}>
+          Trigger bulk index checks
         </button>
       ) : null}
       {selectionActionProgress ? (
@@ -433,6 +448,28 @@ describe("BucketOpsWorkbench selection actions", () => {
     });
     expect(window.URL.createObjectURL).toHaveBeenCalled();
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+  });
+
+  it("resolves tenant-aware targets before opening bulk RGW index checks", async () => {
+    const allBuckets = [{ ...buildBuckets(1)[0], tenant: "tenant-a" }];
+    mocks.listCephAdminBuckets.mockImplementation(createBucketListMock(allBuckets));
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("bucket-001")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Trigger bulk index checks" }));
+
+    const workflow = await screen.findByRole("region", { name: "Bulk bucket index checks" });
+    expect(workflow).toHaveTextContent("tenant-a/bucket-001");
+    expect(mocks.listCephAdminBuckets).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ advanced_filter: expect.stringContaining('"field":"name"'), with_stats: false }),
+    );
   });
 
   it("offers bulk notification configuration operations", async () => {

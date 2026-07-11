@@ -23,7 +23,9 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
    - **Usage & Metrics**: tabbed cluster-level usage composition, endpoint storage metrics, and traffic metrics.
    - **Browser**: object navigation when enabled.
 4. In **Buckets**, long-running bulk actions show progress bars with completion and failure counters.
-   Bulk configuration actions include lifecycle rules and bucket notification
+   Select one or more rows, then open **Actions…**. The menu separates local
+   selection tools, **S3 API** operations, **RGW Admin Ops**, and destructive
+   S3 operations. Bulk configuration actions include lifecycle rules and bucket notification
    configurations, with preview before apply. Selected buckets can also run
    usage-stat calculations, and each bucket detail page exposes the latest
    snapshot from the **Usage stats** tab.
@@ -31,7 +33,8 @@ Use **Ceph Admin** for Ceph RGW cluster-level operations.
 
 ## RGW Admin Ops actions
 
-The row action menus expose unitary RGW Admin Ops operations. Each operation
+Bucket names open S3 API configuration. The row action menu separates navigation,
+**S3 API**, **RGW Admin Ops**, and destructive RGW operations. Each Admin Ops operation
 shows the endpoint, target, impact, available options, required confirmation,
 and the result returned by RGW. The result stays open and includes the RGW HTTP
 status, the Ceph error code when present, and the JSON or text response body.
@@ -90,6 +93,9 @@ FIX BUCKET INDEX <tenant/bucket>
 ```
 
 A read-only index check uses the confirmation button without a typed phrase.
+For multi-selection diagnostics, use **Actions… > RGW Admin Ops > Check bucket
+indexes…**. The bulk workflow is read-only, supports at most 200 buckets, shows
+per-bucket results, and never enables index repair. Repairs remain unitary.
 
 ## Expected result
 

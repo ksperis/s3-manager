@@ -148,13 +148,13 @@ export default function CephAdminAdminOpsModal({
       case "delete-user":
         return "Delete RGW User";
       case "delete-bucket":
-        return "Delete bucket";
+        return "RGW Admin Ops · Delete bucket";
       case "unlink-bucket":
-        return "Unlink bucket";
+        return "RGW Admin Ops · Unlink bucket";
       case "link-bucket":
-        return "Link bucket";
+        return "RGW Admin Ops · Link bucket";
       case "index-check":
-        return "Check bucket index";
+        return "RGW Admin Ops · Check bucket index";
     }
   }, [action.kind]);
 

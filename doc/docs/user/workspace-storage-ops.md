@@ -21,8 +21,11 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - quick search,
    - advanced filter,
    - dynamic columns,
+   - click a bucket name to open its S3 API configuration,
+   - select one or more rows and open **Actions…** for grouped selection and
+     S3 API operations,
    - bulk preview/apply,
-   - export.
+   - export from **Actions… > Selection > Export selection…**.
    - quota and usage columns are available as single-line atomic columns so on-screen review and CSV export stay aligned.
    - the **Notifications** column can be added to inspect bucket notification
      configuration across supported contexts.

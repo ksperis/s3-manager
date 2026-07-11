@@ -17,10 +17,10 @@ Use Storage Ops UI tags for cross-context campaigns. They stay local to the brow
 
 1. Open **Storage Ops > Buckets**.
 2. Select one or more buckets.
-3. Use **+ Tag selection** to assign tags:
+3. Open **Actions… > Selection > Manage UI tags…**, then choose **Add tags**:
    - choose an existing tag, or
    - create a new tag with the `new-tag` input.
-4. Use **- Tag selection** to remove tags from the selected rows.
+4. In the same dialog, choose **Remove tags** to remove tags from the selected rows.
 5. Use tag filters to quickly restore the same selection scope later.
 
 ## Expected result

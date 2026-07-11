@@ -19,7 +19,7 @@ Prefer **HEAD only** for the first diagnostic pass. Use **GET body** only when y
 ## Steps
 
 1. Select one or more buckets from Manager, Ceph Admin, or Storage Ops.
-2. Open **Check integrity**.
+2. Open **Actions… > S3 API > Check object integrity…**.
 3. Choose **HEAD only** or **GET body**, then set parallelism, optional **Since**, optional **Max MB per object**, and **All versions** if noncurrent object versions must be checked.
 4. Run the check and monitor progress.
 5. Filter the result list by bucket, context, status, error state, object key, or error message.

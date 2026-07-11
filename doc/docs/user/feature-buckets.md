@@ -30,11 +30,12 @@ Confirm the workspace and execution context first. Bucket names can repeat acros
 5. In Manager, open **Tools > Feature rules** (`/manager/feature-rules`) to
    audit lifecycle, bucket policy, CORS, notifications, or bucket tags across
    every bucket in the active context.
-6. On Ceph Admin and Storage Ops bucket workbenches, use bulk update to preview
-   and apply lifecycle or notification configuration changes across selected
-   buckets.
+6. On Ceph Admin and Storage Ops bucket workbenches, select rows and open
+   **Actions… > S3 API > Configure selected buckets…** to preview and apply
+   lifecycle, notification, quota, versioning, access, CORS, or policy changes.
 7. When the purge tool is enabled, use **Manager > Tools > Purge** or
-   **Purge selected** from Ceph Admin and Storage Ops bucket workbenches to empty
+   **Actions… > Destructive S3 operations > Purge bucket contents…** from Ceph
+   Admin and Storage Ops bucket workbenches to empty
    selected buckets without deleting bucket configuration.
 8. From **Manager > Buckets**, empty buckets can be deleted from the normal
    confirmation dialog. Deleting a non-empty bucket requires bucket purge access

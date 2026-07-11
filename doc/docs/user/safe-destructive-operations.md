@@ -19,7 +19,7 @@ Use this page before deleting, purging, migrating, or applying configuration to 
 | Delete an RGW Account or User | Ceph Admin | Removes an administrative identity; optional User `purge-data` also removes owned data. | Unitary row action, exact target phrase, active Ceph Admin User protection, persistent RGW result. |
 | Delete a bucket with RGW Admin Ops | Ceph Admin | Removes the bucket; `purge-objects` also permanently removes all objects and versions. | Options off by default, exact target phrase, RGW HTTP and Ceph result displayed. |
 | Link or unlink a bucket | Ceph Admin | Changes the owner association without rewriting object ACLs. | Existing User/Account selector, exact target phrase, old/new owner in audit. |
-| Check or fix a bucket index | Ceph Admin | Read-only by default; `fix` can modify the bucket index. | Simple confirmation for checks, exact phrase for fixes, `check-objects` requires `fix`. |
+| Check or fix a bucket index | Ceph Admin | Read-only by default; `fix` can modify the bucket index. | Bulk checks are read-only and capped at 200 buckets; unitary fixes require an exact phrase and `check-objects` requires `fix`. |
 | Apply lifecycle or notification changes in bulk | Ceph Admin, Storage Ops | Changes configuration on many buckets. | Preview/apply flow and visible progress. |
 | Migrate buckets | Manager | Copies data and may change target state. | Precheck, mode selection, integrity options, progress and failure states. |
 | Delete objects in Browser | Browser | Removes selected current objects or delete markers. | Selection review, action confirmation, Operations overview. |
@@ -49,6 +49,9 @@ Do not start a destructive action if any of those details do not match your inte
   `AccountNotEmpty`; the RGW HTTP status and Ceph error code are authoritative.
 - A successful empty RGW response is still reported with its real status, for
   example `RGW HTTP 204`.
+- Use the grouped **RGW Admin Ops** menu to distinguish Ceph administrative
+  operations from S3 API configuration. Bulk index diagnostics never repair;
+  open the unitary row action when a repair is required.
 
 ## You are done when
 
