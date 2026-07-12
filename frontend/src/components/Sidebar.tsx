@@ -153,7 +153,7 @@ export default function Sidebar({
   const inactiveBadgeClasses = "shell-menu-muted shell-muted-text";
   const containerClasses =
     variant === "desktop"
-      ? "shell-sidebar relative z-[46] hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
+      ? "shell-sidebar relative hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
       : "shell-sidebar flex h-full flex-col border-r";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
   const iconClasses = "h-4 w-4";
@@ -175,21 +175,35 @@ export default function Sidebar({
   return (
     <aside className={rootClassName} style={rootStyle} data-sidebar-variant={variant}>
       <div className={`relative flex h-14 shrink-0 items-center ${compact ? "justify-center px-2" : "gap-3 px-4"}`}>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
-          <BrandCubeIcon className="h-4 w-4" />
-        </span>
-        {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
-        {variant === "desktop" && onCollapseToggle ? (
+        {compact && variant === "desktop" && onCollapseToggle ? (
           <button
             type="button"
             onClick={onCollapseToggle}
-            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
-            title={compact ? "Expand sidebar" : "Collapse sidebar"}
-            className="shell-control absolute right-0 z-30 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full text-[var(--shell-muted)] transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--shell-sidebar-bg)]"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-[0_8px_18px_rgba(37,99,235,0.2)] transition-colors hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--shell-sidebar-bg)]"
           >
-            <CollapseIcon className={`h-3.5 w-3.5 transition-transform ${compact ? "rotate-180" : ""}`} />
+            <CollapseIcon className="h-4 w-4 rotate-180" />
           </button>
-        ) : null}
+        ) : (
+          <>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)]">
+              <BrandCubeIcon className="h-4 w-4" />
+            </span>
+            {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
+            {variant === "desktop" && onCollapseToggle ? (
+              <button
+                type="button"
+                onClick={onCollapseToggle}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="shell-sidebar-item ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--shell-muted)] transition-colors hover:text-[var(--shell-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <CollapseIcon className="h-4 w-4" />
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
       {customBody ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{customBody}</div>

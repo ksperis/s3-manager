@@ -260,26 +260,21 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
     const geometry = await sidebar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const collapseRect = element.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]')?.getBoundingClientRect();
-      const collapseButton = element.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]');
       const profileRect = element.querySelector<HTMLElement>('a[aria-label="Profile"], a[title="Profile"]')?.getBoundingClientRect()
         ?? Array.from(element.querySelectorAll<HTMLElement>("a")).find((link) => link.textContent?.trim() === "Profile")?.getBoundingClientRect();
-      const collapseRightEdgeHit = collapseRect
-        ? document.elementFromPoint(collapseRect.right - 2, collapseRect.top + collapseRect.height / 2)
-        : null;
       return {
         top: rect.top,
         right: rect.right,
         height: rect.height,
         viewportHeight: window.innerHeight,
-        collapseCenterX: collapseRect ? collapseRect.left + collapseRect.width / 2 : null,
-        collapseRightEdgeVisible: Boolean(collapseButton && collapseRightEdgeHit && collapseButton.contains(collapseRightEdgeHit)),
+        collapseRightInset: collapseRect ? rect.right - collapseRect.right : null,
         profileBottom: profileRect?.bottom ?? null,
       };
     });
     expect(Math.abs(geometry.top)).toBeLessThanOrEqual(1);
     expect(Math.abs(geometry.height - geometry.viewportHeight)).toBeLessThanOrEqual(2);
-    expect(Math.abs((geometry.collapseCenterX ?? 0) - geometry.right)).toBeLessThanOrEqual(1);
-    expect(geometry.collapseRightEdgeVisible).toBe(true);
+    expect(geometry.collapseRightInset ?? 0).toBeGreaterThanOrEqual(12);
+    expect(geometry.collapseRightInset ?? 0).toBeLessThanOrEqual(20);
     expect(Math.abs((geometry.profileBottom ?? 0) - geometry.viewportHeight)).toBeLessThanOrEqual(12);
 
     await collapseButton.click();

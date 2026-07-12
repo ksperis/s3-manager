@@ -175,7 +175,7 @@ describe("Sidebar", () => {
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the border collapse control available when compact", () => {
+  it("turns the compact brand control into the sidebar expander", () => {
     const onCollapseToggle = vi.fn();
     const { container } = render(
       <MemoryRouter>
@@ -189,6 +189,7 @@ describe("Sidebar", () => {
 
     const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
     expect(expandButton).toHaveAttribute("title", "Expand sidebar");
+    expect(expandButton).toHaveClass("bg-primary");
     expect(container.querySelector('[data-sidebar-variant="desktop"]')?.firstElementChild).toContainElement(expandButton);
     fireEvent.click(expandButton);
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
