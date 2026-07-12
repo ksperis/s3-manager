@@ -151,7 +151,7 @@ describe("Sidebar", () => {
 
   it("renders the collapse control when a collapse handler is provided", () => {
     const onCollapseToggle = vi.fn();
-    render(
+    const { container } = render(
       <MemoryRouter>
         <Sidebar
           onCollapseToggle={onCollapseToggle}
@@ -165,8 +165,32 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("navigation", { name: "s3-manager navigation" })).toHaveClass("pb-14");
-    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    const collapseButton = screen.getByRole("button", { name: "Collapse sidebar" });
+    expect(screen.getByRole("navigation", { name: "s3-manager navigation" })).toHaveClass("pb-3");
+    expect(screen.getByText("S3 Manager").parentElement).toContainElement(collapseButton);
+    expect(container.querySelector('[data-sidebar-variant="desktop"]')?.lastElementChild).toContainElement(
+      screen.getByRole("link", { name: "Profile" }),
+    );
+    fireEvent.click(collapseButton);
+    expect(onCollapseToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the border collapse control available when compact", () => {
+    const onCollapseToggle = vi.fn();
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar
+          compact
+          onCollapseToggle={onCollapseToggle}
+          sections={[{ label: "Overview", links: [{ to: "/manager/metrics", label: "Metrics" }] }]}
+        />
+      </MemoryRouter>
+    );
+
+    const expandButton = screen.getByRole("button", { name: "Expand sidebar" });
+    expect(expandButton).toHaveAttribute("title", "Expand sidebar");
+    expect(container.querySelector('[data-sidebar-variant="desktop"]')?.firstElementChild).toContainElement(expandButton);
+    fireEvent.click(expandButton);
     expect(onCollapseToggle).toHaveBeenCalledTimes(1);
   });
 
@@ -267,7 +291,10 @@ describe("Sidebar", () => {
     expect(sidebar).not.toBeNull();
     const nav = screen.getByRole("navigation", { name: "s3-manager navigation" });
     const footer = screen.getByText("Portal account footer");
+    const profile = screen.getByRole("link", { name: "Profile" });
     expect(nav.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(footer.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sidebar.lastElementChild).toContainElement(profile);
   });
 
   it("renders footer content in the mobile sidebar variant", () => {

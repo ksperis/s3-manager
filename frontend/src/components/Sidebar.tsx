@@ -153,13 +153,11 @@ export default function Sidebar({
   const inactiveBadgeClasses = "shell-menu-muted shell-muted-text";
   const containerClasses =
     variant === "desktop"
-      ? "shell-sidebar relative hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
+      ? "shell-sidebar relative z-[46] hidden h-full shrink-0 border-r md:flex md:flex-col transition-[width] duration-200 ease-out"
       : "shell-sidebar flex h-full flex-col border-r";
   const rootClassName = className ? `${containerClasses} ${className}` : containerClasses;
   const iconClasses = "h-4 w-4";
-  const navSpacingClasses = compact
-    ? `gap-1.5 px-2 pt-3 ${variant === "desktop" && onCollapseToggle ? "pb-12" : "pb-3"}`
-    : `gap-2 px-2.5 pt-3 ${variant === "desktop" && onCollapseToggle ? "pb-14" : "pb-3"}`;
+  const navSpacingClasses = compact ? "gap-1.5 px-2 pb-3 pt-3" : "gap-2 px-2.5 pb-3 pt-3";
   const rootStyle: CSSProperties | undefined =
     variant === "desktop"
       ? {
@@ -181,6 +179,17 @@ export default function Sidebar({
           <BrandCubeIcon className="h-4 w-4" />
         </span>
         {!compact && <span className="truncate text-[14px] font-semibold leading-none text-[var(--shell-text)]">S3 Manager</span>}
+        {variant === "desktop" && onCollapseToggle ? (
+          <button
+            type="button"
+            onClick={onCollapseToggle}
+            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+            title={compact ? "Expand sidebar" : "Collapse sidebar"}
+            className="shell-control absolute right-0 z-30 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full text-[var(--shell-muted)] transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--shell-hover)] hover:text-[var(--shell-text)] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--shell-sidebar-bg)]"
+          >
+            <CollapseIcon className={`h-3.5 w-3.5 transition-transform ${compact ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
       </div>
       {customBody ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{customBody}</div>
@@ -300,22 +309,6 @@ export default function Sidebar({
           {!compact && <span>Profile</span>}
         </NavLink>
       </div>
-      {variant === "desktop" && onCollapseToggle ? (
-        <div className={`shrink-0 border-t border-[color:var(--shell-border)] ${compact ? "p-2" : "p-2.5"}`}>
-          <button
-            type="button"
-            onClick={onCollapseToggle}
-            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
-            title={compact ? "Expand" : undefined}
-            className={`shell-sidebar-item flex h-8 w-full items-center rounded-md text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-              compact ? "justify-center px-2" : "gap-2 px-2.5"
-            }`}
-          >
-            <CollapseIcon className={`h-4 w-4 shrink-0 transition-transform ${compact ? "rotate-180" : ""}`} />
-            {!compact && <span>Collapse</span>}
-          </button>
-        </div>
-      ) : null}
     </aside>
   );
 }

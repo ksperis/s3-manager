@@ -252,18 +252,46 @@ async function expectBrowserNormalUsageHidden(page: Page) {
 async function expectBrowserSidebarShell(page: Page, viewportName: string) {
   if (viewportName === "desktop") {
     const sidebar = page.locator("aside[data-sidebar-variant='desktop']");
+    const profileLink = sidebar.getByRole("link", { name: "Profile" });
+    const collapseButton = sidebar.getByRole("button", { name: "Collapse sidebar" });
     await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
-    await expect(sidebar.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+    await expect(collapseButton).toBeVisible();
+    await expect(profileLink).toBeVisible();
     const geometry = await sidebar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
+      const collapseRect = element.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]')?.getBoundingClientRect();
+      const collapseButton = element.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]');
+      const profileRect = element.querySelector<HTMLElement>('a[aria-label="Profile"], a[title="Profile"]')?.getBoundingClientRect()
+        ?? Array.from(element.querySelectorAll<HTMLElement>("a")).find((link) => link.textContent?.trim() === "Profile")?.getBoundingClientRect();
+      const collapseRightEdgeHit = collapseRect
+        ? document.elementFromPoint(collapseRect.right - 2, collapseRect.top + collapseRect.height / 2)
+        : null;
       return {
         top: rect.top,
+        right: rect.right,
         height: rect.height,
         viewportHeight: window.innerHeight,
+        collapseCenterX: collapseRect ? collapseRect.left + collapseRect.width / 2 : null,
+        collapseRightEdgeVisible: Boolean(collapseButton && collapseRightEdgeHit && collapseButton.contains(collapseRightEdgeHit)),
+        profileBottom: profileRect?.bottom ?? null,
       };
     });
     expect(Math.abs(geometry.top)).toBeLessThanOrEqual(1);
     expect(Math.abs(geometry.height - geometry.viewportHeight)).toBeLessThanOrEqual(2);
+    expect(Math.abs((geometry.collapseCenterX ?? 0) - geometry.right)).toBeLessThanOrEqual(1);
+    expect(geometry.collapseRightEdgeVisible).toBe(true);
+    expect(Math.abs((geometry.profileBottom ?? 0) - geometry.viewportHeight)).toBeLessThanOrEqual(12);
+
+    await collapseButton.click();
+    const expandButton = sidebar.getByRole("button", { name: "Expand sidebar" });
+    await expect(expandButton).toBeVisible();
+    await expect(sidebar.getByText("S3 Manager", { exact: true })).toHaveCount(0);
+    await expect(sidebar).toHaveCSS("width", "56px");
+    await expect(profileLink).toHaveAttribute("title", "Profile");
+
+    await expandButton.click();
+    await expect(collapseButton).toBeVisible();
+    await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
     return;
   }
 
