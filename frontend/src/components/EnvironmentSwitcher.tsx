@@ -6,12 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
-import { listExecutionContexts } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson, writeClientStorage } from "../utils/clientStorage";
 import {
   WORKSPACE_STORAGE_KEY,
-  isAdminLikeRole,
   type SessionUser,
   type WorkspaceId,
   readStoredUser,
@@ -31,13 +29,6 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<SessionUser | null>(() => readStoredUser());
-  const [workspaceContextAvailability, setWorkspaceContextAvailability] = useState<{
-    manager: boolean | null;
-    browser: boolean | null;
-  }>({
-    manager: null,
-    browser: null,
-  });
   const { generalSettings } = useGeneralSettings();
 
   useEffect(() => {
@@ -65,35 +56,9 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     if (!isUiUser || isSessionUser) {
       return base;
     }
-    return base.filter((workspace) => {
-      if (workspace.id === "manager" && workspaceContextAvailability.manager === false) return false;
-      if (workspace.id === "browser" && workspaceContextAvailability.browser === false) return false;
-      return true;
-    });
-  }, [generalSettings, user, workspaceContextAvailability.browser, workspaceContextAvailability.manager]);
+    return base;
+  }, [generalSettings, user]);
   const current = resolveWorkspaceFromPath(location.pathname, environments);
-
-  useEffect(() => {
-    const isUiUser = user?.role === "ui_user";
-    const isSessionUser = user?.authType === "s3_session";
-    if (!isUiUser || isSessionUser || isAdminLikeRole(user?.role)) {
-      setWorkspaceContextAvailability({ manager: null, browser: null });
-      return;
-    }
-    let cancelled = false;
-    Promise.allSettled([listExecutionContexts("manager"), listExecutionContexts("browser")]).then((results) => {
-      if (cancelled) return;
-      const managerAvailable = results[0].status === "fulfilled" && results[0].value.length > 0;
-      const browserAvailable = results[1].status === "fulfilled" && results[1].value.length > 0;
-      setWorkspaceContextAvailability({
-        manager: managerAvailable,
-        browser: browserAvailable,
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.authType, user?.role]);
 
   const currentWorkspaceId = current?.id ?? null;
 

@@ -4,7 +4,12 @@
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
-import { CLIENT_STORAGE_KEYS, readClientStorage } from "../utils/clientStorage";
+import {
+  CLIENT_STORAGE_KEYS,
+  readClientJson,
+  readClientStorage,
+  writeClientJson,
+} from "../utils/clientStorage";
 
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
@@ -47,8 +52,11 @@ const GeneralSettingsContext = createContext<GeneralSettingsContextValue>({
 });
 
 export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
-  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(DEFAULT_GENERAL_SETTINGS);
-  const [loading, setLoading] = useState(() => Boolean(readClientStorage(CLIENT_STORAGE_KEYS.authToken)));
+  const [cachedSettings] = useState(() => readClientJson<GeneralSettings>(CLIENT_STORAGE_KEYS.generalSettingsCache));
+  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(cachedSettings ?? DEFAULT_GENERAL_SETTINGS);
+  const [loading, setLoading] = useState(
+    () => Boolean(readClientStorage(CLIENT_STORAGE_KEYS.authToken)) && cachedSettings == null
+  );
 
   const refresh = useCallback(async () => {
     const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
@@ -61,13 +69,13 @@ export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
     try {
       const data = await fetchGeneralSettings();
       setGeneralSettings(data);
-    } catch (err) {
-      console.error(err);
-      setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
+      writeClientJson(CLIENT_STORAGE_KEYS.generalSettingsCache, data);
+    } catch {
+      if (!cachedSettings) setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cachedSettings]);
 
   useEffect(() => {
     void refresh();

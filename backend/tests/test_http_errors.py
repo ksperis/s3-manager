@@ -39,7 +39,7 @@ def test_raise_bad_gateway_from_runtime_preserves_safe_runtime_message():
     try:
         raise_bad_gateway_from_runtime(RuntimeError("backend timeout"))
     except HTTPException as exc:
-        assert exc.status_code == 502
+        assert exc.status_code == 504
         assert exc.detail == "backend timeout"
     else:
         raise AssertionError("Expected HTTPException")

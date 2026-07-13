@@ -1269,6 +1269,7 @@ def get_rgw_admin_client(
     endpoint: Optional[str] = None,
     region: Optional[str] = None,
     verify_tls: bool = True,
+    request_timeout_seconds: Optional[float] = None,
 ) -> RGWAdminClient:
     return RGWAdminClient(
         access_key=access_key,
@@ -1276,4 +1277,5 @@ def get_rgw_admin_client(
         endpoint=endpoint,
         region=region,
         verify_tls=verify_tls,
+        request_timeout_seconds=request_timeout_seconds,
     )

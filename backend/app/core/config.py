@@ -234,6 +234,22 @@ class Settings(BaseSettings):
         "us-east-1",
         description="Seed default S3 region",
     )
+    storage_interactive_connect_timeout_seconds: float = Field(
+        2.0,
+        gt=0,
+        description="Connection timeout for interactive S3-compatible API calls",
+    )
+    storage_interactive_read_timeout_seconds: float = Field(
+        5.0,
+        gt=0,
+        description="Socket read timeout for interactive S3-compatible API calls",
+    )
+    storage_interactive_max_attempts: int = Field(
+        2,
+        ge=1,
+        le=5,
+        description="Maximum attempts for interactive S3-compatible API calls",
+    )
 
     seed_rgw_admin_access_key: Optional[str] = Field(
         None,
@@ -247,6 +263,11 @@ class Settings(BaseSettings):
         10.0,
         gt=0,
         description="HTTP timeout for RGW Admin Ops requests in seconds (RGW_ADMIN_TIMEOUT_SECONDS)",
+    )
+    rgw_admin_probe_timeout_seconds: float = Field(
+        3.0,
+        gt=0,
+        description="HTTP timeout for explicit RGW Admin availability probes",
     )
     rgw_admin_bucket_list_stats_timeout_seconds: float = Field(
         60.0,

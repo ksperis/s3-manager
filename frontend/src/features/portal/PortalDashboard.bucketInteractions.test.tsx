@@ -135,7 +135,17 @@ const mocks = vi.hoisted(() => {
       degraded_count: 0,
       down_count: 0,
       unknown_count: 0,
-      endpoints: [],
+      endpoints: [
+        {
+          endpoint_id: 1,
+          name: "Primary storage",
+          endpoint_url: "https://s3.example.test",
+          status: "up",
+          checked_at: new Date().toISOString(),
+          latency_ms: 25,
+          check_mode: "http",
+        },
+      ],
       incidents: [],
     },
     healthAlerts: [],

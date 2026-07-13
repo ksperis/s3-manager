@@ -13,14 +13,6 @@ import { readStoredUser } from "../../utils/workspaces";
 
 const PORTAL_ACCOUNT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedPortalAccount;
 
-const DEV_FALLBACK_ACCOUNT: S3Account = {
-  id: "dev-account",
-  name: "Laurent",
-  tags: [],
-  storage_endpoint_id: 1,
-  storage_endpoint_name: "eu-west-3",
-};
-
 type PortalAccountContextType = {
   accounts: S3Account[];
   selectedAccountId: string | null;
@@ -51,13 +43,13 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await listPortalAccounts();
-        if (cancelled) return;
+        const data = await listPortalAccounts({ signal: controller.signal });
+        if (controller.signal.aborted) return;
         setAccounts(data);
         if (data.length === 0) {
           setSelectedAccountId(null);
@@ -76,15 +68,7 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
         setSelectedAccountId(defaultId);
         writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, defaultId);
       } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          if (import.meta.env.DEV) {
-            setAccounts([DEV_FALLBACK_ACCOUNT]);
-            setSelectedAccountId(DEV_FALLBACK_ACCOUNT.id);
-            writeClientStorage(PORTAL_ACCOUNT_STORAGE_KEY, DEV_FALLBACK_ACCOUNT.id);
-            setError(null);
-            return;
-          }
+        if (!controller.signal.aborted) {
           setError(
             extractApiError(
               err,
@@ -99,15 +83,13 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
           setSelectedAccountId(null);
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       }
     };
-    load();
-    return () => {
-      cancelled = true;
-    };
+    void load();
+    return () => controller.abort();
   }, [t]);
 
   const updateSelected = (id: string | null) => {

@@ -200,7 +200,7 @@ def test_private_connection_tag_definitions_api_isolated_by_owner(client: TestCl
     ]
 
 
-def test_execution_contexts_selector_hides_administrative_tags(client: TestClient, db_session):
+def test_execution_contexts_selector_hides_administrative_tags(client: TestClient, db_session, monkeypatch):
     user = _ui_admin(7101, "selector-user@example.test")
     db_session.add(user)
     db_session.commit()
@@ -235,6 +235,10 @@ def test_execution_contexts_selector_hides_administrative_tags(client: TestClien
     db_session.commit()
 
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: user
+    monkeypatch.setattr(
+        "app.services.s3_accounts_service.S3AccountsService.get_account_limits",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Execution context catalog must stay local")),
+    )
     response = client.get("/api/me/execution-contexts", params={"workspace": "manager"})
     assert response.status_code == 200, response.text
     payload = response.json()

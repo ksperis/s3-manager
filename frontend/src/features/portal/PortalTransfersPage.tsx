@@ -272,7 +272,7 @@ export default function PortalTransfersPage() {
   const [rawLogsSpaceId, setRawLogsSpaceId] = useState("");
   const [rawLogsLoading, setRawLogsLoading] = useState(false);
   const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData();
+  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData({ includeTransfers: true });
   const storageSpaces = workspace.spaces ?? [];
   const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
   const logsTabs = useMemo(() => {

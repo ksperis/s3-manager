@@ -6,10 +6,10 @@ from typing import Any, Optional
 from xml.etree import ElementTree
 
 import boto3
-from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
+from app.services.aws_client_config import build_interactive_aws_config
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def get_sns_client(
         aws_secret_access_key=secret_key or settings.seed_s3_secret_key,
         region_name=region or settings.seed_s3_region,
         verify=verify_tls,
-        config=Config(signature_version="s3v4"),
+        config=build_interactive_aws_config(),
     )
 
 

@@ -8,6 +8,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
+from app.services.aws_client_config import build_interactive_aws_config
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def get_sts_client(
         aws_session_token=session_token,
         region_name=region or settings.seed_s3_region,
         verify=verify_tls,
+        config=build_interactive_aws_config(),
     )
     return client
 

@@ -48,6 +48,7 @@ class S3Account(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+    storage_endpoint_is_default: Optional[bool] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None
     allow_manager_bucket_quota: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)

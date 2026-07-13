@@ -2847,8 +2847,10 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
 
     await user.click(screen.getByText("Show technical details"));
-    expect(await screen.findByText("Network Error")).toBeInTheDocument();
-    expect(screen.getAllByText("Network Error")).toHaveLength(1);
+    expect(
+      await screen.findByText("Unable to list objects for this prefix."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
   });
 
   it("loads more buckets from the panel without dropping the pinned current bucket", async () => {

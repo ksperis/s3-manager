@@ -6,6 +6,7 @@ const clientMock = vi.hoisted(() => ({
 
 vi.mock("./client", () => ({
   default: clientMock,
+  LONG_RUNNING_REQUEST_TIMEOUT_MS: 0,
 }));
 
 import { listBrowserObjects } from "./browser";

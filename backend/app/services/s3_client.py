@@ -5,7 +5,6 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 
 import boto3
-from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 from botocore.parsers import ResponseParserError
 from typing import Iterable, Callable, Any, Optional
@@ -13,6 +12,7 @@ import logging
 from time import perf_counter
 
 from app.core.config import get_settings
+from app.services.aws_client_config import build_interactive_aws_config
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -81,11 +81,9 @@ def get_s3_client(
 ):
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured")
-    config_kwargs = {"signature_version": "s3v4"}
+    s3_config = None
     if force_path_style:
-        config_kwargs["s3"] = {"addressing_style": "path"}
-    if user_agent_extra:
-        config_kwargs["user_agent_extra"] = user_agent_extra
+        s3_config = {"addressing_style": "path"}
     client = boto3.client(
         "s3",
         endpoint_url=endpoint,
@@ -94,7 +92,7 @@ def get_s3_client(
         aws_session_token=session_token,
         region_name=region or settings.seed_s3_region,
         verify=verify_tls,
-        config=Config(**config_kwargs),
+        config=build_interactive_aws_config(s3=s3_config, user_agent_extra=user_agent_extra),
     )
     return LoggedS3Client(client)
 

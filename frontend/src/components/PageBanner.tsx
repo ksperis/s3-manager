@@ -26,6 +26,8 @@ export default function PageBanner({ tone = "info", children, className }: PageB
   }
   return (
     <div
+      role={tone === "error" || tone === "warning" ? "alert" : "status"}
+      aria-live={tone === "error" || tone === "warning" ? "assertive" : "polite"}
       className={cx(
         "min-w-0 max-w-full break-words rounded-md border px-3 py-2 ui-caption [overflow-wrap:anywhere]",
         uiToneBannerClasses[toneMap[tone]],

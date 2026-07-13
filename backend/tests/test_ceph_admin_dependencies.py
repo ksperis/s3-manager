@@ -32,7 +32,8 @@ features:
     detail = deps.validate_ceph_admin_service_identity(endpoint)
 
     assert detail is not None
-    assert "unable to validate credentials" in detail
+    assert "did not respond" in detail
+    assert "connect timeout" not in detail
 
 
 def test_validate_ceph_admin_service_identity_allows_admin_user_when_admin_feature_disabled(monkeypatch):
@@ -135,7 +136,7 @@ features:
     assert ctx.endpoint is endpoint
     assert ctx.s3_endpoint == "https://s3.example.test"
     assert ctx.rgw_admin.endpoint == "https://rgw-admin.example.test"
-    assert captured == ["https://rgw-admin.example.test", "https://rgw-admin.example.test"]
+    assert captured == ["https://rgw-admin.example.test"]
 
 
 def test_build_ceph_admin_endpoint_payload_exposes_admin_endpoint_when_admin_feature_disabled():

@@ -14,5 +14,6 @@ describe("PageBanner", () => {
 
     const banner = screen.getByText(/RGW admin error 404/);
     expect(banner).toHaveClass("min-w-0", "max-w-full", "break-words", "[overflow-wrap:anywhere]");
+    expect(banner).toHaveAttribute("role", "alert");
   });
 });

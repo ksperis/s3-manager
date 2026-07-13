@@ -12,6 +12,7 @@ export const CLIENT_STORAGE_KEYS = {
   selectedCephAdminEndpoint: "selectedCephAdminEndpointId",
   theme: "theme",
   brandingPrimaryColor: "branding.primary_color",
+  generalSettingsCache: "settings:general:v1",
   selectorTagsPreference: "showSelectorTags",
   portalTransfers: "portal:v3:transfers",
   browserRootUiState: "browser:root-ui-state:v1",

@@ -90,6 +90,11 @@ function alertFromApi(item: PortalAlert, t: ReturnType<typeof useI18n>["t"]): Po
 
 export function usePortalWorkspaceData({
   includeArchived = false,
+  includeUsage = false,
+  includeActivity = false,
+  includeCollaborators = false,
+  includeTransfers = false,
+  includeAlerts = false,
   includeTraffic = false,
   includeTrafficTrend = false,
   includeHealth = false,
@@ -97,6 +102,11 @@ export function usePortalWorkspaceData({
   trafficWindow = "week",
 }: {
   includeArchived?: boolean;
+  includeUsage?: boolean;
+  includeActivity?: boolean;
+  includeCollaborators?: boolean;
+  includeTransfers?: boolean;
+  includeAlerts?: boolean;
   includeTraffic?: boolean;
   includeTrafficTrend?: boolean;
   includeHealth?: boolean;
@@ -156,7 +166,6 @@ export function usePortalWorkspaceData({
         if (!cancelled) setState(data);
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setState(null);
           setStateError(
@@ -196,7 +205,6 @@ export function usePortalWorkspaceData({
         if (!cancelled) setStorageSpaces(data);
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setStorageSpaces(null);
           setStorageSpacesError(
@@ -221,7 +229,7 @@ export function usePortalWorkspaceData({
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi) {
+    if (!includeUsage || !hasAccountContext || !accountIdForApi) {
       setUsage(null);
       setUsageLoading(false);
       setUsageError(null);
@@ -236,7 +244,6 @@ export function usePortalWorkspaceData({
         if (!cancelled) setUsage(data);
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setUsage(null);
           setUsageError(
@@ -257,7 +264,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, refreshToken, t]);
+  }, [accountIdForApi, hasAccountContext, includeUsage, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,7 +283,6 @@ export function usePortalWorkspaceData({
         if (!cancelled) setUsageTrends(data);
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setUsageTrends(null);
           setUsageTrendsError(
@@ -343,7 +349,6 @@ export function usePortalWorkspaceData({
         );
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setTraffic(null);
           setTrafficByWindow({});
@@ -381,8 +386,7 @@ export function usePortalWorkspaceData({
       .then((data) => {
         if (!cancelled) setHealth(data);
       })
-      .catch((err) => {
-        console.error(err);
+      .catch(() => {
         if (!cancelled) setHealth(null);
       })
       .finally(() => {
@@ -395,7 +399,7 @@ export function usePortalWorkspaceData({
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi) {
+    if (!includeActivity || !hasAccountContext || !accountIdForApi) {
       setActivity(null);
       setActivityLoading(false);
       return () => {
@@ -407,8 +411,7 @@ export function usePortalWorkspaceData({
       .then((data) => {
         if (!cancelled) setActivity(data);
       })
-      .catch((err) => {
-        console.error(err);
+      .catch(() => {
         if (!cancelled) setActivity(null);
       })
       .finally(() => {
@@ -417,11 +420,11 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, refreshToken]);
+  }, [accountIdForApi, hasAccountContext, includeActivity, refreshToken]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi) {
+    if (!includeCollaborators || !hasAccountContext || !accountIdForApi) {
       setCollaborators(null);
       setCollaboratorsLoading(false);
       setCollaboratorsError(null);
@@ -436,7 +439,6 @@ export function usePortalWorkspaceData({
         if (!cancelled) setCollaborators(data);
       })
       .catch((err) => {
-        console.error(err);
         if (!cancelled) {
           setCollaborators(null);
           setCollaboratorsError(
@@ -457,11 +459,11 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, refreshToken, t]);
+  }, [accountIdForApi, hasAccountContext, includeCollaborators, refreshToken, t]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi) {
+    if (!includeTransfers || !hasAccountContext || !accountIdForApi) {
       setTransfers(null);
       setTransfersLoading(false);
       return () => {
@@ -473,8 +475,7 @@ export function usePortalWorkspaceData({
       .then((data) => {
         if (!cancelled) setTransfers(data);
       })
-      .catch((err) => {
-        console.error(err);
+      .catch(() => {
         if (!cancelled) setTransfers(null);
       })
       .finally(() => {
@@ -483,11 +484,11 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, refreshToken]);
+  }, [accountIdForApi, hasAccountContext, includeTransfers, refreshToken]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!hasAccountContext || !accountIdForApi) {
+    if (!includeAlerts || !hasAccountContext || !accountIdForApi) {
       setAlerts(null);
       setAlertsLoading(false);
       return () => {
@@ -499,8 +500,7 @@ export function usePortalWorkspaceData({
       .then((data) => {
         if (!cancelled) setAlerts(data);
       })
-      .catch((err) => {
-        console.error(err);
+      .catch(() => {
         if (!cancelled) setAlerts(null);
       })
       .finally(() => {
@@ -509,7 +509,7 @@ export function usePortalWorkspaceData({
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext, refreshToken]);
+  }, [accountIdForApi, hasAccountContext, includeAlerts, refreshToken]);
 
   useEffect(() => {
     if (!accountIdForApi) {
@@ -597,7 +597,7 @@ export function usePortalWorkspaceData({
     healthAlerts,
     collaborators,
     workspace,
-    loading: accountLoading || stateLoading || storageSpacesLoading,
+    loading: accountLoading || storageSpacesLoading,
     accountLoading,
     stateLoading,
     storageSpacesLoading,

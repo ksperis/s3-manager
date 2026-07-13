@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
@@ -386,8 +386,8 @@ export type PortalAccountSettings = {
   admin_override: PortalSettingsOverride;
 };
 
-export async function listPortalAccounts(): Promise<S3Account[]> {
-  const { data } = await client.get<S3Account[]>("/portal/accounts");
+export async function listPortalAccounts(options?: { signal?: AbortSignal }): Promise<S3Account[]> {
+  const { data } = await client.get<S3Account[]>("/portal/accounts", { signal: options?.signal });
   return data;
 }
 
@@ -570,6 +570,7 @@ export async function downloadPortalServerAccessRawLogs(
   const response = await client.get<Blob>("/portal/transfers/server-access-logs/raw", {
     params: withS3AccountParam(baseParams, accountId),
     responseType: "blob",
+    timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
   });
   const fallback =
     options.dateFrom === options.dateTo
@@ -760,6 +761,7 @@ export async function downloadPortalStorageSpaceObject(
     {
       params: withS3AccountParam({ key }, accountId),
       responseType: "blob",
+      timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
     }
   );
   const fallback = key.split("/").filter(Boolean).at(-1) ?? "download";

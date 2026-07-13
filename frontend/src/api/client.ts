@@ -6,15 +6,20 @@ import axios, { AxiosRequestConfig } from "axios";
 import { CLIENT_STORAGE_KEYS, clearAuthStorage, readClientJson, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+export const API_REQUEST_TIMEOUT_MS = 15_000;
+export const AUTH_REFRESH_TIMEOUT_MS = 8_000;
+export const LONG_RUNNING_REQUEST_TIMEOUT_MS = 0;
 
 const client = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  timeout: API_REQUEST_TIMEOUT_MS,
 });
 
 const refreshClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  timeout: AUTH_REFRESH_TIMEOUT_MS,
 });
 
 type RetriableRequestConfig = AxiosRequestConfig & { _retry?: boolean };

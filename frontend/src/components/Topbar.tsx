@@ -169,8 +169,7 @@ export default function Topbar({
       const response = await fetchUserNotifications(20);
       setNotifications(response.items);
       setUnreadNotificationsCount(response.unread_count);
-    } catch (error) {
-      console.warn("Unable to load notifications", error);
+    } catch {
       setNotificationsError("Unable to load notifications.");
     } finally {
       setNotificationsLoading(false);

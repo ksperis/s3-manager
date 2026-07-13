@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractApiError, isApiFeatureNotImplemented, sanitizeErrorMessage } from "./apiError";
+import { classifyApiError, extractApiError, isApiFeatureNotImplemented, sanitizeErrorMessage } from "./apiError";
 
 describe("extractApiError", () => {
   it("prefers backend detail when available", () => {
@@ -13,18 +13,47 @@ describe("extractApiError", () => {
     expect(extractApiError(error, "Fallback message")).toBe("Forbidden by policy");
   });
 
-  it("falls back to error.message when backend detail is missing", () => {
+  it("normalizes low-level network errors when backend detail is missing", () => {
     const error = {
       isAxiosError: true,
       response: { data: {} },
       message: "Network Error",
     };
 
-    expect(extractApiError(error, "Fallback message")).toBe("Network Error");
+    expect(extractApiError(error, "Fallback message")).toBe("Fallback message");
   });
 
   it("falls back to provided fallback when error is unstructured", () => {
     expect(extractApiError({ foo: "bar" }, "Fallback message")).toBe("Fallback message");
+  });
+
+  it("uses a safe retryable fallback for upstream timeouts", () => {
+    const failure = classifyApiError(
+      {
+        isAxiosError: true,
+        code: "ECONNABORTED",
+        response: {
+          status: 504,
+          data: { detail: "HTTPConnectionPool(host='10.0.0.5', port=7480): Read timed out" },
+        },
+      },
+      "Storage endpoint is unavailable."
+    );
+
+    expect(failure).toEqual({
+      kind: "timeout",
+      message: "Storage endpoint is unavailable.",
+      retryable: true,
+      status: 504,
+    });
+  });
+
+  it("redacts connection-pool endpoint details", () => {
+    const message = sanitizeErrorMessage("HTTPConnectionPool(host='10.0.0.5', port=7480): Read timed out");
+
+    expect(message).toContain("[redacted-endpoint]");
+    expect(message).not.toContain("10.0.0.5");
+    expect(message).not.toContain("7480");
   });
 
   it("redacts sensitive values from backend details", () => {

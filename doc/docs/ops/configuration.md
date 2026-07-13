@@ -54,6 +54,15 @@ Key areas:
 - Backend replica and lease coordination: `BACKEND_REPLICAS`, `OPERATION_LEASE_TTL_SECONDS`, and `BILLING_OPERATION_LEASE_TTL_SECONDS`.
 - Shared history retention: `BILLING_DAILY_RETENTION_DAYS`, `QUOTA_HISTORY_HOURLY_RETENTION_DAYS`, `QUOTA_HISTORY_DAILY_RETENTION_DAYS`.
 - Quota SMTP secret: `SMTP_PASSWORD`.
+- Interactive storage budgets: `STORAGE_INTERACTIVE_CONNECT_TIMEOUT_SECONDS` (default `2`),
+  `STORAGE_INTERACTIVE_READ_TIMEOUT_SECONDS` (default `5`), and
+  `STORAGE_INTERACTIVE_MAX_ATTEMPTS` (default `2`). These bound UI-facing S3,
+  IAM, SNS, and STS calls; long-running streams and file transfers use explicit
+  request profiles instead.
+- RGW Admin availability probes use `RGW_ADMIN_PROBE_TIMEOUT_SECONDS` (default
+  `3`) while ordinary Admin Ops and bucket-statistics calls keep their separate
+  `RGW_ADMIN_TIMEOUT_SECONDS` and `RGW_ADMIN_BUCKET_LIST_STATS_TIMEOUT_SECONDS`
+  budgets.
 
 OIDC providers can be configured either from Admin **Settings > Authentication**
 or with nested environment variables:

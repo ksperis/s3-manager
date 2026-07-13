@@ -65,7 +65,7 @@ describe("browserBucketsPanelHelpers", () => {
       kind: "request_failed",
       title: "Unable to load objects for this bucket.",
       description: "Retry in a moment.",
-      technicalDetail: "Network Error",
+      technicalDetail: "Fallback message",
     });
   });
 });

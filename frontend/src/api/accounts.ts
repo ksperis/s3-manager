@@ -49,6 +49,7 @@ export type S3Account = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
+  storage_endpoint_is_default?: boolean | null;
   storage_endpoint_capabilities?: Record<string, boolean> | null;
   allow_manager_bucket_quota?: boolean;
 };

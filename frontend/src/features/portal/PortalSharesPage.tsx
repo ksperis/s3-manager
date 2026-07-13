@@ -490,7 +490,7 @@ export default function PortalSharesPage() {
     collaboratorsLoading,
     collaboratorsError,
     refreshWorkspaceData = () => undefined,
-  } = usePortalWorkspaceData();
+  } = usePortalWorkspaceData({ includeCollaborators: true });
   const initialUrlContextApplied = useRef(false);
   const activeCollaboratorSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived"),

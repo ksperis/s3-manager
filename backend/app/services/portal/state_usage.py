@@ -61,27 +61,15 @@ class PortalStateUsageMixin:
         used_objects = None
         access_keys: list[PortalAccessKey] = []
         link = self._existing_portal_link(user, account)
-        iam_user = None
-        iam_provisioned = False
-        if link and link.iam_username:
-            iam_service = self._get_iam_service(account)
-            iam_user = iam_service.get_user(link.iam_username)
-            if iam_user:
-                keys_with_portal = self._list_access_keys(link, iam_service, include_portal=True)
-                access_keys = [key for key in keys_with_portal if not key.is_portal]
-
-                portal_meta = next(
-                    (key for key in keys_with_portal if key.is_portal and key.access_key_id == link.active_access_key),
-                    None,
-                )
-                has_active_portal_credentials = bool(
-                    link.active_access_key
-                    and link.active_secret_key
-                    and portal_meta
-                    and self._is_active_status(portal_meta.status, default=True)
-                )
-                iam_provisioned = has_active_portal_credentials
-        quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
+        iam_provisioned = bool(
+            link
+            and link.iam_username
+            and link.active_access_key
+            and link.active_secret_key
+        )
+        quota_max_size_bytes = None
+        quota_max_objects = None
+        max_buckets = None
         portal_settings = self._effective_portal_settings(account)
         can_create_storage_spaces = bool(
             access.capabilities.can_manage_buckets
@@ -95,7 +83,7 @@ class PortalStateUsageMixin:
             iam_user=PortalIAMUser(
                 iam_user_id=link.iam_user_id if link else None,
                 iam_username=link.iam_username if link else None,
-                arn=iam_user.arn if iam_user else None,
+                arn=None,
                 created_at=link.created_at if link else None,
             ),
             access_keys=access_keys,

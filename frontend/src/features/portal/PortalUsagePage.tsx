@@ -115,7 +115,7 @@ export default function PortalUsagePage() {
     hasAccountContext,
     accountIdForApi,
     state,
-  } = usePortalWorkspaceData({ includeTraffic: true, includeHealth: true, trafficWindow });
+  } = usePortalWorkspaceData({ includeUsage: true, includeTraffic: true, includeHealth: true, trafficWindow });
 
   const tabs = useMemo(
     () =>

@@ -86,7 +86,7 @@ describe("BrowserPage error handling", () => {
     expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
   });
 
-  it("falls back to error.message when bucket loading fails without detail", async () => {
+  it("shows a public fallback when bucket loading fails without detail", async () => {
     searchBrowserBucketsMock.mockRejectedValueOnce({
       isAxiosError: true,
       response: { data: {} },
@@ -95,6 +95,9 @@ describe("BrowserPage error handling", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Network Error")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Unable to list buckets for this account."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
   });
 });

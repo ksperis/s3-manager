@@ -28,6 +28,8 @@ class CephAdminEndpointAccess(BaseModel):
     admin_warning: Optional[str] = None
     active_rgw_uid: Optional[str] = None
     active_rgw_tenant: Optional[str] = None
+    availability_status: Literal["unknown", "available", "unavailable", "denied", "misconfigured"] = "unknown"
+    availability_checked_at: Optional[str] = None
 
 
 class CephAdminAdminOpsResult(BaseModel):

@@ -2,8 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useState } from "react";
-import { fetchLoginSettings } from "../../api/appSettings";
 import { ExecutionContext } from "../../api/executionContexts";
 import { S3Account } from "../../api/accounts";
 
@@ -13,29 +11,7 @@ type DefaultEndpointInfo = {
 };
 
 export function useDefaultStorageEndpoint(): DefaultEndpointInfo {
-  const [defaultEndpointId, setDefaultEndpointId] = useState<number | null>(null);
-  const [defaultEndpointName, setDefaultEndpointName] = useState<string | null>("Default");
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchLoginSettings()
-      .then((settings) => {
-        if (!isMounted) return;
-        const defaultEndpoint = settings.endpoints.find((endpoint) => endpoint.is_default);
-        setDefaultEndpointId(defaultEndpoint?.id ?? null);
-        setDefaultEndpointName(defaultEndpoint?.name ?? (settings.endpoints.length > 0 ? null : "Default"));
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setDefaultEndpointId(null);
-        setDefaultEndpointName("Default");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  return { defaultEndpointId, defaultEndpointName };
+  return { defaultEndpointId: null, defaultEndpointName: null };
 }
 
 type AccountLike = ExecutionContext | S3Account;
@@ -51,6 +27,10 @@ function isDefaultStorageEndpoint(
 ): boolean {
   // User-scoped connections are always explicit targets and should display their endpoint.
   if ((isExecutionContext(context) && context.kind === "connection") || context.id.startsWith("conn-")) return false;
+  const explicitDefault = isExecutionContext(context)
+    ? context.endpoint_is_default
+    : context.storage_endpoint_is_default;
+  if (explicitDefault != null) return explicitDefault;
   if (isExecutionContext(context) ? context.endpoint_id == null : context.storage_endpoint_id == null) return true;
   if (defaultEndpointId !== null) {
     const endpointId = isExecutionContext(context) ? context.endpoint_id : context.storage_endpoint_id;

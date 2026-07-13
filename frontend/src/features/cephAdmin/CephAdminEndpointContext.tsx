@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
@@ -19,6 +19,7 @@ type CephAdminEndpointContextValue = {
   selectedEndpointAccess: CephAdminEndpointAccess | null;
   selectedEndpointAccessLoading: boolean;
   selectedEndpointAccessError: string | null;
+  retrySelectedEndpointAccess: () => void;
   loading: boolean;
   error: string | null;
 };
@@ -31,6 +32,7 @@ const CephAdminEndpointContext = createContext<CephAdminEndpointContextValue>({
   selectedEndpointAccess: null,
   selectedEndpointAccessLoading: false,
   selectedEndpointAccessError: null,
+  retrySelectedEndpointAccess: () => {},
   loading: false,
   error: null,
 });
@@ -47,6 +49,7 @@ function extractError(err: unknown): string {
 }
 
 export function CephAdminEndpointProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [endpoints, setEndpoints] = useState<CephAdminEndpoint[]>([]);
   const [selectedEndpointId, setSelectedEndpointIdState] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +57,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
   const [selectedEndpointAccess, setSelectedEndpointAccess] = useState<CephAdminEndpointAccess | null>(null);
   const [selectedEndpointAccessLoading, setSelectedEndpointAccessLoading] = useState(false);
   const [selectedEndpointAccessError, setSelectedEndpointAccessError] = useState<string | null>(null);
+  const [endpointAccessRefreshToken, setEndpointAccessRefreshToken] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const refresh = useCallback(async () => {
@@ -63,7 +67,6 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       const data = await listCephAdminEndpoints();
       setEndpoints(data);
     } catch (err) {
-      console.error(err);
       setEndpoints([]);
       setError(extractError(err));
     } finally {
@@ -133,7 +136,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
   );
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     async function loadSelectedEndpointAccess() {
       if (loading) return;
       if (selectedEndpointId == null) {
@@ -146,26 +149,34 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       setSelectedEndpointAccessError(null);
       setSelectedEndpointAccessLoading(true);
       try {
-        const access = await getCephAdminEndpointAccess(selectedEndpointId);
-        if (!cancelled) {
+        const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+        const access = await getCephAdminEndpointAccess(selectedEndpointId, {
+          probe: normalizedPath !== "/ceph-admin" && normalizedPath !== "/ceph-admin/profile",
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) {
           setSelectedEndpointAccess(access);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setSelectedEndpointAccess(null);
           setSelectedEndpointAccessError(extractError(err));
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setSelectedEndpointAccessLoading(false);
         }
       }
     }
     void loadSelectedEndpointAccess();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [loading, selectedEndpointId]);
+  }, [endpointAccessRefreshToken, loading, location.pathname, selectedEndpointId]);
+
+  const retrySelectedEndpointAccess = useCallback(() => {
+    setEndpointAccessRefreshToken((value) => value + 1);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -176,6 +187,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       selectedEndpointAccess,
       selectedEndpointAccessLoading,
       selectedEndpointAccessError,
+      retrySelectedEndpointAccess,
       loading,
       error,
     }),
@@ -186,6 +198,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       selectedEndpointAccess,
       selectedEndpointAccessLoading,
       selectedEndpointAccessError,
+      retrySelectedEndpointAccess,
       loading,
       error,
     ]

@@ -11,6 +11,10 @@ _TRUNCATED = "... <truncated>"
 _MAX_ERROR_DETAIL_LENGTH = 1200
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_HTTP_POOL_ENDPOINT_RE = re.compile(
+    r"\b(?:HTTP|HTTPS)ConnectionPool\(host=['\"][^'\"]+['\"],\s*port=\d+\)",
+    re.IGNORECASE,
+)
 _AUTH_HEADER_RE = re.compile(
     r"\b(authorization)\s*[:=]\s*(?:bearer|basic|aws4-hmac-sha256|aws)\s+[^,\n\r;]+",
     re.IGNORECASE,
@@ -114,6 +118,7 @@ def _sanitize_sensitive_text(value: str, *, redact_urls: bool, truncate: bool) -
         return "Upstream service error." if redact_urls else ""
     if redact_urls:
         text = _URL_RE.sub(_redact_url, text)
+        text = _HTTP_POOL_ENDPOINT_RE.sub("<redacted-endpoint>", text)
     text = _AUTH_HEADER_RE.sub(r"\1: " + _REDACTED, text)
     text = _AUTH_SCHEME_RE.sub(lambda match: f"{match.group(1)} {_REDACTED}", text)
     text = _SENSITIVE_ASSIGNMENT_RE.sub(_redact_assignment, text)

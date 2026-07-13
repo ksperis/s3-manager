@@ -34,7 +34,7 @@ export default function PortalActivityPage() {
   const [actionFilter, setActionFilter] = useState("all");
   const [spaceFilter, setSpaceFilter] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData();
+  const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData({ includeActivity: true });
   const actionOptions = useMemo(
     () => Array.from(new Set(workspace.activity.map((item) => item.action))).sort(),
     [workspace.activity]

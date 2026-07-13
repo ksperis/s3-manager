@@ -76,6 +76,7 @@ describe("portal routes", () => {
     const childPaths = ((portalRoute?.children ?? []) as Array<{ path?: string }>).map((route) => route.path).filter(Boolean);
 
     expect(childPaths).toEqual([
+      "profile",
       "storage-spaces",
       "storage-spaces/:spaceId/objects/*",
       "storage-spaces/:spaceId",

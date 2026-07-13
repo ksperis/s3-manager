@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
 export type BillingCoverage = {
@@ -130,7 +130,11 @@ export async function getBillingSubjectDetail(
 
 export async function downloadBillingCsv(month: string, endpointId: number): Promise<Blob> {
   const params: Record<string, string | number> = { month, endpoint_id: endpointId };
-  const response = await client.get("/admin/billing/export.csv", { params, responseType: "blob" });
+  const response = await client.get("/admin/billing/export.csv", {
+    params,
+    responseType: "blob",
+    timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
+  });
   return response.data as Blob;
 }
 

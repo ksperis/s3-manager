@@ -113,6 +113,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
     const load = async () => {
       setAccessError(null);
       if (!requiresS3AccountSelection) {
@@ -120,9 +121,11 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         return;
       }
       try {
-        const data = await listExecutionContexts(scope);
+        const data = await listExecutionContexts(scope, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         setS3Accounts(data);
       } catch {
+        if (controller.signal.aborted) return;
         setS3Accounts([]);
         setAccessError(
           scope === "browser"
@@ -131,7 +134,8 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         );
       }
     };
-    load();
+    void load();
+    return () => controller.abort();
   }, [contextsRefreshToken, requiresS3AccountSelection, scope]);
 
   useEffect(() => {

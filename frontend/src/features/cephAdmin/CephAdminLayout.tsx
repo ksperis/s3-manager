@@ -9,6 +9,7 @@ import { TopbarStaticControl } from "../../components/TopbarControlTrigger";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
@@ -32,6 +33,7 @@ function CephAdminShell() {
     selectedEndpointAccess,
     selectedEndpointAccessLoading,
     selectedEndpointAccessError,
+    retrySelectedEndpointAccess,
     loading,
     error,
   } = useCephAdminEndpoint();
@@ -39,6 +41,9 @@ function CephAdminShell() {
   const showSelector = endpoints.length > 1;
   const selectorEnabled = endpoints.length > 0;
   const endpointSelected = selectorEnabled && selectedEndpointId != null;
+  const endpointUnavailable = selectedEndpointAccess?.availability_status === "unavailable";
+  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+  const endpointDependentRoute = normalizedPath !== "/ceph-admin" && normalizedPath !== "/ceph-admin/profile";
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const trafficFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const canAdmin = endpointSelected && !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_admin);
@@ -60,12 +65,12 @@ function CephAdminShell() {
     canAdmin &&
     generalSettings.browser_enabled &&
     generalSettings.browser_ceph_admin_enabled;
-  const normalizedPath = location.pathname.replace(/\/+$/, "");
   const onCephAdminBrowserRoute = normalizedPath === "/ceph-admin/browser";
   const browserLinkDisabled = !canBrowser || !onCephAdminBrowserRoute;
   const resolveCommonEndpointHint = () => {
     if (!endpointSelected) return "Select a Ceph endpoint first.";
     if (selectedEndpointAccessLoading) return "Endpoint access is loading.";
+    if (endpointUnavailable) return "The selected endpoint is currently unavailable.";
     return null;
   };
   const metricsDisabledHint = (() => {
@@ -252,13 +257,40 @@ function CephAdminShell() {
     >
       <>
         {error && <PageBanner tone="warning" className="mb-4">{error}</PageBanner>}
-        {selectedEndpointAccessError && <PageBanner tone="warning" className="mb-4">{selectedEndpointAccessError}</PageBanner>}
-        {adminWarning && (
+        {endpointDependentRoute && selectedEndpointAccessError ? (
+          <PageEmptyState
+            eyebrow="Unavailable"
+            tone="warning"
+            title="Endpoint availability could not be checked"
+            description="The Ceph Admin shell remains available, but endpoint operations stay closed until the check succeeds."
+            primaryAction={{ label: "Retry", onClick: retrySelectedEndpointAccess }}
+            secondaryAction={{ label: "Back to dashboard", to: "/ceph-admin" }}
+          />
+        ) : endpointDependentRoute && (loading || !endpointSelected || selectedEndpointAccessLoading) ? (
+          <PageEmptyState
+            eyebrow="Checking"
+            title="Checking endpoint availability"
+            description="Ceph Admin operations will open as soon as the selected endpoint responds."
+          />
+        ) : endpointDependentRoute && endpointUnavailable ? (
+          <PageEmptyState
+            eyebrow="Unavailable"
+            tone="warning"
+            title="Storage endpoint unavailable"
+            description="The Ceph Admin shell remains available. Endpoint operations are temporarily closed and can be retried safely."
+            primaryAction={{ label: "Retry", onClick: retrySelectedEndpointAccess }}
+            secondaryAction={{ label: "Back to dashboard", to: "/ceph-admin" }}
+          />
+        ) : (
+          <>
+            {adminWarning && (
           <PageBanner tone="warning" className="mb-4">
             {adminWarning}
           </PageBanner>
+            )}
+            <Outlet />
+          </>
         )}
-        <Outlet />
       </>
     </Layout>
   );

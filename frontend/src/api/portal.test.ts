@@ -10,6 +10,7 @@ const clientMock = vi.hoisted(() => ({
 
 vi.mock("./client", () => ({
   default: clientMock,
+  LONG_RUNNING_REQUEST_TIMEOUT_MS: 0,
 }));
 
 import {
@@ -175,6 +176,7 @@ describe("portal storage spaces api", () => {
         key: "raw-data/report.csv",
       },
       responseType: "blob",
+      timeout: 0,
     });
     expect(result.blob).toBe(blob);
     expect(result.filename).toBe("report.csv");
@@ -318,6 +320,7 @@ describe("portal storage spaces api", () => {
         timezone_offset_minutes: -120,
       },
       responseType: "blob",
+      timeout: 0,
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },

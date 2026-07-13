@@ -240,7 +240,7 @@ describe("GeneralSettingsPage branding", () => {
     expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
   });
 
-  it("falls back to error.message when initial settings load fails without detail", async () => {
+  it("shows a public fallback when initial settings load fails without detail", async () => {
     fetchAppSettingsMock.mockRejectedValueOnce({
       isAxiosError: true,
       response: { data: {} },
@@ -249,6 +249,7 @@ describe("GeneralSettingsPage branding", () => {
 
     render(<GeneralSettingsPage />);
 
-    expect(await screen.findByText("Network Error")).toBeInTheDocument();
+    expect(await screen.findByText("Unable to load settings.")).toBeInTheDocument();
+    expect(screen.queryByText("Network Error")).not.toBeInTheDocument();
   });
 });

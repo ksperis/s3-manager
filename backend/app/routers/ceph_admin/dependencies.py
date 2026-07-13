@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.audit_service import AuditService
@@ -55,17 +56,13 @@ def _extract_ceph_admin_flags(user_payload: dict) -> tuple[bool, bool]:
 
 
 def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[str]:
+    configuration_error = validate_ceph_admin_service_configuration(endpoint)
+    if configuration_error:
+        return configuration_error
     endpoint_label = endpoint.name or f"#{endpoint.id}"
     admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
-    if not admin_endpoint:
-        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': RGW admin endpoint is not configured."
     access_key = endpoint.ceph_admin_access_key
     secret_key = endpoint.ceph_admin_secret_key
-    if not access_key or not secret_key:
-        return (
-            f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': dedicated Ceph Admin credentials "
-            "are not configured."
-        )
     try:
         rgw_admin = get_rgw_admin_client(
             access_key=access_key,
@@ -73,10 +70,11 @@ def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[
             endpoint=admin_endpoint,
             region=getattr(endpoint, "region", None),
             verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+            request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
         )
         user_payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
-    except RGWAdminError as exc:
-        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': unable to validate credentials ({exc})."
+    except RGWAdminError:
+        return f"Ceph Admin endpoint '{endpoint_label}' did not respond while credentials were being checked."
     if not isinstance(user_payload, dict) or not user_payload:
         return (
             f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': access key does not map to an RGW user."
@@ -86,6 +84,18 @@ def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[
         return (
             f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': the dedicated access key must belong "
             "to an RGW user created with --admin or --system."
+        )
+    return None
+
+
+def validate_ceph_admin_service_configuration(endpoint: StorageEndpoint) -> Optional[str]:
+    endpoint_label = endpoint.name or f"#{endpoint.id}"
+    if not resolve_rgw_admin_api_endpoint(endpoint):
+        return f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': RGW admin endpoint is not configured."
+    if not endpoint.ceph_admin_access_key or not endpoint.ceph_admin_secret_key:
+        return (
+            f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': dedicated Ceph Admin credentials "
+            "are not configured."
         )
     return None
 
@@ -109,12 +119,6 @@ def _resolve_storage_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ceph Admin credentials are not configured for this storage endpoint",
-        )
-    identity_validation_error = validate_ceph_admin_service_identity(endpoint)
-    if identity_validation_error:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=identity_validation_error,
         )
     s3_endpoint = normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None))
     if not s3_endpoint:

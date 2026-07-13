@@ -952,8 +952,9 @@ class PortalIamMixin:
     def check_eligibility(self, user: User, access: "AccountAccess") -> tuple[bool, list[str]]:
         """Return whether the portal can be used for this account context.
 
-        Portal is intended for RGW accounts exposing IAM semantics. We keep this
-        check conservative and side-effect free (no user creation).
+        Portal is intended for RGW accounts configured with IAM semantics. This
+        shell-level check is strictly local; remote IAM availability is checked
+        only by the pages and actions that need it.
         """
         reasons: list[str] = []
         account = access.account
@@ -968,16 +969,6 @@ class PortalIamMixin:
 
         if not account.rgw_account_id:
             reasons.append("Portal requires an RGW account")
-
-        if reasons:
-            return False, reasons
-
-        try:
-            iam_service = self._get_iam_service(account)
-            # Probe a minimal IAM call without enumerating all resources.
-            iam_service.client.list_users(MaxItems=1)
-        except Exception:
-            reasons.append("IAM API is not reachable or not authorized")
 
         return (len(reasons) == 0), reasons
 

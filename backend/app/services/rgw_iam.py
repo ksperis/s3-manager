@@ -2,13 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 import json
 import boto3
-from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import List, Optional, Union
 
 from app.models.iam import AccessKey, IAMGroup, IAMRole, IAMUser
 from app.models.policy import Policy
 from app.core.config import get_settings
+from app.services.aws_client_config import build_interactive_aws_config
 
 settings = get_settings()
 
@@ -27,7 +27,7 @@ def get_iam_client(
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4"),
+        config=build_interactive_aws_config(),
         region_name=region or settings.seed_s3_region,
         verify=verify_tls,
     )

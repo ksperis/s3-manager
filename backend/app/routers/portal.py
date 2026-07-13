@@ -302,7 +302,6 @@ def list_portal_accounts(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
-    quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
     links = [
         link
         for link in EffectiveAccessService(db).resolve_user(user).account_links
@@ -339,19 +338,19 @@ def list_portal_accounts(
                 .with_entities(User.email, User.id)
                 .first()
             )
-        quota_max_size_gb, quota_max_objects = quota_service.get_account_quota(acc)
         results.append(
             S3AccountSchema(
                 id=str(acc.id),
                 name=acc.name,
                 rgw_account_id=acc.rgw_account_id,
-                quota_max_size_gb=quota_max_size_gb,
-                quota_max_objects=quota_max_objects,
+                quota_max_size_gb=None,
+                quota_max_objects=None,
                 root_user_email=root_link[0] if root_link else None,
                 root_user_id=root_link[1] if root_link else None,
                 storage_endpoint_id=endpoint.id if endpoint else None,
                 storage_endpoint_name=endpoint.name if endpoint else None,
                 storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                storage_endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
                 storage_endpoint_capabilities=(
                     features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
                     if endpoint

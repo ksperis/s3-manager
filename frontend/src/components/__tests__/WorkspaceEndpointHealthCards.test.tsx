@@ -3,7 +3,7 @@ import type { WorkspaceEndpointHealthOverviewResponse } from "../../api/healthch
 import WorkspaceEndpointHealthCards from "../WorkspaceEndpointHealthCards";
 
 const workspaceHealth: WorkspaceEndpointHealthOverviewResponse = {
-  generated_at: "2026-03-12T13:00:00Z",
+  generated_at: new Date().toISOString(),
   incident_highlight_minutes: 720,
   endpoint_count: 1,
   up_count: 0,
@@ -16,7 +16,7 @@ const workspaceHealth: WorkspaceEndpointHealthOverviewResponse = {
       name: "Primary endpoint",
       endpoint_url: "https://s3.example.com",
       status: "down",
-      checked_at: "2026-03-12T12:59:00Z",
+      checked_at: new Date().toISOString(),
       latency_ms: null,
       check_mode: "http",
     },
@@ -110,5 +110,28 @@ describe("WorkspaceEndpointHealthCards", () => {
     expect(screen.getByText("+ 2 more incident(s)")).toBeInTheDocument();
     expect(screen.getByText("Endpoint 1")).toBeInTheDocument();
     expect(container.querySelectorAll("[data-incident-state]")).toHaveLength(5);
+  });
+
+  it("does not present an old successful check as current", () => {
+    render(
+      <WorkspaceEndpointHealthCards
+        data={{
+          ...workspaceHealth,
+          up_count: 1,
+          down_count: 0,
+          endpoints: [
+            {
+              ...workspaceHealth.endpoints[0],
+              status: "up",
+              checked_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+        }}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByText(/Stale/)).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
   });
 });

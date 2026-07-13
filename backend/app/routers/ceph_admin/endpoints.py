@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.db import StorageEndpoint as DbStorageEndpoint, StorageProvider, User
 from app.models.ceph_admin import (
     CephAdminEndpoint,
@@ -18,6 +19,7 @@ from app.routers.ceph_admin.dependencies import (
     CephAdminContext,
     get_ceph_admin_context,
     get_ceph_admin_workspace_endpoint,
+    validate_ceph_admin_service_configuration,
     validate_ceph_admin_service_identity,
 )
 from app.routers.dependencies import get_current_ceph_admin
@@ -26,6 +28,7 @@ from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 from app.routers.http_errors import sanitize_error_detail
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
 
@@ -199,15 +202,31 @@ def list_ceph_admin_endpoints(
 @router.get("/{endpoint_id}/access", response_model=CephAdminEndpointAccess)
 def get_ceph_admin_endpoint_access(
     endpoint: DbStorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
+    probe: bool = False,
 ) -> CephAdminEndpointAccess:
     has_supervision_credentials = bool(endpoint.supervision_access_key and endpoint.supervision_secret_key)
-    admin_warning = validate_ceph_admin_service_identity(endpoint)
-    can_accounts = False
+    admin_warning = validate_ceph_admin_service_configuration(endpoint)
+    can_admin = admin_warning is None
+    can_accounts = can_admin
     active_rgw_uid = None
     active_rgw_tenant = None
-    if admin_warning is None:
+    availability_status = "misconfigured" if admin_warning else "unknown"
+    availability_checked_at = None
+    if probe and admin_warning is None:
+        availability_checked_at = utcnow().isoformat()
+        admin_warning = validate_ceph_admin_service_identity(endpoint)
+        if admin_warning is not None:
+            if "did not respond" in admin_warning:
+                availability_status = "unavailable"
+                can_accounts = False
+            else:
+                availability_status = "denied"
+                can_admin = False
+                can_accounts = False
+        else:
+            availability_status = "available"
         admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
-        if admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
+        if admin_warning is None and admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
             try:
                 admin_client = get_rgw_admin_client(
                     access_key=endpoint.ceph_admin_access_key,
@@ -215,6 +234,7 @@ def get_ceph_admin_endpoint_access(
                     endpoint=admin_endpoint,
                     region=endpoint.region,
                     verify_tls=bool(getattr(endpoint, "verify_tls", True)),
+                    request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
                 )
                 identity_lookup = getattr(admin_client, "get_user_by_access_key", None)
                 if callable(identity_lookup):
@@ -223,7 +243,7 @@ def get_ceph_admin_endpoint_access(
                         allow_not_found=True,
                     )
                     active_rgw_uid, active_rgw_tenant = _extract_rgw_user_identity(active_identity)
-                # Probe /admin/account directly; not_found still means the API is reachable.
+                # Account support is only discovered on explicit probes, never while rendering the shell.
                 admin_client.get_account(
                     "RGW00000000000000000",
                     allow_not_found=True,
@@ -232,14 +252,17 @@ def get_ceph_admin_endpoint_access(
                 can_accounts = admin_client.account_api_supported is True
             except RGWAdminError:
                 can_accounts = False
+                availability_status = "unavailable"
     return CephAdminEndpointAccess(
         endpoint_id=endpoint.id,
-        can_admin=admin_warning is None,
+        can_admin=can_admin,
         can_accounts=can_accounts,
         can_metrics=has_supervision_credentials,
         admin_warning=admin_warning,
         active_rgw_uid=active_rgw_uid,
         active_rgw_tenant=active_rgw_tenant,
+        availability_status=availability_status,
+        availability_checked_at=availability_checked_at,
     )
 
 

@@ -12,11 +12,32 @@ from app.core.sensitive_data import (
 
 
 def raise_bad_gateway_from_runtime(exc: RuntimeError) -> NoReturn:
-    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    raise_http_exception_from_exception(_upstream_status_code(exc), exc)
 
 
 def raise_bad_gateway_from_exception(exc: Exception) -> NoReturn:
-    raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
+    raise_http_exception_from_exception(_upstream_status_code(exc), exc)
+
+
+def _upstream_status_code(exc: Exception) -> int:
+    message = str(exc).lower()
+    if any(marker in message for marker in ("timed out", "timeout", "read timeout")):
+        return status.HTTP_504_GATEWAY_TIMEOUT
+    if any(
+        marker in message
+        for marker in (
+            "could not connect",
+            "connection refused",
+            "failed to establish a new connection",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "connection aborted",
+        )
+    ):
+        return status.HTTP_503_SERVICE_UNAVAILABLE
+    if any(marker in message for marker in ("accessdenied", "invalidaccesskeyid", "signaturedoesnotmatch")):
+        return status.HTTP_403_FORBIDDEN
+    return status.HTTP_502_BAD_GATEWAY
 
 
 def raise_bad_request_from_value_error(exc: ValueError) -> NoReturn:

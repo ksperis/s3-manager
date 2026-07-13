@@ -82,7 +82,7 @@ const defaultForm: BucketForm = {
 const buildDefaultForm = (): BucketForm => ({
   ...defaultForm,
 });
-const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
+const extractError = (err: unknown, fallback = "Unexpected error"): string => extractApiError(err, fallback);
 
 function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaBytes?: number | null }) {
   if (!quotaBytes || quotaBytes <= 0) {
@@ -240,6 +240,9 @@ export default function BucketsPage() {
   const [buckets, setBuckets] = useState<BucketListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [baseLoadFailed, setBaseLoadFailed] = useState(false);
+  const [dataStale, setDataStale] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletingBucket, setDeletingBucket] = useState<string | null>(null);
   const [pendingDeleteBucketName, setPendingDeleteBucketName] = useState<string | null>(null);
@@ -258,6 +261,8 @@ export default function BucketsPage() {
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const fetchRequestRef = useRef(0);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const lastFetchContextRef = useRef<string | null>(null);
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
   const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, BucketFeatureTooltipState>>({});
   const featureTooltipInflightRef = useRef<Partial<Record<string, Promise<void>>>>({});
@@ -517,6 +522,9 @@ export default function BucketsPage() {
   };
 
   const fetchBuckets = useCallback(async (accountId: S3AccountSelector) => {
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
     const requestId = fetchRequestRef.current + 1;
     fetchRequestRef.current = requestId;
     setError(null);
@@ -525,9 +533,13 @@ export default function BucketsPage() {
     try {
       const baseData = await listBuckets(accountId, {
         with_stats: requiresStats,
+        signal: controller.signal,
       });
-      if (fetchRequestRef.current !== requestId) return;
+      if (fetchRequestRef.current !== requestId || controller.signal.aborted) return;
       setBuckets(baseData);
+      setBaseLoadFailed(false);
+      setDataStale(false);
+      setLastUpdatedAt(new Date());
       setLoading(false);
 
       if (includeParams.length === 0) return;
@@ -537,23 +549,23 @@ export default function BucketsPage() {
         const enrichedData = await listBuckets(accountId, {
           include: includeParams,
           with_stats: requiresStats,
+          signal: controller.signal,
         });
-        if (fetchRequestRef.current !== requestId) return;
+        if (fetchRequestRef.current !== requestId || controller.signal.aborted) return;
         setBuckets(enrichedData);
       } catch (err) {
         if (fetchRequestRef.current !== requestId) return;
-        console.error(err);
-        setError(extractError(err));
+        setError(extractError(err, "Unable to update selected bucket details."));
       } finally {
         if (fetchRequestRef.current === requestId) {
           setEnrichingColumns(false);
         }
       }
     } catch (err) {
-      if (fetchRequestRef.current !== requestId) return;
-      console.error(err);
-      setError(extractError(err) || "Unable to fetch buckets.");
-      setBuckets([]);
+      if (fetchRequestRef.current !== requestId || controller.signal.aborted) return;
+      setError(extractError(err, "Unable to load buckets from the storage endpoint."));
+      setBaseLoadFailed(true);
+      setDataStale(true);
       setEnrichingColumns(false);
     } finally {
       if (fetchRequestRef.current === requestId) {
@@ -563,14 +575,28 @@ export default function BucketsPage() {
   }, [includeParams, requiresStats]);
 
   useEffect(() => {
+    fetchAbortRef.current?.abort();
     if (needsS3AccountSelection) {
       fetchRequestRef.current += 1;
       setLoading(false);
       setEnrichingColumns(false);
       setBuckets([]);
+      setDataStale(false);
+      setLastUpdatedAt(null);
+      setBaseLoadFailed(false);
+      lastFetchContextRef.current = null;
       return;
     }
+    const contextKey = accountIdForApi == null ? "session" : String(accountIdForApi);
+    if (lastFetchContextRef.current !== contextKey) {
+      setBuckets([]);
+      setDataStale(false);
+      setLastUpdatedAt(null);
+      setBaseLoadFailed(false);
+      lastFetchContextRef.current = contextKey;
+    }
     fetchBuckets(accountIdForApi ?? null);
+    return () => fetchAbortRef.current?.abort();
   }, [accountIdForApi, fetchBuckets, needsS3AccountSelection]);
 
   useEffect(() => {
@@ -942,11 +968,29 @@ export default function BucketsPage() {
           {
             label: "Create bucket",
             onClick: openAdvancedModal,
+            disabled: baseLoadFailed || (loading && buckets.length === 0),
           },
         ]}
       />
 
-      {error && <PageBanner tone="error">{error}</PageBanner>}
+      {error && (
+        <PageBanner tone={buckets.length > 0 || !baseLoadFailed ? "warning" : "error"}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              {buckets.length > 0 && dataStale ? "Showing the last available bucket list. " : ""}
+              {error}
+              {lastUpdatedAt ? ` Last updated ${lastUpdatedAt.toLocaleTimeString()}.` : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() => fetchBuckets(accountIdForApi ?? null)}
+              className="font-semibold underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </div>
+        </PageBanner>
+      )}
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
@@ -964,7 +1008,11 @@ export default function BucketsPage() {
             title="Buckets"
             description="Paginated list of buckets for the active context."
             showHeading={false}
-            countLabel={`${filteredBuckets.length} bucket(s)`}
+            countLabel={
+              buckets.length === 0 && (loading || baseLoadFailed)
+                ? "— buckets"
+                : `${filteredBuckets.length} bucket(s)`
+            }
             search={
               <ManagerToolbarSearch
                 value={filter}

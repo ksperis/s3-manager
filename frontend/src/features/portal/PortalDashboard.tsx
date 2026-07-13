@@ -8,6 +8,7 @@ import type { HealthCheckStatus } from "../../api/healthchecks";
 import type { PortalUsageStorageSpace } from "../../api/portal";
 import type { ManagerUsageTrendBaseline } from "../../api/stats";
 import PageEmptyState from "../../components/PageEmptyState";
+import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import {
   buildWorkspaceStorageEvolutionPoints,
@@ -36,6 +37,7 @@ import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n, type I18nMessage } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { effectiveEndpointHealthStatus } from "../../utils/endpointHealth";
 import {
   BucketCollectionIcon,
   BucketIcon,
@@ -129,9 +131,10 @@ function workspaceHealthStatus(
   health: ReturnType<typeof usePortalWorkspaceData>["health"]
 ): HealthCheckStatus {
   if (!health || health.endpoint_count <= 0) return "unknown";
-  if (health.down_count > 0) return "down";
-  if (health.degraded_count > 0) return "degraded";
-  if (health.up_count > 0) return "up";
+  const statuses = health.endpoints.map((endpoint) => effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at));
+  if (statuses.includes("down")) return "down";
+  if (statuses.includes("degraded")) return "degraded";
+  if (statuses.includes("up")) return "up";
   return "unknown";
 }
 
@@ -561,11 +564,13 @@ export default function PortalDashboard() {
     workspace,
     health,
     healthAlerts,
-    loading,
-    error,
     hasAccountContext,
     accountError,
     accountLoading,
+    stateLoading,
+    storageSpacesLoading,
+    stateError,
+    storageSpacesError,
     traffic,
     trafficByWindow,
     usageTrends,
@@ -574,7 +579,13 @@ export default function PortalDashboard() {
     usage,
     collaborators,
     collaboratorsError,
+    refreshWorkspaceData,
   } = usePortalWorkspaceData({
+    includeUsage: true,
+    includeActivity: true,
+    includeCollaborators: true,
+    includeTransfers: true,
+    includeAlerts: true,
     includeTraffic: true,
     includeTrafficTrend: true,
     includeHealth: true,
@@ -709,16 +720,16 @@ export default function PortalDashboard() {
 
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
-    loading,
+    loading: false,
     accountError,
-    error,
+    error: null,
     hasAccountContext,
     loadingMessage: t({ en: "Loading dashboard...", fr: "Chargement du tableau de bord...", de: "Dashboard wird geladen..." }),
     noAccountMessage: t({ en: "Select an account to open the dashboard.", fr: "Sélectionnez un compte pour ouvrir le tableau de bord.", de: "Wählen Sie ein Konto aus, um das Dashboard zu öffnen." }),
   });
   if (pageState) return pageState;
 
-  if (workspace.spaces.length === 0 && workspace.usedObjects === 0) {
+  if (!storageSpacesLoading && !storageSpacesError && workspace.spaces.length === 0 && workspace.usedObjects === 0) {
     return <PortalOnboardingDashboard />;
   }
 
@@ -734,6 +745,31 @@ export default function PortalDashboard() {
           </div>
         }
       />
+
+      {(stateError || storageSpacesError) && (
+        <PageBanner tone="warning">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{storageSpacesError ?? stateError}</span>
+            <button
+              type="button"
+              onClick={refreshWorkspaceData}
+              className="font-semibold underline underline-offset-2"
+            >
+              {t({ en: "Retry", fr: "Réessayer", de: "Erneut versuchen" })}
+            </button>
+          </div>
+        </PageBanner>
+      )}
+
+      {(stateLoading || storageSpacesLoading) && (
+        <PageBanner>
+          {t({
+            en: "Some dashboard data is still loading. Available sections remain usable.",
+            fr: "Certaines données sont encore en cours de chargement. Les sections disponibles restent utilisables.",
+            de: "Einige Dashboard-Daten werden noch geladen. Verfügbare Bereiche bleiben nutzbar.",
+          })}
+        </PageBanner>
+      )}
 
       <KpiRow metrics={metrics} className="2xl:grid-cols-5" />
 

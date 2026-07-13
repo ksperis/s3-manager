@@ -40,6 +40,8 @@ export type CephAdminEndpointAccess = {
   admin_warning?: string | null;
   active_rgw_uid?: string | null;
   active_rgw_tenant?: string | null;
+  availability_status?: "unknown" | "available" | "unavailable" | "denied" | "misconfigured";
+  availability_checked_at?: string | null;
 };
 
 export type CephAdminAdminOpsResult = {
@@ -299,8 +301,14 @@ export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
   return data;
 }
 
-export async function getCephAdminEndpointAccess(endpointId: number): Promise<CephAdminEndpointAccess> {
-  const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`);
+export async function getCephAdminEndpointAccess(
+  endpointId: number,
+  options?: { probe?: boolean; signal?: AbortSignal }
+): Promise<CephAdminEndpointAccess> {
+  const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`, {
+    params: options?.probe ? { probe: true } : undefined,
+    signal: options?.signal,
+  });
   return data;
 }
 

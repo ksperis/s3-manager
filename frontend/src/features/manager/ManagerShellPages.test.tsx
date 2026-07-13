@@ -1158,6 +1158,52 @@ describe("manager shell pages", () => {
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
+  it("keeps the last bucket list visible when a refresh times out", async () => {
+    window.sessionStorage.setItem(MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY, JSON.stringify(["used_bytes"]));
+    listBucketsMock
+      .mockResolvedValueOnce([{ name: "known-bucket", used_bytes: 1024 }])
+      .mockRejectedValueOnce(Object.assign(new Error("timeout"), { code: "ECONNABORTED" }));
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("known-bucket")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByLabelText("Used"));
+
+    expect(await screen.findByText(/Showing the last available bucket list/)).toBeInTheDocument();
+    expect(screen.getByText("known-bucket")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create bucket" })).toBeDisabled();
+  });
+
+  it("distinguishes an unavailable bucket inventory from an empty one", async () => {
+    listBucketsMock.mockRejectedValueOnce({
+      isAxiosError: true,
+      code: "ECONNABORTED",
+      response: { status: 504, data: { detail: "Read timeout" } },
+    });
+    setSelectedManagerAccountContext();
+
+    render(
+      <MemoryRouter>
+        <BucketsPage />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText("Unable to load buckets from the storage endpoint.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("— buckets")).toBeInTheDocument();
+    expect(screen.queryByText("0 bucket(s)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create bucket" })).toBeDisabled();
+  });
+
   it("offers the Notifications bucket column when SNS is enabled and requests notifications enrichment", async () => {
     listBucketsMock.mockResolvedValue([
       {

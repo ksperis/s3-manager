@@ -56,6 +56,7 @@ import {
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { effectiveEndpointHealthStatus, isEndpointHealthCheckStale } from "../../utils/endpointHealth";
 import {
   BellIcon,
   BucketCollectionIcon,
@@ -653,6 +654,8 @@ function BackendHealthCard({
   unavailableReason?: string | null;
 }) {
   const showEndpoint = !unavailableReason && endpoint;
+  const stale = showEndpoint ? isEndpointHealthCheckStale(endpoint.checked_at) : false;
+  const healthStatus = showEndpoint ? effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at) : "unknown";
   const content = (
     <section className={cx(uiCardClass, "h-full p-[14px]")}>
       <div className="flex items-center gap-1.5">
@@ -663,11 +666,11 @@ function BackendHealthCard({
         {showEndpoint ? (
           <div className="flex items-center justify-between gap-3">
             <p className="flex min-w-0 items-center gap-2 ui-caption font-semibold text-[var(--ui-text)]">
-              <WorkspaceStatusDot status={endpoint.status} />
+              <WorkspaceStatusDot status={healthStatus} />
               <span className="truncate">{endpoint.name}</span>
             </p>
-            <UiBadge tone={endpoint.status === "up" ? "success" : endpoint.status === "down" ? "danger" : "warning"} className="rounded-md px-2 py-0 text-[11px] leading-5">
-              {formatStatus(endpoint.status)}
+            <UiBadge tone={healthStatus === "up" ? "success" : healthStatus === "down" ? "danger" : "warning"} className="rounded-md px-2 py-0 text-[11px] leading-5">
+              {stale ? "Stale" : formatStatus(healthStatus)}
             </UiBadge>
           </div>
         ) : (

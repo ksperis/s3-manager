@@ -56,7 +56,7 @@ export type Bucket = {
 
 export async function listBuckets(
   accountId: S3AccountSelector,
-  options?: { include?: string[]; with_stats?: boolean }
+  options?: { include?: string[]; with_stats?: boolean; signal?: AbortSignal }
 ): Promise<Bucket[]> {
   const { data } = await client.get<Bucket[]>(bucketBasePath(), {
     params: withS3AccountParam(
@@ -66,6 +66,7 @@ export async function listBuckets(
       },
       accountId
     ),
+    signal: options?.signal,
   });
   return data;
 }

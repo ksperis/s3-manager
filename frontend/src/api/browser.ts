@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import type { AxiosProgressEvent } from "axios";
 
@@ -882,6 +882,7 @@ export async function proxyUpload(
     ),
     onUploadProgress,
     signal,
+    timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
   });
 }
 
@@ -901,6 +902,7 @@ export async function proxyDownload(
     ),
     responseType: "blob",
     signal,
+    timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
   });
   return data as Blob;
 }

@@ -68,13 +68,9 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
         )
     db_session.commit()
 
-    class _FakeQuotaService:
-        def get_account_quota(self, account):  # noqa: ANN001
-            return None, None
-
     monkeypatch.setattr(
-        "app.routers.portal.get_s3_accounts_service",
-        lambda db, allow_missing_admin=True: _FakeQuotaService(),
+        "app.services.s3_accounts_service.S3AccountsService.get_account_quota",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Portal account catalog must stay local")),
     )
 
     previous_user_override = app.dependency_overrides.get(dependencies.get_current_account_user)

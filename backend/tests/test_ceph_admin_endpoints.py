@@ -140,7 +140,7 @@ def test_get_ceph_admin_endpoint_access_reports_warning_and_metrics_capability(m
         lambda _endpoint: "Ceph Admin workspace is unavailable for this endpoint",
     )
 
-    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint, probe=True)
 
     assert payload.endpoint_id == endpoint.id
     assert payload.can_admin is False
@@ -161,7 +161,7 @@ def test_get_ceph_admin_endpoint_access_disables_metrics_without_supervision_cre
         ),
     )
 
-    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint, probe=True)
 
     assert payload.can_admin is True
     assert payload.can_accounts is True
@@ -181,7 +181,7 @@ def test_get_ceph_admin_endpoint_access_disables_accounts_when_account_api_unava
 
     monkeypatch.setattr(endpoints_router, "get_rgw_admin_client", lambda **kwargs: _FailingClient())
 
-    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint, probe=True)
 
     assert payload.can_admin is True
     assert payload.can_accounts is False
@@ -206,10 +206,31 @@ def test_get_ceph_admin_endpoint_access_allows_admin_when_admin_feature_disabled
 
     monkeypatch.setattr(endpoints_router, "get_rgw_admin_client", fake_get_rgw_admin_client)
 
-    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint, probe=True)
 
     assert payload.can_admin is True
     assert payload.can_accounts is True
     assert payload.can_metrics is True
     assert payload.admin_warning is None
     assert captured == ["https://s3.example.test"]
+
+
+def test_get_ceph_admin_endpoint_access_does_not_probe_for_shell(monkeypatch):
+    endpoint = _build_endpoint(15, usage_enabled=True, metrics_enabled=True, has_supervision_credentials=True)
+
+    def unexpected_probe(_endpoint):
+        raise AssertionError("The Ceph Admin shell must not probe RGW")
+
+    monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", unexpected_probe)
+    monkeypatch.setattr(
+        endpoints_router,
+        "get_rgw_admin_client",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("The Ceph Admin shell must stay local")),
+    )
+
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint, probe=False)
+
+    assert payload.can_admin is True
+    assert payload.can_accounts is True
+    assert payload.availability_status == "unknown"
+    assert payload.availability_checked_at is None
