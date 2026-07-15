@@ -53,12 +53,12 @@ Post-refactor measurements (2026-02-28):
 - Largest chunk: `337.9 KB` (`assets/vendor-B9RtXmmQ.js`)
 - Total JavaScript: `2.57 MB` across `114` chunks
 
-Current budget calibration (2026-07-03):
+Current budget calibration (2026-07-15):
 
 - Entry chunk budget: `600 KiB`
 - Largest chunk budget: `1,500 KiB`
-- Total JavaScript budget: `3,555 KiB`
-- Current validated build: entry `113.6 KB`, largest chunk `380.7 KB`, total JavaScript `3.47 MB` across `173` chunks
+- Total JavaScript budget: `3,650 KiB`
+- Current validated build: entry `116.4 KB`, largest chunk `380.7 KB`, total JavaScript `3.54 MB` across `199` chunks
 
 ### UI review checklist
 

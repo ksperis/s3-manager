@@ -363,7 +363,7 @@ describe("BucketDetailPage replication state", () => {
     });
 
     expect(screen.getByText("Replication")).toBeInTheDocument();
-    expect(screen.getAllByText("Not set").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Not set")).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Advanced" }));
     const replicationCard = await screen.findByTestId("bucket-feature-replication");
