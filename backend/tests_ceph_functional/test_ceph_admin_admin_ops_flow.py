@@ -302,8 +302,23 @@ def test_ceph_admin_admin_ops_lifecycle(
                 "target_type": "account",
                 "target_id": link_account,
             },
+            expected_status=(200, 404),
         )
-        _assert_success(linked, "link_bucket")
+        if linked["success"]:
+            _assert_success(linked, "link_bucket")
+        else:
+            assert linked["operation"] == "link_bucket"
+            assert linked["rgw_status_code"] == 404
+            assert linked["rgw_error_code"] == "NoSuchKey"
+            linked = super_admin_session.put(
+                f"{root}/buckets/{link_bucket}/link",
+                json={
+                    "confirmation": f"LINK BUCKET {link_bucket} TO {link_target}",
+                    "target_type": "user",
+                    "target_id": link_target,
+                },
+            )
+            _assert_success(linked, "link_bucket")
 
         deleted = super_admin_session.delete(
             f"{root}/buckets/{link_bucket}",
