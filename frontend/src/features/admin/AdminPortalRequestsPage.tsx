@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { listMinimalS3Accounts, type S3AccountSummary } from "../../api/accounts";
+import { listMinimalUsers, type UserSummary } from "../../api/users";
 import {
   addAdminPortalRequestMessage,
   approveAdminPortalRequest,
@@ -19,6 +20,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import UserAvatar from "../../components/UserAvatar";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -40,6 +42,8 @@ import {
   portalRequestTypeLabel,
 } from "../shared/portalRequestsPresentation";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { AssociationRoleTooltip, uiPrincipalRoleLabel } from "./AssociationSummary";
+import { buildAdminPrincipalEditHref } from "./adminPrincipalEditLink";
 
 type StatusFilter = PortalAdminRequestStatus | "all";
 type TypeFilter = PortalAdminRequestType | "all";
@@ -48,6 +52,7 @@ type BusyAction = string | null;
 export default function AdminPortalRequestsPage() {
   const [requests, setRequests] = useState<PortalAdminRequest[]>([]);
   const [accounts, setAccounts] = useState<S3AccountSummary[]>([]);
+  const [requesters, setRequesters] = useState<UserSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [accountFilter, setAccountFilter] = useState("all");
@@ -68,10 +73,22 @@ export default function AdminPortalRequestsPage() {
       .catch(() => {
         if (!cancelled) setAccounts([]);
       });
+    listMinimalUsers()
+      .then((items) => {
+        if (!cancelled) setRequesters(items);
+      })
+      .catch(() => {
+        if (!cancelled) setRequesters([]);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const requestersById = useMemo(
+    () => new Map(requesters.map((requester) => [requester.id, requester])),
+    [requesters],
+  );
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -156,7 +173,57 @@ export default function AdminPortalRequestsPage() {
       {
         id: "requester",
         label: "Requester",
-        render: (request) => request.requester_email,
+        render: (request) => {
+          const requester = request.requester_user_id != null
+            ? requestersById.get(request.requester_user_id)
+            : undefined;
+          const label = requester?.display_name || requester?.full_name || request.requester_email;
+          const roleLabel = uiPrincipalRoleLabel(requester?.role);
+          const badge = (
+            <>
+              <UserAvatar
+                name={label}
+                email={request.requester_email}
+                avatar={requester?.avatar}
+                size="sm"
+                decorative
+              />
+              <span className="min-w-0 truncate">{request.requester_email}</span>
+            </>
+          );
+          const classes = "inline-flex max-w-full items-center gap-2 rounded-full bg-slate-100 pr-2.5 ui-caption font-semibold text-slate-800 transition dark:bg-slate-800 dark:text-slate-100";
+          if (request.requester_user_id == null) {
+            return (
+              <AssociationRoleTooltip
+                label="Requester"
+                entries={[{ key: request.requester_email, identity: `${label} · ${request.requester_email}`, roles: [roleLabel] }]}
+                ariaLabel={`${request.requester_email}, role ${roleLabel}`}
+                focusable
+              >
+                <span className={classes}>{badge}</span>
+              </AssociationRoleTooltip>
+            );
+          }
+          return (
+            <AssociationRoleTooltip
+              label="Requester"
+              entries={[{ key: String(request.requester_user_id), identity: `${label} · ${request.requester_email}`, roles: [roleLabel] }]}
+              ariaLabel={`${request.requester_email}, role ${roleLabel}`}
+            >
+              <a
+                href={buildAdminPrincipalEditHref({
+                  id: request.requester_user_id,
+                  kind: "user",
+                  search: request.requester_email,
+                })}
+                aria-label={`Edit UI user ${label}`}
+                className={`${classes} hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50`}
+              >
+                {badge}
+              </a>
+            </AssociationRoleTooltip>
+          );
+        },
       },
       {
         id: "created",
@@ -196,7 +263,7 @@ export default function AdminPortalRequestsPage() {
         ),
       },
     ],
-    [busy, runAction]
+    [busy, requestersById, runAction]
   );
 
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: requests.length });

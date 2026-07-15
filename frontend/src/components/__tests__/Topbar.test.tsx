@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SESSION_USER_UPDATED_EVENT } from "../../utils/workspaces";
 import Topbar from "../Topbar";
 
 const notificationApiMock = vi.hoisted(() => ({
@@ -75,6 +76,60 @@ describe("Topbar account menu", () => {
       expect(screen.queryByRole("menu", { name: "Account actions" })).not.toBeInTheDocument();
     });
     expect(trigger).toHaveFocus();
+  });
+
+  it("uses the stored profile avatar in the trigger and account menu", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_admin",
+        authType: "password",
+        full_name: "Admin User",
+        avatar: {
+          preference: "initials",
+          source: "initials",
+          url: null,
+          initials: "AU",
+        },
+      }),
+    );
+
+    render(<Topbar userEmail="admin@example.com" />);
+
+    const trigger = resolveAccountTrigger();
+    expect(within(trigger).getByTitle("Admin User")).toHaveTextContent("AU");
+    await user.click(trigger);
+    const menu = await screen.findByRole("menu", { name: "Account actions" });
+    expect(within(menu).getByTitle("Admin User")).toHaveTextContent("AU");
+    expect(within(menu).getByText("admin@example.com")).toBeInTheDocument();
+  });
+
+  it("refreshes the topbar avatar after a profile update", async () => {
+    render(<Topbar userEmail="admin@example.com" />);
+    const trigger = resolveAccountTrigger();
+
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role: "ui_admin",
+        authType: "password",
+        full_name: "New User",
+        avatar: {
+          preference: "initials",
+          source: "initials",
+          url: null,
+          initials: "NU",
+        },
+      }),
+    );
+    act(() => {
+      window.dispatchEvent(new Event(SESSION_USER_UPDATED_EVENT));
+    });
+
+    await waitFor(() => {
+      expect(within(trigger).getByTitle("New User")).toHaveTextContent("NU");
+    });
   });
 
   it("closes on outside click", async () => {

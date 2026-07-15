@@ -27,6 +27,8 @@ from app.models.user import (
     ManagerToolAccess,
     UserSummary,
 )
+from app.services.ui_group_avatar_service import UiGroupAvatarService
+from app.services.user_avatar_service import UserAvatarService
 from app.utils.time import utcnow
 
 
@@ -61,6 +63,7 @@ class UiGroupsService:
         )
         self.db.add(group)
         self.db.flush()
+        UiGroupAvatarService(self.db).set_choice(group, payload.avatar_source, payload.avatar_icon)
         self._set_user_links(group, payload.user_ids)
         self._set_account_links(group, payload.account_links)
         self._set_s3_user_links(group, payload.s3_user_ids)
@@ -81,6 +84,8 @@ class UiGroupsService:
             group.name = name
         if payload.description is not None:
             group.description = self._normalize_description(payload.description)
+        if payload.avatar_source is not None:
+            UiGroupAvatarService(self.db).set_choice(group, payload.avatar_source, payload.avatar_icon)
         if payload.can_access_ceph_admin is not None:
             group.can_access_ceph_admin = bool(payload.can_access_ceph_admin)
         if payload.can_access_storage_ops is not None:
@@ -120,8 +125,9 @@ class UiGroupsService:
         return self.db.query(UiGroup).filter(UiGroup.id == group_id).first()
 
     def list_groups_minimal(self) -> list[UiGroupSummary]:
-        rows = self.db.query(UiGroup.id, UiGroup.name).order_by(UiGroup.name.asc()).all()
-        return [UiGroupSummary(id=row[0], name=row[1]) for row in rows]
+        rows = self.db.query(UiGroup).order_by(UiGroup.name.asc()).all()
+        avatar_service = UiGroupAvatarService(self.db)
+        return [UiGroupSummary(id=row.id, name=row.name, avatar=avatar_service.descriptor(row)) for row in rows]
 
     def paginate_groups(
         self,
@@ -178,7 +184,7 @@ class UiGroupsService:
 
     def group_to_out(self, group: UiGroup) -> UiGroupOut:
         user_rows = (
-            self.db.query(User.id, User.email, User.role)
+            self.db.query(User)
             .join(UserUiGroup, UserUiGroup.user_id == User.id)
             .filter(UserUiGroup.group_id == group.id)
             .order_by(User.email.asc())
@@ -210,6 +216,7 @@ class UiGroupsService:
             id=group.id,
             name=group.name,
             description=group.description,
+            avatar=UiGroupAvatarService(self.db).descriptor(group),
             can_access_ceph_admin=bool(group.can_access_ceph_admin),
             can_access_storage_ops=bool(group.can_access_storage_ops),
             manager_tool_access=ManagerToolAccess(
@@ -222,8 +229,18 @@ class UiGroupsService:
                 ceph_s3_user_keys=bool(group.can_access_manager_ceph_s3_user_keys),
             ),
             browser_advanced_features_enabled=bool(group.browser_advanced_features_enabled),
-            user_ids=[row[0] for row in user_rows],
-            user_details=[UserSummary(id=row[0], email=row[1], role=row[2]) for row in user_rows],
+            user_ids=[row.id for row in user_rows],
+            user_details=[
+                UserSummary(
+                    id=row.id,
+                    email=row.email,
+                    full_name=row.full_name,
+                    display_name=row.display_name or row.full_name,
+                    avatar=UserAvatarService(self.db).descriptor(row),
+                    role=row.role,
+                )
+                for row in user_rows
+            ],
             accounts=account_ids,
             account_details=[
                 LinkedS3Account(

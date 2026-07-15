@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import base64
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -20,6 +21,11 @@ from app.main import app
 from app.routers import dependencies, execution_contexts
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.users_service import UsersService
+
+
+PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 def _user(db_session, *, email: str = "group-user@example.com", role: str = UserRole.UI_USER.value) -> User:
@@ -148,6 +154,56 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     )
     assert reject_resp.status_code == 400
     assert "Only shared S3 connections can be linked" in reject_resp.json()["detail"]
+
+
+def test_ui_group_avatar_supports_presets_upload_and_initials_fallback(client: TestClient, db_session):
+    created = client.post(
+        "/api/admin/groups",
+        json={"name": "Research Operators", "avatar_source": "preset", "avatar_icon": "academic"},
+    )
+    assert created.status_code == 201, created.text
+    group_id = created.json()["id"]
+    assert created.json()["avatar"] == {
+        "source": "preset",
+        "initials": "RO",
+        "icon": "academic",
+        "url": None,
+        "updated_at": created.json()["avatar"]["updated_at"],
+    }
+
+    minimal = client.get("/api/admin/groups/minimal")
+    assert minimal.status_code == 200, minimal.text
+    assert next(item for item in minimal.json() if item["id"] == group_id)["avatar"]["icon"] == "academic"
+
+    uploaded = client.put(
+        f"/api/admin/groups/{group_id}/avatar",
+        files={"file": ("group.png", PNG_1X1, "image/png")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["avatar"]["source"] == "uploaded"
+    assert uploaded.json()["avatar"]["url"].startswith(f"/admin/groups/{group_id}/avatar?v=")
+
+    image = client.get(f"/api/admin/groups/{group_id}/avatar")
+    assert image.status_code == 200
+    assert image.content == PNG_1X1
+    assert image.headers["content-type"] == "image/png"
+
+    deleted = client.delete(f"/api/admin/groups/{group_id}/avatar")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["avatar"]["source"] == "initials"
+    assert deleted.json()["avatar"]["initials"] == "RO"
+    assert client.get(f"/api/admin/groups/{group_id}/avatar").status_code == 404
+
+
+def test_ui_group_avatar_rejects_unsupported_content(client: TestClient):
+    created = client.post("/api/admin/groups", json={"name": "Unsafe Image Group"})
+    group_id = created.json()["id"]
+    response = client.put(
+        f"/api/admin/groups/{group_id}/avatar",
+        files={"file": ("group.svg", b"<svg/>", "image/svg+xml")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Avatar image must be a PNG or JPEG file."
 
 
 def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_fields(client: TestClient, db_session):

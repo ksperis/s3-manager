@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.db import S3Connection, UiGroup, UiGroupS3Connection, User, UserRole
+from app.db import S3Connection, UiGroup, UiGroupS3Connection, User, UserRole, UserS3Connection
 from app.services.tags_service import TagsService
 
 
@@ -110,6 +110,8 @@ def test_admin_s3_connections_lists_shared_only(client, db_session):
     names = [item["name"] for item in payload["items"]]
     assert names == ["shared-visible"]
     assert payload["items"][0]["is_shared"] is True
+    assert payload["items"][0]["created_by_avatar"]["source"] == "gravatar"
+    assert payload["items"][0]["created_by_avatar"]["url"].startswith("https://gravatar.com/avatar/")
 
 
 def test_admin_s3_connections_search_matches_tag_labels(client, db_session):
@@ -140,7 +142,31 @@ def test_admin_s3_connections_search_matches_direct_group_links(client, db_sessi
 
     assert [item["name"] for item in payload["items"]] == ["group-linked-connection"]
     assert payload["items"][0]["group_ids"] == [group.id]
-    assert payload["items"][0]["group_details"] == [{"id": group.id, "name": "Connection Operators"}]
+    assert payload["items"][0]["group_details"][0]["id"] == group.id
+    assert payload["items"][0]["group_details"][0]["name"] == "Connection Operators"
+    assert payload["items"][0]["group_details"][0]["avatar"]["initials"] == "CO"
+
+
+def test_admin_s3_connections_search_matches_linked_ui_user_email(client, db_session):
+    linked = _seed_connection(db_session, name="email-linked-connection", is_shared=True)
+    user = User(
+        email="connection.member@example.test",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(UserS3Connection(user_id=user.id, s3_connection_id=linked.id))
+    db_session.commit()
+
+    response = client.get("/api/admin/s3-connections", params={"search": "connection.member"})
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [item["name"] for item in items] == ["email-linked-connection"]
+    assert items[0]["user_details"][0]["id"] == user.id
+    assert items[0]["user_details"][0]["email"] == "connection.member@example.test"
+    assert items[0]["user_details"][0]["avatar"]["initials"] == "CM"
 
 
 def test_admin_s3_connections_update_replaces_direct_group_links(client, db_session):
@@ -157,6 +183,8 @@ def test_admin_s3_connections_update_replaces_direct_group_links(client, db_sess
     payload = response.json()
 
     assert payload["group_ids"] == [new_group.id]
-    assert payload["group_details"] == [{"id": new_group.id, "name": "New Connection Group"}]
+    assert payload["group_details"][0]["id"] == new_group.id
+    assert payload["group_details"][0]["name"] == "New Connection Group"
+    assert payload["group_details"][0]["avatar"]["initials"] == "NG"
     rows = db_session.query(UiGroupS3Connection).filter(UiGroupS3Connection.s3_connection_id == connection.id).all()
     assert [row.group_id for row in rows] == [new_group.id]

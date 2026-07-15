@@ -6,6 +6,7 @@ import type { S3Account } from "../../api/accounts";
 import type {
   PortalState,
   PortalStorageSpaceAccountMemberRole,
+  PortalStorageSpaceCollaboratorPreview,
   PortalStorageSpaceShareScope,
   PortalStorageSpaceSummary,
   PortalStorageSpaceVisibility,
@@ -43,6 +44,8 @@ export type PortalWorkspaceSpace = {
   description: string;
   ownerLabel: string | null;
   ownerUserId: number | null;
+  collaborators: PortalStorageSpaceCollaboratorPreview[];
+  collaboratorCount: number;
   visibility: PortalStorageSpaceVisibility;
   shareScope: PortalStorageSpaceShareScope;
   accountMemberRole: PortalStorageSpaceAccountMemberRole | null;
@@ -226,6 +229,8 @@ export function buildPortalWorkspaceModel({
       description: storageSpace.description ?? t({ en: `${name} storage space`, fr: `Espace de stockage ${name}`, de: `Speicherbereich ${name}` }),
       ownerLabel: storageSpace.owner_label ?? null,
       ownerUserId: storageSpace.owner_user_id ?? null,
+      collaborators: storageSpace.collaborators ?? [],
+      collaboratorCount: storageSpace.collaborator_count ?? storageSpace.collaborators?.length ?? 0,
       visibility,
       shareScope,
       accountMemberRole: shareScope === "account" ? storageSpace.account_member_role ?? "Editor" : null,

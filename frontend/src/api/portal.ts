@@ -10,6 +10,7 @@ import type { BucketUsageStatsAggregateResponse } from "./bucketUsageStats";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
+import type { UserAvatarDescriptor } from "./users";
 
 export type PortalAccessKey = {
   access_key_id: string;
@@ -96,6 +97,14 @@ export type PortalStorageSpaceVisibility = "private" | "shared";
 export type PortalStorageSpaceShareScope = "restricted" | "account";
 export type PortalStorageSpaceAccountMemberRole = "Viewer" | "Editor";
 
+export type PortalStorageSpaceCollaboratorPreview = {
+  user_id: number;
+  email: string;
+  display_name?: string | null;
+  role: PortalStorageSpaceRole;
+  avatar?: UserAvatarDescriptor | null;
+};
+
 export type PortalStorageSpaceSummary = {
   id: string;
   name: string;
@@ -106,6 +115,8 @@ export type PortalStorageSpaceSummary = {
   description?: string | null;
   owner_label?: string | null;
   owner_user_id?: number | null;
+  collaborators?: PortalStorageSpaceCollaboratorPreview[];
+  collaborator_count?: number;
   visibility?: PortalStorageSpaceVisibility;
   share_scope?: PortalStorageSpaceShareScope;
   account_member_role?: PortalStorageSpaceAccountMemberRole | null;
@@ -235,6 +246,7 @@ export type PortalStorageSpaceAccessPerson = {
   role: PortalStorageSpaceRole;
   account_role?: string | null;
   access_source?: "owner" | "direct" | "group" | "direct_and_group" | null;
+  avatar?: UserAvatarDescriptor | null;
 };
 
 export type PortalStorageSpaceAccessSummary = {
@@ -255,6 +267,7 @@ export type PortalStorageSpaceShareCandidate = {
   account_role: string;
   access_source: "direct" | "group" | "direct_and_group";
   already_shared?: boolean;
+  avatar?: UserAvatarDescriptor | null;
 };
 
 export type PortalCollaborator = {
@@ -264,6 +277,7 @@ export type PortalCollaborator = {
   account_role: string;
   access_source: "direct" | "group" | "direct_and_group";
   member_since?: string | null;
+  avatar?: UserAvatarDescriptor | null;
 };
 
 export type PortalCollaboratorTrend = {

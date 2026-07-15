@@ -57,6 +57,12 @@ const mocks = vi.hoisted(() => ({
           account_role: "portal_manager",
           access_source: "direct",
           member_since: "2026-05-01T10:00:00Z",
+          avatar: {
+            preference: "initials",
+            source: "initials",
+            url: null,
+            initials: "MU",
+          },
         },
         {
           user_id: 13,
@@ -65,6 +71,12 @@ const mocks = vi.hoisted(() => ({
           account_role: "portal_user",
           access_source: "group",
           member_since: "2026-06-01T10:00:00Z",
+          avatar: {
+            preference: "auto",
+            source: "provider",
+            url: "https://idp.example.test/editor.png",
+            initials: "EU",
+          },
         },
       ],
     },
@@ -213,6 +225,12 @@ describe("PortalSharesPage", () => {
           account_role: "portal_manager",
           access_source: "direct",
           member_since: "2026-05-01T10:00:00Z",
+          avatar: {
+            preference: "initials",
+            source: "initials",
+            url: null,
+            initials: "MU",
+          },
         },
         {
           user_id: 13,
@@ -221,6 +239,12 @@ describe("PortalSharesPage", () => {
           account_role: "portal_user",
           access_source: "group",
           member_since: "2026-06-01T10:00:00Z",
+          avatar: {
+            preference: "auto",
+            source: "provider",
+            url: "https://idp.example.test/editor.png",
+            initials: "EU",
+          },
         },
       ],
     };
@@ -239,14 +263,19 @@ describe("PortalSharesPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Invite" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Invite people" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Invite people" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Review access" }),
     ).not.toBeInTheDocument();
-    await user.click(
-      await screen.findByRole("button", { name: "Workspace members" }),
-    );
+    const membersTab = await screen.findByRole("button", {
+      name: "Workspace members",
+    });
+    expect(
+      within(membersTab.parentElement!).getAllByRole("button").map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(["Workspace members", "Review access", "Invite"]);
     const workspaceMembers = screen
       .getByRole("heading", { name: "Workspace members" })
       .closest("section");
@@ -254,6 +283,12 @@ describe("PortalSharesPage", () => {
     expect(
       within(workspaceMembers!).getByText("Manager User"),
     ).toBeInTheDocument();
+    expect(within(workspaceMembers!).getByTitle("Manager User")).toHaveTextContent(
+      "MU",
+    );
+    expect(within(workspaceMembers!).getByTitle("Editor User")).toContainElement(
+      within(workspaceMembers!).getByRole("presentation"),
+    );
     expect(
       within(workspaceMembers!).getByText("Workspace manager"),
     ).toBeInTheDocument();
@@ -367,7 +402,7 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Invite people" }),
+      await screen.findByRole("heading", { name: "Workspace members" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Start collaborating" }),
@@ -473,6 +508,7 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(await screen.findByRole("button", { name: "Invite" }));
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );
@@ -511,6 +547,7 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(await screen.findByRole("button", { name: "Invite" }));
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );
@@ -636,6 +673,7 @@ describe("PortalSharesPage", () => {
 
     renderPage();
 
+    await user.click(await screen.findByRole("button", { name: "Invite" }));
     await user.click(
       await screen.findByRole("button", { name: "Invite people" }),
     );

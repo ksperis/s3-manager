@@ -4,24 +4,41 @@
  */
 import client from "./client";
 import type { AccountMembership, ManagerToolAccess } from "./users";
+import type { UserAvatarDescriptor } from "./users";
 import type { PaginatedResponse } from "./types";
+
+export type UiGroupAvatarSource = "initials" | "preset" | "uploaded";
+export type UiGroupAvatarIcon = "users" | "building" | "shield" | "briefcase" | "academic";
+
+export type UiGroupAvatarDescriptor = {
+  source: UiGroupAvatarSource;
+  initials: string;
+  icon?: UiGroupAvatarIcon | null;
+  url?: string | null;
+  updated_at?: string | null;
+};
 
 export type UiGroupSummary = {
   id: number;
   name: string;
   description?: string | null;
+  avatar?: UiGroupAvatarDescriptor | null;
 };
 
 export type UiGroupUserDetail = {
   id: number;
   email: string;
   role?: string | null;
+  full_name?: string | null;
+  display_name?: string | null;
+  avatar?: UserAvatarDescriptor | null;
 };
 
 export type UiGroup = {
   id: number;
   name: string;
   description?: string | null;
+  avatar?: UiGroupAvatarDescriptor | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
@@ -47,6 +64,8 @@ export type UiGroup = {
 export type UiGroupPayload = {
   name?: string;
   description?: string | null;
+  avatar_source?: UiGroupAvatarSource;
+  avatar_icon?: UiGroupAvatarIcon | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
@@ -89,4 +108,16 @@ export async function updateGroup(groupId: number, payload: UiGroupPayload): Pro
 
 export async function deleteGroup(groupId: number): Promise<void> {
   await client.delete(`/admin/groups/${groupId}`);
+}
+
+export async function uploadGroupAvatar(groupId: number, file: File): Promise<UiGroup> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await client.put<UiGroup>(`/admin/groups/${groupId}/avatar`, formData);
+  return data;
+}
+
+export async function deleteGroupAvatar(groupId: number): Promise<UiGroup> {
+  const { data } = await client.delete<UiGroup>(`/admin/groups/${groupId}/avatar`);
+  return data;
 }

@@ -31,6 +31,8 @@ from app.services.resource_deletion_purge_service import ResourceDeletionPurgeSe
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
+from app.services.ui_group_avatar_service import UiGroupAvatarService
+from app.services.user_avatar_service import UserAvatarService
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -525,10 +527,9 @@ class S3AccountsService:
         rows = (
             self.db.query(
                 UserS3Account.account_id,
-                UserS3Account.user_id,
+                User,
                 UserS3Account.account_admin,
                 UserS3Account.account_role,
-                User.email,
             )
             .join(User, User.id == UserS3Account.user_id)
             .filter(
@@ -540,16 +541,19 @@ class S3AccountsService:
         )
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for account_id, user_id, account_admin, account_role, user_email in rows:
+        avatar_service = UserAvatarService(self.db)
+        for account_id, user, account_admin, account_role in rows:
             normalized_account_id = int(account_id)
-            normalized_user_id = int(user_id)
+            normalized_user_id = int(user.id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
             user_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountUserLink(
                     user_id=normalized_user_id,
                     account_admin=account_admin,
                     account_role=account_role,
-                    user_email=user_email,
+                    user_email=user.email,
+                    user_full_name=user.display_name or user.full_name,
+                    user_avatar=avatar_service.descriptor(user),
                 )
             )
         return user_ids_by_account, user_links_by_account
@@ -563,8 +567,7 @@ class S3AccountsService:
         rows = (
             self.db.query(
                 UiGroupS3Account.account_id,
-                UiGroupS3Account.group_id,
-                UiGroup.name,
+                UiGroup,
                 UiGroupS3Account.account_admin,
                 UiGroupS3Account.account_role,
             )
@@ -575,14 +578,16 @@ class S3AccountsService:
         )
         group_ids_by_account: dict[int, list[int]] = {}
         group_links_by_account: dict[int, list[AccountGroupLink]] = {}
-        for account_id, group_id, group_name, account_admin, account_role in rows:
+        avatar_service = UiGroupAvatarService(self.db)
+        for account_id, group, account_admin, account_role in rows:
             normalized_account_id = int(account_id)
-            normalized_group_id = int(group_id)
+            normalized_group_id = int(group.id)
             group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
             group_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountGroupLink(
                     group_id=normalized_group_id,
-                    group_name=group_name,
+                    group_name=group.name,
+                    group_avatar=avatar_service.descriptor(group),
                     account_admin=account_admin,
                     account_role=account_role,
                 )

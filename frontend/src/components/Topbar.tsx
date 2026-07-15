@@ -8,12 +8,19 @@ import {
   markUserNotificationsRead,
   type UserNotification,
 } from "../api/userNotifications";
-import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../utils/workspaces";
+import type { UserAvatarDescriptor } from "../api/users";
+import {
+  isAdminLikeRole,
+  isSuperAdminRole,
+  readStoredUser,
+  SESSION_USER_UPDATED_EVENT,
+} from "../utils/workspaces";
 import type { WorkspaceSwitcherModel } from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import ThemeToggle from "./ThemeToggle";
 import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
+import UserAvatar from "./UserAvatar";
 
 type TopbarProps = {
   projectName?: string;
@@ -38,17 +45,13 @@ type StoredAccountLink = {
 };
 
 type StoredTopbarUser = {
+  full_name?: string | null;
+  display_name?: string | null;
+  avatar?: UserAvatarDescriptor | null;
   role?: string | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
-
-function buildAccountInitial(value?: string | null): string {
-  if (!value) return "U";
-  const clean = value.trim().replace(/[^a-zA-Z0-9]/g, "");
-  if (!clean) return "U";
-  return clean[0].toUpperCase();
-}
 
 function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
   if (!user) return "Unknown";
@@ -119,7 +122,9 @@ export default function Topbar({
   profilePath = "/profile",
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
-  const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
+  const [storedUser, setStoredUser] = useState<StoredTopbarUser | null>(
+    () => readStoredUser() as StoredTopbarUser | null,
+  );
   const isS3Session = storedUser?.authType === "s3_session";
   const canManagePrivateConnections =
     !isS3Session &&
@@ -159,8 +164,24 @@ export default function Topbar({
   const controlsStripRef = useRef<HTMLDivElement | null>(null);
 
   const accountDisplay = userEmail ?? "Session";
-  const accountInitial = buildAccountInitial(accountDisplay);
+  const accountName =
+    storedUser?.display_name?.trim() ||
+    storedUser?.full_name?.trim() ||
+    accountDisplay;
+  const accountAvatarName = accountName === accountDisplay ? null : accountName;
   const showNotifications = !isS3Session;
+
+  useEffect(() => {
+    const syncStoredUser = () => {
+      setStoredUser(readStoredUser() as StoredTopbarUser | null);
+    };
+    window.addEventListener(SESSION_USER_UPDATED_EVENT, syncStoredUser);
+    window.addEventListener("storage", syncStoredUser);
+    return () => {
+      window.removeEventListener(SESSION_USER_UPDATED_EVENT, syncStoredUser);
+      window.removeEventListener("storage", syncStoredUser);
+    };
+  }, []);
   const loadNotifications = useCallback(async () => {
     if (!showNotifications) return;
     setNotificationsLoading(true);
@@ -807,9 +828,13 @@ export default function Topbar({
                 }}
                 className="inline-flex h-9 items-center gap-0 rounded-lg border border-transparent bg-transparent px-1 text-left transition hover:bg-[var(--shell-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:gap-2 sm:px-1.5"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-[12px] font-semibold text-primary-700 dark:bg-primary-900/45 dark:text-primary-100">
-                  {accountInitial}
-                </span>
+                <UserAvatar
+                  avatar={storedUser?.avatar}
+                  name={accountAvatarName}
+                  email={accountDisplay}
+                  size="md"
+                  className="border-[var(--shell-surface)] shadow-none"
+                />
                 <span className="hidden min-w-0 max-w-40 truncate text-[12px] font-semibold text-[var(--shell-text)] sm:block lg:max-w-52">
                   {accountDisplay}
                 </span>
@@ -829,13 +854,25 @@ export default function Topbar({
                     aria-label="Account actions"
                     className="shell-menu w-72 rounded-lg border p-1.5"
                   >
-                    <div className="shell-menu-muted mb-1 rounded-md border px-2.5 py-2">
-                      <p className="shell-muted-text ui-caption">Signed in as</p>
-                      <p className="truncate ui-caption font-semibold text-[var(--shell-text)]">{accountDisplay}</p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        <span className="shell-menu-muted inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold text-[var(--shell-text)]">
-                          {uiRoleLabel}
-                        </span>
+                    <div className="shell-menu-muted mb-1 flex items-center gap-2.5 rounded-md border px-2.5 py-2">
+                      <UserAvatar
+                        avatar={storedUser?.avatar}
+                        name={accountAvatarName}
+                        email={accountDisplay}
+                        size="lg"
+                        className="border-[var(--shell-surface)] shadow-none"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="shell-muted-text ui-caption">Signed in as</p>
+                        <p className="truncate ui-caption font-semibold text-[var(--shell-text)]">{accountName}</p>
+                        {accountName !== accountDisplay ? (
+                          <p className="shell-muted-text truncate ui-caption">{accountDisplay}</p>
+                        ) : null}
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          <span className="shell-menu-muted inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold text-[var(--shell-text)]">
+                            {uiRoleLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
 

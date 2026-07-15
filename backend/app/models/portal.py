@@ -6,6 +6,7 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
+from app.models.user import UserAvatar
 
 
 class PortalAccessKey(BaseModel):
@@ -125,6 +126,14 @@ PortalAlertTone = Literal["info", "warning", "danger"]
 PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 
 
+class PortalStorageSpaceCollaboratorPreview(BaseModel):
+    user_id: int
+    email: str
+    display_name: Optional[str] = None
+    role: PortalStorageSpaceRole
+    avatar: UserAvatar
+
+
 class PortalStorageSpaceSummary(BaseModel):
     id: str
     name: str
@@ -135,6 +144,8 @@ class PortalStorageSpaceSummary(BaseModel):
     description: Optional[str] = None
     owner_label: Optional[str] = None
     owner_user_id: Optional[int] = None
+    collaborators: list[PortalStorageSpaceCollaboratorPreview] = Field(default_factory=list)
+    collaborator_count: int = 0
     visibility: PortalStorageSpaceVisibility = "private"
     share_scope: PortalStorageSpaceShareScope = "restricted"
     account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
@@ -300,6 +311,7 @@ class PortalStorageSpaceAccessPerson(BaseModel):
     role: PortalStorageSpaceRole
     account_role: Optional[str] = None
     access_source: Optional[Literal["owner", "direct", "group", "direct_and_group"]] = None
+    avatar: Optional[UserAvatar] = None
 
 
 class PortalStorageSpaceAccessSummary(BaseModel):
@@ -320,6 +332,7 @@ class PortalStorageSpaceShareCandidate(BaseModel):
     account_role: str
     access_source: Literal["direct", "group", "direct_and_group"]
     already_shared: bool = False
+    avatar: Optional[UserAvatar] = None
 
 
 class PortalCollaborator(BaseModel):
@@ -329,6 +342,7 @@ class PortalCollaborator(BaseModel):
     account_role: str
     access_source: Literal["direct", "group", "direct_and_group"]
     member_since: Optional[datetime] = None
+    avatar: Optional[UserAvatar] = None
 
 
 class PortalCollaboratorTrend(BaseModel):

@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -16,6 +16,11 @@ class UiGroup(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
+    avatar_source = Column(String, nullable=False, default="initials", server_default="initials")
+    avatar_icon = Column(String, nullable=True)
+    avatar_image = Column(LargeBinary, nullable=True)
+    avatar_content_type = Column(String, nullable=True)
+    avatar_updated_at = Column(DateTime, nullable=True)
     can_access_ceph_admin = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_storage_ops = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_bucket_compare = Column(Boolean, default=False, nullable=False, server_default="0")

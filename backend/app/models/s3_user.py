@@ -7,11 +7,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.ui_group import UiGroupAvatar
+from app.models.user import UserAssociationDetail
 
 
 class S3UserGroupDetail(BaseModel):
     id: int
     name: str
+    avatar: Optional[UiGroupAvatar] = None
 
 
 class S3User(BaseModel):
@@ -21,6 +24,7 @@ class S3User(BaseModel):
     email: Optional[str] = None
     created_at: Optional[datetime] = None
     user_ids: list[int] = []
+    user_details: list[UserAssociationDetail] = Field(default_factory=list)
     group_ids: list[int] = Field(default_factory=list)
     group_details: list[S3UserGroupDetail] = Field(default_factory=list)
     quota_max_size_gb: Optional[float] = None

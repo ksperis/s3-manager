@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,17 @@ from app.models.user import (
     UserSummary,
 )
 
+UiGroupAvatarSource = Literal["initials", "preset", "uploaded"]
+UiGroupAvatarIcon = Literal["users", "building", "shield", "briefcase", "academic"]
+
+
+class UiGroupAvatar(BaseModel):
+    source: UiGroupAvatarSource = "initials"
+    initials: str
+    icon: Optional[UiGroupAvatarIcon] = None
+    url: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
 
 class LinkedS3Account(BaseModel):
     id: int
@@ -24,6 +35,8 @@ class LinkedS3Account(BaseModel):
 class UiGroupCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    avatar_source: UiGroupAvatarSource = "initials"
+    avatar_icon: Optional[UiGroupAvatarIcon] = None
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: Optional[ManagerToolAccess] = None
@@ -37,6 +50,8 @@ class UiGroupCreate(BaseModel):
 class UiGroupUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    avatar_source: Optional[UiGroupAvatarSource] = None
+    avatar_icon: Optional[UiGroupAvatarIcon] = None
     can_access_ceph_admin: Optional[bool] = None
     can_access_storage_ops: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
@@ -50,12 +65,14 @@ class UiGroupUpdate(BaseModel):
 class UiGroupSummary(BaseModel):
     id: int
     name: str
+    avatar: UiGroupAvatar
 
 
 class UiGroupOut(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    avatar: UiGroupAvatar
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)

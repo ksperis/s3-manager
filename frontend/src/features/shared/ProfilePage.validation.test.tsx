@@ -11,6 +11,9 @@ const validateConnectionCredentialsMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
 const fetchCurrentUserMock = vi.fn();
 const updateCurrentUserMock = vi.fn();
+const uploadCurrentUserAvatarMock = vi.fn();
+const deleteCurrentUserAvatarMock = vi.fn();
+const fetchUserAvatarImageMock = vi.fn();
 const setThemeMock = vi.fn();
 const setLanguagePreferenceMock = vi.fn();
 const listPrivateConnectionTagDefinitionsMock = vi.fn();
@@ -55,6 +58,12 @@ vi.mock("../../components/language", () => ({
 vi.mock("../../api/users", () => ({
   fetchCurrentUser: () => fetchCurrentUserMock(),
   updateCurrentUser: (payload: unknown) => updateCurrentUserMock(payload),
+  uploadCurrentUserAvatar: (file: File) => uploadCurrentUserAvatarMock(file),
+  deleteCurrentUserAvatar: () => deleteCurrentUserAvatarMock(),
+}));
+
+vi.mock("../../api/avatarImages", () => ({
+  fetchAuthenticatedAvatarImage: (url: string) => fetchUserAvatarImageMock(url),
 }));
 
 vi.mock("../../api/connections", () => ({
@@ -114,6 +123,12 @@ describe("ProfilePage live validation", () => {
     listStorageEndpointsMock.mockResolvedValue([]);
     fetchCurrentUserMock.mockResolvedValue({
       full_name: "Admin User",
+      avatar: {
+        preference: "auto",
+        source: "gravatar",
+        url: "https://gravatar.com/avatar/hash?d=404",
+        initials: "AU",
+      },
     });
     validateConnectionCredentialsMock.mockResolvedValue({
       ok: false,
@@ -125,7 +140,30 @@ describe("ProfilePage live validation", () => {
       ui_language: null,
       quota_alerts_enabled: true,
       quota_alerts_global_watch: false,
+      avatar: {
+        preference: "initials",
+        source: "initials",
+        url: null,
+        initials: "AU",
+      },
     });
+    uploadCurrentUserAvatarMock.mockResolvedValue({
+      avatar: {
+        preference: "uploaded",
+        source: "uploaded",
+        url: "/users/1/avatar?v=123",
+        initials: "AU",
+      },
+    });
+    deleteCurrentUserAvatarMock.mockResolvedValue({
+      avatar: {
+        preference: "auto",
+        source: "gravatar",
+        url: "https://gravatar.com/avatar/hash?d=404",
+        initials: "AU",
+      },
+    });
+    fetchUserAvatarImageMock.mockResolvedValue(new Blob(["avatar"], { type: "image/png" }));
     listPrivateConnectionTagDefinitionsMock.mockResolvedValue([
       { id: 901, label: "ops", color_key: "teal", scope: "standard" },
       { id: 902, label: "finance", color_key: "amber", scope: "standard" },
@@ -137,6 +175,52 @@ describe("ProfilePage live validation", () => {
   afterEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+  it("selects an avatar source and explains identity-provider fallback", async () => {
+    fetchCurrentUserMock.mockResolvedValue({
+      full_name: "Admin User",
+      avatar: {
+        preference: "auto",
+        source: "provider",
+        url: "https://idp.example.test/admin.png",
+        initials: "AU",
+      },
+    });
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} />);
+
+    expect(await screen.findByText("Identity provider image.", { exact: false })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Initials" }));
+
+    await waitFor(() => {
+      expect(updateCurrentUserMock).toHaveBeenCalledWith({ avatar_preference: "initials" });
+    });
+    expect(await screen.findByText("Avatar updated.")).toBeInTheDocument();
+  });
+
+  it("uploads and removes a profile image", async () => {
+    const { container } = render(
+      <ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} />,
+    );
+    await screen.findByText("Profile image");
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+
+    const file = new File([new Uint8Array([1, 2, 3])], "avatar.png", {
+      type: "image/png",
+    });
+    fireEvent.change(fileInput!, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(uploadCurrentUserAvatarMock).toHaveBeenCalledWith(file);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Remove uploaded image" }));
+
+    await waitFor(() => {
+      expect(deleteCurrentUserAvatarMock).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText("Profile image removed.")).toBeInTheDocument();
   });
 
   it("shows validation error without disabling Create connection", async () => {

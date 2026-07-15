@@ -77,6 +77,7 @@ vi.mock("../../api/groups", () => ({
 describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, "", "/admin/users");
 
     generalSettingsState.portal_enabled = false;
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
@@ -135,6 +136,38 @@ describe("UsersPage modal tabs", () => {
     updateS3AccountMock.mockResolvedValue(undefined);
   });
 
+  it("opens the requested UI user directly in the edit page", async () => {
+    window.history.replaceState({}, "", "/admin/users?edit=12&search=linked.user%40example.com");
+    listUsersMock.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          email: "linked.user@example.com",
+          role: "ui_user",
+          accounts: [],
+          s3_users: [],
+          s3_connections: [],
+          group_ids: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<UsersPage />);
+
+    expect(await screen.findByRole("heading", { name: "Edit user" })).toBeInTheDocument();
+    expect(screen.getAllByText("linked.user@example.com")).toHaveLength(2);
+    expect(listUsersMock).toHaveBeenCalledWith(
+      expect.objectContaining({ search: "linked.user@example.com" }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to users" }));
+    expect(window.location.search).toBe("?search=linked.user%40example.com");
+  });
+
   it("renders associations with the shared sectioned summary", async () => {
     generalSettingsState.portal_enabled = true;
     listUsersMock.mockResolvedValue({
@@ -161,16 +194,14 @@ describe("UsersPage modal tabs", () => {
 
     render(<UsersPage />);
 
-    expect(await screen.findByText("acc-1")).toBeInTheDocument();
-    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Portal user")).toBeInTheDocument();
-    expect(screen.getByText("Accounts")).toBeInTheDocument();
-    expect(screen.getByText("Users")).toBeInTheDocument();
-    expect(screen.getByText("Connections")).toBeInTheDocument();
-    expect(screen.getByText("Groups")).toBeInTheDocument();
-    expect(screen.getByText("s3-user-1")).toBeInTheDocument();
-    expect(screen.getByText("conn-1")).toBeInTheDocument();
-    expect(screen.getByText("storage-operators")).toBeInTheDocument();
+    const associations = await screen.findByLabelText("3 linked associations");
+    expect(associations).toHaveAccessibleDescription(
+      "Linked associations (3)\nRGW account: acc-1 — Roles: Account admin, Portal user\nRGW user: s3-user-1 — Roles: Direct access\nS3 connection: conn-1 — Roles: Direct access",
+    );
+    expect(screen.getByLabelText("1 accounts")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 s3 connections")).toBeInTheDocument();
+    expect(screen.queryByText("storage-operators")).not.toBeInTheDocument();
   });
 
   it("uses the responsive shared table for the user list", async () => {
@@ -238,8 +269,10 @@ describe("UsersPage modal tabs", () => {
 
     render(<UsersPage />);
 
-    expect(await screen.findByText("acc-1")).toBeInTheDocument();
-    expect(screen.queryByText("Portal user")).not.toBeInTheDocument();
+    const associations = await screen.findByLabelText("1 linked association");
+    expect(associations).toHaveAccessibleDescription(
+      "Linked associations (1)\nRGW account: acc-1 — Roles: Account admin",
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Associations" }));

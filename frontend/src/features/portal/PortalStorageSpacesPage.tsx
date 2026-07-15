@@ -34,6 +34,7 @@ import UiCard from "../../components/ui/UiCard";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
+import { UserAvatarStack } from "../../components/UserAvatar";
 import {
   cx,
   uiButtonBaseClass,
@@ -245,19 +246,34 @@ export default function PortalStorageSpacesPage() {
         }),
         render: (space) => {
           const status = visibleStatus(space);
+          const collaborators = space.collaborators ?? [];
           return (
-            <div className="flex flex-wrap items-center gap-2">
-              <UiBadge tone={portalVisibilityTone(space.visibility)}>
-                {portalShareScopeLabel(space.visibility, space.shareScope, t)}
-              </UiBadge>
-              {status ? (
-                <UiBadge tone={portalStorageSpaceStatusTone(space)}>
-                  {portalStatusLabel(
-                    status as "Active" | "Attention" | "Archived",
-                    t,
-                  )}
+            <div className="flex min-w-[132px] flex-col items-start gap-2">
+              {collaborators.length > 0 ? (
+                <UserAvatarStack
+                  people={collaborators}
+                  totalCount={space.collaboratorCount ?? collaborators.length}
+                  maxVisible={5}
+                  size="sm"
+                />
+              ) : (
+                <span className={cx("text-xs", uiMutedTextClass)}>
+                  {t({ en: "No collaborators", fr: "Aucun collaborateur", de: "Keine Mitwirkenden" })}
+                </span>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <UiBadge tone={portalVisibilityTone(space.visibility)}>
+                  {portalShareScopeLabel(space.visibility, space.shareScope, t)}
                 </UiBadge>
-              ) : null}
+                {status ? (
+                  <UiBadge tone={portalStorageSpaceStatusTone(space)}>
+                    {portalStatusLabel(
+                      status as "Active" | "Attention" | "Archived",
+                      t,
+                    )}
+                  </UiBadge>
+                ) : null}
+              </div>
             </div>
           );
         },

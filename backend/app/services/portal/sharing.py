@@ -10,9 +10,89 @@ COLLABORATOR_TREND_WINDOWS: tuple[tuple[str, str, int], ...] = (
     ("week", "last week", 6),
     ("day", "yesterday", 1),
 )
+STORAGE_SPACE_COLLABORATOR_PREVIEW_LIMIT = 5
 
 
 class PortalSharingMixin:
+    def _storage_space_collaborator_previews(
+        self,
+        account: S3Account,
+        metadata_rows: list[PortalStorageSpaceMetadata],
+    ) -> dict[str, tuple[list[PortalStorageSpaceCollaboratorPreview], int]]:
+        if not metadata_rows:
+            return {}
+        member_map = self._portal_account_member_map(account)
+        users_by_id = {user_id: member[0] for user_id, member in member_map.items()}
+        owner_user_ids = {metadata.owner_user_id for metadata in metadata_rows if metadata.owner_user_id is not None}
+        missing_owner_ids = owner_user_ids - set(users_by_id)
+        if missing_owner_ids:
+            users_by_id.update(
+                {
+                    target.id: target
+                    for target in self.db.query(User).filter(User.id.in_(missing_owner_ids)).all()
+                }
+            )
+
+        metadata_ids = [metadata.id for metadata in metadata_rows if metadata.id is not None]
+        grants_by_metadata_id: dict[int, list[tuple[User, PortalStorageSpaceRole]]] = {}
+        if metadata_ids:
+            grant_rows = (
+                self.db.query(PortalStorageSpaceGrant.storage_space_metadata_id, PortalStorageSpaceGrant.role, User)
+                .join(User, User.id == PortalStorageSpaceGrant.user_id)
+                .filter(PortalStorageSpaceGrant.storage_space_metadata_id.in_(metadata_ids))
+                .all()
+            )
+            for metadata_id, role, target in grant_rows:
+                if role not in {"Viewer", "Editor", "Owner"}:
+                    continue
+                users_by_id[target.id] = target
+                grants_by_metadata_id.setdefault(metadata_id, []).append((target, role))
+
+        avatar_service = UserAvatarService(self.db)
+        result: dict[str, tuple[list[PortalStorageSpaceCollaboratorPreview], int]] = {}
+        for metadata in metadata_rows:
+            roles_by_user_id: dict[int, PortalStorageSpaceRole] = {}
+            if metadata.owner_user_id is not None and metadata.owner_user_id in users_by_id:
+                roles_by_user_id[metadata.owner_user_id] = "Owner"
+            if self._metadata_visibility(metadata) == "shared":
+                if self._metadata_share_scope(metadata) == "account":
+                    default_role = self._metadata_account_member_role(metadata) or "Editor"
+                    for user_id in member_map:
+                        roles_by_user_id[user_id] = self._best_storage_space_role(
+                            roles_by_user_id.get(user_id),
+                            default_role,
+                        ) or default_role
+                elif metadata.id is not None:
+                    for target, grant_role in grants_by_metadata_id.get(metadata.id, []):
+                        roles_by_user_id[target.id] = self._best_storage_space_role(
+                            roles_by_user_id.get(target.id),
+                            grant_role,
+                        ) or grant_role
+
+            previews = [
+                PortalStorageSpaceCollaboratorPreview(
+                    user_id=user_id,
+                    email=target.email,
+                    display_name=target.display_name or target.full_name,
+                    role=role,
+                    avatar=avatar_service.descriptor(target),
+                )
+                for user_id, role in roles_by_user_id.items()
+                if (target := users_by_id.get(user_id)) is not None
+            ]
+            previews.sort(
+                key=lambda item: (
+                    0 if item.role == "Owner" else 1,
+                    (item.display_name or item.email).lower(),
+                    item.email.lower(),
+                )
+            )
+            result[metadata.bucket_name] = (
+                previews[:STORAGE_SPACE_COLLABORATOR_PREVIEW_LIMIT],
+                len(previews),
+            )
+        return result
+
     def _portal_access_source(self, sources: set[str]) -> str:
         if sources == {"direct"}:
             return "direct"
@@ -129,6 +209,7 @@ class PortalSharingMixin:
                 account_role=account_role,
                 access_source=self._portal_access_source(sources),
                 member_since=self._portal_collaborator_member_since(target, sources, source_dates.get(user_id)),
+                avatar=UserAvatarService(self.db).descriptor(target),
             )
             for user_id, (target, account_role, sources) in member_map.items()
         ]
@@ -238,6 +319,7 @@ class PortalSharingMixin:
             role="Owner",
             account_role=member[1] if member else None,
             access_source="owner",
+            avatar=UserAvatarService(self.db).descriptor(owner),
         )
 
     def _storage_space_effective_access_user_ids(self, metadata: PortalStorageSpaceMetadata) -> set[int]:

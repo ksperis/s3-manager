@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.db import AccountRole, S3Account, UiGroup, UiGroupS3Account
+from app.db import AccountRole, S3Account, UiGroup, UiGroupS3Account, User, UserRole, UserS3Account
 from app.services.tags_service import TagsService
 
 
@@ -111,14 +111,45 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
 
     assert [item["name"] for item in payload["items"]] == ["group-linked-account"]
     assert payload["items"][0]["group_ids"] == [group.id]
-    assert payload["items"][0]["group_links"] == [
-        {
-            "group_id": group.id,
-            "group_name": "Analytics Team",
-            "account_admin": True,
-            "account_role": AccountRole.PORTAL_USER.value,
-        }
-    ]
+    group_link = payload["items"][0]["group_links"][0]
+    assert group_link["group_id"] == group.id
+    assert group_link["group_name"] == "Analytics Team"
+    assert group_link["account_admin"] is True
+    assert group_link["account_role"] == AccountRole.PORTAL_USER.value
+    assert group_link["group_avatar"]["initials"] == "AT"
+
+
+def test_admin_accounts_search_matches_linked_user_email_and_exposes_avatar(client, db_session):
+    linked = _seed_account(db_session, name="user-linked-account", rgw_account_id="RGW-USER-LINKED")
+    user = User(
+        email="specific.member@example.test",
+        full_name="Specific Member",
+        display_name="Specific Member",
+        hashed_password="x",
+        role=UserRole.UI_USER.value,
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        UserS3Account(
+            account_id=linked.id,
+            user_id=user.id,
+            is_root=False,
+            account_admin=False,
+            account_role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/admin/accounts", params={"search": "specific.member"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert [item["name"] for item in payload["items"]] == ["user-linked-account"]
+    user_link = payload["items"][0]["user_links"][0]
+    assert user_link["user_email"] == user.email
+    assert user_link["user_full_name"] == "Specific Member"
+    assert user_link["user_avatar"]["initials"] == "SM"
 
 
 def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
@@ -153,14 +184,12 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
     payload = response.json()
 
     assert payload["group_ids"] == [new_group.id]
-    assert payload["group_links"] == [
-        {
-            "group_id": new_group.id,
-            "group_name": "New Account Group",
-            "account_admin": False,
-            "account_role": AccountRole.PORTAL_MANAGER.value,
-        }
-    ]
+    group_link = payload["group_links"][0]
+    assert group_link["group_id"] == new_group.id
+    assert group_link["group_name"] == "New Account Group"
+    assert group_link["account_admin"] is False
+    assert group_link["account_role"] == AccountRole.PORTAL_MANAGER.value
+    assert group_link["group_avatar"]["initials"] == "NG"
     rows = db_session.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
     assert [(row.group_id, row.account_admin, row.account_role) for row in rows] == [
         (new_group.id, False, AccountRole.PORTAL_MANAGER.value)

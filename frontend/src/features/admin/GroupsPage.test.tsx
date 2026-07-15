@@ -6,6 +6,8 @@ const listGroupsMock = vi.fn();
 const createGroupMock = vi.fn();
 const updateGroupMock = vi.fn();
 const deleteGroupMock = vi.fn();
+const uploadGroupAvatarMock = vi.fn();
+const deleteGroupAvatarMock = vi.fn();
 const listMinimalUsersMock = vi.fn();
 const listMinimalS3AccountsMock = vi.fn();
 const listMinimalS3UsersMock = vi.fn();
@@ -50,6 +52,8 @@ vi.mock("../../api/groups", () => ({
   createGroup: (payload: unknown) => createGroupMock(payload),
   updateGroup: (groupId: number, payload: unknown) => updateGroupMock(groupId, payload),
   deleteGroup: (groupId: number) => deleteGroupMock(groupId),
+  uploadGroupAvatar: (groupId: number, file: File) => uploadGroupAvatarMock(groupId, file),
+  deleteGroupAvatar: (groupId: number) => deleteGroupAvatarMock(groupId),
 }));
 
 vi.mock("../../api/users", () => ({
@@ -71,6 +75,7 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 describe("GroupsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, "", "/admin/groups");
     generalSettingsState.portal_enabled = false;
 
     listGroupsMock.mockResolvedValue({
@@ -95,6 +100,37 @@ describe("GroupsPage", () => {
     createGroupMock.mockResolvedValue({ id: 50, name: "ops-group" });
     updateGroupMock.mockResolvedValue({ id: 50, name: "ops-group-updated" });
     deleteGroupMock.mockResolvedValue(undefined);
+    uploadGroupAvatarMock.mockResolvedValue({ id: 50, name: "ops-group", avatar: { source: "uploaded", initials: "OG" } });
+    deleteGroupAvatarMock.mockResolvedValue({ id: 50, name: "ops-group", avatar: { source: "initials", initials: "OG" } });
+  });
+
+  it("opens the requested UI group directly in the edit page", async () => {
+    window.history.replaceState({}, "", "/admin/groups?edit=50&search=ops-group");
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          user_ids: [],
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    expect(await screen.findByRole("heading", { name: "Edit UI group" })).toBeInTheDocument();
+    expect(listGroupsMock).toHaveBeenCalledWith(expect.objectContaining({ search: "ops-group" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to groups" }));
+    expect(window.location.search).toBe("?search=ops-group");
   });
 
   it("renders association names from group details without waiting for modal resources", async () => {
@@ -136,7 +172,10 @@ describe("GroupsPage", () => {
 
     render(<GroupsPage />);
 
-    expect(await screen.findByText("production-account")).toBeInTheDocument();
+    const associations = await screen.findByLabelText("3 linked associations");
+    expect(associations).toHaveAccessibleDescription(
+      "Linked associations (3)\nRGW account: production-account — Roles: Account admin, Portal manager\nRGW user: archive-rgw-user — Roles: Direct access\nS3 connection: archive-shared-connection — Roles: Manager, Browser",
+    );
     expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
     expect(screen.getByLabelText("Search")).toHaveAttribute(
       "placeholder",
@@ -155,23 +194,59 @@ describe("GroupsPage", () => {
     expect(table).toHaveClass("responsive-data-table");
     expect(within(table).getByRole("button", { name: "ops-group" }).closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("No workspace/tool rights").closest("td")).toHaveAttribute("data-label", "Rights");
-    expect(within(table).getByText("production-account").closest("td")).toHaveAttribute("data-label", "Associations");
+    expect(associations.closest("td")).toHaveAttribute("data-label", "Storage associations");
+    const members = screen.getByLabelText("1 linked principal");
+    expect(members).toHaveAccessibleDescription(
+      "Linked principals (1)\nalice@example.com — Roles: User, UI user",
+    );
+    expect(members.closest("td")).toHaveAttribute("data-label", "Members");
+    expect(screen.getByRole("link", { name: "Edit UI user alice@example.com" })).toHaveAttribute(
+      "href",
+      "/admin/users?edit=2&search=alice%40example.com",
+    );
     expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
-    expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Portal manager")).toBeInTheDocument();
-    expect(screen.getByText("Accounts")).toBeInTheDocument();
-    expect(screen.getByText("Users")).toBeInTheDocument();
-    expect(screen.getByText("S3 Users")).toBeInTheDocument();
-    expect(screen.getByText("Connections")).toBeInTheDocument();
-    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
-    expect(screen.getByText("archive-rgw-user")).toBeInTheDocument();
-    expect(screen.getByText("archive-shared-connection")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 accounts")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();
+    expect(screen.getByLabelText("1 s3 connections")).toBeInTheDocument();
     expect(screen.queryByText("Account #99")).not.toBeInTheDocument();
     expect(screen.queryByText("S3 User #88")).not.toBeInTheDocument();
     expect(screen.queryByText("Connection #77")).not.toBeInTheDocument();
     expect(listMinimalS3AccountsMock).not.toHaveBeenCalled();
     expect(listMinimalS3UsersMock).not.toHaveBeenCalled();
     expect(listMinimalS3ConnectionsMock).not.toHaveBeenCalled();
+  });
+
+  it("limits visible member avatars and reports hidden members", async () => {
+    const members = Array.from({ length: 7 }, (_, index) => ({
+      id: index + 1,
+      email: `member-${index + 1}@example.com`,
+      role: index === 0 ? "ui_admin" : "ui_user",
+      avatar: { preference: "initials" as const, source: "initials" as const, initials: `M${index + 1}` },
+    }));
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "large-group",
+          user_ids: members.map((member) => member.id),
+          user_details: members,
+          account_links: [],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+
+    const memberStack = await screen.findByLabelText("7 linked principals");
+    expect(within(memberStack).getAllByRole("link")).toHaveLength(5);
+    expect(within(memberStack).getByText("+2")).toBeInTheDocument();
+    expect(memberStack).toHaveAccessibleDescription(/member-7@example\.com — Roles: User, UI user/);
   });
 
   it("hides portal role labels when portal is disabled and preserves existing group account roles", async () => {
@@ -208,8 +283,10 @@ describe("GroupsPage", () => {
 
     render(<GroupsPage />);
 
-    expect(await screen.findByText("production-account")).toBeInTheDocument();
-    expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
+    const associations = await screen.findByLabelText("1 linked association");
+    expect(associations).toHaveAccessibleDescription(
+      "Linked associations (1)\nRGW account: production-account — Roles: Account admin",
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Associations" }));
@@ -275,6 +352,8 @@ describe("GroupsPage", () => {
     expect(createGroupMock).toHaveBeenCalledWith({
       name: "ops-group",
       description: null,
+      avatar_source: "initials",
+      avatar_icon: null,
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
       browser_advanced_features_enabled: true,
@@ -292,6 +371,31 @@ describe("GroupsPage", () => {
       s3_user_ids: [11],
       s3_connection_ids: [21],
     });
+  });
+
+  it("lets an administrator choose a preset or upload a custom group image", async () => {
+    render(<GroupsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create group" }));
+    fireEvent.change(screen.getByPlaceholderText("Storage operators"), { target: { value: "visual-group" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use Security pictogram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(createGroupMock).toHaveBeenCalledWith(expect.objectContaining({
+        name: "visual-group",
+        avatar_source: "preset",
+        avatar_icon: "shield",
+      }));
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create group" }));
+    fireEvent.change(screen.getByPlaceholderText("Storage operators"), { target: { value: "uploaded-group" } });
+    const file = new File(["png"], "group.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Upload image"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(uploadGroupAvatarMock).toHaveBeenCalledWith(50, file));
   });
 
   it("edits and deletes existing groups", async () => {

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useSearchParams } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
@@ -17,12 +17,20 @@ import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
+import UserAvatar from "../../components/UserAvatar";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { cx, uiDataTableClass } from "../../components/ui/styles";
 import { useTheme } from "../../components/theme";
 import { UiLanguagePreference, useLanguage } from "../../components/language";
-import { fetchCurrentUser, updateCurrentUser } from "../../api/users";
+import {
+  deleteCurrentUserAvatar,
+  fetchCurrentUser,
+  updateCurrentUser,
+  uploadCurrentUserAvatar,
+  type UserAvatarDescriptor,
+  type UserAvatarPreference,
+} from "../../api/users";
 import {
   S3Connection,
   createConnection,
@@ -94,7 +102,11 @@ type ConnectionCredentialDraft = {
 
 const privateConnectionsTableClass = cx(uiDataTableClass, "compact-table min-w-full");
 
-function persistStoredUser(values: { fullName?: string | null; uiLanguage?: "en" | "fr" | "de" | null }) {
+function persistStoredUser(values: {
+  fullName?: string | null;
+  uiLanguage?: "en" | "fr" | "de" | null;
+  avatar?: UserAvatarDescriptor | null;
+}) {
   if (typeof window === "undefined") return;
   updateStoredUserProfile(values);
 }
@@ -107,6 +119,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+function avatarSourceLabel(avatar?: UserAvatarDescriptor | null): string {
+  if (avatar?.source === "uploaded") return "Uploaded profile image";
+  if (avatar?.source === "provider") return "Identity provider image";
+  if (avatar?.source === "gravatar") return "Gravatar";
+  return "Initials";
 }
 
 function buildConnectionDraft(connection: S3Connection): ConnectionDraft {
@@ -199,6 +218,10 @@ export default function ProfilePage({
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [avatar, setAvatar] = useState<UserAvatarDescriptor | null>(storedUser?.avatar ?? null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [profileTouched, setProfileTouched] = useState(false);
   const [profileInitialSignature, setProfileInitialSignature] = useState(() => stableSignature({ fullName: "" }));
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -531,13 +554,14 @@ export default function ProfilePage({
         const nextQuotaAlertsEnabled = user.quota_alerts_enabled !== false;
         const nextQuotaAlertsGlobalWatch = Boolean(user.quota_alerts_global_watch);
         setFullName(nextFullName);
+        setAvatar(user.avatar ?? null);
         setProfileTouched(false);
         setLanguagePreference(nextLanguage);
         setPreferencesLanguage(nextLanguage);
         setQuotaAlertsEnabled(nextQuotaAlertsEnabled);
         setQuotaAlertsGlobalWatch(nextQuotaAlertsGlobalWatch);
         setPreferencesTouched(false);
-        persistStoredUser({ uiLanguage: user.ui_language ?? null });
+        persistStoredUser({ uiLanguage: user.ui_language ?? null, avatar: user.avatar ?? null });
       })
       .catch((error) => {
         console.error(error);
@@ -794,6 +818,72 @@ export default function ProfilePage({
       setProfileError(getErrorMessage(error, "Unable to save profile."));
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const applyAvatarResponse = (updatedAvatar?: UserAvatarDescriptor | null) => {
+    const nextAvatar = updatedAvatar ?? null;
+    setAvatar(nextAvatar);
+    persistStoredUser({ avatar: nextAvatar });
+  };
+
+  const handleAvatarPreferenceChange = async (preference: UserAvatarPreference) => {
+    if (isS3Session || avatarBusy) return;
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      const updated = await updateCurrentUser({ avatar_preference: preference });
+      applyAvatarResponse(updated.avatar);
+      setProfileMessage("Avatar updated.");
+    } catch (error) {
+      console.error(error);
+      setAvatarError(getErrorMessage(error, "Unable to update avatar."));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || isS3Session || avatarBusy) return;
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      setAvatarError("Choose a PNG or JPEG image.");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setAvatarError("Avatar image must be 1 MiB or smaller.");
+      return;
+    }
+    setAvatarBusy(true);
+    setAvatarError(null);
+    setProfileMessage(null);
+    try {
+      const updated = await uploadCurrentUserAvatar(file);
+      applyAvatarResponse(updated.avatar);
+      setProfileMessage("Profile image uploaded.");
+    } catch (error) {
+      console.error(error);
+      setAvatarError(getErrorMessage(error, "Unable to upload profile image."));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    if (isS3Session || avatarBusy) return;
+    setAvatarBusy(true);
+    setAvatarError(null);
+    setProfileMessage(null);
+    try {
+      const updated = await deleteCurrentUserAvatar();
+      applyAvatarResponse(updated.avatar);
+      setProfileMessage("Profile image removed.");
+    } catch (error) {
+      console.error(error);
+      setAvatarError(getErrorMessage(error, "Unable to remove profile image."));
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -1247,6 +1337,84 @@ export default function ProfilePage({
                 className={isS3Session ? "cursor-not-allowed opacity-70" : undefined}
                 placeholder="Your name"
               />
+            </div>
+            <div className="rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <UserAvatar
+                  avatar={avatar}
+                  name={fullName || storedUser?.display_name || storedUser?.email}
+                  email={storedUser?.email}
+                  size="xl"
+                />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div>
+                    <div className="text-sm font-bold text-[var(--ui-text)]">Profile image</div>
+                    <div className="ui-caption text-[var(--ui-text-muted)]">
+                      {avatarSourceLabel(avatar)}. Automatic mode uses an uploaded image, then the image from your identity provider, then Gravatar, with initials as fallback.
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <UiButton
+                      size="xs"
+                      variant={avatar?.preference === "auto" ? "primary" : "secondary"}
+                      aria-pressed={avatar?.preference === "auto"}
+                      disabled={isS3Session || avatarBusy}
+                      onClick={() => void handleAvatarPreferenceChange("auto")}
+                    >
+                      Automatic
+                    </UiButton>
+                    <UiButton
+                      size="xs"
+                      variant={avatar?.preference === "gravatar" ? "primary" : "secondary"}
+                      aria-pressed={avatar?.preference === "gravatar"}
+                      disabled={isS3Session || avatarBusy}
+                      onClick={() => void handleAvatarPreferenceChange("gravatar")}
+                    >
+                      Gravatar
+                    </UiButton>
+                    <UiButton
+                      size="xs"
+                      variant={avatar?.preference === "initials" ? "primary" : "secondary"}
+                      aria-pressed={avatar?.preference === "initials"}
+                      disabled={isS3Session || avatarBusy}
+                      onClick={() => void handleAvatarPreferenceChange("initials")}
+                    >
+                      Initials
+                    </UiButton>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={avatarFileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="sr-only"
+                      tabIndex={-1}
+                      onChange={handleAvatarUpload}
+                    />
+                    <UiButton
+                      size="xs"
+                      variant="secondary"
+                      disabled={isS3Session || avatarBusy}
+                      loading={avatarBusy}
+                      onClick={() => avatarFileInputRef.current?.click()}
+                    >
+                      Upload image
+                    </UiButton>
+                    {avatar?.source === "uploaded" ? (
+                      <UiButton
+                        size="xs"
+                        variant="ghost"
+                        disabled={isS3Session || avatarBusy}
+                        onClick={() => void handleAvatarDelete()}
+                      >
+                        Remove uploaded image
+                      </UiButton>
+                    ) : null}
+                    <span className="ui-caption text-[var(--ui-text-muted)]">PNG or JPEG, maximum 1 MiB.</span>
+                  </div>
+                  {avatarError ? <UiInlineMessage tone="error">{avatarError}</UiInlineMessage> : null}
+                </div>
+              </div>
             </div>
             {isS3Session && (
               <p className="ui-caption text-slate-500 dark:text-slate-400">

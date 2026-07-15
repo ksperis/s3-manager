@@ -112,6 +112,8 @@ class PortalStorageSpacesMixin:
         role: Optional[PortalStorageSpaceRole] = None,
         content_role: Optional[PortalStorageSpaceRole] = None,
         metadata: PortalStorageSpaceMetadata | None = None,
+        collaborators: Optional[list[PortalStorageSpaceCollaboratorPreview]] = None,
+        collaborator_count: int = 0,
     ) -> PortalStorageSpaceSummary:
         role = role or self._storage_space_role(access)
         endpoint = getattr(access.account, "storage_endpoint", None)
@@ -127,6 +129,8 @@ class PortalStorageSpacesMixin:
             description=self._default_storage_space_description(name, metadata),
             owner_label=self._storage_space_owner_label(access.account, metadata),
             owner_user_id=metadata.owner_user_id if metadata else None,
+            collaborators=collaborators or [],
+            collaborator_count=collaborator_count,
             visibility=self._metadata_visibility(metadata),
             share_scope=self._metadata_share_scope(metadata),
             account_member_role=self._metadata_account_member_role(metadata),
@@ -157,6 +161,10 @@ class PortalStorageSpacesMixin:
         role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
         content_role_by_bucket = self.list_existing_user_storage_space_content_access(user, access.account, access.role)
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
+        collaborator_previews = self._storage_space_collaborator_previews(
+            access.account,
+            list(metadata_by_bucket.values()),
+        )
         spaces: list[PortalStorageSpaceSummary] = []
         for metadata in metadata_by_bucket.values():
             role_for_bucket = self._storage_space_effective_role(
@@ -183,6 +191,8 @@ class PortalStorageSpacesMixin:
                     role=role_for_bucket,
                     content_role=content_role_by_bucket.get(metadata.bucket_name),
                     metadata=metadata,
+                    collaborators=collaborator_previews.get(metadata.bucket_name, ([], 0))[0],
+                    collaborator_count=collaborator_previews.get(metadata.bucket_name, ([], 0))[1],
                 )
             )
         if search:

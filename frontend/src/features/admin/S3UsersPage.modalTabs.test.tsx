@@ -189,9 +189,15 @@ describe("S3UsersPage modal tabs", () => {
     expect(within(table).getByText("rgw-user-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("rgw-uid-1").closest("td")).toHaveAttribute("data-label", "UID");
     expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
-    expect(await screen.findByText("ui33@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Storage Group")).toBeInTheDocument();
-    expect(within(table).getByText("Storage Group").closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
+    const associations = await screen.findByLabelText("2 linked principals");
+    await waitFor(() => {
+      expect(associations).toHaveAccessibleDescription(
+        "Linked principals (2)\nui33@example.com — Roles: UI user\nStorage Group — Roles: UI group",
+      );
+    });
+    expect(associations).toBeInTheDocument();
+    expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();
+    expect(associations.closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
     expect(within(table).getByRole("link", { name: "Keys" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 

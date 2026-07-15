@@ -62,11 +62,26 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
-import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
+import { AssociationPrincipalStack, type AssociationPrincipalItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
+
+function getS3UserSearchCandidates(user: S3User): Array<string | number | null | undefined> {
+  return [
+    user.name,
+    user.rgw_user_uid,
+    user.email,
+    ...(user.user_details ?? []).flatMap((linkedUser) => [
+      linkedUser.email,
+      linkedUser.display_name,
+      linkedUser.full_name,
+    ]),
+    ...(user.group_details ?? []).map((group) => group.name),
+    ...extractUiTagLabels(user.tags),
+  ];
+}
 
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
@@ -237,8 +252,7 @@ export default function S3UsersPage() {
         }
 
         const exactMatches = allMatches.filter((user) => {
-          const candidates = [user.name, user.rgw_user_uid, user.email ?? "", ...extractUiTagLabels(user.tags)];
-          return matchesExactTextCandidate(candidates, quick);
+          return matchesExactTextCandidate(getS3UserSearchCandidates(user), quick);
         });
         const totalExact = exactMatches.length;
         const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));
@@ -351,30 +365,40 @@ export default function S3UsersPage() {
     portalUsers.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [portalUsers]);
+  const portalUsersById = useMemo(() => new Map(portalUsers.map((user) => [user.id, user])), [portalUsers]);
   const groupLabelById = useMemo(() => {
     const map = new Map<number, string>();
     uiGroups.forEach((group) => map.set(group.id, group.name));
     return map;
   }, [uiGroups]);
+  const groupsById = useMemo(() => new Map(uiGroups.map((group) => [group.id, group])), [uiGroups]);
   const renderUserAssociations = (user: S3User) => {
-    const userItems: AssociationChipItem[] = (user.user_ids ?? []).map((id) => ({
-      id,
-      label: portalUserLabelById.get(id) ?? `User #${id}`,
-    }));
-    const groupItems: AssociationChipItem[] = (user.group_details && user.group_details.length > 0
-      ? user.group_details.map((group) => ({ id: group.id, label: group.name }))
-      : (user.group_ids ?? []).map((id) => ({ id, label: `Group #${id}` })));
-    if (userItems.length === 0 && groupItems.length === 0) {
-      return <span className="ui-caption text-slate-400">None</span>;
-    }
-    return (
-      <AssociationSummary
-        sections={[
-          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
-          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
-        ]}
-      />
-    );
+    const userItems: AssociationPrincipalItem[] = (user.user_details && user.user_details.length > 0
+      ? user.user_details
+      : (user.user_ids ?? []).map((id) => portalUsersById.get(id) ?? { id, email: `User #${id}` })
+    ).map((uiUser) => {
+      return {
+        id: uiUser.id,
+        kind: "user",
+        label: uiUser.display_name || uiUser.full_name || uiUser.email || `User #${uiUser.id}`,
+        email: uiUser.email,
+        avatar: uiUser.avatar,
+      };
+    });
+    const groupItems: AssociationPrincipalItem[] = (user.group_details && user.group_details.length > 0
+      ? user.group_details.map((group) => ({
+          id: group.id,
+          kind: "group" as const,
+          label: group.name,
+          avatar: group.avatar || groupsById.get(group.id)?.avatar,
+        }))
+      : (user.group_ids ?? []).map((id) => ({
+          id,
+          kind: "group" as const,
+          label: groupsById.get(id)?.name || `Group #${id}`,
+          avatar: groupsById.get(id)?.avatar,
+        })));
+    return <AssociationPrincipalStack items={[...userItems, ...groupItems]} />;
   };
   const availablePortalUsers = useMemo(() => {
     const query = portalUserSearch.trim().toLowerCase();
@@ -768,7 +792,7 @@ export default function S3UsersPage() {
     {
       id: "associations",
       label: "UI Users / Groups",
-      cellClassName: "min-w-[224px] max-w-[416px] align-top",
+      cellClassName: "min-w-[180px] max-w-[240px] align-middle",
       render: renderUserAssociations,
     },
     {

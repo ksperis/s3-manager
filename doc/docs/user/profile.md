@@ -13,6 +13,8 @@ Use this page when you need to adjust personal UI preferences, manage your own p
 
 1. Select **Profile** at the bottom of the sidebar, just above **Collapse**, or use the account menu in the topbar. The profile page opens inside your current workspace so its navigation and context remain available.
 2. Use the **Profile** tab to update identity and preferences:
+   - choose your profile image source: automatic, Gravatar, or initials,
+   - upload or remove a personal PNG or JPEG image up to 1 MiB,
    - choose language and theme,
    - set the default workspace after sign-in,
    - enable **Show tags in top selectors** if you want compact color-coded tags in the topbar context and endpoint selectors on this browser,
@@ -30,6 +32,12 @@ Your local UI preferences are updated, and your private connections remain easie
 Quota notifications for accounts or RGW users you administer remain visible from
 the topbar notification menu when the platform quota monitor raises them.
 
+In automatic avatar mode, the UI uses your uploaded image first, then the image
+provided by your OIDC identity provider, then Gravatar. Initials remain the
+fallback when an image is missing or cannot be loaded. Choose **Initials** to
+avoid loading an external profile image. The selected avatar is also used in
+the account menu in the topbar.
+
 ## Limits / feature flags
 
 !!! note
@@ -38,6 +46,10 @@ the topbar notification menu when the platform quota monitor raises them.
 !!! note
     The quota email preference controls email delivery only. Topbar quota notifications
     are shown for accessible RGW accounts or users when quota monitoring is enabled.
+
+!!! note
+    Uploaded profile images are stored by the application and are visible only
+    to you, administrators, and users who share a Portal project with you.
 
 !!! note
     Private S3 connections remain private to their owner. Tags on those connections are also editable only by the owner.

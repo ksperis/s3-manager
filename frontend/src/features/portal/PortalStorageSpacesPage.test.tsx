@@ -45,6 +45,22 @@ const mocks = vi.hoisted(() => ({
           objectCount: 12,
           createdAt: "2026-03-10T10:00:00Z",
           shareCount: 3,
+          collaborators: [
+            {
+              user_id: 7,
+              email: "owner@example.com",
+              display_name: "Owner Example",
+              role: "Owner",
+              avatar: {
+                preference: "initials",
+                source: "initials",
+                url: null,
+                initials: "OE",
+                updated_at: null,
+              },
+            },
+          ],
+          collaboratorCount: 1,
           origin: "portal_generic",
           nameEditable: true,
         },
@@ -128,6 +144,22 @@ describe("PortalStorageSpacesPage", () => {
         objectCount: 12,
         createdAt: "2026-03-10T10:00:00Z",
         shareCount: 3,
+        collaborators: [
+          {
+            user_id: 7,
+            email: "owner@example.com",
+            display_name: "Owner Example",
+            role: "Owner",
+            avatar: {
+              preference: "initials",
+              source: "initials",
+              url: null,
+              initials: "OE",
+              updated_at: null,
+            },
+          },
+        ],
+        collaboratorCount: 1,
         origin: "portal_generic",
         nameEditable: true,
       },
@@ -199,6 +231,9 @@ describe("PortalStorageSpacesPage", () => {
     expect(
       within(researchRow!).getByText("Selected people"),
     ).toBeInTheDocument();
+    expect(within(researchRow!).getByTitle("Owner Example")).toHaveTextContent(
+      "OE",
+    );
     expect(within(researchRow!).queryByText("Active")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("columnheader", { name: "Status" }),

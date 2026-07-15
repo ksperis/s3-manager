@@ -26,7 +26,8 @@ import {
 } from "../../components/ui/styles";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
-import AssociationSummary, { AssociationChips, type AssociationChipItem } from "./AssociationSummary";
+import { AssociationPrincipalStack, type AssociationPrincipalItem } from "./AssociationSummary";
+import UserAvatar from "../../components/UserAvatar";
 import {
   S3ConnectionAdminItem,
   createAdminS3Connection,
@@ -84,6 +85,7 @@ function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array
     connection.name,
     connection.endpoint_url,
     connection.created_by_email,
+    ...(connection.user_details ?? []).flatMap((user) => [user.email, user.display_name, user.full_name]),
     ...(connection.group_details ?? []).map((group) => group.name),
     ...extractUiTagLabels(connection.tags),
   ];
@@ -405,30 +407,41 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
+  const portalUsersById = useMemo(() => new Map(portalUsers.map((user) => [user.id, user])), [portalUsers]);
   const groupLabelById = useMemo(() => {
     const map = new Map<number, string>();
     uiGroups.forEach((group) => map.set(group.id, group.name));
     return map;
   }, [uiGroups]);
+  const groupsById = useMemo(() => new Map(uiGroups.map((group) => [group.id, group])), [uiGroups]);
   const renderConnectionAssociations = (connection: S3ConnectionAdminItem) => {
-    const userItems: AssociationChipItem[] = (connection.user_ids ?? []).map((id) => ({
-      id,
-      label: portalUserLabelById.get(id) ?? `User #${id}`,
-    }));
-    const groupItems: AssociationChipItem[] = (connection.group_details && connection.group_details.length > 0
-      ? connection.group_details.map((group) => ({ id: group.id, label: group.name }))
-      : (connection.group_ids ?? []).map((id) => ({ id, label: `Group #${id}` })));
-    if (userItems.length === 0 && groupItems.length === 0) {
-      return <span className="ui-caption text-slate-400">None</span>;
-    }
-    return (
-      <AssociationSummary
-        sections={[
-          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
-          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
-        ]}
-      />
-    );
+    const userItems: AssociationPrincipalItem[] = (
+      connection.user_details && connection.user_details.length > 0
+        ? connection.user_details
+        : (connection.user_ids ?? []).map((id) => portalUsersById.get(id) ?? { id, email: `User #${id}` })
+    ).map((user) => {
+      return {
+        id: user.id,
+        kind: "user",
+        label: user.display_name || user.full_name || user.email || `User #${user.id}`,
+        email: user.email,
+        avatar: user.avatar,
+      };
+    });
+    const groupItems: AssociationPrincipalItem[] = (connection.group_details && connection.group_details.length > 0
+      ? connection.group_details.map((group) => ({
+          id: group.id,
+          kind: "group" as const,
+          label: group.name,
+          avatar: group.avatar || groupsById.get(group.id)?.avatar,
+        }))
+      : (connection.group_ids ?? []).map((id) => ({
+          id,
+          kind: "group" as const,
+          label: groupsById.get(id)?.name || `Group #${id}`,
+          avatar: groupsById.get(id)?.avatar,
+        })));
+    return <AssociationPrincipalStack items={[...userItems, ...groupItems]} />;
   };
   const linkedEditUsers = useMemo(
     () =>
@@ -1043,15 +1056,19 @@ export default function S3ConnectionsPage() {
       id: "created-by",
       label: "Created by",
       render: (connection) => (
-        <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          {connection.created_by_email || connection.created_by_user_id}
-        </span>
+        <UserAvatar
+          avatar={connection.created_by_avatar}
+          name={connection.created_by_full_name || connection.created_by_email || `User #${connection.created_by_user_id}`}
+          email={connection.created_by_email}
+          size="sm"
+          title={[connection.created_by_full_name, connection.created_by_email].filter(Boolean).join(" · ") || `User #${connection.created_by_user_id}`}
+        />
       ),
     },
     {
       id: "associations",
       label: "UI Users / Groups",
-      cellClassName: "min-w-[240px]",
+      cellClassName: "min-w-[180px] max-w-[240px] align-middle",
       render: renderConnectionAssociations,
     },
     {

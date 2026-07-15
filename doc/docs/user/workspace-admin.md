@@ -23,6 +23,36 @@ Use **Admin** for platform governance and global configuration.
 
 Platform and tenant-entry resources are configured and auditable.
 
+## Compact identity associations
+
+The **Managed Tenants** RGW Accounts and RGW Users lists, together with
+**Shared S3 Connections**, display linked UI users and UI groups as one compact
+avatar stack. User avatars are circular; group pictograms use a rounded-square
+shape so the two principal types remain distinguishable. Hover the stack, or
+focus one of its links with the keyboard, to open a readable panel containing
+each user email, group name, and role as compact badges. To keep very large
+tooltips readable, the list is limited to 20 entries and reports how many
+additional principals remain.
+Click a user or group pictogram to open that principal directly in its edit
+page. Emails remain searchable even though they are no longer printed in each
+row.
+
+The **UI Users** and **UI Groups** lists summarize storage associations with
+three count badges: RGW accounts, RGW users, and shared S3 connections. Their
+hover/focus panel exposes the complete bounded list and its roles. **UI Groups**
+also shows up to five member avatars before a `+N` indicator; the same panel
+still exposes up to 20 members.
+
+The **Portal requests** requester badge uses the same avatar and role panel and
+opens the requester's UI user edit page when that user still exists.
+
+The **Created by** column of Shared S3 Connections uses the creator's user
+avatar and exposes the creator identity on hover.
+
+UI group pictograms are managed from **Platform > UI Groups > General**. A
+group can use initials, one of the predefined pictograms, or a custom PNG/JPEG
+image up to 1 MiB. Group images never use Gravatar or an OIDC profile image.
+
 ## Limits / feature flags
 
 !!! note

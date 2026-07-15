@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -21,6 +21,10 @@ class User(Base):
     full_name = Column(String, nullable=True)
     display_name = Column(String, nullable=True)
     picture_url = Column(String, nullable=True)
+    avatar_preference = Column(String, nullable=False, default="auto", server_default="auto")
+    avatar_image = Column(LargeBinary, nullable=True)
+    avatar_content_type = Column(String, nullable=True)
+    avatar_updated_at = Column(DateTime, nullable=True)
     hashed_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     role = Column(String, nullable=False, default=UserRole.UI_USER.value)

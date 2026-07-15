@@ -45,9 +45,9 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useTagCatalog } from "../../hooks/useTagCatalog";
 import { useAdminAccountStats } from "./useAdminAccountStats";
-import AssociationSummary, {
-  AccountAssociationChips,
-  type AssociationAccountItem,
+import {
+  AssociationPrincipalStack,
+  type AssociationPrincipalItem,
 } from "./AssociationSummary";
 import AdminModalTabs from "./AdminModalTabs";
 import {
@@ -352,7 +352,14 @@ export default function S3AccountsPage() {
         }
 
         const exactMatches = allMatches.filter((account) => {
-          const candidates = [account.name, account.rgw_account_id ?? "", account.id ?? "", ...extractUiTagLabels(account.tags)];
+          const candidates = [
+            account.name,
+            account.rgw_account_id ?? "",
+            account.id ?? "",
+            ...(account.user_links ?? []).flatMap((link) => [link.user_email, link.user_full_name]),
+            ...(account.group_links ?? []).map((link) => link.group_name),
+            ...extractUiTagLabels(account.tags),
+          ];
           return matchesExactTextCandidate(candidates, quick);
         });
         const totalExact = exactMatches.length;
@@ -401,11 +408,13 @@ export default function S3AccountsPage() {
     users.forEach((u) => map.set(u.id, u.email));
     return map;
   }, [users]);
+  const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const groupLabelById = useMemo(() => {
     const map = new Map<number, string>();
     groups.forEach((group) => map.set(group.id, group.name));
     return map;
   }, [groups]);
+  const groupsById = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
   const assignedUsers = useMemo(() => {
     return editForm.user_links.map((link) => ({
       id: link.user_id,
@@ -770,7 +779,7 @@ export default function S3AccountsPage() {
     {
       id: "associations",
       label: "UI Users / Groups",
-      cellClassName: "min-w-[288px] max-w-[480px] align-top",
+      cellClassName: "min-w-[180px] max-w-[240px] align-middle",
       render: (account) => renderAccountAssociations(account),
     },
     {
@@ -881,37 +890,30 @@ export default function S3AccountsPage() {
     return (account.group_ids ?? []).map((id) => ({ group_id: id, account_admin: false, account_role: "portal_none" }));
   };
   const renderAccountAssociations = (account: S3Account | S3AccountSummary) => {
-    const userItems: AssociationAccountItem[] = resolveAccountUserLinks(account).map((link) => ({
-      id: link.user_id,
-      label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
-      account_admin: link.account_admin,
-      account_role: link.account_role,
-    }));
-    const groupItems: AssociationAccountItem[] = resolveAccountGroupLinks(account).map((link) => ({
-      id: link.group_id,
-      label: link.group_name ?? `Group #${link.group_id}`,
-      account_admin: link.account_admin,
-      account_role: link.account_role,
-    }));
-    if (userItems.length === 0 && groupItems.length === 0) {
-      return <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>;
-    }
-    return (
-      <AssociationSummary
-        sections={[
-          {
-            label: "Users",
-            value: <AccountAssociationChips accounts={userItems} showPortalRole={portalEnabled} />,
-            visible: userItems.length > 0,
-          },
-          {
-            label: "Groups",
-            value: <AccountAssociationChips accounts={groupItems} showPortalRole={portalEnabled} />,
-            visible: groupItems.length > 0,
-          },
-        ]}
-      />
-    );
+    const userItems: AssociationPrincipalItem[] = resolveAccountUserLinks(account).map((link) => {
+      const user = usersById.get(link.user_id);
+      return {
+        id: link.user_id,
+        kind: "user",
+        label: link.user_full_name || user?.display_name || user?.full_name || link.user_email || user?.email || `User #${link.user_id}`,
+        email: link.user_email || user?.email,
+        avatar: link.user_avatar || user?.avatar,
+        account_admin: link.account_admin,
+        account_role: link.account_role,
+      };
+    });
+    const groupItems: AssociationPrincipalItem[] = resolveAccountGroupLinks(account).map((link) => {
+      const group = groupsById.get(link.group_id);
+      return {
+        id: link.group_id,
+        kind: "group",
+        label: link.group_name || group?.name || `Group #${link.group_id}`,
+        avatar: link.group_avatar || group?.avatar,
+        account_admin: link.account_admin,
+        account_role: link.account_role,
+      };
+    });
+    return <AssociationPrincipalStack items={[...userItems, ...groupItems]} showPortalRole={portalEnabled} />;
   };
 
   const deleteModalUnknownResources =
@@ -2370,7 +2372,7 @@ export default function S3AccountsPage() {
             <ToolbarSearchInput
               value={filter}
               onChange={handleFilterChange}
-              placeholder="Search by name, RGW ID, group, or tag"
+              placeholder="Search by name, RGW ID, user email, group, or tag"
               className="w-full sm:w-64 md:w-72"
               active={quickFilterActive}
               matchMode={quickFilterMode}

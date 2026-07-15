@@ -31,7 +31,6 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
-import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -45,6 +44,7 @@ import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
+import UserAvatar from "../../components/UserAvatar";
 import {
   cx,
   uiButtonBaseClass,
@@ -316,17 +316,25 @@ function CollaboratorsInventory({
         label: t({ en: "Person", fr: "Personne", de: "Person" }),
         primary: true,
         render: (collaborator) => (
-          <span className="min-w-0">
-            <span className="block truncate font-semibold text-[var(--ui-text)]">
-              {collaborator.display_name || collaborator.email}
-            </span>
-            <span
-              className={cx(
-                "block truncate text-[11px] font-medium",
-                uiMutedTextClass,
-              )}
-            >
-              {collaborator.email}
+          <span className="flex min-w-0 items-center gap-2.5">
+            <UserAvatar
+              avatar={collaborator.avatar}
+              name={collaborator.display_name || collaborator.email}
+              email={collaborator.email}
+              size="sm"
+            />
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-[var(--ui-text)]">
+                {collaborator.display_name || collaborator.email}
+              </span>
+              <span
+                className={cx(
+                  "block truncate text-[11px] font-medium",
+                  uiMutedTextClass,
+                )}
+              >
+                {collaborator.email}
+              </span>
             </span>
           </span>
         ),
@@ -452,7 +460,7 @@ function CollaboratorsInventory({
 export default function PortalSharesPage() {
   const { locale, t } = useI18n();
   const [activeViewTab, setActiveViewTab] =
-    useState<CollaboratorsViewTab>("invite");
+    useState<CollaboratorsViewTab>("members");
   const [activeTab, setActiveTab] = useState<ShareTab>("with");
   const [apiShares, setApiShares] = useState<PortalStorageSpaceShare[] | null>(
     null,
@@ -1320,14 +1328,6 @@ export default function PortalSharesPage() {
       <PageTabs
         tabs={[
           {
-            id: "invite",
-            label: t({
-              en: "Invite",
-              fr: "Inviter",
-              de: "Einladen",
-            }),
-          },
-          {
             id: "members",
             label: t({
               en: "Workspace members",
@@ -1341,6 +1341,14 @@ export default function PortalSharesPage() {
               en: "Review access",
               fr: "Vérifier les accès",
               de: "Zugriff prüfen",
+            }),
+          },
+          {
+            id: "invite",
+            label: t({
+              en: "Invite",
+              fr: "Inviter",
+              de: "Einladen",
             }),
           },
         ]}

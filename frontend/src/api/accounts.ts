@@ -7,17 +7,22 @@ import type { PortalSettingsOverride } from "./appSettings";
 import type { PortalAccountSettings } from "./portal";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
+import type { UiGroupAvatarDescriptor } from "./groups";
+import type { UserAvatarDescriptor } from "./users";
 
 export type AccountUserLink = {
   user_id: number;
   account_admin?: boolean | null;
   account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   user_email?: string | null;
+  user_full_name?: string | null;
+  user_avatar?: UserAvatarDescriptor | null;
 };
 
 export type AccountGroupLink = {
   group_id: number;
   group_name?: string | null;
+  group_avatar?: UiGroupAvatarDescriptor | null;
   account_admin?: boolean | null;
   account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
 };

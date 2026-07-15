@@ -5,6 +5,8 @@
 import client from "./client";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
+import type { UiGroupAvatarDescriptor } from "./groups";
+import type { UserAvatarDescriptor, UserSummary } from "./users";
 
 export type S3ConnectionAdminItem = {
   id: number;
@@ -25,10 +27,13 @@ export type S3ConnectionAdminItem = {
   verify_tls?: boolean | null;
   created_by_user_id: number;
   created_by_email?: string | null;
+  created_by_full_name?: string | null;
+  created_by_avatar?: UserAvatarDescriptor | null;
   user_count: number;
   user_ids?: number[];
+  user_details?: UserSummary[];
   group_ids?: number[];
-  group_details?: { id: number; name: string }[];
+  group_details?: { id: number; name: string; avatar?: UiGroupAvatarDescriptor | null }[];
   last_used_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

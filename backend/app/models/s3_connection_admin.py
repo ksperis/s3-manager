@@ -11,11 +11,14 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.ui_group import UiGroupAvatar
+from app.models.user import UserAssociationDetail, UserAvatar
 
 
 class S3ConnectionGroupDetail(BaseModel):
     id: int
     name: str
+    avatar: Optional[UiGroupAvatar] = None
 
 
 class S3ConnectionAdminItem(BaseModel):
@@ -36,8 +39,11 @@ class S3ConnectionAdminItem(BaseModel):
     capabilities: dict[str, Any] = Field(default_factory=dict)
     created_by_user_id: int
     created_by_email: Optional[str] = None
+    created_by_full_name: Optional[str] = None
+    created_by_avatar: Optional[UserAvatar] = None
     user_count: int = 0
     user_ids: list[int] = Field(default_factory=list)
+    user_details: list[UserAssociationDetail] = Field(default_factory=list)
     group_ids: list[int] = Field(default_factory=list)
     group_details: list[S3ConnectionGroupDetail] = Field(default_factory=list)
     tags: list[TagDefinitionSummary] = Field(default_factory=list)

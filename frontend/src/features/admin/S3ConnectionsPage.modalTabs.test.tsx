@@ -150,10 +150,14 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(within(table).getByText("connection-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("https://endpoint-1.example.test").closest("td")).toHaveAttribute("data-label", "Endpoint");
     expect(within(table).getByText("Active").closest("td")).toHaveAttribute("data-label", "Status");
-    expect(within(table).getByText("owner@example.com").closest("td")).toHaveAttribute("data-label", "Created by");
-    expect(await screen.findByText("u11@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Storage Operators")).toBeInTheDocument();
-    expect(within(table).getByText("Storage Operators").closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
+    expect(within(table).getByTitle("owner@example.com").closest("td")).toHaveAttribute("data-label", "Created by");
+    const associations = await screen.findByLabelText("2 linked principals");
+    expect(associations).toHaveAccessibleDescription(
+      "Linked principals (2)\nu11@example.com — Roles: UI user\nStorage Operators — Roles: UI group",
+    );
+    expect(associations).toBeInTheDocument();
+    expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();
+    expect(associations.closest("td")).toHaveAttribute("data-label", "UI Users / Groups");
     expect(within(table).getByRole("button", { name: "Edit" }).closest("td")).toHaveAttribute("data-mobile-actions", "true");
   });
 

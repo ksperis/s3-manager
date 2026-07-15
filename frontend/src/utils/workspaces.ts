@@ -3,10 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
-import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "../api/users";
+import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
+export const SESSION_USER_UPDATED_EVENT = "s3-manager:session-user-updated";
 
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
@@ -23,6 +24,9 @@ export type WorkspaceOption = {
 export type SessionUser = {
   id?: number | null;
   email?: string | null;
+  full_name?: string | null;
+  display_name?: string | null;
+  avatar?: UserAvatarDescriptor | null;
   role?: string | null;
   ui_language?: "en" | "fr" | "de" | null;
   ui_preferences?: UiPreferences | null;

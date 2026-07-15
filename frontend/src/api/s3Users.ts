@@ -5,6 +5,8 @@
 import client from "./client";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
+import type { UiGroupAvatarDescriptor } from "./groups";
+import type { UserSummary } from "./users";
 
 export type S3User = {
   id: number;
@@ -14,8 +16,9 @@ export type S3User = {
   email?: string | null;
   created_at?: string | null;
   user_ids: number[];
+  user_details?: UserSummary[];
   group_ids?: number[];
-  group_details?: { id: number; name: string }[];
+  group_details?: { id: number; name: string; avatar?: UiGroupAvatarDescriptor | null }[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;

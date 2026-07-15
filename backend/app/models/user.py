@@ -8,6 +8,8 @@ from app.models.pagination import PaginatedResponse
 
 UiLanguage = Literal["en", "fr", "de"]
 UiThemePreference = Literal["light", "dark"]
+UserAvatarPreference = Literal["auto", "uploaded", "gravatar", "initials"]
+UserAvatarSource = Literal["uploaded", "provider", "gravatar", "initials"]
 MIN_PASSWORD_LENGTH = 12
 PASSWORD_POLICY_ERROR = f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
 
@@ -64,11 +66,30 @@ class UiPreferences(BaseModel):
         return cleaned or None
 
 
+class UserAvatar(BaseModel):
+    preference: UserAvatarPreference = "auto"
+    source: UserAvatarSource = "initials"
+    url: Optional[str] = None
+    initials: str
+    updated_at: Optional[datetime] = None
+
+
 class UserSummary(BaseModel):
     id: int
     email: EmailStr
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar: Optional[UserAvatar] = None
     role: Optional[str] = None
     iam_username: Optional[str] = None
+
+
+class UserAssociationDetail(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar: Optional[UserAvatar] = None
 
 
 class User(BaseModel):
@@ -77,6 +98,7 @@ class User(BaseModel):
     full_name: Optional[str] = None
     display_name: Optional[str] = None
     picture_url: Optional[str] = None
+    avatar: Optional[UserAvatar] = None
     is_active: bool = True
     is_admin: bool = False
     is_root: bool = False
@@ -122,6 +144,7 @@ class UserUpdate(BaseModel):
 
 class UserSelfUpdate(BaseModel):
     full_name: Optional[str] = None
+    avatar_preference: Optional[UserAvatarPreference] = None
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: Optional[bool] = None
     quota_alerts_global_watch: Optional[bool] = None
@@ -156,6 +179,7 @@ class UserOut(BaseModel):
     full_name: Optional[str] = None
     display_name: Optional[str] = None
     picture_url: Optional[str] = None
+    avatar: UserAvatar
     is_active: bool = True
     is_admin: bool = False
     role: Optional[str] = None

@@ -8,6 +8,7 @@ import type { PortalAdminRequest } from "../../api/portalRequests";
 
 const mocks = vi.hoisted(() => ({
   listMinimalS3Accounts: vi.fn(),
+  listMinimalUsers: vi.fn(),
   listAdminPortalRequests: vi.fn(),
   approveAdminPortalRequest: vi.fn(),
   rejectAdminPortalRequest: vi.fn(),
@@ -16,6 +17,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../api/accounts", () => ({
   listMinimalS3Accounts: mocks.listMinimalS3Accounts,
+}));
+
+vi.mock("../../api/users", () => ({
+  listMinimalUsers: mocks.listMinimalUsers,
 }));
 
 vi.mock("../../api/portalRequests", () => ({
@@ -54,6 +59,15 @@ describe("AdminPortalRequestsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listMinimalS3Accounts.mockResolvedValue([{ id: "101", db_id: 101, name: "Research Account", tags: [] }]);
+    mocks.listMinimalUsers.mockResolvedValue([
+      {
+        id: 1,
+        email: "requester@example.org",
+        display_name: "Request Owner",
+        role: "ui_user",
+        avatar: { preference: "initials", source: "initials", initials: "RO" },
+      },
+    ]);
     mocks.listAdminPortalRequests.mockResolvedValue([pendingRequest]);
     mocks.approveAdminPortalRequest.mockResolvedValue({
       ...pendingRequest,
@@ -89,6 +103,14 @@ describe("AdminPortalRequestsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Portal requests" })).toBeInTheDocument();
     expect(await screen.findByText("Jane Viewer <jane@example.org>")).toBeInTheDocument();
+    const requesterBadge = await screen.findByRole("link", { name: "Edit UI user Request Owner" });
+    expect(requesterBadge).toHaveAttribute(
+      "href",
+      "/admin/users?edit=1&search=requester%40example.org",
+    );
+    expect(screen.getByLabelText("requester@example.org, role User")).toHaveAccessibleDescription(
+      "Requester (1)\nRequest Owner · requester@example.org — Roles: User",
+    );
     expect(mocks.listAdminPortalRequests).toHaveBeenCalledWith({
       status: "pending",
       request_type: "all",

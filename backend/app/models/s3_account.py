@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.ui_group import UiGroupAvatar
+from app.models.user import UserAvatar
 
 
 class AccountUserLink(BaseModel):
@@ -13,11 +15,14 @@ class AccountUserLink(BaseModel):
     account_admin: Optional[bool] = None
     account_role: Optional[str] = None
     user_email: Optional[str] = None
+    user_full_name: Optional[str] = None
+    user_avatar: Optional[UserAvatar] = None
 
 
 class AccountGroupLink(BaseModel):
     group_id: int
     group_name: Optional[str] = None
+    group_avatar: Optional[UiGroupAvatar] = None
     account_admin: Optional[bool] = None
     account_role: Optional[str] = None
 

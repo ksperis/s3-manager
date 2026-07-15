@@ -3,12 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
+import { SESSION_USER_UPDATED_EVENT } from "../../utils/workspaces";
+import type { UserAvatarDescriptor } from "../../api/users";
 
 export type StoredUserProfilePatch = {
   fullName?: string | null;
   displayName?: string | null;
   uiLanguage?: "en" | "fr" | "de" | null;
   uiPreferences?: Record<string, unknown> | null;
+  avatar?: UserAvatarDescriptor | null;
 };
 
 export function updateStoredUserProfile(
@@ -30,6 +33,12 @@ export function updateStoredUserProfile(
   if ("uiPreferences" in patch) {
     next.ui_preferences = patch.uiPreferences ?? {};
   }
+  if ("avatar" in patch) {
+    next.avatar = patch.avatar ?? null;
+  }
   writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, next);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_USER_UPDATED_EVENT));
+  }
   return true;
 }

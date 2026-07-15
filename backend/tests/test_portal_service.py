@@ -1086,6 +1086,66 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_s
     assert manager_spaces[0].content_role is None
 
 
+def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
+    account = S3Account(name="portal-avatar-previews", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(
+        email="owner-avatar@example.com",
+        full_name="Owner Avatar",
+        display_name="Owner Avatar",
+        picture_url="https://identity.example.com/owner.png",
+        hashed_password="x",
+        role="ui_user",
+    )
+    viewer = User(
+        email="viewer-avatar@example.com",
+        full_name="Viewer Avatar",
+        display_name="Viewer Avatar",
+        hashed_password="x",
+        role="ui_user",
+    )
+    manager = User(email="manager-avatar@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, viewer, manager])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="shared-avatar-data",
+        display_name="Shared Avatar Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add(
+        PortalStorageSpaceGrant(
+            storage_space_metadata_id=metadata.id,
+            user_id=viewer.id,
+            role="Viewer",
+        )
+    )
+    db_session.commit()
+
+    spaces = PortalService(db_session).list_storage_spaces(
+        manager,
+        _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value),
+    )
+
+    assert len(spaces) == 1
+    assert spaces[0].collaborator_count == 2
+    assert [(item.display_name, item.role, item.avatar.source) for item in spaces[0].collaborators] == [
+        ("Owner Avatar", "Owner", "provider"),
+        ("Viewer Avatar", "Viewer", "gravatar"),
+    ]
+    assert spaces[0].collaborators[0].avatar.url == "https://identity.example.com/owner.png"
+
+
 def test_portal_manager_content_access_excludes_private_spaces_owned_by_others(monkeypatch, db_session):
     account = S3Account(name="portal-manager-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-content@example.com", hashed_password="x", role="ui_user")

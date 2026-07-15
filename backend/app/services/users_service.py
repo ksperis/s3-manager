@@ -39,6 +39,7 @@ from app.models.user import (
     LinkedUiGroup,
     ManagerToolAccess,
     UiPreferences,
+    UserAvatarPreference,
     UserCreate,
     UserOut,
     UserSummary,
@@ -46,6 +47,7 @@ from app.models.user import (
     validate_password_policy,
 )
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.user_avatar_service import UserAvatarService
 logger = logging.getLogger(__name__)
 
 
@@ -260,6 +262,8 @@ class UsersService:
         update_quota_alerts_global_watch: bool = False,
         ui_preferences: Optional[UiPreferences] = None,
         update_ui_preferences: bool = False,
+        avatar_preference: Optional[UserAvatarPreference] = None,
+        update_avatar_preference: bool = False,
         current_password: Optional[str] = None,
         new_password: Optional[str] = None,
     ) -> User:
@@ -277,6 +281,8 @@ class UsersService:
             user.quota_alerts_global_watch = bool(quota_alerts_global_watch) if is_admin_ui_role(user.role) else False
         if update_ui_preferences:
             user.ui_preferences_json = _dump_ui_preferences(ui_preferences or UiPreferences())
+        if update_avatar_preference:
+            UserAvatarService(self.db).set_preference(user, avatar_preference or "auto")
 
         if current_password is not None or new_password is not None:
             if not current_password or not new_password:
@@ -394,8 +400,19 @@ class UsersService:
         return self.db.query(User).all()
 
     def list_users_minimal(self) -> list[UserSummary]:
-        rows = self.db.query(User.id, User.email).order_by(User.email.asc()).all()
-        return [UserSummary(id=row[0], email=row[1]) for row in rows]
+        rows = self.db.query(User).order_by(User.email.asc()).all()
+        avatar_service = UserAvatarService(self.db)
+        return [
+            UserSummary(
+                id=row.id,
+                email=row.email,
+                full_name=row.full_name,
+                display_name=row.display_name or row.full_name,
+                avatar=avatar_service.descriptor(row),
+                role=row.role,
+            )
+            for row in rows
+        ]
 
     def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
@@ -691,6 +708,7 @@ class UsersService:
             full_name=user.full_name,
             display_name=user.display_name or user.full_name,
             picture_url=user.picture_url,
+            avatar=UserAvatarService(self.db).descriptor(user),
             is_active=user.is_active,
             is_admin=is_admin_ui_role(user.role),
             role=user.role,

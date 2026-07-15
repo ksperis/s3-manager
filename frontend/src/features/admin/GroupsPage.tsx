@@ -2,13 +2,16 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   UiGroup,
   UiGroupPayload,
+  type UiGroupAvatarIcon,
   createGroup,
+  deleteGroupAvatar,
   deleteGroup,
   listGroups,
+  uploadGroupAvatar,
   updateGroup,
 } from "../../api/groups";
 import { AccountMembership, UserSummary, listMinimalUsers } from "../../api/users";
@@ -16,17 +19,22 @@ import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
+import GroupAvatar from "../../components/GroupAvatar";
 import ListToolbar from "../../components/ListToolbar";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
-import AssociationSummary, {
-  AccountAssociationChips,
-  AssociationChips,
+import {
+  AssociationPrincipalStack,
+  CompactAssociationSummary,
+  accountAssociationRoleLabels,
+  connectionAssociationRoleLabels,
+  uiPrincipalRoleLabel,
   type AssociationAccountItem,
-  type AssociationChipItem,
+  type AssociationPrincipalItem,
+  type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
   BrowserAccessSection,
@@ -59,6 +67,10 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { extractApiError } from "../../utils/apiError";
+import {
+  clearAdminPrincipalEditRequest,
+  readAdminPrincipalEditRequest,
+} from "./adminPrincipalEditLink";
 
 type GroupModalTab = "general" | "members" | "associations" | "workspaces" | "browser" | "manager_tools";
 type AssociationTab = "accounts" | "s3_users" | "connections";
@@ -67,6 +79,13 @@ const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const secondaryButtonClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const groupAvatarIcons: Array<{ value: UiGroupAvatarIcon; label: string }> = [
+  { value: "users", label: "Team" },
+  { value: "building", label: "Organization" },
+  { value: "shield", label: "Security" },
+  { value: "briefcase", label: "Operations" },
+  { value: "academic", label: "Research" },
+];
 function accountDbId(account: S3AccountSummary): number {
   return Number(account.db_id ?? account.id);
 }
@@ -80,6 +99,12 @@ export default function GroupsPage() {
 
   const { generalSettings } = useGeneralSettings();
   const showPortalRole = Boolean(generalSettings.portal_enabled);
+  const principalEditRequest = useMemo(
+    () => readAdminPrincipalEditRequest(typeof window === "undefined" ? "" : window.location.search),
+    [],
+  );
+  const requestedEditHandledRef = useRef(false);
+  const openEditRef = useRef<(group: UiGroup) => void>(() => undefined);
   const [groups, setGroups] = useState<UiGroup[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [accounts, setAccounts] = useState<S3AccountSummary[]>([]);
@@ -90,7 +115,7 @@ export default function GroupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState(principalEditRequest?.search ?? "");
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "name",
     direction: "asc",
@@ -120,6 +145,35 @@ export default function GroupsPage() {
   const [accountSearch, setAccountSearch] = useState("");
   const [s3UserSearch, setS3UserSearch] = useState("");
   const [connectionSearch, setConnectionSearch] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [removeAvatarImage, setRemoveAvatarImage] = useState(false);
+  const avatarFileUrl = useMemo(
+    () => (avatarFile && typeof URL.createObjectURL === "function" ? URL.createObjectURL(avatarFile) : null),
+    [avatarFile],
+  );
+
+  useEffect(() => () => {
+    if (avatarFileUrl && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(avatarFileUrl);
+  }, [avatarFileUrl]);
+
+  const avatarPreview = avatarFileUrl
+    ? { source: "uploaded" as const, initials: "", url: avatarFileUrl }
+    : form.avatar_source === "preset"
+      ? { source: "preset" as const, initials: "", icon: form.avatar_icon ?? "users" }
+      : form.avatar_source === "uploaded" && editingGroup?.avatar
+        ? editingGroup.avatar
+        : { source: "initials" as const, initials: "" };
+
+  const selectAvatarFile = (file: File | null) => {
+    if (!file) return;
+    if (!(["image/png", "image/jpeg"].includes(file.type)) || file.size > 1024 * 1024) {
+      setActionError("Group image must be a PNG or JPEG file of 1 MiB or less.");
+      return;
+    }
+    setActionError(null);
+    setAvatarFile(file);
+    setRemoveAvatarImage(false);
+  };
 
   const accountOptionsById = useMemo(() => {
     const map = new Map<number, S3AccountSummary>();
@@ -215,6 +269,8 @@ export default function GroupsPage() {
     setForm({
       name: "",
       description: "",
+      avatar_source: "initials",
+      avatar_icon: null,
       can_access_ceph_admin: false,
       can_access_storage_ops: false,
       browser_advanced_features_enabled: false,
@@ -230,6 +286,8 @@ export default function GroupsPage() {
     setAccountSearch("");
     setS3UserSearch("");
     setConnectionSearch("");
+    setAvatarFile(null);
+    setRemoveAvatarImage(false);
   };
 
   const openCreateModal = () => {
@@ -246,6 +304,8 @@ export default function GroupsPage() {
     setForm({
       name: group.name,
       description: group.description ?? "",
+      avatar_source: group.avatar?.source ?? "initials",
+      avatar_icon: group.avatar?.icon ?? null,
       can_access_ceph_admin: Boolean(group.can_access_ceph_admin),
       can_access_storage_ops: Boolean(group.can_access_storage_ops),
       browser_advanced_features_enabled: Boolean(group.browser_advanced_features_enabled),
@@ -268,10 +328,20 @@ export default function GroupsPage() {
     void loadAuxiliaryData();
   };
 
+  openEditRef.current = openEditModal;
+  useEffect(() => {
+    if (!principalEditRequest || requestedEditHandledRef.current) return;
+    const requestedGroup = groups.find((group) => group.id === principalEditRequest.id);
+    if (!requestedGroup) return;
+    requestedEditHandledRef.current = true;
+    openEditRef.current(requestedGroup);
+  }, [groups, principalEditRequest]);
+
   const closeModal = () => {
     setShowModal(false);
     setEditingGroup(null);
     resetForm();
+    clearAdminPrincipalEditRequest();
   };
 
   const setSelectedMembers = (userId: number, selected: boolean) => {
@@ -335,6 +405,8 @@ export default function GroupsPage() {
     const payload: UiGroupPayload = {
       name,
       description: form.description || null,
+      avatar_source: avatarFile ? undefined : form.avatar_source,
+      avatar_icon: form.avatar_icon,
       can_access_ceph_admin: Boolean(form.can_access_ceph_admin),
       can_access_storage_ops: Boolean(form.can_access_storage_ops),
       browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
@@ -350,13 +422,19 @@ export default function GroupsPage() {
       s3_connection_ids: form.s3_connection_ids ?? [],
     };
     try {
+      let savedGroup: UiGroup;
       if (editingGroup) {
         setBusyId(editingGroup.id);
-        await updateGroup(editingGroup.id, payload);
+        savedGroup = await updateGroup(editingGroup.id, payload);
         setActionMessage("Group updated");
       } else {
-        await createGroup(payload);
+        savedGroup = await createGroup(payload);
         setActionMessage("Group created");
+      }
+      if (avatarFile) {
+        await uploadGroupAvatar(savedGroup.id, avatarFile);
+      } else if (editingGroup && removeAvatarImage) {
+        await deleteGroupAvatar(savedGroup.id);
       }
       closeModal();
       await fetchGroups();
@@ -579,45 +657,60 @@ export default function GroupsPage() {
         account_role: link.account_role,
       };
     });
-    const userItems: AssociationChipItem[] = (group.user_details ?? []).map((user) => ({
-      id: user.id,
-      label: user.email,
-    }));
-    const s3UserItems: AssociationChipItem[] = (group.s3_users ?? []).map((id) => {
+    const s3UserItems = (group.s3_users ?? []).map((id) => {
       const s3UserId = Number(id);
       return {
         id: s3UserId,
         label: s3UserDetailsById.get(s3UserId)?.name ?? s3UserLabelById.get(s3UserId) ?? `S3 User #${id}`,
+        role_labels: ["Direct access"],
       };
     });
-    const connectionItems: AssociationChipItem[] = (group.s3_connections ?? []).map((id) => {
+    const connectionItems = (group.s3_connections ?? []).map((id) => {
       const connectionId = Number(id);
+      const details = connectionDetailsById.get(connectionId);
       return {
         id: connectionId,
         label:
-          connectionDetailsById.get(connectionId)?.name ??
+          details?.name ??
           connectionLabelById.get(connectionId) ??
           `Connection #${id}`,
+        role_labels: connectionAssociationRoleLabels(details ?? {}),
       };
     });
-    return (
-      <AssociationSummary
-        sections={[
-          {
-            label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} showPortalRole={showPortalRole} />,
-            visible: accountItems.length > 0,
-          },
-          { label: "Users", value: <AssociationChips items={userItems} />, visible: userItems.length > 0 },
-          { label: "S3 Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
-          {
-            label: "Connections",
-            value: <AssociationChips items={connectionItems} />,
-            visible: connectionItems.length > 0,
-          },
-        ]}
-      />
-    );
+    const categories: CompactAssociationCategory[] = [
+      {
+        id: "accounts",
+        label: "Accounts",
+        itemLabel: "RGW account",
+        items: accountItems.map((account) => ({
+          id: account.id,
+          label: account.label,
+          role_labels: accountAssociationRoleLabels(account, showPortalRole),
+        })),
+      },
+      { id: "s3_users", label: "RGW users", itemLabel: "RGW user", items: s3UserItems },
+      { id: "connections", label: "S3 connections", itemLabel: "S3 connection", items: connectionItems },
+    ];
+    return <CompactAssociationSummary categories={categories} />;
+  };
+
+  const renderGroupMembers = (group: UiGroup) => {
+    const detailsById = new Map((group.user_details ?? []).map((user) => [Number(user.id), user]));
+    const memberIds = group.user_ids && group.user_ids.length > 0
+      ? group.user_ids.map(Number)
+      : (group.user_details ?? []).map((user) => Number(user.id));
+    const memberItems: AssociationPrincipalItem[] = memberIds.map((id) => {
+      const user = detailsById.get(id);
+      return {
+        id,
+        kind: "user",
+        label: user?.display_name || user?.full_name || user?.email || `User #${id}`,
+        email: user?.email,
+        avatar: user?.avatar,
+        role_labels: [uiPrincipalRoleLabel(user?.role)],
+      };
+    });
+    return <AssociationPrincipalStack items={memberItems} maxVisible={5} />;
   };
   const groupTableColumns: Array<DataTableColumn<UiGroup, SortField>> = [
     {
@@ -630,12 +723,15 @@ export default function GroupsPage() {
         <button
           type="button"
           onClick={() => openEditModal(group)}
-          className="w-full text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
+          className="flex w-full items-center gap-2 text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
         >
-          <span>{group.name}</span>
-          {group.description && (
-            <span className="mt-1 block ui-caption font-normal text-slate-500 dark:text-slate-400">{group.description}</span>
-          )}
+          <GroupAvatar avatar={group.avatar} name={group.name} size="md" decorative />
+          <span className="min-w-0">
+            <span className="block truncate">{group.name}</span>
+            {group.description && (
+              <span className="mt-0.5 block truncate ui-caption font-normal text-slate-500 dark:text-slate-400">{group.description}</span>
+            )}
+          </span>
         </button>
       ),
     },
@@ -671,9 +767,15 @@ export default function GroupsPage() {
       },
     },
     {
+      id: "members",
+      label: "Members",
+      cellClassName: "align-top min-w-[10rem]",
+      render: (group) => renderGroupMembers(group),
+    },
+    {
       id: "associations",
-      label: "Associations",
-      cellClassName: "align-top min-w-[20rem]",
+      label: "Storage associations",
+      cellClassName: "align-top min-w-[18rem]",
       render: (group) => renderGroupAssociations(group),
     },
     {
@@ -804,6 +906,79 @@ export default function GroupsPage() {
                     onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                     placeholder="Optional notes for administrators"
                   />
+                </div>
+                <div className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-3">
+                  <div className="flex flex-wrap items-start gap-4">
+                    <GroupAvatar avatar={avatarPreview} name={String(form.name || "UI group")} size="lg" />
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <div className={labelClass}>Group pictogram</div>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Use initials, a predefined pictogram, or a custom PNG/JPEG image. Groups never use Gravatar or OIDC images.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={form.avatar_source === "initials" && !avatarFile ? secondaryButtonClass : tableActionButtonClasses}
+                          onClick={() => {
+                            setAvatarFile(null);
+                            setForm((current) => ({ ...current, avatar_source: "initials", avatar_icon: null }));
+                          }}
+                        >
+                          Initials
+                        </button>
+                        {groupAvatarIcons.map((icon) => (
+                          <button
+                            key={icon.value}
+                            type="button"
+                            title={icon.label}
+                            aria-label={`Use ${icon.label} pictogram`}
+                            className={`rounded-md border p-1.5 ${
+                              form.avatar_source === "preset" && form.avatar_icon === icon.value && !avatarFile
+                                ? "border-primary bg-primary-50 dark:bg-primary-950/40"
+                                : "border-[color:var(--ui-border)] bg-[var(--ui-surface)] hover:bg-[var(--ui-hover)]"
+                            }`}
+                            onClick={() => {
+                              setAvatarFile(null);
+                              setForm((current) => ({ ...current, avatar_source: "preset", avatar_icon: icon.value }));
+                            }}
+                          >
+                            <GroupAvatar
+                              avatar={{ source: "preset", initials: "", icon: icon.value }}
+                              name={icon.label}
+                              size="sm"
+                              className="border-0"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className={secondaryButtonClass}>
+                          Upload image
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            className="sr-only"
+                            onChange={(event) => selectAvatarFile(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {avatarFile ? <span className="ui-caption text-slate-600 dark:text-slate-300">{avatarFile.name}</span> : null}
+                        {editingGroup?.avatar?.source === "uploaded" && !avatarFile ? (
+                          <button
+                            type="button"
+                            className={tableDeleteActionClasses}
+                            onClick={() => {
+                              setRemoveAvatarImage(true);
+                              setForm((current) => ({ ...current, avatar_source: "initials", avatar_icon: null }));
+                            }}
+                          >
+                            Remove uploaded image
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

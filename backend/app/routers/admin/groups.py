@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -18,6 +18,8 @@ from app.models.user import ManagerToolAccess
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
+from app.services.avatar_image_service import MAX_AVATAR_BYTES
+from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/groups", tags=["admin-groups"])
@@ -134,6 +136,83 @@ def update_group(
         detail = sanitize_error_detail(str(exc))
         status_code = status.HTTP_404_NOT_FOUND if detail.lower() == "ui group not found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.put("/{group_id}/avatar", response_model=UiGroupOut)
+async def upload_group_avatar(
+    group_id: int,
+    file: UploadFile = File(...),
+    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
+) -> UiGroupOut:
+    group = groups_service.get_group(group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI group not found")
+    payload = await file.read(MAX_AVATAR_BYTES + 1)
+    try:
+        UiGroupAvatarService(db).store_uploaded_image(group, payload, file.content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="upload_ui_group_avatar",
+        entity_type="ui_group",
+        entity_id=str(group_id),
+        metadata={"content_type": group.avatar_content_type, "size_bytes": len(payload)},
+    )
+    return groups_service.group_to_out(group)
+
+
+@router.delete("/{group_id}/avatar", response_model=UiGroupOut)
+def delete_group_avatar(
+    group_id: int,
+    groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
+) -> UiGroupOut:
+    group = groups_service.get_group(group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI group not found")
+    UiGroupAvatarService(db).remove_uploaded_image(group)
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    audit_service.record_action(
+        user=current_user,
+        scope="admin",
+        action="delete_ui_group_avatar",
+        entity_type="ui_group",
+        entity_id=str(group_id),
+    )
+    return groups_service.group_to_out(group)
+
+
+@router.get("/{group_id}/avatar")
+def read_group_avatar(
+    group_id: int,
+    _: User = Depends(get_current_super_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        payload, content_type, version = UiGroupAvatarService(db).image(group_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group avatar not found.") from exc
+    return Response(
+        content=payload,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=86400",
+            "ETag": f'"group-avatar-{group_id}-{version}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

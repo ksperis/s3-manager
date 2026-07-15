@@ -20,7 +20,7 @@ when needed.
 | Create a new space | **Spaces > Create space** | Regular Portal users create private spaces only, when Portal user space creation is enabled. Portal managers choose Private, Team, or Selected people access before creation. The new space opens with the next steps to add files and invite people. |
 | Add existing storage | **Spaces > Add existing space** | Portal managers can expose existing buckets as spaces and choose the initial access mode. Selected people imports can include collaborators immediately. The added space opens with the same file and collaborator next steps. |
 | Archive a space | Space actions | Archived spaces keep metadata but suspend browsing, sharing, and public links. |
-| Understand collaborators | Space details > Collaborators | The Collaborators panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
+| Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
 | Connect an external S3 tool | Space details > Connect external tools | Copy the space-to-bucket mapping, then open External tools with the space preselected. |
 
 ## Starting a new space
@@ -46,7 +46,8 @@ When a Portal manager creates or imports a Selected people space, selected colla
 
 ## You are done when
 
-The space opens on its file area, and the list shows the expected collaborators mode, role, usage, and open action.
+The space opens on its file area, and the list shows the expected collaborator
+avatars, access mode, role, usage, and open action.
 
 For an external S3 tool, the space detail page shows the exact bucket name to
 use. Keep using the space name inside Portal; use the bucket name only when the

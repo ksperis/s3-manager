@@ -35,12 +35,14 @@ space's settings without receiving file access to that private content.
 ## Main tasks
 
 1. Open **Portal > Collaborators**.
-2. Use **Workspace members** to search every active member of the selected
-   workspace. The list shows whether their workspace access is direct, inherited
-   through a group, or both.
+2. **Workspace members** opens by default. Use it to search every active member
+   of the selected workspace. Each row shows the member avatar, full name on
+   hover, and whether workspace access is direct, inherited through a group, or
+   both.
 3. Use **Start collaborating** to follow the recommended order: pick a space,
    invite collaborators, review access, then create file links only when needed.
-4. In **Share a space**, choose the space you want to open to collaborators.
+4. Open the last tab, **Invite**, then choose the space you want to open to
+   collaborators.
 5. Search for people by name or email, select the least-powerful role that fits
    the work, then choose **Invite people**.
 6. If no person matches, choose **Request collaborator access**, add their name

@@ -26,6 +26,17 @@ export type UiPreferences = {
   selected_portal_account_id?: string | null;
 };
 
+export type UserAvatarPreference = "auto" | "uploaded" | "gravatar" | "initials";
+export type UserAvatarSource = "uploaded" | "provider" | "gravatar" | "initials";
+
+export type UserAvatarDescriptor = {
+  preference: UserAvatarPreference;
+  source: UserAvatarSource;
+  url?: string | null;
+  initials: string;
+  updated_at?: string | null;
+};
+
 export type EffectiveUserAccess = {
   can_access_ceph_admin: boolean;
   can_access_storage_ops: boolean;
@@ -50,6 +61,7 @@ export type User = {
   full_name?: string | null;
   display_name?: string | null;
   picture_url?: string | null;
+  avatar?: UserAvatarDescriptor | null;
   role?: string | null;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
@@ -82,6 +94,10 @@ export type User = {
 export type UserSummary = {
   id: number;
   email: string;
+  full_name?: string | null;
+  display_name?: string | null;
+  avatar?: UserAvatarDescriptor | null;
+  role?: string | null;
 };
 
 export type CreateUserPayload = {
@@ -111,6 +127,7 @@ export type UpdateUserPayload = {
 
 export type UpdateCurrentUserPayload = {
   full_name?: string | null;
+  avatar_preference?: UserAvatarPreference;
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
@@ -164,6 +181,19 @@ export async function updateCurrentUser(payload: UpdateCurrentUserPayload): Prom
   const { data } = await client.put<User>("/users/me", payload);
   return data;
 }
+
+export async function uploadCurrentUserAvatar(file: File): Promise<User> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await client.put<User>("/users/me/avatar", formData);
+  return data;
+}
+
+export async function deleteCurrentUserAvatar(): Promise<User> {
+  const { data } = await client.delete<User>("/users/me/avatar");
+  return data;
+}
+
 
 export async function assignUserToS3Account(
   userId: number,

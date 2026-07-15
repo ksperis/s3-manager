@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences } from "./users";
+import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "./users";
 
 export type LoginResponse = {
   access_token: string;
@@ -14,6 +14,7 @@ export type LoginResponse = {
     full_name?: string | null;
     display_name?: string | null;
     picture_url?: string | null;
+    avatar?: UserAvatarDescriptor | null;
     role?: string | null;
     is_admin?: boolean;
     is_root?: boolean;

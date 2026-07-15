@@ -22,11 +22,12 @@ import ListToolbar from "../../components/ListToolbar";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
-import AssociationSummary, {
-  AccountAssociationChips,
-  AssociationChips,
+import {
+  CompactAssociationSummary,
+  accountAssociationRoleLabels,
+  connectionAssociationRoleLabels,
   type AssociationAccountItem,
-  type AssociationChipItem,
+  type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
   BrowserAccessSection,
@@ -56,6 +57,10 @@ import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import {
+  clearAdminPrincipalEditRequest,
+  readAdminPrincipalEditRequest,
+} from "./adminPrincipalEditLink";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -633,6 +638,12 @@ export default function UsersPage() {
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
   const showPortalRole = Boolean(generalSettings.portal_enabled);
+  const principalEditRequest = useMemo(
+    () => readAdminPrincipalEditRequest(typeof window === "undefined" ? "" : window.location.search),
+    [],
+  );
+  const requestedEditHandledRef = useRef(false);
+  const startEditRef = useRef<(user: User) => void>(() => undefined);
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
   const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);
@@ -725,7 +736,7 @@ export default function UsersPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [createRoleHelpOpen, setCreateRoleHelpOpen] = useState(false);
   const [editRoleHelpOpen, setEditRoleHelpOpen] = useState(false);
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState(principalEditRequest?.search ?? "");
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "email",
     direction: "asc",
@@ -771,11 +782,6 @@ export default function UsersPage() {
     s3Connections.forEach((conn) => map.set(conn.id, conn.name));
     return map;
   }, [s3Connections]);
-  const groupLabelById = useMemo(() => {
-    const map = new Map<number, string>();
-    groups.forEach((group) => map.set(group.id, group.name));
-    return map;
-  }, [groups]);
   const availableCreateS3Accounts = useMemo(() => {
     const query = createS3AccountSearch.trim().toLowerCase();
     const selectedIds = new Set(createSelectedS3Accounts.map((a) => Number(a.id)));
@@ -891,48 +897,45 @@ export default function UsersPage() {
       account_admin: adminByAccountId.get(id) === true,
       account_role: portalRoleByAccountId.get(id) ?? "portal_none",
     }));
-    const s3UserItems: AssociationChipItem[] =
+    const s3UserItems =
       user.s3_user_details && user.s3_user_details.length > 0
-        ? user.s3_user_details.map((entry) => ({ id: entry.id, label: entry.name || `User #${entry.id}` }))
+        ? user.s3_user_details.map((entry) => ({
+            id: entry.id,
+            label: entry.name || `User #${entry.id}`,
+            role_labels: ["Direct access"],
+          }))
         : (user.s3_users ?? []).map((id) => ({
             id: Number(id),
             label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
+            role_labels: ["Direct access"],
           }));
-    const connectionItems: AssociationChipItem[] =
+    const connectionItems =
       user.s3_connection_details && user.s3_connection_details.length > 0
         ? user.s3_connection_details.map((entry) => ({
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
+            role_labels: connectionAssociationRoleLabels(entry),
           }))
         : (user.s3_connections ?? []).map((id) => ({
             id: Number(id),
             label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
+            role_labels: ["Direct access"],
           }));
-    const groupItems: AssociationChipItem[] =
-      user.group_details && user.group_details.length > 0
-        ? user.group_details.map((entry) => ({ id: entry.id, label: entry.name || `Group #${entry.id}` }))
-        : (user.group_ids ?? []).map((id) => ({
-            id: Number(id),
-            label: groupLabelById.get(Number(id)) ?? `Group #${id}`,
-          }));
-    return (
-      <AssociationSummary
-        sections={[
-          {
-            label: "Accounts",
-            value: <AccountAssociationChips accounts={accountItems} showPortalRole={showPortalRole} />,
-            visible: accountItems.length > 0,
-          },
-          { label: "Users", value: <AssociationChips items={s3UserItems} />, visible: s3UserItems.length > 0 },
-          {
-            label: "Connections",
-            value: <AssociationChips items={connectionItems} />,
-            visible: connectionItems.length > 0,
-          },
-          { label: "Groups", value: <AssociationChips items={groupItems} />, visible: groupItems.length > 0 },
-        ]}
-      />
-    );
+    const categories: CompactAssociationCategory[] = [
+      {
+        id: "accounts",
+        label: "Accounts",
+        itemLabel: "RGW account",
+        items: accountItems.map((account) => ({
+          id: account.id,
+          label: account.label,
+          role_labels: accountAssociationRoleLabels(account, showPortalRole),
+        })),
+      },
+      { id: "s3_users", label: "RGW users", itemLabel: "RGW user", items: s3UserItems },
+      { id: "connections", label: "S3 connections", itemLabel: "S3 connection", items: connectionItems },
+    ];
+    return <CompactAssociationSummary categories={categories} />;
   };
 
   const renderGroupsSelector = ({
@@ -1360,6 +1363,7 @@ export default function UsersPage() {
         accountAdminChoice: {},
       })
     );
+    clearAdminPrincipalEditRequest();
   };
 
   const createCloseGuard = useUnsavedChangesGuard({
@@ -1520,6 +1524,15 @@ export default function UsersPage() {
     void ensureAssociationOptionsForTab(initialAssociationsTab, { retryOnError: true });
   };
 
+  startEditRef.current = startEdit;
+  useEffect(() => {
+    if (!principalEditRequest || requestedEditHandledRef.current) return;
+    const requestedUser = users.find((user) => user.id === principalEditRequest.id);
+    if (!requestedUser) return;
+    requestedEditHandledRef.current = true;
+    startEditRef.current(requestedUser);
+  }, [principalEditRequest, users]);
+
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
@@ -1655,7 +1668,7 @@ export default function UsersPage() {
   };
 
   const usersDescription = "Create, edit, delete, and link UI users to groups, RGW accounts, S3 users, and S3 connections.";
-  const associationLabel = "Associations / Groups";
+  const associationLabel = "Storage associations";
   const filterPlaceholder = "Search by email, role, group, account, user, or connection";
   const tableStatus = resolveListTableStatus({
     loading,

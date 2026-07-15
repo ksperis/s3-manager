@@ -67,6 +67,7 @@ from app.models.portal import (
     PortalStorageSpace,
     PortalStorageSpaceAccessPerson,
     PortalStorageSpaceAccessSummary,
+    PortalStorageSpaceCollaboratorPreview,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceNamingMode,
     PortalStorageSpaceRole,
@@ -83,6 +84,7 @@ from app.services import s3_client
 from app.services.s3_client import get_s3_client as _get_s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
+from app.services.user_avatar_service import UserAvatarService
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
 from app.utils.s3_endpoint import resolve_s3_client_options as _resolve_s3_client_options, resolve_s3_endpoint
