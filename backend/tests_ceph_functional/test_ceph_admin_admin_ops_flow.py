@@ -224,7 +224,8 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(deleted, "delete_bucket")
-        assert not rgw.get_bucket_info(purge_bucket, stats=False, allow_not_found=True)
+        owner_buckets = rgw.get_all_buckets(uid=bucket_user, with_stats=False)
+        assert purge_bucket not in _listed_bucket_names(owner_buckets)
         discard_bucket(purge_bucket)
 
         bypass_bucket = _name(ceph_test_settings.test_prefix, "bucket-bypass")
@@ -240,7 +241,8 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(deleted, "delete_bucket")
-        assert not rgw.get_bucket_info(bypass_bucket, stats=False, allow_not_found=True)
+        owner_buckets = rgw.get_all_buckets(uid=bucket_user, with_stats=False)
+        assert bypass_bucket not in _listed_bucket_names(owner_buckets)
         discard_bucket(bypass_bucket)
 
         link_source, link_source_key = create_user("link-source")
