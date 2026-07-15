@@ -12,7 +12,7 @@ theme:
   features:
     - navigation.instant
     - navigation.tracking
-    - navigation.sections
+    - navigation.indexes
     - navigation.top
     - toc.follow
     - content.code.copy
@@ -61,8 +61,8 @@ extra_javascript:
 nav:
   - Home: index.md
   - User Guide:
+      - Overview: user/index.md
       - Start:
-          - Overview: user/index.md
           - Start here: user/start-here.md
           - "Common tasks: storage users": user/common-tasks-storage-user.md
           - "Common tasks: storage administrators": user/common-tasks-storage-admin.md
@@ -117,8 +117,8 @@ nav:
           - Troubleshooting: user/troubleshooting.md
           - Glossary and search tips: user/glossary.md
   - Ops / Sysadmin Guide:
+      - Overview: ops/index.md
       - Deployment:
-          - Overview: ops/index.md
           - Sysadmin onboarding: ops/sysadmin-onboarding.md
           - Deploy with Docker Compose: ops/deploy-docker-compose.md
           - Deploy with Helm: ops/deploy-helm.md
@@ -140,8 +140,8 @@ nav:
           - "Backends: Ceph RGW": ops/backends-ceph-rgw.md
           - "Backends: other S3 implementations": ops/backends-others.md
   - Developer Guide:
+      - Overview: developer/index.md
       - Architecture:
-          - Overview: developer/index.md
           - Architecture overview: developer/architecture-overview.md
           - "Architecture: backend": developer/architecture-backend.md
           - "Architecture: frontend": developer/architecture-frontend.md
