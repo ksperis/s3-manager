@@ -33,7 +33,8 @@ simple preferences.
    history, storage health, file movement, and cost checks.
 8. Use **Help requests** to follow requests for missing collaborators, user
    removal, or storage-limit changes.
-9. Use **Settings** for simple project and preference changes.
+9. Use **Settings** to review the selected project's access, storage service,
+   Storage Spaces, and current usage.
 
 ## Main workflows
 
@@ -47,7 +48,7 @@ simple preferences.
 | Follow admin-help requests | [Portal: Help Requests](portal-requests.md) | Missing collaborators, user removal, storage-limit changes, statuses, and admin messages. |
 | Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible space and file events. |
 | Follow file operations | [Portal: Transfers](portal-transfers.md) | Queued, running, completed, and failed transfers. |
-| Adjust preferences | [Portal: Settings](portal-settings.md) | Simple project, security, and preference cards. |
+| Review project settings | [Portal: Settings](portal-settings.md) | Read-only project context, access level, storage service, and usage. |
 
 ## Portal model in one minute
 

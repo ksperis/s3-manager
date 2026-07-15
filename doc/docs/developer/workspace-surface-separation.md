@@ -177,10 +177,11 @@ Use `/portal/storage-spaces*` and `/portal/storage-spaces/{spaceId}/shares*`
 for end-user collaboration workflows. Use `/admin/accounts/{accountId}/portal-settings`
 for super-admin-only Portal override governance. Portal managers cannot manage
 or apply account Portal overrides. Native IAM, policy compliance, access-key, and
-bucket administration workflows belong outside the Portal user surface. Future
-Portal preferences use the simple `/users/me` `ui_preferences` contract, not
-the advanced Portal settings payload. Stored preferences such as theme and
-default Portal account are UI defaults only; they never grant account access.
+bucket administration workflows belong outside the Portal user surface. Personal
+Portal preferences belong to `/portal/profile` and use the simple `/users/me`
+`ui_preferences` contract, not the advanced Portal settings payload. The
+`/portal/settings` page remains project-scoped. Stored preferences such as theme
+and default Portal account are UI defaults only; they never grant account access.
 
 ### Breaking API Notes
 

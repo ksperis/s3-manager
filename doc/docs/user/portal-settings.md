@@ -1,41 +1,48 @@
 # Portal: Settings
 
-Use this page when you need to adjust simple project and preference settings.
+Use this page to review the context of the project currently selected in the Portal.
 
 ## When to use
 
-Use **Portal > Settings** for self-service preferences that do not require Manager or Admin.
+Use **Portal > Settings** to confirm the selected project, your access level,
+the storage service, and the current Storage Space usage. Personal identity,
+display preferences, alerts, and password settings are managed from
+**User profile**.
 
 ## Prerequisites
 
 - Portal is enabled.
 - You are linked to the selected project.
-- The setting you want is visible for your role.
+- The selected project is available in the Portal.
 
 ## Steps
 
 1. Open **Portal > Settings**.
 2. Confirm the selected project.
-3. Review project, security, and preference cards.
-4. Change only settings you understand, such as usage alert preferences or display preferences.
-5. Reopen the related Portal page to confirm the effect.
+3. Review your workspace access and the associated storage service.
+4. Check the number of active Storage Spaces and the storage currently used.
 
 ## Expected result
 
-Portal behavior matches your preferences without exposing management controls.
+The page shows the read-only context of the selected project without exposing
+personal or management controls.
 
 ## You are done when
 
-The setting is saved and the related Portal page reflects the new behavior.
+The project, access level, storage service, and usage summary match the workspace
+you intended to review.
 
 ## If you do not see this action
 
-Some Portal settings are controlled by Admin or by project policy. Ask an admin when a card is missing, locked, or disabled.
+Project configuration is not currently editable from this page. Use
+**User profile** for personal settings or ask an administrator when the displayed
+project context is incorrect.
 
 ## Limits / feature flags
 
 !!! note
-    Portal settings never replace Admin settings, Manager permissions, or storage-side IAM/S3 authorization.
+    Portal settings are currently read-only. They never replace Admin settings,
+    Manager permissions, or storage-side IAM/S3 authorization.
 
 ## Related pages
 
@@ -47,6 +54,6 @@ Some Portal settings are controlled by Admin or by project policy. Ask an admin 
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with project, security, and preference cards" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-settings.dark.png" alt="Portal Settings page with project, security, and preference cards" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with the selected project context" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-settings.dark.png" alt="Portal Settings page with the selected project context" loading="lazy">
 </div>

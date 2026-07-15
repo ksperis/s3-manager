@@ -1037,7 +1037,7 @@ export const scenarios: DocScreenshotScenario[] = [
     outputBasename: "portal-settings",
     waitFor: "h1:has-text('Settings')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
-    actions: [{ type: "wait", selector: "text=Preferences" }],
+    actions: [{ type: "wait", selector: "text=Workspace access" }],
     mockRules: withBaseRules(),
   },
   {
