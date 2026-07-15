@@ -25,21 +25,6 @@ def _assert_success(payload: dict[str, Any], operation: str) -> None:
     assert 200 <= payload["rgw_status_code"] < 300
 
 
-def _bucket_owner(payload: Any) -> str | None:
-    if not isinstance(payload, dict):
-        return None
-    candidates = [payload]
-    for key in ("bucket", "data", "stats"):
-        nested = payload.get(key)
-        if isinstance(nested, dict):
-            candidates.append(nested)
-    for candidate in candidates:
-        owner = candidate.get("owner")
-        if isinstance(owner, str) and owner.strip():
-            return owner.strip()
-    return None
-
-
 def _listed_bucket_names(payload: Any) -> set[str]:
     names: set[str] = set()
     if isinstance(payload, str):
@@ -246,13 +231,20 @@ def test_ceph_admin_admin_ops_lifecycle(
         discard_bucket(bypass_bucket)
 
         link_source, link_source_key = create_user("link-source")
-        link_target, _ = create_user("link-target")
+        link_target, link_target_key = create_user("link-target")
         link_account = create_account("link-account")
         assert link_source_key and link_source_key.get("access_key") and link_source_key.get("secret_key")
+        assert link_target_key and link_target_key.get("access_key") and link_target_key.get("secret_key")
         link_client = _s3_client(
             s3_endpoint,
             link_source_key["access_key"],
             link_source_key["secret_key"],
+            ceph_test_settings,
+        )
+        link_target_client = _s3_client(
+            s3_endpoint,
+            link_target_key["access_key"],
+            link_target_key["secret_key"],
             ceph_test_settings,
         )
         link_bucket = _name(ceph_test_settings.test_prefix, "bucket-link")
@@ -292,7 +284,8 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(linked, "link_bucket")
-        assert _bucket_owner(rgw.get_bucket_info(link_bucket, stats=False)) == link_target
+        target_listing = link_target_client.list_buckets()
+        assert link_bucket in _listed_bucket_names(target_listing)
 
         linked = super_admin_session.put(
             f"{root}/buckets/{link_bucket}/link",
@@ -303,7 +296,8 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(linked, "link_bucket")
-        assert _bucket_owner(rgw.get_bucket_info(link_bucket, stats=False)) == link_account
+        target_listing = link_target_client.list_buckets()
+        assert link_bucket not in _listed_bucket_names(target_listing)
 
         deleted = super_admin_session.delete(
             f"{root}/buckets/{link_bucket}",
