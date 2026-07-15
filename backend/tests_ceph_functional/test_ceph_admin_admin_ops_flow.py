@@ -48,7 +48,7 @@ def _listed_bucket_names(payload: Any) -> set[str]:
         for item in payload:
             names.update(_listed_bucket_names(item))
     elif isinstance(payload, dict):
-        for key in ("bucket", "name"):
+        for key in ("bucket", "name", "Name"):
             value = payload.get(key)
             if isinstance(value, str):
                 names.add(value)
@@ -224,7 +224,7 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(deleted, "delete_bucket")
-        owner_buckets = rgw.get_all_buckets(uid=bucket_user, with_stats=False)
+        owner_buckets = bucket_client.list_buckets()
         assert purge_bucket not in _listed_bucket_names(owner_buckets)
         discard_bucket(purge_bucket)
 
@@ -241,7 +241,7 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(deleted, "delete_bucket")
-        owner_buckets = rgw.get_all_buckets(uid=bucket_user, with_stats=False)
+        owner_buckets = bucket_client.list_buckets()
         assert bypass_bucket not in _listed_bucket_names(owner_buckets)
         discard_bucket(bypass_bucket)
 
