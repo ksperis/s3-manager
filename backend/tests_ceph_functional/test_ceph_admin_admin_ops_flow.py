@@ -280,7 +280,7 @@ def test_ceph_admin_admin_ops_lifecycle(
             json={"confirmation": f"UNLINK BUCKET {link_bucket}"},
         )
         _assert_success(unlinked, "unlink_bucket")
-        source_listing = rgw.get_all_buckets(uid=link_source, with_stats=False)
+        source_listing = link_client.list_buckets()
         assert link_bucket not in _listed_bucket_names(source_listing)
 
         linked = super_admin_session.put(
