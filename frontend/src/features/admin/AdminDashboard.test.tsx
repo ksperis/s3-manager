@@ -411,7 +411,7 @@ describe("AdminDashboard feature summary", () => {
     expect(screen.getByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Endpoint Health" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
-    expect(screen.getByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
+    expect(await screen.findByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View all incidents" })).toHaveAttribute("href", "/admin/endpoint-status");
     const platformSummary = screen.getByRole("heading", { name: "Platform summary" }).closest("section");
     expect(platformSummary).not.toBeNull();
@@ -467,7 +467,7 @@ describe("AdminDashboard feature summary", () => {
     await renderDashboard();
 
     expect(screen.getByRole("heading", { name: "Ongoing / Recent Incidents" })).toBeInTheDocument();
-    expect(screen.getByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
+    expect(await screen.findByText("Ongoing incidents and incidents ended in the last 7 days.")).toBeInTheDocument();
     expect(await screen.findByText("No ongoing or recent incidents.")).toBeInTheDocument();
   });
 
