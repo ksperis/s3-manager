@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.services.aws_client_config import StorageRequestProfile
+
 from ._shared import *
 
 
@@ -38,13 +40,16 @@ class BrowserContextMixin:
             "verify_tls": verify_tls,
         }
 
-    def _client(self, account: S3Account):
+    def _client(self, account: S3Account, *, request_profile: StorageRequestProfile = "interactive"):
         access_key, secret_key, session_token = self._resolve_s3_credentials(account)
+        client_options = self._s3_client_kwargs(account)
+        client_options["session_token"] = session_token
+        if request_profile != "interactive":
+            client_options["request_profile"] = request_profile
         return get_s3_client(
             access_key,
             secret_key,
-            session_token=session_token,
-            **self._s3_client_kwargs(account),
+            **client_options,
         )
 
     def _sse_customer_params(self, sse_customer: Optional[SseCustomerContext]) -> dict[str, str]:

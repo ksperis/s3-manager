@@ -711,6 +711,7 @@ class PortalSharingMixin:
             region=region,
             force_path_style=force_path_style,
             verify_tls=verify_tls,
+            request_profile="long_running",
         )
         try:
             resp = client.get_object(Bucket=link.bucket_name, Key=link.object_key)

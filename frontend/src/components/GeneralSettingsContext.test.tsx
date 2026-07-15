@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GeneralSettingsProvider, useGeneralSettings } from "./GeneralSettingsContext";
@@ -13,7 +13,7 @@ vi.mock("../api/appSettings", async () => {
 });
 
 function Probe() {
-  const { generalSettings, loading } = useGeneralSettings();
+  const { generalSettings, loading, setGeneralSettings } = useGeneralSettings();
   return (
     <div>
       <span data-testid="migration">{String(generalSettings.bucket_migration_enabled)}</span>
@@ -22,6 +22,12 @@ function Probe() {
       <span data-testid="usage-history">{String(generalSettings.usage_history_enabled)}</span>
       <span data-testid="portal-browser">{String(generalSettings.browser_portal_enabled)}</span>
       <span data-testid="loading">{String(loading)}</span>
+      <button
+        type="button"
+        onClick={() => setGeneralSettings({ ...generalSettings, bucket_migration_enabled: true })}
+      >
+        Save locally
+      </button>
     </div>
   );
 }
@@ -102,5 +108,20 @@ describe("GeneralSettingsProvider fallbacks", () => {
     expect(screen.getByTestId("endpoint-status").textContent).toBe("true");
     expect(screen.getByTestId("usage-history").textContent).toBe("true");
     expect(screen.getByTestId("portal-browser").textContent).toBe("true");
+  });
+
+  it("writes saved settings to the local cache immediately", async () => {
+    render(
+      <GeneralSettingsProvider>
+        <Probe />
+      </GeneralSettingsProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save locally" }));
+
+    expect(screen.getByTestId("migration").textContent).toBe("true");
+    expect(JSON.parse(window.localStorage.getItem("settings:general:v1") ?? "{}")).toEqual(
+      expect.objectContaining({ bucket_migration_enabled: true })
+    );
   });
 });

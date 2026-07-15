@@ -8,6 +8,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import S3Account
 from app.models.object import ListObjectsResponse, S3Object
+from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 
@@ -15,20 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectsService:
-    def _client(self, account: S3Account):
+    def _client(self, account: S3Account, *, request_profile: StorageRequestProfile = "interactive"):
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3Account root keys missing")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        client_options = {
+            "endpoint": endpoint,
+            "session_token": session_token,
+            "region": region,
+            "force_path_style": force_path_style,
+            "verify_tls": verify_tls,
+        }
+        if request_profile != "interactive":
+            client_options["request_profile"] = request_profile
         return get_s3_client(
             access_key,
             secret_key,
-            endpoint=endpoint,
-            session_token=session_token,
-            region=region,
-            force_path_style=force_path_style,
-            verify_tls=verify_tls,
+            **client_options,
         )
 
     def list_objects(
@@ -39,7 +45,7 @@ class ObjectsService:
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
     ) -> ListObjectsResponse:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         kwargs = {
             "Bucket": bucket_name,
             "Prefix": prefix or "",
@@ -108,7 +114,7 @@ class ObjectsService:
         file_obj,
         content_type: Optional[str] = None,
     ) -> None:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         extra_args = {}
         if content_type:
             extra_args["ContentType"] = content_type

@@ -185,6 +185,7 @@ class WorkspaceEndpointHealthEntry(BaseModel):
     latency_ms: Optional[int] = None
     check_mode: str = "http"
     check_target_url: Optional[str] = None
+    is_stale: bool = False
 
 
 class WorkspaceEndpointIncidentEntry(BaseModel):
@@ -202,6 +203,7 @@ class WorkspaceEndpointIncidentEntry(BaseModel):
 
 class WorkspaceEndpointHealthOverviewResponse(BaseModel):
     generated_at: str
+    stale_after_seconds: int
     incident_highlight_minutes: int
     endpoint_count: int
     up_count: int = 0

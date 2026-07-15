@@ -15,11 +15,23 @@ export type ManagerContext = {
   manager_browser_enabled?: boolean;
   manager_bucket_quota_enabled?: boolean;
   manager_ceph_keys_enabled?: boolean;
+  quota_max_size_gb?: number | null;
+  quota_max_objects?: number | null;
+  max_buckets?: number | null;
+  max_users?: number | null;
+  max_roles?: number | null;
+  max_groups?: number | null;
 };
 
-export async function fetchManagerContext(accountId?: S3AccountSelector): Promise<ManagerContext> {
+export async function fetchManagerContext(
+  accountId?: S3AccountSelector,
+  options: { includeLimits?: boolean } = {}
+): Promise<ManagerContext> {
   const { data } = await client.get<ManagerContext>("/manager/context", {
-    params: withS3AccountParam(undefined, accountId),
+    params: withS3AccountParam(
+      options.includeLimits ? { include_limits: true } : undefined,
+      accountId
+    ),
   });
   return data;
 }

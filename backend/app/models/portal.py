@@ -107,6 +107,7 @@ class PortalUsage(BaseModel):
     used_objects: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+    max_buckets: Optional[int] = None
     storage_spaces: list[PortalUsageStorageSpace] = Field(default_factory=list)
     other_storage_space: Optional[PortalUsageStorageSpace] = None
 

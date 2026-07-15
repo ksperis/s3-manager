@@ -20,7 +20,7 @@ from app.routers.ceph_admin.dependencies import (
     get_ceph_admin_context,
     get_ceph_admin_workspace_endpoint,
     validate_ceph_admin_service_configuration,
-    validate_ceph_admin_service_identity,
+    probe_ceph_admin_service_identity,
 )
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
@@ -206,6 +206,7 @@ def get_ceph_admin_endpoint_access(
 ) -> CephAdminEndpointAccess:
     has_supervision_credentials = bool(endpoint.supervision_access_key and endpoint.supervision_secret_key)
     admin_warning = validate_ceph_admin_service_configuration(endpoint)
+    accounts_warning = None
     can_admin = admin_warning is None
     can_accounts = can_admin
     active_rgw_uid = None
@@ -214,17 +215,12 @@ def get_ceph_admin_endpoint_access(
     availability_checked_at = None
     if probe and admin_warning is None:
         availability_checked_at = utcnow().isoformat()
-        admin_warning = validate_ceph_admin_service_identity(endpoint)
-        if admin_warning is not None:
-            if "did not respond" in admin_warning:
-                availability_status = "unavailable"
-                can_accounts = False
-            else:
-                availability_status = "denied"
-                can_admin = False
-                can_accounts = False
-        else:
-            availability_status = "available"
+        identity_probe = probe_ceph_admin_service_identity(endpoint)
+        admin_warning = identity_probe.warning
+        availability_status = identity_probe.status
+        if identity_probe.status != "available":
+            can_admin = False
+            can_accounts = False
         admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
         if admin_warning is None and admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
             try:
@@ -236,13 +232,7 @@ def get_ceph_admin_endpoint_access(
                     verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                     request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
                 )
-                identity_lookup = getattr(admin_client, "get_user_by_access_key", None)
-                if callable(identity_lookup):
-                    active_identity = identity_lookup(
-                        endpoint.ceph_admin_access_key,
-                        allow_not_found=True,
-                    )
-                    active_rgw_uid, active_rgw_tenant = _extract_rgw_user_identity(active_identity)
+                active_rgw_uid, active_rgw_tenant = _extract_rgw_user_identity(identity_probe.user_payload)
                 # Account support is only discovered on explicit probes, never while rendering the shell.
                 admin_client.get_account(
                     "RGW00000000000000000",
@@ -250,15 +240,18 @@ def get_ceph_admin_endpoint_access(
                     allow_not_implemented=True,
                 )
                 can_accounts = admin_client.account_api_supported is True
+                if not can_accounts:
+                    accounts_warning = "RGW Accounts API is not supported by this endpoint. Other Ceph Admin operations remain available."
             except RGWAdminError:
                 can_accounts = False
-                availability_status = "unavailable"
+                accounts_warning = "RGW Accounts API could not be checked. Other Ceph Admin operations remain available."
     return CephAdminEndpointAccess(
         endpoint_id=endpoint.id,
         can_admin=can_admin,
         can_accounts=can_accounts,
         can_metrics=has_supervision_credentials,
         admin_warning=admin_warning,
+        accounts_warning=accounts_warning,
         active_rgw_uid=active_rgw_uid,
         active_rgw_tenant=active_rgw_tenant,
         availability_status=availability_status,

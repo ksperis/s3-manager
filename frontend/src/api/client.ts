@@ -6,9 +6,16 @@ import axios, { AxiosRequestConfig } from "axios";
 import { CLIENT_STORAGE_KEYS, clearAuthStorage, readClientJson, readClientStorage, writeClientStorage } from "../utils/clientStorage";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
-export const API_REQUEST_TIMEOUT_MS = 15_000;
+export type ApiRequestProfile = "interactive" | "long_running";
+
+export const API_REQUEST_TIMEOUT_MS = 0;
+export const INTERACTIVE_REQUEST_TIMEOUT_MS = 15_000;
 export const AUTH_REFRESH_TIMEOUT_MS = 8_000;
 export const LONG_RUNNING_REQUEST_TIMEOUT_MS = 0;
+
+export function timeoutForRequestProfile(profile: ApiRequestProfile): number {
+  return profile === "interactive" ? INTERACTIVE_REQUEST_TIMEOUT_MS : LONG_RUNNING_REQUEST_TIMEOUT_MS;
+}
 
 const client = axios.create({
   baseURL: API_BASE_URL,

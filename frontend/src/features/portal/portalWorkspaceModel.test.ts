@@ -83,6 +83,7 @@ describe("buildPortalWorkspaceModel", () => {
         access_keys: [],
         quota_max_size_bytes: 10_000,
         quota_max_objects: 1_000,
+        max_buckets: 4,
       },
       storageSpaces: [
         {
@@ -100,6 +101,7 @@ describe("buildPortalWorkspaceModel", () => {
         used_objects: 90,
         quota_max_size_bytes: 1_000,
         quota_max_objects: 100,
+        max_buckets: 8,
         storage_spaces: [
           {
             id: "research-data",
@@ -117,6 +119,7 @@ describe("buildPortalWorkspaceModel", () => {
     expect(workspace.usedObjects).toBe(90);
     expect(workspace.quotaBytes).toBe(1_000);
     expect(workspace.quotaObjects).toBe(100);
+    expect(workspace.maxBuckets).toBe(8);
     expect(workspace.spaces[0]).toMatchObject({
       usedBytes: 700,
       objectCount: 70,

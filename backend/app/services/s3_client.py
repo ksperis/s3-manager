@@ -12,7 +12,7 @@ import logging
 from time import perf_counter
 
 from app.core.config import get_settings
-from app.services.aws_client_config import build_interactive_aws_config
+from app.services.aws_client_config import StorageRequestProfile, build_aws_config
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ def get_s3_client(
     force_path_style: bool = False,
     verify_tls: bool = True,
     user_agent_extra: Optional[str] = None,
+    request_profile: StorageRequestProfile = "interactive",
 ):
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured")
@@ -92,7 +93,11 @@ def get_s3_client(
         aws_session_token=session_token,
         region_name=region or settings.seed_s3_region,
         verify=verify_tls,
-        config=build_interactive_aws_config(s3=s3_config, user_agent_extra=user_agent_extra),
+        config=build_aws_config(
+            request_profile=request_profile,
+            s3=s3_config,
+            user_agent_extra=user_agent_extra,
+        ),
     )
     return LoggedS3Client(client)
 

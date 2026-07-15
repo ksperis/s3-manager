@@ -30,6 +30,7 @@ import {
   bucketCompareMappingTableHeadClass,
   bucketCompareMappingTableHeaderClass,
   bucketCompareMappingTargetCellClass,
+  bucketComparisonCancelledMessage,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
@@ -516,7 +517,7 @@ export default function CephAdminBucketCompareModal({
                 ? {
                     ...item,
                     status: "cancelled",
-                    error: "Comparison cancelled.",
+                      error: bucketComparisonCancelledMessage,
                   }
                 : item
             )
@@ -587,7 +588,7 @@ export default function CephAdminBucketCompareModal({
           ? {
               ...item,
               status: "cancelled",
-              error: "Comparison cancelled.",
+              error: bucketComparisonCancelledMessage,
             }
           : item
       )

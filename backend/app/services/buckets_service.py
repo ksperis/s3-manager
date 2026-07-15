@@ -1026,6 +1026,7 @@ class BucketsService:
         return s3_client.get_s3_client(
             access_key=access_key,
             secret_key=secret_key,
+            request_profile="long_running",
             **self._client_kwargs(account),
         )
 
@@ -1125,6 +1126,7 @@ class BucketsService:
         return s3_client.get_s3_client(
             access_key=access_key,
             secret_key=secret_key,
+            request_profile="long_running",
             **self._client_kwargs(account),
         )
 

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 import type { TagDefinitionSummary } from "./tags";
 
 export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_account";
@@ -45,8 +45,9 @@ export async function listExecutionContexts(
   options?: { signal?: AbortSignal }
 ): Promise<ExecutionContext[]> {
   const { data } = await client.get<ExecutionContext[]>("/me/execution-contexts", {
-    params: workspace ? { workspace } : undefined,
-    signal: options?.signal,
+      params: workspace ? { workspace } : undefined,
+      signal: options?.signal,
+      timeout: timeoutForRequestProfile("interactive"),
   });
   return data;
 }

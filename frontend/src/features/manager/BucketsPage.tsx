@@ -454,7 +454,7 @@ export default function BucketsPage() {
       } catch (err) {
         setFeatureTooltipState((prev) => ({
           ...prev,
-          [key]: { status: "error", message: extractError(err) },
+          [key]: { status: "error", message: extractError(err, "Unable to load bucket feature details.") },
         }));
       } finally {
         delete featureTooltipInflightRef.current[key];
@@ -690,7 +690,7 @@ export default function BucketsPage() {
       await fetchBuckets(accountIdForApi ?? null);
       return { created: true };
     } catch (err) {
-      setActionError(extractError(err));
+      setActionError(extractError(err, "Unable to create the bucket."));
       return { created: false };
     } finally {
       setCreating(false);
@@ -756,7 +756,7 @@ export default function BucketsPage() {
       await fetchBuckets(accountIdForApi ?? null);
       return;
     } catch (err) {
-      const msg = extractError(err);
+      const msg = extractError(err, `Unable to delete bucket '${name}'.`);
       const notEmpty = msg.toLowerCase().includes("not empty");
       const conflict = axios.isAxiosError(err) && err.response?.status === 409;
       if (notEmpty || conflict) {

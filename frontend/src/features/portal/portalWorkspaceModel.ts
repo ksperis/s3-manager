@@ -262,7 +262,7 @@ export function buildPortalWorkspaceModel({
     usedObjects: usage?.used_objects ?? state?.used_objects ?? spaceObjectCount,
     quotaBytes: usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? null,
     quotaObjects: usage?.quota_max_objects ?? state?.quota_max_objects ?? null,
-    maxBuckets: state?.max_buckets ?? null,
+    maxBuckets: usage?.max_buckets ?? state?.max_buckets ?? null,
     requestCount: null,
     dataInBytes: null,
     dataOutBytes: null,

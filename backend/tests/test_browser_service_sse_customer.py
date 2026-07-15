@@ -45,7 +45,7 @@ def test_presign_includes_sse_customer_params_and_response_headers(monkeypatch):
             return "https://example.test/presigned"
 
     service = BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
 
     result = service.presign(
         "bucket-a",
@@ -81,6 +81,7 @@ def test_presign_rejects_post_object_when_sse_customer_is_enabled(monkeypatch):
 
 def test_initiate_multipart_upload_passes_sse_customer(monkeypatch):
     captured: dict[str, object] = {}
+    profiles: list[str] = []
 
     class FakeClient:
         def create_multipart_upload(self, **kwargs):  # noqa: ANN001
@@ -88,7 +89,11 @@ def test_initiate_multipart_upload_passes_sse_customer(monkeypatch):
             return {"UploadId": "upload-1"}
 
     service = BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda _account, request_profile="interactive": profiles.append(request_profile) or FakeClient(),
+    )
 
     response = service.initiate_multipart_upload(
         "bucket-a",
@@ -98,6 +103,7 @@ def test_initiate_multipart_upload_passes_sse_customer(monkeypatch):
     )
 
     assert response.upload_id == "upload-1"
+    assert profiles == ["long_running"]
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
     assert kwargs["SSECustomerAlgorithm"] == "AES256"
@@ -164,6 +170,7 @@ def test_head_object_passes_sse_customer_headers(monkeypatch):
 
 def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
     calls: list[dict[str, object]] = []
+    profiles: list[str] = []
 
     class Body:
         def iter_chunks(self, chunk_size=1024):  # noqa: ANN001
@@ -179,7 +186,13 @@ def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
             }
 
     service = BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda _account, request_profile="interactive": (
+            profiles.append(request_profile) or FakeClient()
+        ),
+    )
 
     proxy_resp = service.proxy_download("bucket-a", _account(), "docs/demo.txt", sse_customer=_sse_context())
     stream, content_type, filename = service.download_object(
@@ -194,6 +207,7 @@ def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
     assert filename == "demo.txt"
     assert next(iter(stream)) == b"hello"
     assert len(calls) == 2
+    assert profiles == ["long_running", "long_running"]
     for kwargs in calls:
         assert kwargs["SSECustomerAlgorithm"] == "AES256"
         assert "SSECustomerKey" in kwargs
@@ -211,7 +225,7 @@ def test_proxy_upload_passes_sse_customer(monkeypatch):
             captured["extra_args"] = ExtraArgs or {}
 
     service = BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
 
     service.proxy_upload(
         "bucket-a",

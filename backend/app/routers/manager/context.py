@@ -2,12 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Connection, User
+from app.db import S3Account, S3Connection, S3User, User
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import (
     get_account_context,
@@ -17,6 +17,8 @@ from app.routers.dependencies import (
 )
 from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
+from app.services.s3_accounts_service import get_s3_accounts_service
+from app.services.s3_users_service import get_s3_users_service
 from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
@@ -31,6 +33,12 @@ class ManagerContext(BaseModel):
     manager_browser_enabled: bool = True
     manager_bucket_quota_enabled: bool = False
     manager_ceph_keys_enabled: bool = False
+    quota_max_size_gb: Optional[float] = None
+    quota_max_objects: Optional[int] = None
+    max_buckets: Optional[int] = None
+    max_users: Optional[int] = None
+    max_roles: Optional[int] = None
+    max_groups: Optional[int] = None
 
 
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
@@ -76,6 +84,7 @@ def get_manager_context(
     account=Depends(get_account_context),
     actor=Depends(get_current_actor),
     db: Session = Depends(get_db),
+    include_limits: bool = Query(default=False),
 ) -> ManagerContext:
     s3_user_id = getattr(account, "s3_user_id", None)
     s3_connection_id = getattr(account, "s3_connection_id", None)
@@ -117,6 +126,30 @@ def get_manager_context(
         else False
     )
 
+    quota_max_size_gb = None
+    quota_max_objects = None
+    max_buckets = None
+    max_users = None
+    max_roles = None
+    max_groups = None
+    if include_limits and s3_connection_id is None:
+        if s3_user_id is not None:
+            s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
+            if s3_user is not None:
+                quota_max_size_gb, quota_max_objects, max_buckets = get_s3_users_service(db).get_user_limits(s3_user)
+        else:
+            account_id = getattr(account, "id", None)
+            s3_account = db.query(S3Account).filter(S3Account.id == account_id).first() if account_id else None
+            if s3_account is not None:
+                (
+                    quota_max_size_gb,
+                    quota_max_objects,
+                    max_buckets,
+                    max_users,
+                    max_roles,
+                    max_groups,
+                ) = get_s3_accounts_service(db, allow_missing_admin=True).get_account_limits(s3_account)
+
     return ManagerContext(
         access_mode=access_mode,
         context_kind=("connection" if access_mode == "connection" else "account"),
@@ -126,4 +159,10 @@ def get_manager_context(
         manager_browser_enabled=manager_browser_enabled,
         manager_bucket_quota_enabled=manager_bucket_quota_enabled,
         manager_ceph_keys_enabled=manager_ceph_keys_enabled,
+        quota_max_size_gb=quota_max_size_gb,
+        quota_max_objects=quota_max_objects,
+        max_buckets=max_buckets,
+        max_users=max_users,
+        max_roles=max_roles,
+        max_groups=max_groups,
     )

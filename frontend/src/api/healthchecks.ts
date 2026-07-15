@@ -184,6 +184,7 @@ export type WorkspaceEndpointHealthEntry = {
   latency_ms?: number | null;
   check_mode?: "http" | "s3";
   check_target_url?: string | null;
+  is_stale?: boolean;
 };
 
 export type WorkspaceEndpointIncidentEntry = {
@@ -201,6 +202,7 @@ export type WorkspaceEndpointIncidentEntry = {
 
 export type WorkspaceEndpointHealthOverviewResponse = {
   generated_at: string;
+  stale_after_seconds?: number;
   incident_highlight_minutes: number;
   endpoint_count: number;
   up_count: number;

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 
 export type KeyRotationType =
   | "endpoint_admin"
@@ -46,6 +46,8 @@ export type KeyRotationResponse = {
 };
 
 export async function rotateS3Keys(payload: KeyRotationRequestPayload): Promise<KeyRotationResponse> {
-  const { data } = await client.post<KeyRotationResponse>("/admin/key-rotation", payload);
+  const { data } = await client.post<KeyRotationResponse>("/admin/key-rotation", payload, {
+    timeout: timeoutForRequestProfile("long_running"),
+  });
   return data;
 }

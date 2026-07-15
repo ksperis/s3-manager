@@ -293,6 +293,11 @@ class S3AccountsService:
             logger.warning("Unable to fetch account limits for %s: %s", account.rgw_account_id, exc)
             return None, None, None, None, None, None
         max_size_bytes, max_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
+        if max_size_bytes is None and max_objects is None:
+            try:
+                max_size_bytes, max_objects = rgw_admin.get_account_quota(account.rgw_account_id)
+            except RGWAdminError as exc:
+                logger.warning("Unable to fetch account quota fallback for %s: %s", account.rgw_account_id, exc)
         return (
             bytes_to_gb(max_size_bytes),
             max_objects,

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 
 export type PortalSettings = {
   allow_portal_key: boolean;
@@ -187,12 +187,16 @@ export async function fetchGeneralFeatureLocks(): Promise<GeneralFeatureLocks> {
 }
 
 export async function fetchGeneralSettings(): Promise<GeneralSettings> {
-  const { data } = await client.get<GeneralSettings>("/settings/general");
+  const { data } = await client.get<GeneralSettings>("/settings/general", {
+    timeout: timeoutForRequestProfile("interactive"),
+  });
   return data;
 }
 
 export async function fetchLoginSettings(): Promise<LoginSettings> {
-  const { data } = await client.get("/settings/login");
+  const { data } = await client.get("/settings/login", {
+    timeout: timeoutForRequestProfile("interactive"),
+  });
   const normalized = (data && typeof data === "object" ? data : {}) as Partial<LoginSettings>;
   return {
     allow_login_access_keys: Boolean(normalized.allow_login_access_keys ?? false),

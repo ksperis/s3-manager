@@ -22,7 +22,7 @@ class BrowserVersionsMixin:
     ) -> CleanupObjectVersionsResponse:
         if not (payload.keep_last_n or payload.older_than_days or payload.delete_orphan_markers):
             raise ValueError("No cleanup criteria provided.")
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         prefix = payload.prefix or ""
         cutoff = None
         if payload.older_than_days:

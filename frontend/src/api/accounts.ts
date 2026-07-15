@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 import type { PortalSettingsOverride } from "./appSettings";
 import type { PortalAccountSettings } from "./portal";
 import { PaginatedResponse } from "./types";
@@ -153,7 +153,9 @@ export type ImportS3AccountPayload = {
 };
 
 export async function importS3Accounts(payload: ImportS3AccountPayload[]): Promise<S3Account[]> {
-  const { data } = await client.post<S3Account[]>("/admin/accounts/import", payload);
+  const { data } = await client.post<S3Account[]>("/admin/accounts/import", payload, {
+    timeout: timeoutForRequestProfile("long_running"),
+  });
   return data;
 }
 

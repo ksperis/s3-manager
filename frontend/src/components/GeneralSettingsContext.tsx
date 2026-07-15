@@ -53,7 +53,7 @@ const GeneralSettingsContext = createContext<GeneralSettingsContextValue>({
 
 export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
   const [cachedSettings] = useState(() => readClientJson<GeneralSettings>(CLIENT_STORAGE_KEYS.generalSettingsCache));
-  const [generalSettings, setGeneralSettings] = useState<GeneralSettings>(cachedSettings ?? DEFAULT_GENERAL_SETTINGS);
+  const [generalSettings, setGeneralSettingsState] = useState<GeneralSettings>(cachedSettings ?? DEFAULT_GENERAL_SETTINGS);
   const [loading, setLoading] = useState(
     () => Boolean(readClientStorage(CLIENT_STORAGE_KEYS.authToken)) && cachedSettings == null
   );
@@ -61,21 +61,26 @@ export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const token = readClientStorage(CLIENT_STORAGE_KEYS.authToken);
     if (!token) {
-      setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
+      setGeneralSettingsState(DEFAULT_GENERAL_SETTINGS);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
       const data = await fetchGeneralSettings();
-      setGeneralSettings(data);
+      setGeneralSettingsState(data);
       writeClientJson(CLIENT_STORAGE_KEYS.generalSettingsCache, data);
     } catch {
-      if (!cachedSettings) setGeneralSettings(DEFAULT_GENERAL_SETTINGS);
+      if (!cachedSettings) setGeneralSettingsState(DEFAULT_GENERAL_SETTINGS);
     } finally {
       setLoading(false);
     }
   }, [cachedSettings]);
+
+  const setGeneralSettings = useCallback((settings: GeneralSettings) => {
+    setGeneralSettingsState(settings);
+    writeClientJson(CLIENT_STORAGE_KEYS.generalSettingsCache, settings);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -88,7 +93,7 @@ export function GeneralSettingsProvider({ children }: { children: ReactNode }) {
       refresh,
       setGeneralSettings,
     }),
-    [generalSettings, loading, refresh]
+    [generalSettings, loading, refresh, setGeneralSettings]
   );
 
   return <GeneralSettingsContext.Provider value={value}>{children}</GeneralSettingsContext.Provider>;

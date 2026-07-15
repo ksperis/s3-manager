@@ -275,6 +275,26 @@ def test_get_user_usage_hides_when_endpoint_metrics_are_disabled(db_session, mon
     assert fake.bucket_list_calls == []
 
 
+def test_get_user_limits_falls_back_to_quota_endpoint(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    s3_user = _seed_local_user(
+        db_session,
+        name="Quota Fallback User",
+        uid="quota-fallback-user",
+        endpoint_id=endpoint.id,
+    )
+    fake = FakeRGWAdmin()
+    fake.remote_users["quota-fallback-user"] = {
+        "display_name": "Quota Fallback User",
+        "email": "quota-fallback-user@example.com",
+        "keys": [],
+    }
+    fake.quota_by_uid["quota-fallback-user"] = (2 * 1024 ** 3, 500)
+    service = _build_service(db_session, monkeypatch, fake)
+
+    assert service.get_user_limits(s3_user) == (2, 500, None)
+
+
 def test_create_user_persists_credentials(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()

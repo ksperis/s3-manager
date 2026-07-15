@@ -13,6 +13,7 @@ def _account() -> S3Account:
 
 def test_cleanup_keep_last_never_deletes_current_version(monkeypatch):
     captured_deletions: list[dict] = []
+    profiles: list[str] = []
 
     class FakeClient:
         def list_object_versions(self, **_kwargs):  # noqa: ANN001
@@ -46,7 +47,11 @@ def test_cleanup_keep_last_never_deletes_current_version(monkeypatch):
         captured_deletions.extend(items)
 
     service = browser_service.BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(
+        service,
+        "_client",
+        lambda _account, request_profile="interactive": profiles.append(request_profile) or FakeClient(),
+    )
     monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(
@@ -61,6 +66,7 @@ def test_cleanup_keep_last_never_deletes_current_version(monkeypatch):
         {"Key": "docs/report.txt", "VersionId": "v2"},
         {"Key": "docs/report.txt", "VersionId": "v1"},
     ]
+    assert profiles == ["long_running"]
 
 
 def test_cleanup_older_than_never_deletes_current_version(monkeypatch):
@@ -99,7 +105,7 @@ def test_cleanup_older_than_never_deletes_current_version(monkeypatch):
         captured_deletions.extend(items)
 
     service = browser_service.BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
     monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(
@@ -159,7 +165,7 @@ def test_cleanup_batches_large_version_deletions_and_orphan_markers(monkeypatch)
         delete_batches.append(list(items))
 
     service = browser_service.BrowserService()
-    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+    monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
     monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(

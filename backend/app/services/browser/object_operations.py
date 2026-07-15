@@ -81,7 +81,7 @@ class BrowserObjectOperationsMixin:
         account: S3Account,
         payload: CopyObjectPayload,
     ) -> None:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         source_bucket = payload.source_bucket or bucket_name
         copy_source: dict[str, str] = {
             "Bucket": source_bucket,
@@ -220,7 +220,7 @@ class BrowserObjectOperationsMixin:
         payload: MultipartUploadInitRequest,
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> MultipartUploadInitResponse:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         kwargs = {"Bucket": bucket_name, "Key": payload.key}
         kwargs.update(self._sse_customer_params(sse_customer))
         if payload.content_type:
@@ -358,7 +358,7 @@ class BrowserObjectOperationsMixin:
     ) -> None:
         if not payload.parts:
             raise RuntimeError("No parts provided to complete multipart upload")
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         sorted_parts = sorted(payload.parts, key=lambda part: part.part_number)
         completed = [{"ETag": part.etag, "PartNumber": part.part_number} for part in sorted_parts]
         try:
@@ -379,7 +379,7 @@ class BrowserObjectOperationsMixin:
         key: str,
         upload_id: str,
     ) -> None:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         try:
             client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
         except (ClientError, BotoCoreError) as exc:

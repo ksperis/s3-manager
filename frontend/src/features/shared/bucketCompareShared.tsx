@@ -61,8 +61,11 @@ export const bucketCompareMappingSourceCellClass = "px-3 py-2 font-semibold text
 export const bucketCompareMappingTargetCellClass = "space-y-1 px-3 py-2";
 
 export const extractCompareError = (err: unknown): string => {
-  return extractApiError(err, "Unexpected error");
+  return extractApiError(err, "Bucket comparison failed.");
 };
+
+export const bucketComparisonCancelledMessage =
+  "Comparison cancelled in this browser. The backend may still be finishing; verify the current state before retrying.";
 
 export const runWithConcurrencySettled = async <T, R>(
   items: T[],

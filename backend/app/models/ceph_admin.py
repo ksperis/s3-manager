@@ -26,6 +26,7 @@ class CephAdminEndpointAccess(BaseModel):
     can_accounts: bool = False
     can_metrics: bool = False
     admin_warning: Optional[str] = None
+    accounts_warning: Optional[str] = None
     active_rgw_uid: Optional[str] = None
     active_rgw_tenant: Optional[str] = None
     availability_status: Literal["unknown", "available", "unavailable", "denied", "misconfigured"] = "unknown"

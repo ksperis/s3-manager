@@ -16,6 +16,7 @@ const listManagerActivityMock = vi.fn();
 const fetchManagerTrafficMock = vi.fn();
 const fetchManagerUsageTrendsMock = vi.fn();
 const getManagerUsageStatsAggregateMock = vi.fn();
+const fetchManagerContextMock = vi.fn();
 let bucketUsageStatsEnabled = false;
 let bucketPurgeEnabled = false;
 const MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
@@ -106,6 +107,10 @@ vi.mock("../../api/buckets", async () => {
 
 vi.mock("../../api/managerActivity", () => ({
   listManagerActivity: (...args: unknown[]) => listManagerActivityMock(...args),
+}));
+
+vi.mock("../../api/managerContext", () => ({
+  fetchManagerContext: (...args: unknown[]) => fetchManagerContextMock(...args),
 }));
 
 vi.mock("../../api/stats", async () => {
@@ -280,6 +285,10 @@ describe("manager shell pages", () => {
     fetchManagerTrafficMock.mockResolvedValue(managerTrafficResponse(0, 0));
     fetchManagerUsageTrendsMock.mockResolvedValue({});
     getManagerUsageStatsAggregateMock.mockResolvedValue({ aggregate: usageStatsAggregate() });
+    fetchManagerContextMock.mockResolvedValue({
+      access_mode: "admin",
+      manager_stats_enabled: true,
+    });
     bucketUsageStatsEnabled = false;
     bucketPurgeEnabled = false;
     window.localStorage.clear();
@@ -1196,7 +1205,7 @@ describe("manager shell pages", () => {
     );
 
     expect(
-      await screen.findByText("Unable to load buckets from the storage endpoint.")
+      await screen.findByText("Read timeout")
     ).toBeInTheDocument();
     expect(screen.getByText("— buckets")).toBeInTheDocument();
     expect(screen.queryByText("0 bucket(s)")).not.toBeInTheDocument();

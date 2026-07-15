@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
 function isTopLevelBrowserSurface(): boolean {
@@ -77,6 +77,7 @@ export async function listFeatureRuleInventory(
 ): Promise<FeatureRuleInventoryBucket[]> {
   const { data } = await client.get<FeatureRuleInventoryBucket[]>("/manager/feature-rules", {
     params: withS3AccountParam({ feature }, accountId),
+    timeout: timeoutForRequestProfile("long_running"),
   });
   return data;
 }
@@ -322,6 +323,7 @@ export async function compareManagerBucketPair(
     {
       params: withS3AccountParam(undefined, sourceContextId),
       signal: options?.signal,
+      timeout: timeoutForRequestProfile("long_running"),
     }
   );
   return data;
@@ -338,6 +340,7 @@ export async function runManagerBucketCompareAction(
     {
       params: withS3AccountParam(undefined, sourceContextId),
       signal: options?.signal,
+      timeout: timeoutForRequestProfile("long_running"),
     }
   );
   return data;

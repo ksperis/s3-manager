@@ -111,7 +111,12 @@ class PortalServerAccessLoggingMixin:
 
     def _portal_server_access_client(self, account: S3Account):
         access_key, secret_key = self._account_credentials(account)
-        return get_s3_client(access_key, secret_key, **self._s3_client_kwargs(account))
+        return get_s3_client(
+            access_key,
+            secret_key,
+            request_profile="long_running",
+            **self._s3_client_kwargs(account),
+        )
 
     def _portal_server_access_log_retention_days(self, portal_settings: PortalSettings) -> int:
         try:

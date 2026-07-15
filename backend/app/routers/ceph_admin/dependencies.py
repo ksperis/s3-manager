@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
@@ -34,6 +34,13 @@ class CephAdminContext:
     audit_service: Optional[AuditService] = None
 
 
+@dataclass(frozen=True)
+class CephAdminIdentityProbe:
+    status: Literal["available", "unavailable", "denied", "misconfigured"]
+    warning: Optional[str] = None
+    user_payload: Optional[dict] = None
+
+
 def _to_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
@@ -55,10 +62,10 @@ def _extract_ceph_admin_flags(user_payload: dict) -> tuple[bool, bool]:
     return admin, system
 
 
-def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[str]:
+def probe_ceph_admin_service_identity(endpoint: StorageEndpoint) -> CephAdminIdentityProbe:
     configuration_error = validate_ceph_admin_service_configuration(endpoint)
     if configuration_error:
-        return configuration_error
+        return CephAdminIdentityProbe(status="misconfigured", warning=configuration_error)
     endpoint_label = endpoint.name or f"#{endpoint.id}"
     admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     access_key = endpoint.ceph_admin_access_key
@@ -73,19 +80,40 @@ def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[
             request_timeout_seconds=get_settings().rgw_admin_probe_timeout_seconds,
         )
         user_payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
-    except RGWAdminError:
-        return f"Ceph Admin endpoint '{endpoint_label}' did not respond while credentials were being checked."
+    except RGWAdminError as exc:
+        error_text = str(exc).lower()
+        denied = any(
+            marker in error_text
+            for marker in ("401", "403", "accessdenied", "access denied", "invalidaccesskey", "signature")
+        )
+        if denied:
+            return CephAdminIdentityProbe(
+                status="denied",
+                warning=f"Ceph Admin credentials were denied for endpoint '{endpoint_label}'.",
+            )
+        return CephAdminIdentityProbe(
+            status="unavailable",
+            warning=f"Ceph Admin endpoint '{endpoint_label}' did not respond while credentials were being checked.",
+        )
     if not isinstance(user_payload, dict) or not user_payload:
-        return (
-            f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': access key does not map to an RGW user."
+        return CephAdminIdentityProbe(
+            status="denied",
+            warning=f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': access key does not map to an RGW user.",
         )
     is_admin, is_system = _extract_ceph_admin_flags(user_payload)
     if not is_admin and not is_system:
-        return (
-            f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': the dedicated access key must belong "
-            "to an RGW user created with --admin or --system."
+        return CephAdminIdentityProbe(
+            status="denied",
+            warning=(
+                f"Ceph Admin workspace is unavailable for endpoint '{endpoint_label}': the dedicated access key must belong "
+                "to an RGW user created with --admin or --system."
+            ),
         )
-    return None
+    return CephAdminIdentityProbe(status="available", user_payload=user_payload)
+
+
+def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[str]:
+    return probe_ceph_admin_service_identity(endpoint).warning
 
 
 def validate_ceph_admin_service_configuration(endpoint: StorageEndpoint) -> Optional[str]:

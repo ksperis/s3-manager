@@ -37,7 +37,6 @@ import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiCardClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useI18n, type I18nMessage } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
-import { effectiveEndpointHealthStatus } from "../../utils/endpointHealth";
 import {
   BucketCollectionIcon,
   BucketIcon,
@@ -131,7 +130,7 @@ function workspaceHealthStatus(
   health: ReturnType<typeof usePortalWorkspaceData>["health"]
 ): HealthCheckStatus {
   if (!health || health.endpoint_count <= 0) return "unknown";
-  const statuses = health.endpoints.map((endpoint) => effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at));
+  const statuses = health.endpoints.map((endpoint) => endpoint.is_stale === true ? "unknown" : endpoint.status);
   if (statuses.includes("down")) return "down";
   if (statuses.includes("degraded")) return "degraded";
   if (statuses.includes("up")) return "up";

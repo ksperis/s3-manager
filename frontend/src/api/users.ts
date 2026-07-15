@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 import { PaginatedResponse } from "./types";
 
 export type AccountMembership = {
@@ -154,7 +154,9 @@ export async function deleteUser(userId: number): Promise<void> {
 }
 
 export async function fetchCurrentUser(): Promise<User> {
-  const { data } = await client.get<User>("/users/me");
+  const { data } = await client.get<User>("/users/me", {
+    timeout: timeoutForRequestProfile("interactive"),
+  });
   return data;
 }
 

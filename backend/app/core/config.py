@@ -250,6 +250,11 @@ class Settings(BaseSettings):
         le=5,
         description="Maximum attempts for interactive S3-compatible API calls",
     )
+    storage_long_running_read_timeout_seconds: float = Field(
+        60.0,
+        gt=0,
+        description="Socket read timeout for long-running S3-compatible API calls",
+    )
 
     seed_rgw_admin_access_key: Optional[str] = Field(
         None,

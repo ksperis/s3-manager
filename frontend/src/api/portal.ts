@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
+import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS, timeoutForRequestProfile } from "./client";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
@@ -77,6 +77,7 @@ export type PortalUsage = {
   used_objects?: number | null;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
+  max_buckets?: number | null;
   storage_spaces?: PortalUsageStorageSpace[];
   other_storage_space?: PortalUsageStorageSpace | null;
 };
@@ -387,7 +388,10 @@ export type PortalAccountSettings = {
 };
 
 export async function listPortalAccounts(options?: { signal?: AbortSignal }): Promise<S3Account[]> {
-  const { data } = await client.get<S3Account[]>("/portal/accounts", { signal: options?.signal });
+  const { data } = await client.get<S3Account[]>("/portal/accounts", {
+    signal: options?.signal,
+    timeout: timeoutForRequestProfile("interactive"),
+  });
   return data;
 }
 

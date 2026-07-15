@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.services.aws_client_config import StorageRequestProfile
+
 from ._shared import *
 
 
@@ -55,18 +57,29 @@ class PortalObjectsMixin:
             raise RuntimeError("Storage Space content access not allowed for this role.")
         return role
 
-    def _portal_object_client(self, user: User, account: S3Account):
+    def _portal_object_client(
+        self,
+        user: User,
+        account: S3Account,
+        *,
+        request_profile: StorageRequestProfile = "interactive",
+    ):
         link = self._existing_portal_link(user, account)
         if not link or not link.active_access_key or not link.active_secret_key:
             raise RuntimeError("Portal IAM credentials are not provisioned for this user.")
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        client_options = {
+            "endpoint": endpoint,
+            "region": region,
+            "force_path_style": force_path_style,
+            "verify_tls": verify_tls,
+        }
+        if request_profile != "interactive":
+            client_options["request_profile"] = request_profile
         return get_s3_client(
             link.active_access_key,
             link.active_secret_key,
-            endpoint=endpoint,
-            region=region,
-            force_path_style=force_path_style,
-            verify_tls=verify_tls,
+            **client_options,
         )
 
     def _object_name(self, key: str) -> str:
@@ -100,7 +113,7 @@ class PortalObjectsMixin:
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
         self._require_storage_space_content_role(user, access, bucket_name)
-        client = self._portal_object_client(user, access.account)
+        client = self._portal_object_client(user, access.account, request_profile="long_running")
         try:
             resp = client.get_object(Bucket=bucket_name, Key=target_key)
         except (ClientError, BotoCoreError) as exc:

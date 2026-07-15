@@ -47,29 +47,30 @@ export function classifyApiError(error: unknown, fallback: string): ApiFailure {
     const status = error.response?.status ?? null;
     const code = String(error.code ?? "").toUpperCase();
     const lowLevelMessage = typeof error.message === "string" ? error.message : "";
+    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+    const safeDetail =
+      typeof detail === "string" && detail.trim().length > 0
+        ? sanitizeErrorMessage(detail, fallback)
+        : null;
     if (
       code === "ECONNABORTED" ||
       code === "ETIMEDOUT" ||
       status === 504 ||
       TIMEOUT_MESSAGE_PATTERN.test(lowLevelMessage)
     ) {
-      return { kind: "timeout", message: fallback, retryable: true, status };
+      return { kind: "timeout", message: safeDetail ?? fallback, retryable: true, status };
     }
     if (status === 503 || !error.response || NETWORK_UNAVAILABLE_PATTERN.test(lowLevelMessage)) {
-      return { kind: "unavailable", message: fallback, retryable: true, status };
+      return { kind: "unavailable", message: safeDetail ?? fallback, retryable: true, status };
     }
     if (status === 502) {
-      return { kind: "invalid_response", message: fallback, retryable: true, status };
+      return { kind: "invalid_response", message: safeDetail ?? fallback, retryable: true, status };
     }
-    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
     if (status === 401 || status === 403) {
-      const message = typeof detail === "string" && detail.trim().length > 0
-        ? sanitizeErrorMessage(detail, fallback)
-        : fallback;
-      return { kind: "denied", message, retryable: false, status };
+      return { kind: "denied", message: safeDetail ?? fallback, retryable: false, status };
     }
-    if (typeof detail === "string" && detail.trim().length > 0) {
-      return { kind: "unknown", message: sanitizeErrorMessage(detail, fallback), retryable: false, status };
+    if (safeDetail) {
+      return { kind: "unknown", message: safeDetail, retryable: false, status };
     }
     if (typeof error.message === "string" && error.message.trim().length > 0) {
       return { kind: "unknown", message: sanitizeErrorMessage(error.message, fallback), retryable: false, status };

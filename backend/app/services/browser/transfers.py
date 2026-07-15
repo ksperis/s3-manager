@@ -109,7 +109,7 @@ class BrowserTransfersMixin:
         content_type: Optional[str],
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> None:
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         extra_args = {}
         if content_type:
             extra_args["ContentType"] = content_type
@@ -144,7 +144,7 @@ class BrowserTransfersMixin:
         key: str,
         sse_customer: Optional[SseCustomerContext] = None,
     ):
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         kwargs = {"Bucket": bucket_name, "Key": key}
         kwargs.update(self._sse_customer_params(sse_customer))
         try:
@@ -182,7 +182,7 @@ class BrowserTransfersMixin:
         version_id: Optional[str] = None,
         sse_customer: Optional[SseCustomerContext] = None,
     ):
-        client = self._client(account)
+        client = self._client(account, request_profile="long_running")
         kwargs = {"Bucket": bucket_name, "Key": key}
         if version_id:
             kwargs["VersionId"] = version_id

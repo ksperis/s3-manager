@@ -57,8 +57,9 @@ Key areas:
 - Interactive storage budgets: `STORAGE_INTERACTIVE_CONNECT_TIMEOUT_SECONDS` (default `2`),
   `STORAGE_INTERACTIVE_READ_TIMEOUT_SECONDS` (default `5`), and
   `STORAGE_INTERACTIVE_MAX_ATTEMPTS` (default `2`). These bound UI-facing S3,
-  IAM, SNS, and STS calls; long-running streams and file transfers use explicit
-  request profiles instead.
+  IAM, SNS, and STS calls. Long-running S3 streams, bulk inventories, and file
+  transfers keep the same connect/retry budget but use
+  `STORAGE_LONG_RUNNING_READ_TIMEOUT_SECONDS` (default `60`) for socket reads.
 - RGW Admin availability probes use `RGW_ADMIN_PROBE_TIMEOUT_SECONDS` (default
   `3`) while ordinary Admin Ops and bucket-statistics calls keep their separate
   `RGW_ADMIN_TIMEOUT_SECONDS` and `RGW_ADMIN_BUCKET_LIST_STATS_TIMEOUT_SECONDS`

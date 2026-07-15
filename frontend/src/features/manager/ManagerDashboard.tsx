@@ -17,6 +17,7 @@ import {
   type WorkspaceEndpointIncidentEntry,
 } from "../../api/healthchecks";
 import { listManagerActivity, type ManagerActivityEntry } from "../../api/managerActivity";
+import { fetchManagerContext, type ManagerContext } from "../../api/managerContext";
 import {
   fetchManagerTraffic,
   fetchManagerUsageTrends,
@@ -56,7 +57,6 @@ import {
 } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
-import { effectiveEndpointHealthStatus, isEndpointHealthCheckStale } from "../../utils/endpointHealth";
 import {
   BellIcon,
   BucketCollectionIcon,
@@ -654,8 +654,8 @@ function BackendHealthCard({
   unavailableReason?: string | null;
 }) {
   const showEndpoint = !unavailableReason && endpoint;
-  const stale = showEndpoint ? isEndpointHealthCheckStale(endpoint.checked_at) : false;
-  const healthStatus = showEndpoint ? effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at) : "unknown";
+  const stale = showEndpoint ? endpoint.is_stale === true : false;
+  const healthStatus = showEndpoint ? (stale ? "unknown" : endpoint.status) : "unknown";
   const content = (
     <section className={cx(uiCardClass, "h-full p-[14px]")}>
       <div className="flex items-center gap-1.5">
@@ -817,6 +817,7 @@ export default function ManagerDashboard() {
   const [usageTrendsLoading, setUsageTrendsLoading] = useState(false);
   const [usageStatsAggregate, setUsageStatsAggregate] = useState<BucketUsageStatsAggregate | null>(null);
   const [usageStatsLoading, setUsageStatsLoading] = useState(false);
+  const [managerLimits, setManagerLimits] = useState<ManagerContext | null>(null);
 
   const selected = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
@@ -847,6 +848,25 @@ export default function ManagerDashboard() {
     hasContext,
     refreshKey
   );
+
+  useEffect(() => {
+    if (!hasContext) {
+      setManagerLimits(null);
+      return;
+    }
+    let cancelled = false;
+    setManagerLimits(null);
+    fetchManagerContext(accountIdForApi, { includeLimits: true })
+      .then((context) => {
+        if (!cancelled) setManagerLimits(context);
+      })
+      .catch(() => {
+        if (!cancelled) setManagerLimits(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, hasContext, refreshNonce]);
 
   useEffect(() => {
     if (!hasContext) {
@@ -1058,36 +1078,27 @@ export default function ManagerDashboard() {
   const activityUnavailableReason = noContextReason || activityError;
   const trafficUnavailableReason = noContextReason || (!trafficFeatureEnabled ? "Traffic usage is not available for this context." : trafficError);
   const storageUsedBytes = metricsUnavailableReason ? null : stats?.total_bytes ?? null;
+  const storageQuotaSizeGb = managerLimits?.quota_max_size_gb ?? selected?.quota_max_size_gb ?? null;
   const storageQuotaBytes =
-    selected?.quota_max_size_gb !== undefined && selected?.quota_max_size_gb !== null
-      ? selected.quota_max_size_gb * 1024 ** 3
+    storageQuotaSizeGb != null
+      ? storageQuotaSizeGb * 1024 ** 3
       : null;
   const objectCount = metricsUnavailableReason ? null : stats?.total_objects ?? null;
   const objectQuota =
-    selected?.quota_max_objects !== undefined && selected?.quota_max_objects !== null
-      ? selected.quota_max_objects
-      : null;
+    managerLimits?.quota_max_objects ?? selected?.quota_max_objects ?? null;
   const visibleBucketCount = bucketUnavailableReason ? null : bucketCount;
   const bucketQuota =
-    selected?.max_buckets !== undefined && selected?.max_buckets !== null
-      ? selected.max_buckets
-      : null;
+    managerLimits?.max_buckets ?? selected?.max_buckets ?? null;
   const iamUserCount = iamUnavailableReason ? null : iamOverview?.iam_users ?? stats?.total_iam_users ?? null;
   const iamGroupCount = iamUnavailableReason ? null : iamOverview?.iam_groups ?? stats?.total_iam_groups ?? null;
   const iamRoleCount = iamUnavailableReason ? null : iamOverview?.iam_roles ?? stats?.total_iam_roles ?? null;
   const iamPolicyCount = iamUnavailableReason ? null : iamOverview?.iam_policies ?? stats?.total_iam_policies ?? null;
   const userQuota =
-    selected?.max_users !== undefined && selected?.max_users !== null
-      ? selected.max_users
-      : null;
+    managerLimits?.max_users ?? selected?.max_users ?? null;
   const roleQuota =
-    selected?.max_roles !== undefined && selected?.max_roles !== null
-      ? selected.max_roles
-      : null;
+    managerLimits?.max_roles ?? selected?.max_roles ?? null;
   const groupQuota =
-    selected?.max_groups !== undefined && selected?.max_groups !== null
-      ? selected.max_groups
-      : null;
+    managerLimits?.max_groups ?? selected?.max_groups ?? null;
   const uploadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_in ?? null;
   const downloadBytes = trafficUnavailableReason ? null : trafficStats?.totals.bytes_out ?? null;
   const transferBytes = uploadBytes == null || downloadBytes == null ? null : uploadBytes + downloadBytes;

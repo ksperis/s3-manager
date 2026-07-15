@@ -6,7 +6,6 @@ import { Link } from "react-router-dom";
 import type { WorkspaceEndpointHealthOverviewResponse } from "../api/healthchecks";
 import { WorkspaceStatusCounter, WorkspaceStatusDot, WorkspaceStatusPill } from "./WorkspaceDashboardKit";
 import WorkspaceIncidentsCard from "./WorkspaceIncidentsCard";
-import { effectiveEndpointHealthStatus, isEndpointHealthCheckStale } from "../utils/endpointHealth";
 import {
   cx,
   uiButtonBaseClass,
@@ -53,13 +52,12 @@ export default function WorkspaceEndpointHealthCards({
   showStatusCounters = true,
 }: WorkspaceEndpointHealthCardsProps) {
   const incidents = data?.incidents ?? [];
-  const effectiveCounts = (data?.endpoints ?? []).reduce(
-    (counts, endpoint) => {
-      counts[effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at)] += 1;
-      return counts;
-    },
-    { up: 0, degraded: 0, down: 0, unknown: 0 }
-  );
+  const effectiveCounts = {
+    up: data?.up_count ?? 0,
+    degraded: data?.degraded_count ?? 0,
+    down: data?.down_count ?? 0,
+    unknown: data?.unknown_count ?? 0,
+  };
   const showIncidents = !loading && !error && incidents.length > 0;
 
   return (
@@ -114,8 +112,8 @@ export default function WorkspaceEndpointHealthCards({
                 <p className={cx("ui-caption", uiMutedTextClass)}>No endpoint linked to this workspace context.</p>
               )}
               {(data?.endpoints ?? []).slice(0, 6).map((endpoint) => {
-                const stale = isEndpointHealthCheckStale(endpoint.checked_at);
-                const effectiveStatus = effectiveEndpointHealthStatus(endpoint.status, endpoint.checked_at);
+                const stale = endpoint.is_stale === true;
+                const effectiveStatus = stale ? "unknown" : endpoint.status;
                 return <div
                   key={endpoint.endpoint_id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)]/45 px-3 py-2 dark:bg-transparent"

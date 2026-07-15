@@ -4,6 +4,7 @@ import WorkspaceEndpointHealthCards from "../WorkspaceEndpointHealthCards";
 
 const workspaceHealth: WorkspaceEndpointHealthOverviewResponse = {
   generated_at: new Date().toISOString(),
+  stale_after_seconds: 600,
   incident_highlight_minutes: 720,
   endpoint_count: 1,
   up_count: 0,
@@ -19,6 +20,7 @@ const workspaceHealth: WorkspaceEndpointHealthOverviewResponse = {
       checked_at: new Date().toISOString(),
       latency_ms: null,
       check_mode: "http",
+      is_stale: false,
     },
   ],
   incidents: [
@@ -117,15 +119,17 @@ describe("WorkspaceEndpointHealthCards", () => {
       <WorkspaceEndpointHealthCards
         data={{
           ...workspaceHealth,
-          up_count: 1,
+          up_count: 0,
           down_count: 0,
           endpoints: [
             {
               ...workspaceHealth.endpoints[0],
               status: "up",
               checked_at: "2026-01-01T00:00:00Z",
+              is_stale: true,
             },
           ],
+          unknown_count: 1,
         }}
         loading={false}
       />

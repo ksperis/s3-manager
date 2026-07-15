@@ -106,7 +106,7 @@ class PortalStateUsageMixin:
 
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
-        quota_max_size_bytes, quota_max_objects = self._account_quota(account)
+        quota_max_size_bytes, quota_max_objects, max_buckets = self._account_limits(account)
         is_portal_user = access.role == AccountRole.PORTAL_USER.value
         if is_portal_user:
             allowed = set(self.list_existing_user_content_bucket_access(user, account, access.role))
@@ -118,6 +118,7 @@ class PortalStateUsageMixin:
                 used_objects=None,
                 quota_max_size_bytes=quota_max_size_bytes,
                 quota_max_objects=quota_max_objects,
+                max_buckets=max_buckets,
                 storage_spaces=[],
             )
         try:
@@ -130,6 +131,7 @@ class PortalStateUsageMixin:
                 used_objects=None,
                 quota_max_size_bytes=quota_max_size_bytes,
                 quota_max_objects=quota_max_objects,
+                max_buckets=max_buckets,
                 storage_spaces=self._usage_storage_space_breakdown(user, access, {}),
             )
 
@@ -176,6 +178,7 @@ class PortalStateUsageMixin:
             used_objects=total_objects if has_objects else None,
             quota_max_size_bytes=quota_max_size_bytes,
             quota_max_objects=quota_max_objects,
+            max_buckets=max_buckets,
             storage_spaces=self._usage_storage_space_breakdown(user, access, usage_by_bucket),
             other_storage_space=other_storage_space,
         )

@@ -214,6 +214,7 @@ import {
   UpIcon,
   UploadIcon,
 } from "./browserIcons";
+import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
   BUCKET_MENU_LIMIT,
   COMPLETED_OPERATIONS_LIMIT,
@@ -496,7 +497,6 @@ type LazyColumnCacheEntry = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
-const BYTES_PER_GIB = 1024 * 1024 * 1024;
 const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
 const CONTEXT_MENU_PADDING_PX = 8;
@@ -1492,14 +1492,14 @@ export default function BrowserPage({
     contextQuotaMaxObjects === undefined
       ? selectedContextQuotaObjects
       : contextQuotaMaxObjects;
-  const cephContextQuotaSizeBytes =
-    effectiveContextQuotaSizeGb != null && effectiveContextQuotaSizeGb > 0
-      ? effectiveContextQuotaSizeGb * BYTES_PER_GIB
-      : null;
-  const cephContextQuotaObjects =
-    effectiveContextQuotaObjects != null && effectiveContextQuotaObjects > 0
-      ? effectiveContextQuotaObjects
-      : null;
+  const {
+    quotaSizeBytes: cephContextQuotaSizeBytes,
+    quotaObjects: cephContextQuotaObjects,
+  } = resolveBrowserContextQuotas(
+    effectiveContextQuotaSizeGb,
+    effectiveContextQuotaObjects,
+    usageSummary
+  );
   const isCephContext = effectiveContextEndpointProvider === "ceph";
   const showActionBarToggle =
     showPanelToggles && isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled;

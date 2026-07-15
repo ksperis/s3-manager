@@ -34,6 +34,7 @@ import {
   bucketCompareMappingTableHeadClass,
   bucketCompareMappingTableHeaderClass,
   bucketCompareMappingTargetCellClass,
+  bucketComparisonCancelledMessage,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
@@ -591,7 +592,7 @@ export default function ManagerBucketCompareModal({
                   ? {
                       ...item,
                       status: "cancelled",
-                      error: "Comparison cancelled.",
+                      error: bucketComparisonCancelledMessage,
                     }
                   : item
               )
@@ -681,7 +682,7 @@ export default function ManagerBucketCompareModal({
           ? {
               ...item,
               status: "cancelled",
-              error: "Comparison cancelled.",
+              error: bucketComparisonCancelledMessage,
             }
           : item
       )

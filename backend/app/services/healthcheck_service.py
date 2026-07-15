@@ -540,6 +540,7 @@ class HealthCheckService:
             raise ValueError("Endpoint not found.")
 
         now = utcnow()
+        stale_after_seconds = max(1, int(settings.healthcheck_interval_seconds)) * 2
         endpoint_ids = [int(endpoint.id) for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
 
@@ -563,11 +564,16 @@ class HealthCheckService:
                 latency_ms = None
                 check_mode = profile.mode
 
-            if status == HealthCheckStatus.UP.value:
+            is_stale = latest_scope is None or (
+                now - latest_scope.checked_at > timedelta(seconds=stale_after_seconds)
+            )
+            effective_status = HealthCheckStatus.UNKNOWN.value if is_stale else status
+
+            if effective_status == HealthCheckStatus.UP.value:
                 up_count += 1
-            elif status == HealthCheckStatus.DEGRADED.value:
+            elif effective_status == HealthCheckStatus.DEGRADED.value:
                 degraded_count += 1
-            elif status == HealthCheckStatus.DOWN.value:
+            elif effective_status == HealthCheckStatus.DOWN.value:
                 down_count += 1
             else:
                 unknown_count += 1
@@ -582,6 +588,7 @@ class HealthCheckService:
                     "latency_ms": latency_ms,
                     "check_mode": check_mode,
                     "check_target_url": profile.target_url,
+                    "is_stale": is_stale,
                 }
             )
 
@@ -646,6 +653,7 @@ class HealthCheckService:
 
         return {
             "generated_at": now.isoformat(),
+            "stale_after_seconds": stale_after_seconds,
             "incident_highlight_minutes": highlight_minutes,
             "endpoint_count": len(payload_endpoints),
             "up_count": up_count,

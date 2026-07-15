@@ -1,10 +1,12 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import requests
+from datetime import timedelta
 
-from app.db import HealthCheckStatus, StorageEndpoint, StorageProvider
+from app.db import EndpointHealthLatest, HealthCheckStatus, StorageEndpoint, StorageProvider
 from app.services import healthcheck_service
 from app.services.healthcheck_service import EndpointCheckTarget, HealthCheckProfile, HealthCheckService, HealthWindow
+from app.utils.time import utcnow
 
 
 def _build_target(*, verify_tls: bool, force_path_style: bool = False) -> EndpointCheckTarget:
@@ -139,3 +141,33 @@ def test_workspace_health_overview_uses_requested_incident_window(db_session):
     payload = service.build_workspace_health_overview(incident_highlight_minutes=7 * 24 * 60)
 
     assert payload["incident_highlight_minutes"] == 10080
+
+
+def test_workspace_health_overview_uses_configured_interval_for_stale_counts(db_session, monkeypatch):
+    _seed_endpoint(
+        db_session,
+        name="Stale endpoint",
+        endpoint_url="https://stale.example.test",
+        is_default=True,
+    )
+    db_session.flush()
+    endpoint = db_session.query(StorageEndpoint).filter(StorageEndpoint.name == "Stale endpoint").one()
+    db_session.add(
+        EndpointHealthLatest(
+            storage_endpoint_id=endpoint.id,
+            checked_at=utcnow() - timedelta(seconds=61),
+            check_mode="http",
+            check_type="availability",
+            scope="endpoint",
+            status=HealthCheckStatus.UP.value,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(healthcheck_service.settings, "healthcheck_interval_seconds", 30)
+
+    payload = HealthCheckService(db_session).build_workspace_health_overview()
+
+    assert payload["stale_after_seconds"] == 60
+    assert payload["endpoints"][0]["is_stale"] is True
+    assert payload["up_count"] == 0
+    assert payload["unknown_count"] == 1

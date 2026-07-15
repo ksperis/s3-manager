@@ -1679,6 +1679,44 @@ def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkey
         )
 
 
+def test_prepare_storage_space_version_cleanup_uses_long_running_profile(monkeypatch, db_session):
+    account = S3Account(name="portal-cleanup-profile", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-cleanup-profile@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="research-data",
+            display_name="Research Data",
+            owner_user_id=user.id,
+            visibility="shared",
+        )
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    captured: list[dict] = []
+    fake_client = object()
+
+    def fake_portal_object_client(_user, _account, **kwargs):  # noqa: ANN001
+        captured.append(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(service, "_portal_object_client", fake_portal_object_client)
+
+    target = service.prepare_storage_space_version_cleanup(
+        user,
+        access,
+        "research-data",
+        confirmation="CLEAN HISTORY RESEARCH DATA",
+    )
+
+    assert target.client is fake_client
+    assert captured == [{"request_profile": "long_running"}]
+
+
 def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatch, db_session):
     account = S3Account(name="portal-storage-user-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-user-create@example.com", hashed_password="x", role="ui_user")
@@ -4000,7 +4038,7 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
     service = PortalService(db_session)
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
-    monkeypatch.setattr(service, "_account_quota", lambda _account: (1_000, 100))
+    monkeypatch.setattr(service, "_account_limits", lambda _account: (1_000, 100, 12))
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
     monkeypatch.setattr(
         service,
@@ -4025,6 +4063,7 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
     assert usage.used_bytes == 900
     assert usage.used_objects == 90
     assert usage.quota_max_size_bytes == 1_000
+    assert usage.max_buckets == 12
     assert usage.quota_max_objects == 100
     assert [(space.id, space.used_bytes, space.object_count) for space in usage.storage_spaces] == [
         ("research-data", 700, 70),
@@ -4061,7 +4100,7 @@ def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_se
     service = PortalService(db_session)
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
-    monkeypatch.setattr(service, "_account_quota", lambda _account: (2_000, 200))
+    monkeypatch.setattr(service, "_account_limits", lambda _account: (2_000, 200, 20))
     monkeypatch.setattr(service, "_supervision_admin_for_account", lambda _account: object())
     monkeypatch.setattr(
         service,
@@ -4078,6 +4117,7 @@ def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_se
     assert usage.used_bytes == 1_000
     assert usage.used_objects == 100
     assert usage.quota_max_size_bytes == 2_000
+    assert usage.max_buckets == 20
     assert [(space.id, space.name, space.used_bytes, space.object_count) for space in usage.storage_spaces] == [
         ("research-data", "Research Data", 700, 70),
     ]

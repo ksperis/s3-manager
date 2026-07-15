@@ -104,6 +104,7 @@ function CephAdminShell() {
     return undefined;
   })();
   const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
+  const accountsWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.accounts_warning ?? null : null;
 
   const handleChange = (selectedValue: string) => {
     const next = Number(selectedValue);
@@ -287,6 +288,11 @@ function CephAdminShell() {
           <PageBanner tone="warning" className="mb-4">
             {adminWarning}
           </PageBanner>
+            )}
+            {accountsWarning && (
+              <PageBanner tone="warning" className="mb-4">
+                {accountsWarning}
+              </PageBanner>
             )}
             <Outlet />
           </>

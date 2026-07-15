@@ -55,7 +55,7 @@ class PortalStorageSpaceVersionCleanupMixin:
         if confirmation != expected_confirmation:
             raise ValueError(f"Confirmation must be exactly '{expected_confirmation}'.")
         return PortalStorageSpaceVersionCleanupTarget(
-            client=self._portal_object_client(user, access.account),
+            client=self._portal_object_client(user, access.account, request_profile="long_running"),
             bucket_name=bucket_name,
             storage_space_id=space_id,
             storage_space_name=storage_space_name,

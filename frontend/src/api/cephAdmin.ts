@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import client from "./client";
+import client, { timeoutForRequestProfile } from "./client";
 import type { PaginatedResponse } from "./types";
 import type { ManagerTrafficStats, TrafficWindow } from "./stats";
 import type { TagDefinitionSummary } from "./tags";
@@ -38,6 +38,7 @@ export type CephAdminEndpointAccess = {
   can_accounts: boolean;
   can_metrics: boolean;
   admin_warning?: string | null;
+  accounts_warning?: string | null;
   active_rgw_uid?: string | null;
   active_rgw_tenant?: string | null;
   availability_status?: "unknown" | "available" | "unavailable" | "denied" | "misconfigured";
@@ -297,7 +298,9 @@ function buildEntityListingQuery(
 }
 
 export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
-  const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints");
+  const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints", {
+    timeout: timeoutForRequestProfile("interactive"),
+  });
   return data;
 }
 
@@ -308,6 +311,7 @@ export async function getCephAdminEndpointAccess(
   const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`, {
     params: options?.probe ? { probe: true } : undefined,
     signal: options?.signal,
+    timeout: timeoutForRequestProfile("interactive"),
   });
   return data;
 }
@@ -774,7 +778,7 @@ export async function backupCephAdminBucketConfigs(
   const { data } = await client.post<CephAdminBucketConfigBackupResponse>(
     `/ceph-admin/endpoints/${endpointId}/buckets/config-backup`,
     payload,
-    { signal: options?.signal }
+    { signal: options?.signal, timeout: timeoutForRequestProfile("long_running") }
   );
   return data;
 }
@@ -887,7 +891,7 @@ export async function compareCephAdminBucketPair(
   const { data } = await client.post<CephAdminBucketCompareResult>(
     `/ceph-admin/endpoints/${sourceEndpointId}/buckets/compare`,
     payload,
-    { signal: options?.signal }
+    { signal: options?.signal, timeout: timeoutForRequestProfile("long_running") }
   );
   return data;
 }

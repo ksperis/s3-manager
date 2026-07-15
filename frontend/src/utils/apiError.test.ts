@@ -27,7 +27,7 @@ describe("extractApiError", () => {
     expect(extractApiError({ foo: "bar" }, "Fallback message")).toBe("Fallback message");
   });
 
-  it("uses a safe retryable fallback for upstream timeouts", () => {
+  it("uses the sanitized backend detail for upstream timeouts", () => {
     const failure = classifyApiError(
       {
         isAxiosError: true,
@@ -42,10 +42,34 @@ describe("extractApiError", () => {
 
     expect(failure).toEqual({
       kind: "timeout",
-      message: "Storage endpoint is unavailable.",
+      message: "[redacted-endpoint]: Read timed out",
       retryable: true,
       status: 504,
     });
+  });
+
+  it.each([
+    [502, "invalid_response"],
+    [503, "unavailable"],
+    [504, "timeout"],
+  ] as const)("keeps sanitized backend detail for status %s", (status, kind) => {
+    const failure = classifyApiError(
+      {
+        isAxiosError: true,
+        response: {
+          status,
+          data: {
+            detail: "Storage request to https://rgw.internal:7480 failed with secret_access_key=do-not-show",
+          },
+        },
+      },
+      "Operation failed."
+    );
+
+    expect(failure.kind).toBe(kind);
+    expect(failure.message).toBe("Storage request to [redacted-url] failed with secret_access_key=[redacted]");
+    expect(failure.message).not.toContain("rgw.internal");
+    expect(failure.message).not.toContain("do-not-show");
   });
 
   it("redacts connection-pool endpoint details", () => {

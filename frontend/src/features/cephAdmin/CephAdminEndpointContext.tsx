@@ -45,7 +45,7 @@ function parseEndpointId(value: string | null): number | null {
 }
 
 function extractError(err: unknown): string {
-  return extractApiError(err, "Unexpected error");
+  return extractApiError(err, "Unable to load Ceph Admin endpoint access.");
 }
 
 export function CephAdminEndpointProvider({ children }: { children: ReactNode }) {
@@ -134,6 +134,10 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     () => (selectedEndpointId ? endpoints.find((ep) => ep.id === selectedEndpointId) ?? null : null),
     [endpoints, selectedEndpointId]
   );
+  const endpointDependentRoute = useMemo(() => {
+    const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+    return normalizedPath !== "/ceph-admin" && normalizedPath !== "/ceph-admin/profile";
+  }, [location.pathname]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -149,9 +153,8 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       setSelectedEndpointAccessError(null);
       setSelectedEndpointAccessLoading(true);
       try {
-        const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
         const access = await getCephAdminEndpointAccess(selectedEndpointId, {
-          probe: normalizedPath !== "/ceph-admin" && normalizedPath !== "/ceph-admin/profile",
+          probe: endpointDependentRoute,
           signal: controller.signal,
         });
         if (!controller.signal.aborted) {
@@ -172,7 +175,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     return () => {
       controller.abort();
     };
-  }, [endpointAccessRefreshToken, loading, location.pathname, selectedEndpointId]);
+  }, [endpointAccessRefreshToken, endpointDependentRoute, loading, selectedEndpointId]);
 
   const retrySelectedEndpointAccess = useCallback(() => {
     setEndpointAccessRefreshToken((value) => value + 1);

@@ -20,6 +20,7 @@ class BucketMigrationExecutionContextMixin:
             force_path_style=ctx.force_path_style,
             verify_tls=ctx.verify_tls,
             user_agent_extra=_MIGRATION_USER_AGENT_MARKER,
+            request_profile="long_running",
         )
 
     def _load_runtime_limits(self) -> _MigrationRuntimeLimits:
