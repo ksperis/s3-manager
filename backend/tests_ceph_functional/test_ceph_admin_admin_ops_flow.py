@@ -287,6 +287,14 @@ def test_ceph_admin_admin_ops_lifecycle(
         target_listing = link_target_client.list_buckets()
         assert link_bucket in _listed_bucket_names(target_listing)
 
+        unlinked = super_admin_session.post(
+            f"{root}/buckets/{link_bucket}/unlink",
+            json={"confirmation": f"UNLINK BUCKET {link_bucket}"},
+        )
+        _assert_success(unlinked, "unlink_bucket")
+        target_listing = link_target_client.list_buckets()
+        assert link_bucket not in _listed_bucket_names(target_listing)
+
         linked = super_admin_session.put(
             f"{root}/buckets/{link_bucket}/link",
             json={
@@ -296,8 +304,6 @@ def test_ceph_admin_admin_ops_lifecycle(
             },
         )
         _assert_success(linked, "link_bucket")
-        target_listing = link_target_client.list_buckets()
-        assert link_bucket not in _listed_bucket_names(target_listing)
 
         deleted = super_admin_session.delete(
             f"{root}/buckets/{link_bucket}",
