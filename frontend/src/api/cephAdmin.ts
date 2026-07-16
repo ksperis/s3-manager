@@ -20,6 +20,7 @@ import {
   shouldUsePostBucketListing,
 } from "./bucketListingTransport";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
+import type { ListBrowserObjectsResponse } from "./browser";
 
 export type CephAdminEndpoint = {
   id: number;
@@ -936,6 +937,18 @@ export type BucketProperties = {
   lifecycle_rules: BucketLifecycleRule[];
   cors_rules?: Record<string, unknown>[] | null;
 };
+
+export async function listCephAdminBucketObjects(
+  endpointId: number,
+  bucketName: string,
+  prefix = ""
+): Promise<ListBrowserObjectsResponse> {
+  const { data } = await client.get<ListBrowserObjectsResponse>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/objects`,
+    { params: { prefix } }
+  );
+  return data;
+}
 
 export async function getCephAdminBucketProperties(endpointId: number, bucketName: string): Promise<BucketProperties> {
   const { data } = await client.get<BucketProperties>(

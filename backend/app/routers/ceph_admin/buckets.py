@@ -53,6 +53,7 @@ from app.models.ceph_admin import (
     CephAdminBucketSummary,
     PaginatedCephAdminBucketsResponse,
 )
+from app.models.browser import ListBrowserObjectsResponse
 from app.routers.ceph_admin import bucket_listing_cache as _bucket_listing_cache
 from app.routers.ceph_admin.audit import record_ceph_admin_action
 from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
@@ -132,6 +133,7 @@ from app.services.bucket_owner_enrichment import (
     invalidate_bucket_owner_metadata_cache,
 )
 from app.services.buckets_service import BucketsService
+from app.services.browser_service import BrowserService, get_browser_service
 from app.services.rgw_admin import RGWAdminError
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -1057,6 +1059,27 @@ def compare_bucket_pair(
         content_diff=content_diff,
         config_diff=config_diff,
     )
+
+
+@router.get("/{bucket_name}/objects", response_model=ListBrowserObjectsResponse)
+def list_bucket_objects(
+    bucket_name: str,
+    prefix: str = "",
+    continuation_token: str | None = None,
+    max_keys: int = Query(default=1000, ge=1, le=1000),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    service: BrowserService = Depends(get_browser_service),
+) -> ListBrowserObjectsResponse:
+    try:
+        return service.list_objects(
+            bucket_name,
+            _build_endpoint_account(ctx),
+            prefix=prefix,
+            continuation_token=continuation_token,
+            max_keys=max_keys,
+        )
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/properties", response_model=BucketProperties)

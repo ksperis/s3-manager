@@ -127,8 +127,10 @@ vi.mock("./BucketOpsRowActionsMenu", () => ({
 }));
 
 import BucketOpsWorkbench from "./BucketOpsWorkbench";
+import { saveBucketListReturnContext } from "./bucketListReturnContext";
 
 const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
+const STORAGE_OPS_LIST_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v1";
 
 const baseResponse = {
   total: 1,
@@ -220,6 +222,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     Object.defineProperty(window.URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -248,7 +251,107 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(within(row as HTMLElement).getByRole("checkbox", { name: "Select bucket bucket-a in Account A" })).toBeInTheDocument();
 
     fireEvent.click(bucketButton);
-    expect(await screen.findByRole("heading", { name: "Configure bucket · bucket-a" })).toBeInTheDocument();
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/storage-ops/buckets/bucket-a",
+        search: "?ctx=account-1",
+      },
+      {
+        state: expect.objectContaining({
+          bucketListOrigin: {
+            surface: "storage-ops",
+            scopeKey: "storage-ops",
+            listUrl: "/storage-ops/buckets",
+          },
+          bucketQuotaAvailable: false,
+        }),
+      }
+    );
+  });
+
+  it("persists the current page and page size before opening a bucket", async () => {
+    mocks.listStorageOpsBuckets.mockImplementation(async (_endpointId, params) => ({
+      items: [baseBucket],
+      ...baseResponse,
+      total: 30,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 25,
+      has_next: (params.page ?? 1) < 3,
+    }));
+
+    renderStorageOps();
+
+    fireEvent.change(await screen.findByLabelText("Page size"), { target: { value: "10" } });
+    await waitFor(() => expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(screen.getByText(/Page 2 of 3/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "bucket-a" }));
+
+    const stored = JSON.parse(window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}") as Record<
+      string,
+      { page?: number; pageSize?: number }
+    >;
+    expect(stored["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
+  });
+
+  it("restores the list scroll position and focuses the originating bucket", async () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", { configurable: true, value: scrollTo });
+    mocks.listStorageOpsBuckets.mockResolvedValue({ items: [baseBucket], ...baseResponse });
+    saveBucketListReturnContext(
+      {
+        surface: "storage-ops",
+        scopeKey: "storage-ops",
+        listUrl: "/storage-ops/buckets",
+      },
+      "bucket-a",
+      420
+    );
+
+    renderStorageOps();
+
+    const bucketButton = await screen.findByRole("button", { name: "bucket-a" });
+    await waitFor(() => expect(bucketButton).toHaveFocus());
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: "auto" });
+  });
+
+  it("restores persisted filters, pagination, sort, and selection after a route return", async () => {
+    window.localStorage.setItem(
+      STORAGE_OPS_LIST_STATE_STORAGE_KEY,
+      JSON.stringify({
+        "1": {
+          filter: "bucket-a",
+          quickFilterMode: "contains",
+          advancedApplied: null,
+          tagFilters: [],
+          tagFilterMode: "any",
+          selectedBuckets: ["bucket-a"],
+          page: 2,
+          pageSize: 50,
+          sort: { field: "name", direction: "desc" },
+        },
+      })
+    );
+    mocks.listStorageOpsBuckets.mockResolvedValue({ items: [baseBucket], ...baseResponse });
+
+    renderStorageOps();
+
+    expect(await screen.findByLabelText("Quick filter")).toHaveValue("bucket-a");
+    await waitFor(() =>
+      expect(mocks.listStorageOpsBuckets).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          page: 2,
+          page_size: 50,
+          filter: "bucket-a",
+          sort_by: "name",
+          sort_dir: "desc",
+        }),
+        expect.any(Object)
+      )
+    );
+    expect(screen.getByRole("checkbox", { name: "Select bucket bucket-a in Account A" })).toBeChecked();
   });
 
   it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {

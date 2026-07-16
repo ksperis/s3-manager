@@ -29,9 +29,10 @@ describe("bucketDetailSurface", () => {
     ]);
   });
 
-  it("keeps Ceph Admin bucket detail endpoint-scoped and hides object browsing", () => {
+  it("keeps Ceph Admin bucket detail endpoint-scoped and exposes object browsing", () => {
     expect(resolveBucketDetailTabs({ mode: "ceph-admin", showObjectsTab: true, showQuotaTab: true })).toEqual([
       "overview",
+      "objects",
       "ceph",
       "usage-stats",
       "properties",

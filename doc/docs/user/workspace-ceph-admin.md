@@ -39,6 +39,11 @@ shows the endpoint, target, impact, available options, required confirmation,
 and the result returned by RGW. The result stays open and includes the RGW HTTP
 status, the Ceph error code when present, and the JSON or text response body.
 
+Bucket configuration opens on `/ceph-admin/buckets/<bucket>?ep=<endpoint>`. Use
+**Back to buckets**, the **Buckets** breadcrumb, or the browser Back button to
+return to the originating list with its endpoint, filters, sort, page, selection,
+scroll position, and focused bucket preserved.
+
 ### Accounts
 
 Use **Delete account** to remove an empty RGW Account. RGW Accounts require

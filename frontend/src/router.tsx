@@ -106,6 +106,7 @@ const CephAdminBrowserPage = lazy(() => import("./features/cephAdmin/CephAdminBr
 const StorageOpsLayout = lazy(() => import("./features/storageOps/StorageOpsLayout"));
 const StorageOpsDashboard = lazy(() => import("./features/storageOps/StorageOpsDashboard"));
 const StorageOpsBucketsPage = lazy(() => import("./features/storageOps/StorageOpsBucketsPage"));
+const StorageOpsBucketDetailPage = lazy(() => import("./features/storageOps/StorageOpsBucketDetailPage"));
 const AccountProfilePage = lazy(() => import("./features/shared/AccountProfilePage"));
 
 const SUPERADMIN_ROLE = "ui_superadmin";
@@ -321,6 +322,7 @@ export function createAppRoutes() {
               <Route index element={<StorageOpsDashboard />} />
               <Route path="profile" element={<AccountProfilePage />} />
               <Route path="buckets" element={<StorageOpsBucketsPage />} />
+              <Route path="buckets/:bucketName" element={<StorageOpsBucketDetailPage />} />
             </Route>
           </Route>
         </Route>

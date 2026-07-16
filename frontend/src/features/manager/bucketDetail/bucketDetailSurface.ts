@@ -50,7 +50,9 @@ export function resolveBucketDetailTabs({
   showQuotaTab: boolean;
 }): BucketDetailTabId[] {
   if (mode === "ceph-admin") {
-    return ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
+    return showObjectsTab
+      ? ["overview", "objects", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"]
+      : ["overview", "ceph", "usage-stats", "properties", "permissions", "advanced", "metrics"];
   }
   const baseTabs: BucketDetailTabId[] = showObjectsTab
     ? ["overview", "objects", "usage-stats", "properties", "permissions", "advanced", "metrics"]

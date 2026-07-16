@@ -61,6 +61,7 @@ describe("route snapshot", () => {
       "/storage-ops#index",
       "/storage-ops/profile",
       "/storage-ops/buckets",
+      "/storage-ops/buckets/:bucketName",
       "/manager",
       "/manager#index",
       "/manager/profile",

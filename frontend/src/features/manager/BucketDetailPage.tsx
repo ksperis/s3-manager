@@ -88,6 +88,7 @@ import {
   getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketTags,
   getCephAdminBucketWebsite,
+  listCephAdminBucketObjects,
   listCephAdminBuckets,
   putCephAdminBucketCors,
   putCephAdminBucketEncryption,
@@ -382,6 +383,8 @@ type BucketDetailPageProps = {
   quotaAvailableOverride?: boolean | null;
   embedded?: boolean;
   hideObjectsTab?: boolean;
+  bucketListPathOverride?: string;
+  onBackToBuckets?: () => void;
 };
 
 export default function BucketDetailPage({
@@ -391,6 +394,8 @@ export default function BucketDetailPage({
   quotaAvailableOverride = null,
   embedded = false,
   hideObjectsTab = false,
+  bucketListPathOverride,
+  onBackToBuckets,
 }: BucketDetailPageProps) {
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
@@ -575,7 +580,7 @@ export default function BucketDetailPage({
     ? isCephEndpoint
     : Boolean((isCephEndpoint || hasQuotaOverride) && quotaTargetAllows);
   const showQuotaTab = isCephAdmin || Boolean(quotaFeatureEnabled && managerBucketQuotaAccess && hasAccountContext);
-  const showObjectsTab = !isCephAdmin && !hideObjectsTab;
+  const showObjectsTab = !hideObjectsTab;
   const availableTabs = useMemo(() => {
     return resolveBucketDetailTabs({ mode, showObjectsTab, showQuotaTab });
   }, [mode, showObjectsTab, showQuotaTab]);
@@ -1208,12 +1213,19 @@ export default function BucketDetailPage({
 
   const loadObjects = useCallback(
     async (prefix: string) => {
-      if (isCephAdmin || !bucketName || !hasAccountContext) return;
+      if (!bucketName || !hasContext || (isCephAdmin && !endpointId)) return;
       setObjectsLoading(true);
       setObjectsError(null);
       try {
-        const data = await listObjects(accountId, bucketName, prefix);
-        setObjects(data.objects);
+        const data = isCephAdmin
+          ? await listCephAdminBucketObjects(endpointId!, bucketName, prefix)
+          : await listObjects(accountId, bucketName, prefix);
+        setObjects(
+          data.objects.map((object) => ({
+            ...object,
+            last_modified: object.last_modified ?? undefined,
+          }))
+        );
         setPrefixes(data.prefixes);
       } catch (err) {
         setObjects([]);
@@ -1223,7 +1235,7 @@ export default function BucketDetailPage({
         setObjectsLoading(false);
       }
     },
-    [accountId, bucketName, hasAccountContext, isCephAdmin]
+    [accountId, bucketName, endpointId, hasContext, isCephAdmin]
   );
 
   const loadUsageStats = useCallback(async () => {
@@ -1344,9 +1356,7 @@ export default function BucketDetailPage({
       return;
     }
     if (activeTab === "objects") {
-      if (!isCephAdmin) {
-        await loadObjects(currentPrefix);
-      }
+      await loadObjects(currentPrefix);
       return;
     }
     if (activeTab === "usage-stats") {
@@ -1372,7 +1382,6 @@ export default function BucketDetailPage({
     activeTab,
     canViewBucketMetrics,
     currentPrefix,
-    isCephAdmin,
     loadAccessLogging,
     loadBucketAcl,
     loadBucketTags,
@@ -1392,9 +1401,9 @@ export default function BucketDetailPage({
   ]);
 
   useEffect(() => {
-    if (isCephAdmin || !hasContext) return;
+    if (!hasContext || (isCephAdmin && activeTab !== "objects")) return;
     refreshActiveTab();
-  }, [accessMode, hasContext, isCephAdmin, refreshActiveTab]);
+  }, [accessMode, activeTab, hasContext, isCephAdmin, refreshActiveTab]);
 
   const activeTabLoading = useMemo(() => {
     if (activeTab === "overview") {
@@ -1459,10 +1468,10 @@ export default function BucketDetailPage({
       return hasContext && canViewBucketMetrics;
     }
     if (activeTab === "objects") {
-      return !isCephAdmin && hasAccountContext;
+      return hasContext;
     }
     return hasContext;
-  }, [activeTab, canViewBucketMetrics, hasAccountContext, hasContext, isCephAdmin]);
+  }, [activeTab, canViewBucketMetrics, hasContext]);
 
   const describeLifecycleActions = (rule: LifecycleRuleRecord): string => {
     const actions: string[] = [];
@@ -2092,8 +2101,14 @@ export default function BucketDetailPage({
     websiteLoading,
   ]);
 
-  const basePath = useMemo(() => resolveBucketDetailSurface(mode).bucketListPath, [mode]);
-  const breadcrumbs = useMemo(() => buildBucketDetailBreadcrumbs(mode, bucketName), [bucketName, mode]);
+  const basePath = useMemo(
+    () => bucketListPathOverride ?? resolveBucketDetailSurface(mode).bucketListPath,
+    [bucketListPathOverride, mode]
+  );
+  const breadcrumbs = useMemo(() => {
+    const items = buildBucketDetailBreadcrumbs(mode, bucketName);
+    return items.map((item, index) => (index === 1 ? { ...item, to: basePath } : item));
+  }, [basePath, bucketName, mode]);
 
   const handleTogglePublicAccessField = (key: keyof BucketPublicAccessBlock, value: boolean) => {
     setPublicAccessBlock((prev) => ({
@@ -2934,7 +2949,11 @@ export default function BucketDetailPage({
               : "Bucket overview, objects, properties, permissions, metrics.")
           }
           breadcrumbs={breadcrumbs}
-          actions={[{ label: "← Back to buckets", to: basePath, variant: "ghost" }]}
+          actions={[
+            onBackToBuckets
+              ? { label: "← Back to buckets", onClick: onBackToBuckets, variant: "ghost" }
+              : { label: "← Back to buckets", to: basePath, variant: "ghost" },
+          ]}
         />
       )}
 
@@ -3062,7 +3081,9 @@ export default function BucketDetailPage({
                           {bucketName}/{currentPrefix || "(root)"}
                         </div>
                         <div className="ui-caption text-slate-500 dark:text-slate-400">
-                          Read-only preview. Use the main Browser page for object operations.
+                          {isCephAdmin
+                            ? "Read-only preview using the selected endpoint's Ceph Admin credentials."
+                            : "Read-only preview. Use the main Browser page for object operations."}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +23,7 @@ const getBucketTagsMock = vi.fn();
 const getBucketPublicAccessBlockMock = vi.fn();
 const putBucketLifecycleMock = vi.fn();
 const listObjectsMock = vi.fn();
+const listCephAdminBucketObjectsMock = vi.fn();
 const listCephAdminBucketsMock = vi.fn();
 const getCephAdminBucketPropertiesMock = vi.fn();
 const getCephAdminBucketVersioningMock = vi.fn();
@@ -70,6 +71,7 @@ vi.mock("../../../api/cephAdmin", async () => {
   return {
     ...actual,
     listCephAdminBuckets: (...args: unknown[]) => listCephAdminBucketsMock(...args),
+    listCephAdminBucketObjects: (...args: unknown[]) => listCephAdminBucketObjectsMock(...args),
     getCephAdminBucketProperties: (...args: unknown[]) => getCephAdminBucketPropertiesMock(...args),
     getCephAdminBucketVersioning: (...args: unknown[]) => getCephAdminBucketVersioningMock(...args),
     getCephAdminBucketObjectLock: (...args: unknown[]) => getCephAdminBucketObjectLockMock(...args),
@@ -153,6 +155,7 @@ describe("BucketDetailPage replication state", () => {
     putBucketLifecycleMock.mockImplementation((_accountId, _bucketName, rules) => Promise.resolve({ rules }));
     getBucketReplicationMock.mockResolvedValue({ configuration: {} });
     listObjectsMock.mockResolvedValue({ prefix: "", objects: [], prefixes: [], is_truncated: false });
+    listCephAdminBucketObjectsMock.mockResolvedValue({ prefix: "", objects: [], prefixes: [], is_truncated: false });
     listCephAdminBucketsMock.mockResolvedValue({
       items: [{ name: "demo-bucket" }],
     });
@@ -229,6 +232,29 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.getByRole("link", { name: /Back to buckets/i })).toHaveAttribute("href", "/manager/buckets");
   });
 
+  it("supports a history-aware Ceph Admin return action and endpoint-scoped breadcrumb", () => {
+    const onBack = vi.fn();
+    useCephAdminEndpointMock.mockReturnValue({
+      selectedEndpointId: null,
+      selectedEndpoint: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage
+          mode="ceph-admin"
+          bucketNameOverride="demo-bucket"
+          bucketListPathOverride="/ceph-admin/buckets?ep=7"
+          onBackToBuckets={onBack}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "Buckets" })).toHaveAttribute("href", "/ceph-admin/buckets?ep=7");
+    fireEvent.click(screen.getByRole("button", { name: /Back to buckets/i }));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
   it("renders the bucket overview without a redundant eyebrow or nested card shell", async () => {
     render(
       <MemoryRouter>
@@ -246,6 +272,40 @@ describe("BucketDetailPage replication state", () => {
 
     const propertiesGroup = within(overviewSection as HTMLElement).getByText("Bucket properties").parentElement;
     expect(propertiesGroup).not.toHaveClass("ui-surface-muted");
+  });
+
+  it("shows a read-only object browser for Ceph Admin buckets", async () => {
+    const user = userEvent.setup();
+    listCephAdminBucketObjectsMock.mockResolvedValue({
+      prefix: "",
+      objects: [
+        {
+          key: "reports/summary.csv",
+          size: 2048,
+          last_modified: "2026-07-16T08:00:00Z",
+          storage_class: "STANDARD",
+        },
+      ],
+      prefixes: ["reports/"],
+      is_truncated: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Objects / S3 Console" }));
+
+    await waitFor(() =>
+      expect(listCephAdminBucketObjectsMock).toHaveBeenCalledWith(1, "demo-bucket", "")
+    );
+    expect(screen.getAllByText("reports/")).not.toHaveLength(0);
+    expect(screen.getByText("reports/summary.csv")).toBeInTheDocument();
+    expect(
+      screen.getByText("Read-only preview using the selected endpoint's Ceph Admin credentials.")
+    ).toBeInTheDocument();
   });
 
   it("uses the shared warning banner when Ceph Admin bucket context is missing", async () => {

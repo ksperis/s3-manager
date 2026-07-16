@@ -38,6 +38,12 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
      deleted in bulk from the same action flow as lifecycle rules.
    - selected buckets can run usage-stat calculations, with the latest snapshot
      available from each bucket detail page on the **Usage stats** tab.
+   - bucket configuration opens on
+     `/storage-ops/buckets/<bucket>?ctx=<execution-context>`. Use **Back to
+     buckets**, the **Buckets** breadcrumb, or the browser Back button to restore
+     the originating filters, sort, page, selection, scroll position, and
+     focused bucket. Direct URLs require `ctx`; Storage Ops never chooses a
+     different execution context implicitly.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
    selectors to pick authorized scopes directly. Their quick filters match
    names, types, and standard tags, and **Select filtered** / **Deselect

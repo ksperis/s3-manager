@@ -10,7 +10,7 @@ import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import { workflowPageHostClass } from "../../components/WorkflowPage";
 import TableEmptyState from "../../components/TableEmptyState";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import {
@@ -128,7 +128,6 @@ import CephAdminAdminOpsModal, {
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexCheckPage";
-import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
@@ -151,6 +150,11 @@ import {
   type BucketOpsMode,
 } from "./bucketOpsSurface";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
+import {
+  buildBucketDetailLocationState,
+  loadBucketListReturnContext,
+  saveBucketListReturnContext,
+} from "./bucketListReturnContext";
 import { buildUiTagItems, extractUiTagLabels, filterSelectorVisibleUiTags } from "../../utils/uiTags";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
 import {
@@ -2281,12 +2285,6 @@ type BucketOpsWorkbenchProps = {
   };
 };
 
-type StorageOpsEditingBucket = {
-  bucketName: string;
-  contextId: string;
-  bucketQuotaAvailable: boolean;
-};
-
 export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -2373,6 +2371,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const uiTagsNamespace = surface.uiTagsNamespace;
   const bucketsStateStorageKey = surface.storageKeys.bucketListState;
   const bulkClipboardStorageKey = surface.storageKeys.bulkConfigClipboard;
+  const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
+  const initialStoredBucketListState = useMemo(
+    () => loadBucketListState(bucketsStateStorageKey, selectedEndpointId),
+    [bucketsStateStorageKey, selectedEndpointId]
+  );
+  const initialOwnerFilter = useMemo<AdvancedFilterState | null>(
+    () =>
+      ownerQueryFilter
+        ? {
+            ...defaultAdvancedFilter,
+            owner: ownerQueryFilter,
+            ownerMatchMode: "exact",
+          }
+        : null,
+    [ownerQueryFilter]
+  );
   const defaultVisibleColumns = useMemo(() => [...surface.defaultVisibleColumns] as ColumnId[], [surface]);
   const useExplicitBucketName = surface.useExplicitBucketName;
   const scopeDisplayName = surface.scopeDisplayName;
@@ -2400,11 +2414,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => FEATURE_STATE_OPTIONS.map((option) => ({ ...option, supported: featureSupport[option.id] !== false })),
     [featureSupport]
   );
-  const [filter, setFilter] = useState("");
-  const [filterValue, setFilterValue] = useState("");
-  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [filter, setFilter] = useState(() => (ownerQueryFilter ? "" : initialStoredBucketListState?.filter ?? ""));
+  const [filterValue, setFilterValue] = useState(() =>
+    ownerQueryFilter ? "" : initialStoredBucketListState?.filter.trim() ?? ""
+  );
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>(() =>
+    ownerQueryFilter ? "contains" : initialStoredBucketListState?.quickFilterMode ?? "contains"
+  );
+  const [page, setPage] = useState(() => (ownerQueryFilter ? 1 : initialStoredBucketListState?.page ?? 1));
+  const [pageSize, setPageSize] = useState(() => initialStoredBucketListState?.pageSize ?? DEFAULT_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(() =>
     loadVisibleColumns(columnsStorageKey, defaultVisibleColumns, isStorageOps)
   );
@@ -2414,8 +2432,12 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [advancedFilterSecondarySections, setAdvancedFilterSecondarySections] =
     useState<AdvancedFilterSecondarySectionState>(() => buildAdvancedFilterSecondarySectionState());
   const advancedFilterWasOpenRef = useRef(false);
-  const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
-  const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
+  const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(() =>
+    initialOwnerFilter ?? initialStoredBucketListState?.advancedApplied ?? defaultAdvancedFilter
+  );
+  const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(() =>
+    initialOwnerFilter ?? initialStoredBucketListState?.advancedApplied ?? null
+  );
   const [storageOpsContexts, setStorageOpsContexts] = useState<ExecutionContext[]>([]);
   const [storageOpsContextsLoading, setStorageOpsContextsLoading] = useState(false);
   const [storageOpsContextsError, setStorageOpsContextsError] = useState<string | null>(null);
@@ -2424,12 +2446,16 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [uiTags, setUiTags] = useState<BucketUiTags>(() =>
     loadUiTags(selectedEndpointId, uiTagsNamespace)
   );
-  const [tagFilters, setTagFilters] = useState<string[]>([]);
-  const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">("any");
-  const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(new Set());
-  const [editingBucketName, setEditingBucketName] = useState<string | null>(null);
+  const [tagFilters, setTagFilters] = useState<string[]>(() =>
+    ownerQueryFilter ? [] : initialStoredBucketListState?.tagFilters ?? []
+  );
+  const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">(() =>
+    ownerQueryFilter ? "any" : initialStoredBucketListState?.tagFilterMode ?? "any"
+  );
+  const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(
+    () => new Set(ownerQueryFilter ? [] : initialStoredBucketListState?.selectedBuckets ?? [])
+  );
   const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
-  const [editingStorageOpsBucket, setEditingStorageOpsBucket] = useState<StorageOpsEditingBucket | null>(null);
   const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
   const [allFilteredBucketNamesKey, setAllFilteredBucketNamesKey] = useState<string | null>(null);
   const [selectAllProgress, setSelectAllProgress] = useState<ActionProgressState | null>(null);
@@ -2534,7 +2560,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const bulkPreviewRunTokenRef = useRef(0);
   const selectionActionRunTokenRef = useRef(0);
   const restoreFilterRef = useRef<string | null>(null);
-  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
+  const restoredReturnContextRef = useRef<number | null>(null);
+  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(
+    () => initialStoredBucketListState?.sort ?? DEFAULT_SORT
+  );
   const taggedBucketTargets = useMemo(() => {
     const byKey = new Map<string, BucketTagTarget>();
     Object.entries(uiTags).forEach(([storageKey, tags]) => {
@@ -2554,7 +2583,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
         .join("|"),
     [taggedBucketTargets]
   );
-  const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
   const storageOpsContextItems = useMemo(
     () =>
       storageOpsContexts
@@ -2784,7 +2812,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
 
   useEffect(() => {
     setUiTags(loadUiTags(selectedEndpointId, uiTagsNamespace));
-    setEditingBucketName(null);
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
     setSelectionExportLoading(null);
@@ -3193,6 +3220,29 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     listBuckets,
     streamBuckets,
   });
+
+  useEffect(() => {
+    if (loading || items.length === 0 || !selectedEndpointId) return;
+    const scopeKey = isStorageOps ? "storage-ops" : String(selectedEndpointId);
+    const returnContext = loadBucketListReturnContext(surface.mode, scopeKey);
+    if (!returnContext || returnContext.listUrl !== `${location.pathname}${location.search}`) return;
+    if (restoredReturnContextRef.current === returnContext.savedAt) return;
+    restoredReturnContextRef.current = returnContext.savedAt;
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: returnContext.scrollY, behavior: "auto" });
+      const rowButton = Array.from(document.querySelectorAll<HTMLElement>("[data-bucket-row-key]")).find(
+        (element) => element.dataset.bucketRowKey === returnContext.rowKey
+      );
+      if (!rowButton) return;
+      rowButton.focus({ preventScroll: true });
+      const bounds = rowButton.getBoundingClientRect();
+      if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
+        rowButton.scrollIntoView({ block: "center", behavior: "auto" });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isStorageOps, items, loading, location.pathname, location.search, selectedEndpointId, surface.mode]);
 
   const clearBucketListingUiCaches = () => {
     ownerNameCacheRef.current = {};
@@ -7701,18 +7751,46 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const openBucketConfiguration = (bucket: CephAdminBucket) => {
+    if (!selectedEndpointId) return;
+    persistBucketListState(bucketsStateStorageKey, selectedEndpointId, {
+      filter,
+      quickFilterMode,
+      advancedApplied,
+      tagFilters,
+      tagFilterMode,
+      selectedBuckets: Array.from(selectedBuckets),
+      page,
+      pageSize,
+      sort,
+    });
+    const listUrl = `${location.pathname}${location.search}`;
+    const scopeKey = isStorageOps ? "storage-ops" : String(selectedEndpointId);
+    const origin = { surface: surface.mode, scopeKey, listUrl };
+    saveBucketListReturnContext(origin, bucket.name, window.scrollY);
+
     if (isStorageOps) {
       const contextId = getStorageOpsContextId(bucket);
       const bucketName = getStorageOpsBucketName(bucket);
       if (!contextId || !bucketName) return;
-      setEditingStorageOpsBucket({
-        bucketName,
-        contextId,
-        bucketQuotaAvailable: Boolean((bucket as StorageOpsBucket).bucket_quota_available),
+      const params = new URLSearchParams();
+      params.set("ctx", contextId);
+      navigate({
+        pathname: `/storage-ops/buckets/${encodeURIComponent(bucketName)}`,
+        search: `?${params.toString()}`,
+      }, {
+        state: {
+          ...buildBucketDetailLocationState(origin),
+          bucketQuotaAvailable: Boolean((bucket as StorageOpsBucket).bucket_quota_available),
+        },
       });
       return;
     }
-    setEditingBucketName(bucket.name);
+    const params = new URLSearchParams();
+    params.set("ep", String(selectedEndpointId));
+    navigate({
+      pathname: `/ceph-admin/buckets/${encodeURIComponent(bucket.name)}`,
+      search: `?${params.toString()}`,
+    }, { state: buildBucketDetailLocationState(origin) });
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -7759,6 +7837,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           <button
             type="button"
             onClick={() => openBucketConfiguration(bucket)}
+            data-bucket-row-key={bucket.name}
             className="block w-full truncate text-left hover:text-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:hover:text-primary-200"
             title={`Configure ${getBucketDisplayName(bucket, useExplicitBucketName)} with the S3 API`}
           >
@@ -8090,9 +8169,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     <div
       className={workflowPageHostClass(
         Boolean(
-          editingBucketName ||
-            editingStorageOpsBucket ||
-            showCompareModal ||
+          showCompareModal ||
             showIntegrityModal ||
             showPurgeModal ||
             showUsageStatsModal ||
@@ -9961,18 +10038,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           disabled={loading || !selectedEndpointId}
         />
       </div>
-      {!isStorageOps && editingBucketName && (
-        <WorkflowPage
-          title={`Configure bucket · ${editingBucketName}`}
-          description="Review and update the complete bucket configuration through the S3 API."
-          breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
-          backLabel="Back to buckets"
-          onBack={() => setEditingBucketName(null)}
-          contentVariant="plain"
-        >
-          <BucketDetailPage mode="ceph-admin" bucketNameOverride={editingBucketName} embedded />
-        </WorkflowPage>
-      )}
       {!isStorageOps && selectedEndpointId && adminOpsAction && (
         <CephAdminAdminOpsModal
           endpointId={selectedEndpointId}
@@ -9985,25 +10050,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             void refreshBuckets();
           }}
         />
-      )}
-      {isStorageOps && editingStorageOpsBucket && (
-        <WorkflowPage
-          title={`Configure bucket · ${editingStorageOpsBucket.bucketName}`}
-          description="Review and update the complete S3 API configuration for its selected execution context."
-          breadcrumbs={[surface.breadcrumb, { label: "Buckets" }, { label: "Configure" }]}
-          backLabel="Back to buckets"
-          onBack={() => setEditingStorageOpsBucket(null)}
-          contentVariant="plain"
-        >
-          <BucketDetailPage
-            mode="manager"
-            bucketNameOverride={editingStorageOpsBucket.bucketName}
-            accountIdOverride={editingStorageOpsBucket.contextId}
-            quotaAvailableOverride={editingStorageOpsBucket.bucketQuotaAvailable}
-            embedded
-            hideObjectsTab
-          />
-        </WorkflowPage>
       )}
       {!isStorageOps && showCompareModal && selectedEndpointId && (
         <CephAdminBucketCompareModal

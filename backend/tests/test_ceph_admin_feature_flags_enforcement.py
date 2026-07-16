@@ -60,6 +60,43 @@ def _build_ctx(*, metrics_enabled: bool, sse_enabled: bool = False) -> tuple[Sim
     return ctx, rgw_admin
 
 
+def test_ceph_admin_bucket_objects_use_endpoint_credentials_without_browser_workspace_gate():
+    ctx, _ = _build_ctx(metrics_enabled=True)
+
+    class FakeBrowserService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, object, dict[str, object]]] = []
+
+        def list_objects(self, bucket_name: str, account: object, **kwargs: object):
+            self.calls.append((bucket_name, account, kwargs))
+            return {
+                "prefix": "reports/",
+                "objects": [],
+                "prefixes": ["reports/2026/"],
+                "is_truncated": False,
+                "next_continuation_token": None,
+            }
+
+    service = FakeBrowserService()
+
+    response = buckets_router.list_bucket_objects(
+        bucket_name="archive",
+        prefix="reports/",
+        continuation_token=None,
+        max_keys=100,
+        ctx=ctx,
+        service=service,
+    )
+
+    assert response["prefix"] == "reports/"
+    assert len(service.calls) == 1
+    bucket_name, account, kwargs = service.calls[0]
+    assert bucket_name == "archive"
+    assert account.name == "ceph-admin:1"
+    assert account.storage_endpoint is ctx.endpoint
+    assert kwargs == {"prefix": "reports/", "continuation_token": None, "max_keys": 100}
+
+
 def test_ceph_admin_bucket_listing_can_request_stats_when_metrics_feature_disabled():
     ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 

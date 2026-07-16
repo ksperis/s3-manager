@@ -152,6 +152,42 @@ describe("BucketOpsWorkbench Ceph Admin stats fallback", () => {
     mocks.noopAsync.mockClear();
     mocks.navigate.mockReset();
     window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+
+  it("opens Ceph Admin bucket configuration on the endpoint-scoped detail route", async () => {
+    mocks.listCephAdminBuckets.mockResolvedValue({
+      items: [{ name: "bucket-a", owner: "owner-a" }],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+      stats_available: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketOpsWorkbench mode="ceph-admin" shell={{ pageDescription: "Ceph buckets" }} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "bucket-a" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/ceph-admin/buckets/bucket-a",
+        search: "?ep=7",
+      },
+      {
+        state: {
+          bucketListOrigin: {
+            surface: "ceph-admin",
+            scopeKey: "7",
+            listUrl: "/ceph-admin/buckets",
+          },
+        },
+      }
+    );
   });
 
   it("requests bucket stats by default and surfaces degraded stats warnings", async () => {
