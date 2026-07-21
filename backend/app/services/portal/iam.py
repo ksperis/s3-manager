@@ -271,7 +271,7 @@ class PortalIamMixin:
         if metadata.owner_user_id == user.id:
             return "Owner"
         if metadata.archived_at:
-            return None
+            return role if include_archived and role == "Owner" else None
         if self._metadata_visibility(metadata) != "shared":
             return None
         return role
@@ -593,7 +593,7 @@ class PortalIamMixin:
             if metadata.owner_user_id == target.id:
                 access_by_bucket[metadata.bucket_name] = "Owner"
                 continue
-            if metadata.archived_at or self._metadata_visibility(metadata) != "shared":
+            if (metadata.archived_at and not include_archived) or self._metadata_visibility(metadata) != "shared":
                 continue
             role = self._best_storage_space_role(
                 self._metadata_account_member_role(metadata),
@@ -608,6 +608,8 @@ class PortalIamMixin:
         target: User,
         account: S3Account,
         account_role: str,
+        *,
+        include_archived: bool = False,
     ) -> dict[str, PortalStorageSpaceRole]:
         if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
             return {}
@@ -623,7 +625,7 @@ class PortalIamMixin:
         )
         access_by_bucket: dict[str, PortalStorageSpaceRole] = {}
         for metadata, grant_role in rows:
-            if metadata.archived_at:
+            if metadata.archived_at and not include_archived:
                 continue
             if metadata.owner_user_id == target.id:
                 access_by_bucket[metadata.bucket_name] = "Owner"
@@ -736,7 +738,14 @@ class PortalIamMixin:
         participant_user_ids = self._storage_space_participant_user_ids(metadata)
         if extra_user_ids:
             participant_user_ids.update(extra_user_ids)
-        if not participant_user_ids:
+        self._sync_storage_space_user_projections(account, participant_user_ids)
+
+    def _sync_storage_space_user_projections(
+        self,
+        account: S3Account,
+        user_ids: set[int],
+    ) -> None:
+        if not user_ids:
             return
         rows = (
             self.db.query(User, AccountIAMUser.iam_username)
@@ -744,7 +753,7 @@ class PortalIamMixin:
                 AccountIAMUser,
                 (AccountIAMUser.user_id == User.id) & (AccountIAMUser.account_id == account.id),
             )
-            .filter(User.id.in_(participant_user_ids))
+            .filter(User.id.in_(user_ids))
             .all()
         )
         member_roles = {user_id: row[1] for user_id, row in self._portal_account_member_map(account).items()}

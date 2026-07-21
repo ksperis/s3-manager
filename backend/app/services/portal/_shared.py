@@ -169,4 +169,8 @@ class PortalAccessKeyProtected(RuntimeError):
     """Raised when a request targets the active portal credential."""
 
 
+class PortalStorageSpaceNotEmpty(RuntimeError):
+    """Raised when a Storage Space still contains current or historical data."""
+
+
 __all__ = [name for name in globals() if not name.startswith("__")]

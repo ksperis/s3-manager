@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
+  deletePortalStorageSpace,
   fetchPortalStorageSpaceAccessSummary,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
@@ -165,6 +166,9 @@ export default function PortalStorageSpaceDetailPage() {
   const [pendingAccessChange, setPendingAccessChange] = useState<PendingAccessChange | null>(null);
   const [pendingAccessRevoke, setPendingAccessRevoke] = useState<PortalStorageSpaceShare | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [publicLinkTarget, setPublicLinkTarget] = useState<PublicLinkTarget | null>(null);
   const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
@@ -423,6 +427,33 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!space || !accountIdForApi || !space.canDelete) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    setMessage(null);
+    try {
+      await deletePortalStorageSpace(accountIdForApi, space.id);
+      setDeleteDialogOpen(false);
+      refreshWorkspaceData();
+      navigate("/portal/storage-spaces", { replace: true });
+    } catch (err) {
+      console.error(err);
+      setDeleteError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to delete this space.",
+            fr: "Impossible de supprimer cet espace.",
+            de: "Dieser Bereich kann nicht gelöscht werden.",
+          })
+        )
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -478,6 +509,8 @@ export default function PortalStorageSpaceDetailPage() {
   );
   const historyCleanupEnabled = Boolean(state?.storage_space_version_cleanup_enabled);
   const canCleanHistory = Boolean(historyCleanupEnabled && !isArchived && space.role === "Owner" && contentRole === "Owner");
+  const deletionStatsKnown = space.objectCount != null && space.usedBytes != null;
+  const storageSpaceIsEmpty = deletionStatsKnown && space.objectCount === 0 && space.usedBytes === 0;
   const expectedHistoryCleanupConfirmation = portalStorageSpaceVersionCleanupConfirmationPhrase(space.name);
   const historyCleanupDeletedEntries =
     (historyCleanupProgress?.deleted_versions ?? 0) + (historyCleanupProgress?.deleted_delete_markers ?? 0);
@@ -670,6 +703,19 @@ export default function PortalStorageSpaceDetailPage() {
               {t({ en: "Archive", fr: "Archiver", de: "Archivieren" })}
             </UiButton>
           )}
+          {space.canDelete ? (
+            <UiButton
+              size="sm"
+              variant="danger"
+              disabled={metadataBusy || deleteBusy}
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteDialogOpen(true);
+              }}
+            >
+              {t({ en: "Delete space", fr: "Supprimer l'espace", de: "Bereich löschen" })}
+            </UiButton>
+          ) : null}
         </div>
       }
     >
@@ -1647,6 +1693,72 @@ export default function PortalStorageSpaceDetailPage() {
           warning={t({ en: "Archiving is reversible from this settings section.", fr: "L'archivage est réversible depuis cette section de paramètres.", de: "Die Archivierung kann in diesem Einstellungsbereich rückgängig gemacht werden." })}
           onCancel={() => setArchiveDialogOpen(false)}
           onConfirm={confirmArchive}
+        />
+      ) : null}
+
+      {deleteDialogOpen ? (
+        <ConfirmActionDialog
+          title={t({ en: "Delete space", fr: "Supprimer l'espace", de: "Bereich löschen" })}
+          description={
+            deleteError
+              ? deleteError
+              : storageSpaceIsEmpty
+              ? t({
+                  en: "Confirm the permanent deletion of this space and its storage bucket.",
+                  fr: "Confirmez la suppression définitive de cet espace et de son bucket de stockage.",
+                  de: "Bestätigen Sie die endgültige Löschung dieses Bereichs und seines Speicher-Buckets.",
+                })
+              : deletionStatsKnown
+              ? t({
+                  en: "This space cannot be deleted yet. Delete every current file, then clean up its history before trying again.",
+                  fr: "Cet espace ne peut pas encore être supprimé. Supprimez tous les fichiers courants, puis nettoyez son historique avant de réessayer.",
+                  de: "Dieser Bereich kann noch nicht gelöscht werden. Löschen Sie zuerst alle aktuellen Dateien und bereinigen Sie anschließend die Historie.",
+                })
+              : t({
+                  en: "Current storage statistics are unavailable. The server will verify that the bucket is empty before deleting anything.",
+                  fr: "Les statistiques de stockage sont indisponibles. Le serveur vérifiera que le bucket est vide avant toute suppression.",
+                  de: "Aktuelle Speicherstatistiken sind nicht verfügbar. Der Server prüft vor dem Löschen, ob der Bucket leer ist.",
+                })
+          }
+          confirmLabel={t({ en: "Delete space", fr: "Supprimer l'espace", de: "Bereich löschen" })}
+          cancelLabel={t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+          loading={deleteBusy}
+          confirmDisabled={deletionStatsKnown && !storageSpaceIsEmpty}
+          details={[
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
+            {
+              label: t({ en: "Current files", fr: "Fichiers courants", de: "Aktuelle Dateien" }),
+              value: space.objectCount == null ? "-" : formatCompactNumber(space.objectCount),
+            },
+            {
+              label: t({ en: "Current storage", fr: "Stockage courant", de: "Aktueller Speicher" }),
+              value: formatBytes(space.usedBytes),
+            },
+          ]}
+          impacts={
+            storageSpaceIsEmpty
+              ? [
+                  t({ en: "The Storage Space and its bucket are permanently deleted.", fr: "Le Storage Space et son bucket sont supprimés définitivement.", de: "Der Storage Space und sein Bucket werden endgültig gelöscht." }),
+                  t({ en: "Collaborator access, external credentials, and public links are revoked.", fr: "Les accès collaborateurs, identifiants externes et liens publics sont révoqués.", de: "Zugriffe von Mitwirkenden, externe Anmeldedaten und öffentliche Links werden widerrufen." }),
+                ]
+              : [
+                  isArchived
+                    ? t({ en: "Restore the space before removing files and cleaning its history.", fr: "Restaurez l'espace avant de supprimer les fichiers et de nettoyer son historique.", de: "Stellen Sie den Bereich wieder her, bevor Sie Dateien und Historie löschen." })
+                    : t({ en: "Remove current files from the Files tab.", fr: "Supprimez les fichiers courants depuis l'onglet Fichiers.", de: "Entfernen Sie aktuelle Dateien auf der Registerkarte Dateien." }),
+                  t({ en: "Use History cleanup to remove older versions and delete markers.", fr: "Utilisez Nettoyage de l'historique pour retirer les anciennes versions et les delete markers.", de: "Verwenden Sie die Historienbereinigung, um ältere Versionen und Löschmarkierungen zu entfernen." }),
+                ]
+          }
+          warning={t({
+            en: "Portal never empties the bucket automatically during deletion.",
+            fr: "Portal ne vide jamais automatiquement le bucket pendant la suppression.",
+            de: "Portal leert den Bucket beim Löschen niemals automatisch.",
+          })}
+          onCancel={() => {
+            if (deleteBusy) return;
+            setDeleteDialogOpen(false);
+            setDeleteError(null);
+          }}
+          onConfirm={confirmDelete}
         />
       ) : null}
     </div>

@@ -111,6 +111,7 @@ export type PortalStorageSpaceSummary = {
   role: PortalStorageSpaceRole;
   content_role?: PortalStorageSpaceRole | null;
   can_browse?: boolean | null;
+  can_delete?: boolean;
   status?: string | null;
   description?: string | null;
   owner_label?: string | null;
@@ -675,6 +676,15 @@ export async function updatePortalStorageSpace(
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
+}
+
+export async function deletePortalStorageSpace(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<void> {
+  await client.delete(`/portal/storage-spaces/${encodeURIComponent(spaceId)}`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function fetchPortalStorageSpaceAccessSummary(

@@ -72,6 +72,7 @@ from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
     PortalAccessKeyProtected,
+    PortalStorageSpaceNotEmpty,
     PortalService,
     get_portal_service,
 )
@@ -113,7 +114,13 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
     if "not found" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
-    if "not allowed" in lowered or "not provisioned" in lowered or "owner role required" in lowered or "cannot be changed" in lowered:
+    if (
+        "not allowed" in lowered
+        or "not provisioned" in lowered
+        or "owner role required" in lowered
+        or "owner content role required" in lowered
+        or "cannot be changed" in lowered
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
     raise_bad_gateway_from_runtime(exc)
 
@@ -1013,6 +1020,37 @@ def update_portal_storage_space(
         return storage_space
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
+
+
+@router.delete("/storage-spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_portal_storage_space(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> Response:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        result = service.delete_storage_space(actor, access, space_id)
+    except PortalStorageSpaceNotEmpty as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="delete_storage_space",
+        entity_type="storage_space",
+        entity_id=result["storage_space_id"],
+        account=access.account,
+        metadata=result,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/storage-spaces/{space_id}/access-summary", response_model=PortalStorageSpaceAccessSummary)

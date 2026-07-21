@@ -19,7 +19,8 @@ when needed.
 | Open an assigned space | **Portal > Spaces** | Select a space to browse files and view usage. |
 | Create a new space | **Spaces > Create space** | Regular Portal users create private spaces only, when Portal user space creation is enabled. Portal managers choose Private, Team, or Selected people access before creation. The new space opens with the next steps to add files and invite people. |
 | Add existing storage | **Spaces > Add existing space** | Portal managers can expose existing buckets as spaces and choose the initial access mode. Selected people imports can include collaborators immediately. The added space opens with the same file and collaborator next steps. |
-| Archive a space | Space actions | Archived spaces keep metadata but suspend browsing, sharing, and public links. |
+| Archive a space | Space actions | Archived spaces keep their bucket and metadata but suspend browsing, sharing, and public links. This is reversible. |
+| Delete a space | Space settings > **Delete space** | Content Owners can permanently delete active, archived, and imported spaces only after current files and file history have been removed. |
 | Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
 | Connect an external S3 tool | Space details > Connect external tools | Copy the space-to-bucket mapping, then open External tools with the space preselected. |
 
@@ -43,6 +44,25 @@ come back later and still see the next step.
 | Selected people | Only selected people receive Viewer, Editor, or Owner access. Users outside the project must be added by an admin before they can be selected. |
 
 When a Portal manager creates or imports a Selected people space, selected collaborators are saved with the space. If a searched person is not already available in the current project, ask an admin to add that external collaborator first.
+
+## Archiving and permanent deletion
+
+Archiving keeps the Storage Space and its bucket. It suspends file access and
+public links until an Owner restores the space.
+
+Permanent deletion removes both the Storage Space and its underlying bucket,
+including for a space added from an existing bucket. Portal never empties a
+bucket automatically during deletion. Before deleting a space:
+
+1. Remove every current file from the **Files** tab.
+2. Run **History cleanup** to remove older versions and remaining delete markers.
+3. Return to **Space settings** and confirm **Delete space** after usage shows
+   zero files and zero storage.
+
+If the space is archived but still contains data, restore it before completing
+these steps. Deletion also revokes collaborator access, external credentials,
+and public links. Audit and activity history remain available to authorized
+administrators.
 
 ## You are done when
 

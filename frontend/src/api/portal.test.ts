@@ -35,6 +35,7 @@ import {
   grantPortalStorageSpaceShare,
   createPortalStorageSpace,
   createPortalStorageSpacePublicLink,
+  deletePortalStorageSpace,
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
@@ -131,6 +132,14 @@ describe("portal storage spaces api", () => {
       params: {
         account_id: "101",
       },
+    });
+  });
+
+  it("deletes a storage space through the canonical portal endpoint", async () => {
+    await deletePortalStorageSpace("101", "research data");
+
+    expect(clientMock.delete).toHaveBeenCalledWith("/portal/storage-spaces/research%20data", {
+      params: { account_id: "101" },
     });
   });
 

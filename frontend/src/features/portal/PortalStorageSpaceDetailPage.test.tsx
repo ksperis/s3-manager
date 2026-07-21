@@ -7,6 +7,7 @@ import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
   createPublicLinkMock: vi.fn(),
+  deleteStorageSpaceMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
@@ -51,6 +52,7 @@ const mocks = vi.hoisted(() => ({
           role: "Owner",
           contentRole: "Owner",
           canBrowse: true,
+          canDelete: true,
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -108,6 +110,7 @@ vi.mock("../../components/GeneralSettingsContext", () => ({
 
 vi.mock("../../api/portal", () => ({
   createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
+  deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
@@ -136,6 +139,7 @@ function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["initial
 describe("PortalStorageSpaceDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.deleteStorageSpaceMock.mockReset();
     window.localStorage.clear();
     mocks.usePortalWorkspaceDataMock.mockClear();
     mocks.fetchAccessSummaryMock.mockResolvedValue({
@@ -231,6 +235,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].role = "Owner";
     mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
     mocks.hookResult.workspace.spaces[0].canBrowse = true;
+    mocks.hookResult.workspace.spaces[0].canDelete = true;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";
@@ -240,6 +245,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].accountMemberRole = null;
     mocks.hookResult.workspace.spaces[0].archivedAt = null;
     mocks.hookResult.workspace.spaces[0].objectCount = 12;
+    mocks.hookResult.workspace.spaces[0].usedBytes = 512;
     mocks.hookResult.workspace.spaces[0].shareCount = 3;
     mocks.hookResult.state.storage_space_version_cleanup_enabled = true;
     mocks.hookResult.refreshWorkspaceData.mockClear();
@@ -593,6 +599,75 @@ describe("PortalStorageSpaceDetailPage", () => {
       expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith("101", "research-data", { archived: false });
     });
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("explains how to empty a non-empty space without calling deletion", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
+
+    expect(screen.getByRole("dialog", { name: "Delete space" })).toBeInTheDocument();
+    expect(screen.getByText(/Delete every current file, then clean up its history/i)).toBeInTheDocument();
+    expect(screen.getByText(/Portal never empties the bucket automatically/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Delete space" }).at(-1)).toBeDisabled();
+    expect(mocks.deleteStorageSpaceMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes an empty space after a simple confirmation", async () => {
+    mocks.hookResult.workspace.spaces[0].objectCount = 0;
+    mocks.hookResult.workspace.spaces[0].usedBytes = 0;
+    mocks.deleteStorageSpaceMock.mockResolvedValue(undefined);
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete space" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
+
+    await waitFor(() => {
+      expect(mocks.deleteStorageSpaceMock).toHaveBeenCalledWith("101", "research-data");
+    });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Spaces")).toBeInTheDocument();
+  });
+
+  it("keeps the confirmation open and reports deletion errors", async () => {
+    mocks.hookResult.workspace.spaces[0].objectCount = 0;
+    mocks.hookResult.workspace.spaces[0].usedBytes = 0;
+    mocks.deleteStorageSpaceMock.mockRejectedValue(new Error("Deletion service unavailable"));
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete space" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
+
+    expect(await within(dialog).findByText("Deletion service unavailable")).toBeInTheDocument();
+    expect(mocks.hookResult.refreshWorkspaceData).not.toHaveBeenCalled();
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it("hides permanent deletion from administrative Owners without content ownership", () => {
+    mocks.hookResult.workspace.spaces[0].contentRole = null;
+    mocks.hookResult.workspace.spaces[0].canBrowse = false;
+    mocks.hookResult.workspace.spaces[0].canDelete = false;
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.queryByRole("button", { name: "Delete space" })).not.toBeInTheDocument();
+  });
+
+  it("asks to restore an archived non-empty space before cleanup", () => {
+    mocks.hookResult.workspace.spaces[0].status = "Archived";
+    mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
+
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
+
+    expect(screen.getByText(/Restore the space before removing files and cleaning its history/i)).toBeInTheDocument();
   });
 
   it("hides the embedded Browser when the space is archived", () => {

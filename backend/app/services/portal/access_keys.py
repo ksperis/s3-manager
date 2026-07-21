@@ -7,6 +7,31 @@ from app.services.mappers.portal import portal_access_key_from_external_credenti
 
 
 class PortalAccessKeysMixin:
+    def _delete_storage_space_external_iam_credentials(
+        self,
+        account: S3Account,
+        metadata: PortalStorageSpaceMetadata,
+    ) -> int:
+        credentials = (
+            self.db.query(PortalExternalAccessCredential)
+            .filter(
+                PortalExternalAccessCredential.account_id == account.id,
+                PortalExternalAccessCredential.storage_space_metadata_id == metadata.id,
+            )
+            .all()
+        )
+        if not credentials:
+            return 0
+        iam_service = self._get_iam_service(account)
+        for credential in credentials:
+            iam_service.delete_access_key(credential.iam_username, credential.access_key_id)
+            iam_service.delete_user_inline_policy(
+                credential.iam_username,
+                self._external_access_policy_name,
+            )
+            iam_service.delete_user(credential.iam_username)
+        return len(credentials)
+
     def list_access_keys(self, user: User, access: "AccountAccess") -> list[PortalAccessKey]:
         keys: list[PortalAccessKey] = []
         link = self._existing_portal_link(user, access.account)

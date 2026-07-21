@@ -111,6 +111,7 @@ class PortalStorageSpacesMixin:
         access: "AccountAccess",
         role: Optional[PortalStorageSpaceRole] = None,
         content_role: Optional[PortalStorageSpaceRole] = None,
+        can_delete: bool = False,
         metadata: PortalStorageSpaceMetadata | None = None,
         collaborators: Optional[list[PortalStorageSpaceCollaboratorPreview]] = None,
         collaborator_count: int = 0,
@@ -125,6 +126,7 @@ class PortalStorageSpacesMixin:
             role=role,
             content_role=content_role,
             can_browse=content_role is not None,
+            can_delete=can_delete,
             status=self._storage_space_status(bucket, role, metadata),
             description=self._default_storage_space_description(name, metadata),
             owner_label=self._storage_space_owner_label(access.account, metadata),
@@ -158,8 +160,19 @@ class PortalStorageSpacesMixin:
         sort: str = "name",
         include_archived: bool = False,
     ) -> list[PortalStorageSpaceSummary]:
-        role_by_bucket = self.list_existing_user_storage_space_access(user, access.account, access.role)
+        role_by_bucket = self._db_storage_space_access(
+            user,
+            access.account,
+            access.role,
+            include_archived=include_archived,
+        )
         content_role_by_bucket = self.list_existing_user_storage_space_content_access(user, access.account, access.role)
+        deletion_role_by_bucket = self._db_storage_space_content_access(
+            user,
+            access.account,
+            access.role,
+            include_archived=True,
+        )
         metadata_by_bucket = self._storage_space_metadata_map(access.account)
         collaborator_previews = self._storage_space_collaborator_previews(
             access.account,
@@ -190,6 +203,7 @@ class PortalStorageSpacesMixin:
                     access,
                     role=role_for_bucket,
                     content_role=content_role_by_bucket.get(metadata.bucket_name),
+                    can_delete=deletion_role_by_bucket.get(metadata.bucket_name) == "Owner",
                     metadata=metadata,
                     collaborators=collaborator_previews.get(metadata.bucket_name, ([], 0))[0],
                     collaborator_count=collaborator_previews.get(metadata.bucket_name, ([], 0))[1],
@@ -270,6 +284,7 @@ class PortalStorageSpacesMixin:
             access,
             role=summary.role,
             content_role=summary.content_role,
+            can_delete=summary.can_delete,
             metadata=metadata,
         )
         return PortalStorageSpace(**merged.model_dump())
@@ -525,6 +540,121 @@ class PortalStorageSpacesMixin:
         if storage_space is None:
             raise RuntimeError("Storage space not found after update.")
         return storage_space
+
+    def _storage_space_deletion_usage(
+        self,
+        account: S3Account,
+        bucket_name: str,
+    ) -> tuple[bool, Optional[int], Optional[int]]:
+        try:
+            rgw_admin = self._supervision_admin_for_account(account)
+            scope_kwargs: dict = {}
+            account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
+            if account_uid:
+                scope_kwargs["uid"] = account_uid
+            stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True, **scope_kwargs)
+            if stats is None and scope_kwargs:
+                stats = rgw_admin.get_bucket_info(bucket_name, allow_not_found=True)
+        except RGWAdminError as exc:
+            raise RuntimeError(f"Unable to fetch Storage Space deletion stats: {exc}") from exc
+        if stats is None:
+            return False, None, None
+        usage = stats.get("usage") if isinstance(stats, dict) else None
+        used_bytes, object_count = extract_usage_stats(usage)
+        return True, used_bytes, object_count
+
+    def delete_storage_space(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+    ) -> dict[str, Any]:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id, include_archived=True)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        metadata = self._storage_space_metadata(access.account, bucket_name)
+        if metadata is None:
+            raise RuntimeError("Storage space not found or not allowed.")
+        deletion_roles = self._db_storage_space_content_access(
+            user,
+            access.account,
+            access.role,
+            include_archived=True,
+        )
+        if deletion_roles.get(bucket_name) != "Owner":
+            raise RuntimeError("Owner content role required for this storage space.")
+
+        bucket_exists, used_bytes, object_count = self._storage_space_deletion_usage(
+            access.account,
+            bucket_name,
+        )
+        if bucket_exists and (used_bytes is None or object_count is None):
+            raise RuntimeError("Storage Space usage statistics are unavailable. Retry before deleting the space.")
+        if bucket_exists and (used_bytes != 0 or object_count != 0):
+            raise PortalStorageSpaceNotEmpty(
+                "Storage Space is not empty. Delete all current files and clean up its history before deleting it."
+            )
+
+        participant_user_ids = self._storage_space_participant_user_ids(metadata)
+        external_access_count = (
+            self.db.query(PortalExternalAccessCredential)
+            .filter(
+                PortalExternalAccessCredential.account_id == access.account.id,
+                PortalExternalAccessCredential.storage_space_metadata_id == metadata.id,
+            )
+            .count()
+        )
+        public_links = (
+            self.db.query(DBPortalPublicLink)
+            .filter(
+                DBPortalPublicLink.account_id == access.account.id,
+                DBPortalPublicLink.bucket_name == bucket_name,
+                DBPortalPublicLink.revoked_at.is_(None),
+            )
+            .all()
+        )
+        storage_space_name = self._display_storage_space_name(bucket_name, metadata)
+        origin = self._storage_space_origin(metadata)
+
+        try:
+            if bucket_exists:
+                try:
+                    self.delete_bucket(user, access, bucket_name, force=False, use_root=True)
+                except s3_client.BucketNotEmptyError as exc:
+                    raise PortalStorageSpaceNotEmpty(
+                        "Storage Space is not empty. Delete all current files and clean up its history before deleting it."
+                    ) from exc
+
+            self._delete_storage_space_external_iam_credentials(access.account, metadata)
+            now = utcnow()
+            for link in public_links:
+                link.revoked_at = now
+                self.db.add(link)
+            self.db.query(PortalExternalAccessCredential).filter(
+                PortalExternalAccessCredential.storage_space_metadata_id == metadata.id,
+            ).delete(synchronize_session=False)
+            self.db.query(PortalStorageSpaceGrant).filter(
+                PortalStorageSpaceGrant.storage_space_metadata_id == metadata.id,
+            ).delete(synchronize_session=False)
+            self.db.delete(metadata)
+            self.db.flush()
+            self._sync_storage_space_user_projections(access.account, participant_user_ids)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        return {
+            "storage_space_id": bucket_name,
+            "storage_space_name": storage_space_name,
+            "origin": origin,
+            "used_bytes": used_bytes or 0,
+            "object_count": object_count or 0,
+            "participant_count": len(participant_user_ids),
+            "external_access_count": external_access_count,
+            "public_link_count": len(public_links),
+            "bucket_already_absent": not bucket_exists,
+        }
 
     def _resolve_storage_space_bucket_name(
         self,

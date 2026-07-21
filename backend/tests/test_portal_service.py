@@ -58,6 +58,7 @@ from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
     PortalAccessKeyProtected,
+    PortalStorageSpaceNotEmpty,
     PortalService,
 )
 from app.services.portal.version_cleanup import PortalStorageSpaceVersionCleanupTarget
@@ -1004,6 +1005,7 @@ def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_sessi
     assert spaces[0].internal_bucket_name == "research-data"
     assert spaces[0].used_bytes is None
     assert spaces[0].object_count is None
+    assert spaces[0].can_delete is True
 
 
 def test_storage_space_metadata_filters_sorting_and_archive(db_session):
@@ -1078,12 +1080,415 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_s
     ]
     assert owner_spaces[0].can_browse is True
     assert owner_spaces[0].content_role == "Owner"
+    assert owner_spaces[0].can_delete is True
     assert other_spaces == []
     assert [(space.id, space.role, space.status) for space in manager_spaces] == [
         ("private-data", "Owner", "Private")
     ]
     assert manager_spaces[0].can_browse is False
     assert manager_spaces[0].content_role is None
+    assert manager_spaces[0].can_delete is False
+
+
+def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(monkeypatch, db_session):
+    account = S3Account(name="portal-delete-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete@example.com", hashed_password="x", role="ui_user")
+    delegated_owner = User(email="delegated-delete@example.com", hashed_password="x", role="ui_user")
+    viewer = User(email="viewer-delete@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, delegated_owner, viewer])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="imported-data",
+        display_name="Imported Data",
+        owner_user_id=owner.id,
+        visibility="shared",
+        origin="imported",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add_all(
+        [
+            PortalStorageSpaceGrant(
+                storage_space_metadata_id=metadata.id,
+                user_id=delegated_owner.id,
+                role="Owner",
+            ),
+            PortalStorageSpaceGrant(
+                storage_space_metadata_id=metadata.id,
+                user_id=viewer.id,
+                role="Viewer",
+            ),
+            PortalExternalAccessCredential(
+                account_id=account.id,
+                storage_space_metadata_id=metadata.id,
+                bucket_name="imported-data",
+                created_by_user_id=owner.id,
+                external_email="external@example.com",
+                permission="read_only",
+                iam_user_id="external-delete-id",
+                iam_username="external-delete-user",
+                access_key_id="AK-EXTERNAL-DELETE",
+                status="Active",
+            ),
+            PortalPublicLink(
+                token="delete-space-token",
+                account_id=account.id,
+                bucket_name="imported-data",
+                object_key="old-report.csv",
+                created_by_user_id=owner.id,
+                created_by_email=owner.email,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    delete_bucket_calls = []
+    projection_calls = []
+    iam_calls = []
+
+    class FakeIAMService:
+        def delete_access_key(self, username, access_key_id):
+            iam_calls.append(("delete_access_key", username, access_key_id))
+
+        def delete_user_inline_policy(self, username, policy_name):
+            iam_calls.append(("delete_policy", username, policy_name))
+
+        def delete_user(self, username):
+            iam_calls.append(("delete_user", username))
+
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: (True, 0, 0))
+    monkeypatch.setattr(
+        service,
+        "delete_bucket",
+        lambda *args, **kwargs: delete_bucket_calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: FakeIAMService())
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_user_projections",
+        lambda scoped_account, user_ids: projection_calls.append((scoped_account.id, set(user_ids))),
+    )
+
+    result = service.delete_storage_space(
+        delegated_owner,
+        _portal_access(account, delegated_owner),
+        "imported-data",
+    )
+
+    assert result == {
+        "storage_space_id": "imported-data",
+        "storage_space_name": "Imported Data",
+        "origin": "imported",
+        "used_bytes": 0,
+        "object_count": 0,
+        "participant_count": 3,
+        "external_access_count": 1,
+        "public_link_count": 1,
+        "bucket_already_absent": False,
+    }
+    assert delete_bucket_calls[0][0][2] == "imported-data"
+    assert delete_bucket_calls[0][1] == {"force": False, "use_root": True}
+    assert iam_calls == [
+        ("delete_access_key", "external-delete-user", "AK-EXTERNAL-DELETE"),
+        ("delete_policy", "external-delete-user", service._external_access_policy_name),
+        ("delete_user", "external-delete-user"),
+    ]
+    assert projection_calls == [(account.id, {owner.id, delegated_owner.id, viewer.id})]
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="imported-data").first() is None
+    assert db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id).count() == 0
+    assert db_session.query(PortalExternalAccessCredential).filter_by(bucket_name="imported-data").count() == 0
+    link = db_session.query(PortalPublicLink).filter_by(token="delete-space-token").one()
+    assert link.revoked_at is not None
+
+
+def test_delete_storage_space_rejects_administrative_owner_without_content_ownership(monkeypatch, db_session):
+    account = S3Account(name="portal-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-denied@example.com", hashed_password="x", role="ui_user")
+    manager = User(email="manager-delete-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, manager])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="private-delete-denied",
+            owner_user_id=owner.id,
+            visibility="private",
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "_storage_space_deletion_usage",
+        lambda *_args: pytest.fail("Stats must not be fetched for an unauthorized deletion"),
+    )
+
+    with pytest.raises(RuntimeError, match="Owner content role required"):
+        service.delete_storage_space(
+            manager,
+            _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+            "private-delete-denied",
+        )
+
+
+@pytest.mark.parametrize("role", ["Editor", "Viewer"])
+def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_session, role):
+    account = S3Account(name=f"portal-delete-{role.lower()}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email=f"owner-delete-{role.lower()}@example.com", hashed_password="x", role="ui_user")
+    participant = User(email=f"{role.lower()}-delete@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner, participant])
+    db_session.commit()
+    db_session.add(UserS3Account(user_id=participant.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name=f"shared-delete-{role.lower()}",
+        owner_user_id=owner.id,
+        visibility="shared",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add(
+        PortalStorageSpaceGrant(
+            storage_space_metadata_id=metadata.id,
+            user_id=participant.id,
+            role=role,
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "_storage_space_deletion_usage",
+        lambda *_args: pytest.fail("Stats must not be fetched for an unauthorized deletion"),
+    )
+
+    with pytest.raises(RuntimeError, match="Owner content role required"):
+        service.delete_storage_space(
+            participant,
+            _portal_access(account, participant),
+            f"shared-delete-{role.lower()}",
+        )
+
+
+@pytest.mark.parametrize(
+    ("usage", "expected_message"),
+    [
+        ((True, 1, 0), "not empty"),
+        ((True, 0, 1), "not empty"),
+        ((True, None, None), "statistics are unavailable"),
+    ],
+)
+def test_delete_storage_space_requires_zero_known_stats(monkeypatch, db_session, usage, expected_message):
+    account = S3Account(name=f"portal-delete-stats-{usage}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email=f"owner-delete-stats-{usage}@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="delete-stats-data",
+            owner_user_id=owner.id,
+            visibility="private",
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: usage)
+    monkeypatch.setattr(service, "delete_bucket", lambda *_args, **_kwargs: pytest.fail("Bucket deletion must be blocked"))
+
+    expected_exception = PortalStorageSpaceNotEmpty if "not empty" in expected_message else RuntimeError
+    with pytest.raises(expected_exception, match=expected_message):
+        service.delete_storage_space(owner, _portal_access(account, owner), "delete-stats-data")
+
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="delete-stats-data").one()
+
+
+def test_delete_storage_space_maps_delete_bucket_race_without_force(monkeypatch, db_session):
+    account = S3Account(name="portal-delete-race", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-race@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="delete-race-data",
+            owner_user_id=owner.id,
+            visibility="private",
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: (True, 0, 0))
+
+    def reject_delete(_user, _access, _bucket_name, *, force, use_root):
+        assert force is False
+        assert use_root is True
+        raise s3_client.BucketNotEmptyError("BucketNotEmpty")
+
+    monkeypatch.setattr(service, "delete_bucket", reject_delete)
+    with pytest.raises(PortalStorageSpaceNotEmpty, match="not empty"):
+        service.delete_storage_space(owner, _portal_access(account, owner), "delete-race-data")
+
+
+def test_delete_storage_space_finalizes_archived_metadata_when_bucket_is_already_absent(monkeypatch, db_session):
+    account = S3Account(name="portal-delete-archived", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-archived@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="delete-archived-data",
+            owner_user_id=owner.id,
+            visibility="private",
+            archived_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: (False, None, None))
+    monkeypatch.setattr(service, "delete_bucket", lambda *_args, **_kwargs: pytest.fail("Missing bucket must not be deleted again"))
+    monkeypatch.setattr(service, "_delete_storage_space_external_iam_credentials", lambda *_args: 0)
+    monkeypatch.setattr(service, "_sync_storage_space_user_projections", lambda *_args: None)
+
+    result = service.delete_storage_space(owner, _portal_access(account, owner), "delete-archived-data")
+
+    assert result["bucket_already_absent"] is True
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="delete-archived-data").first() is None
+
+
+def test_delete_storage_space_retry_finishes_after_partial_external_iam_cleanup(monkeypatch, db_session):
+    account = S3Account(name="portal-delete-iam-retry", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-iam-retry@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="delete-iam-retry-data",
+        owner_user_id=owner.id,
+        visibility="private",
+    )
+    db_session.add(metadata)
+    db_session.flush()
+    db_session.add(
+        PortalExternalAccessCredential(
+            account_id=account.id,
+            storage_space_metadata_id=metadata.id,
+            bucket_name=metadata.bucket_name,
+            created_by_user_id=owner.id,
+            external_email="already-cleaned@example.com",
+            permission="read_only",
+            iam_user_id="already-cleaned-id",
+            iam_username="already-cleaned-user",
+            access_key_id="AK-ALREADY-CLEANED",
+            status="Active",
+        )
+    )
+    db_session.commit()
+    service = PortalService(db_session)
+    iam_calls = []
+
+    class AlreadyCleanedIAMService:
+        def delete_access_key(self, username, access_key_id):
+            iam_calls.append(("access_key", username, access_key_id))
+
+        def delete_user_inline_policy(self, username, policy_name):
+            iam_calls.append(("policy", username, policy_name))
+
+        def delete_user(self, username):
+            iam_calls.append(("user", username))
+
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: (False, None, None))
+    monkeypatch.setattr(service, "_get_iam_service", lambda _account: AlreadyCleanedIAMService())
+    monkeypatch.setattr(service, "_sync_storage_space_user_projections", lambda *_args: None)
+
+    result = service.delete_storage_space(owner, _portal_access(account, owner), metadata.bucket_name)
+
+    assert result["bucket_already_absent"] is True
+    assert iam_calls == [
+        ("access_key", "already-cleaned-user", "AK-ALREADY-CLEANED"),
+        ("policy", "already-cleaned-user", service._external_access_policy_name),
+        ("user", "already-cleaned-user"),
+    ]
+    assert db_session.query(PortalExternalAccessCredential).filter_by(bucket_name=metadata.bucket_name).count() == 0
+    assert db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name=metadata.bucket_name).first() is None
+
+
+def test_delete_storage_space_route_returns_no_content_and_audits_without_secrets(db_session):
+    account = S3Account(name="portal-delete-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-route@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    result = {
+        "storage_space_id": "route-data",
+        "storage_space_name": "Route Data",
+        "origin": "portal_generic",
+        "used_bytes": 0,
+        "object_count": 0,
+        "participant_count": 1,
+        "external_access_count": 0,
+        "public_link_count": 0,
+        "bucket_already_absent": False,
+    }
+
+    class FakePortalService:
+        def delete_storage_space(self, actor, access, space_id):
+            assert actor.id == owner.id
+            assert access.account.id == account.id
+            assert space_id == "route-data"
+            return result
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+    response = portal_router.delete_portal_storage_space(
+        "route-data",
+        access=_portal_access(account, owner),
+        audit_service=audit_service,
+        service=FakePortalService(),
+    )
+
+    assert response.status_code == 204
+    assert audit_service.actions[0]["action"] == "delete_storage_space"
+    assert audit_service.actions[0]["metadata"] == result
+    assert "ROOT-AK" not in json.dumps(audit_service.actions[0]["metadata"])
+    assert "ROOT-SK" not in json.dumps(audit_service.actions[0]["metadata"])
+
+
+def test_delete_storage_space_route_maps_non_empty_to_conflict(db_session):
+    account = S3Account(name="portal-delete-route-conflict", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    owner = User(email="owner-delete-route-conflict@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+
+    class FakePortalService:
+        def delete_storage_space(self, *_args):
+            raise PortalStorageSpaceNotEmpty("Storage Space is not empty. Clean up its history.")
+
+    with pytest.raises(HTTPException) as exc_info:
+        portal_router.delete_portal_storage_space(
+            "route-data",
+            access=_portal_access(account, owner),
+            audit_service=None,
+            service=FakePortalService(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "not empty" in exc_info.value.detail
 
 
 def test_storage_space_list_includes_collaborator_avatar_previews(db_session):

@@ -140,6 +140,7 @@ class PortalStorageSpaceSummary(BaseModel):
     role: PortalStorageSpaceRole
     content_role: Optional[PortalStorageSpaceRole] = None
     can_browse: bool = True
+    can_delete: bool = False
     status: str = "Active"
     description: Optional[str] = None
     owner_label: Optional[str] = None

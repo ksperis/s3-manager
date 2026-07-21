@@ -54,6 +54,7 @@ export type PortalWorkspaceSpace = {
   role: PortalWorkspaceRole;
   contentRole: PortalWorkspaceRole | null;
   canBrowse: boolean;
+  canDelete: boolean;
   status: PortalWorkspaceStatus | "Archived";
   access: PortalWorkspaceAccess;
   region: string | null;
@@ -239,6 +240,7 @@ export function buildPortalWorkspaceModel({
       role,
       contentRole,
       canBrowse,
+      canDelete: Boolean(storageSpace.can_delete),
       status,
       access,
       region: storageSpace.region ?? null,
