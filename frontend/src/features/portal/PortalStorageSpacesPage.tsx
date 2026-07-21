@@ -24,7 +24,6 @@ import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import WorkflowPage, {
   WorkflowActions,
   workflowPageHostClass,
@@ -57,6 +56,7 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import PortalPageTabs from "./PortalPageTabs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   portalStorageSpaceStatusTone,
@@ -1166,7 +1166,7 @@ export default function PortalStorageSpacesPage() {
         </WorkflowPage>
       ) : null}
 
-      <PageTabs
+      <PortalPageTabs
         tabs={[
           {
             id: "active",
@@ -1187,7 +1187,6 @@ export default function PortalStorageSpacesPage() {
         ]}
         activeTab={activeTab}
         onChange={(tabId) => setActiveTab(tabId as SpacesTab)}
-        variant="bar"
       />
 
       <UiCard>

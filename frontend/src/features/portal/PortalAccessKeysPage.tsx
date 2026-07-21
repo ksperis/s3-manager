@@ -24,7 +24,6 @@ import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -46,6 +45,7 @@ import {
 } from "./portalExternalToolAccess";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalAccessKeyStatusLabel, portalDateTimeLabel } from "./portalI18n";
+import PortalPageTabs from "./PortalPageTabs";
 
 type PendingAccessKeyAction =
   | { type: "disable"; key: PortalAccessKey }
@@ -580,7 +580,7 @@ export default function PortalAccessKeysPage() {
         <PageBanner tone="info">{t({ en: "The maximum number of tool access entries has been reached.", fr: "Le nombre maximal d'accès outil est atteint.", de: "Die maximale Anzahl von Werkzeugzugriffen wurde erreicht." })}</PageBanner>
       )}
 
-      <PageTabs
+      <PortalPageTabs
         tabs={[
           {
             id: "connect",
@@ -597,7 +597,6 @@ export default function PortalAccessKeysPage() {
         ]}
         activeTab={activeTab}
         onChange={(tabId) => setActiveTab(tabId as AccessKeysTab)}
-        variant="bar"
       />
 
       {activeTab === "connect" && showStarterGuide ? (

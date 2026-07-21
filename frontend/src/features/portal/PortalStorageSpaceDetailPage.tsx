@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
@@ -25,13 +25,13 @@ import {
   type PortalStorageSpaceShare,
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
+import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -43,7 +43,6 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
-  uiDividerClass,
   uiMutedTextClass,
   uiPanelMutedClass,
   uiTitleTextClass,
@@ -66,6 +65,7 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import PortalPageTabs from "./PortalPageTabs";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
@@ -95,6 +95,11 @@ const VIEWER_HIDDEN_BROWSER_ACTION_IDS: readonly BrowserActionId[] = [
 type PendingAccessChange = {
   mode: PortalAccessMode;
   accountMemberRole: PortalStorageSpaceAccountMemberRole;
+};
+
+type PendingAccessRoleChange = {
+  share: PortalStorageSpaceShare;
+  role: PortalStorageSpaceGrantRole;
 };
 
 type PublicLinkTarget = {
@@ -164,7 +169,9 @@ export default function PortalStorageSpaceDetailPage() {
   const [accessCandidatesLoading, setAccessCandidatesLoading] = useState(false);
   const [accessBusy, setAccessBusy] = useState(false);
   const [accessPeopleDialogOpen, setAccessPeopleDialogOpen] = useState(false);
+  const [accessRequestMessage, setAccessRequestMessage] = useState<string | null>(null);
   const [pendingAccessChange, setPendingAccessChange] = useState<PendingAccessChange | null>(null);
+  const [pendingAccessRoleChange, setPendingAccessRoleChange] = useState<PendingAccessRoleChange | null>(null);
   const [pendingAccessRevoke, setPendingAccessRevoke] = useState<PortalStorageSpaceShare | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -205,6 +212,15 @@ export default function PortalStorageSpaceDetailPage() {
   const savedAccountMemberRole = accessSummary?.default_account_member_role ?? space?.accountMemberRole ?? "Editor";
   const accessChanged = accessMode !== savedAccessMode || (accessMode === "account" && accessAccountMemberRole !== savedAccountMemberRole);
   const selectedAccessShareEntries = selectedPortalShares(accessRolesByUserId);
+  const existingAccessRolesByUserId = useMemo(
+    () =>
+      Object.fromEntries(
+        (accessSummary?.explicit_shares ?? [])
+          .filter((share) => share.user_id != null)
+          .map((share) => [share.user_id as number, share.role]),
+      ) as Record<number, PortalStorageSpaceGrantRole>,
+    [accessSummary?.explicit_shares],
+  );
   const onboardingState = (location.state as { portalSpaceCreated?: boolean; portalSpaceImported?: boolean } | null) ?? null;
   const showSpaceReadyBanner = Boolean(onboardingState?.portalSpaceCreated || onboardingState?.portalSpaceImported);
 
@@ -215,6 +231,17 @@ export default function PortalStorageSpaceDetailPage() {
     setAccessMode(spaceAccessMode);
     setAccessAccountMemberRole(space.accountMemberRole ?? "Editor");
   }, [space, spaceAccessMode]);
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(location.search).get("tab");
+    if (
+      requestedTab === "files" ||
+      requestedTab === "collaborators" ||
+      requestedTab === "settings"
+    ) {
+      setActiveTab(requestedTab);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (!startGuideStorageKey) {
@@ -316,6 +343,7 @@ export default function PortalStorageSpaceDetailPage() {
     setAccessPeopleDialogOpen(false);
     setAccessRolesByUserId({});
     setAccessCandidateQuery("");
+    setAccessRequestMessage(null);
   };
 
   const confirmAccessChange = async (change: PendingAccessChange) => {
@@ -356,7 +384,12 @@ export default function PortalStorageSpaceDetailPage() {
       setAccessCandidateQuery("");
       setAccessPeopleDialogOpen(false);
       await loadAccessSummary();
-      setMessage(t({ en: "People added.", fr: "Personnes ajoutées.", de: "Personen hinzugefügt." }));
+      const addedCount = selectedAccessShareEntries.length;
+      setMessage(t({
+        en: `${addedCount} ${addedCount === 1 ? "person" : "people"} added to ${space.name}.`,
+        fr: `${addedCount} personne${addedCount > 1 ? "s" : ""} ajoutée${addedCount > 1 ? "s" : ""} à ${space.name}.`,
+        de: `${addedCount} ${addedCount === 1 ? "Person" : "Personen"} zu ${space.name} hinzugefügt.`,
+      }));
     } catch (err) {
       console.error(err);
       setMessage(extractApiError(err, t({ en: "Unable to add people.", fr: "Impossible d'ajouter ces personnes.", de: "Personen können nicht hinzugefügt werden." })));
@@ -365,19 +398,66 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
-  const handleAccessRoleChange = async (share: PortalStorageSpaceShare, role: PortalStorageSpaceGrantRole) => {
+  const handleAccessRoleChange = (share: PortalStorageSpaceShare, role: PortalStorageSpaceGrantRole) => {
+    if (role === share.role) return;
+    setPendingAccessRoleChange({ share, role });
+  };
+
+  const confirmAccessRoleChange = async ({ share, role }: PendingAccessRoleChange) => {
     if (!space || !accountIdForApi || share.user_id == null) return;
     setAccessBusy(true);
     setMessage(null);
     try {
       await updatePortalStorageSpaceShare(accountIdForApi, space.id, share.user_id, role);
       await loadAccessSummary();
-      setMessage(t({ en: "Access role updated.", fr: "Rôle d'accès mis à jour.", de: "Zugriffsrolle aktualisiert." }));
+      setPendingAccessRoleChange(null);
+      setMessage(t({
+        en: `${share.email} now has ${portalRoleLabel(role, t)} access to ${space.name}.`,
+        fr: `${share.email} dispose maintenant de l'accès ${portalRoleLabel(role, t)} à ${space.name}.`,
+        de: `${share.email} hat jetzt ${portalRoleLabel(role, t)}-Zugriff auf ${space.name}.`,
+      }));
     } catch (err) {
       console.error(err);
       setMessage(extractApiError(err, t({ en: "Unable to update this person.", fr: "Impossible de mettre à jour cette personne.", de: "Diese Person kann nicht aktualisiert werden." })));
+      setPendingAccessRoleChange(null);
     } finally {
       setAccessBusy(false);
+    }
+  };
+
+  const handleRequestCollaboratorAccess = async ({
+    targetName,
+    targetEmail,
+  }: {
+    targetName: string;
+    targetEmail: string;
+  }) => {
+    if (!accountIdForApi) return;
+    try {
+      await createPortalRequest(accountIdForApi, {
+        request_type: "portal_user_access",
+        target_name: targetName,
+        target_email: targetEmail,
+      });
+      setAccessRequestMessage(
+        t({
+          en: `Request sent. Track it in Help requests, then return to ${space?.name ?? "this space"} to finish the invitation.`,
+          fr: `Demande envoyée. Suivez-la dans Demandes d'aide, puis revenez dans ${space?.name ?? "cet espace"} pour terminer l'invitation.`,
+          de: `Anfrage gesendet. Verfolgen Sie sie unter Hilfeanfragen und kehren Sie danach zu ${space?.name ?? "diesem Bereich"} zurück, um die Einladung abzuschließen.`,
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      throw new Error(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to send this request.",
+            fr: "Impossible d'envoyer cette demande.",
+            de: "Diese Anfrage kann nicht gesendet werden.",
+          }),
+        ),
+      );
     }
   };
 
@@ -790,13 +870,17 @@ export default function PortalStorageSpaceDetailPage() {
               : t({ en: "Browse and download the files available to you in this space.", fr: "Parcourez et téléchargez les fichiers disponibles dans cet espace.", de: "Durchsuchen und laden Sie die für Sie verfügbaren Dateien in diesem Bereich herunter." })}
           </p>
         </div>
-        {canInvitePeople ? (
-          <Link
-            to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
+        {canInvitePeople && savedAccessMode === "restricted" ? (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("collaborators");
+              setAccessPeopleDialogOpen(true);
+            }}
             className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
           >
             {t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
-          </Link>
+          </button>
         ) : null}
       </div>
       {isArchived ? (
@@ -923,13 +1007,17 @@ export default function PortalStorageSpaceDetailPage() {
             </p>
           </div>
           <div className="mt-3">
-            {canInvitePeople ? (
-              <Link
-                to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
+            {canInvitePeople && savedAccessMode === "restricted" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("collaborators");
+                  setAccessPeopleDialogOpen(true);
+                }}
                 className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 px-3 py-1.5 text-xs")}
               >
                 {t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
-              </Link>
+              </button>
             ) : (
               <span className={cx("text-xs font-semibold", uiMutedTextClass)}>
                 {t({ en: "Private for now", fr: "Privé pour l'instant", de: "Vorerst privat" })}
@@ -1058,10 +1146,13 @@ export default function PortalStorageSpaceDetailPage() {
                 to: `${storageSpacePath(space)}#space-files`,
               }]
             : []),
-          ...(canInvitePeople
+          ...(canInvitePeople && savedAccessMode === "restricted"
             ? [{
                 label: t({ en: "Invite people", fr: "Inviter", de: "Einladen" }),
-                to: `/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`,
+                onClick: () => {
+                  setActiveTab("collaborators");
+                  setAccessPeopleDialogOpen(true);
+                },
                 variant: "secondary" as const,
               }]
             : []),
@@ -1090,18 +1181,21 @@ export default function PortalStorageSpaceDetailPage() {
         </PageBanner>
       ) : null}
 
-      <div className={cx("border-b pb-3", uiDividerClass)}>
-        <PageTabs
-          tabs={[
-            { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
-            { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
-            { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
-          ]}
-          activeTab={activeTab}
-          onChange={(tab) => setActiveTab(tab as SpaceDetailTab)}
-          variant="bar"
-        />
-      </div>
+      <PortalPageTabs
+        tabs={[
+          { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
+          { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
+          { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
+        ]}
+        activeTab={activeTab}
+        onChange={(tab) => setActiveTab(tab as SpaceDetailTab)}
+        ariaLabel={t({
+          en: "Space sections",
+          fr: "Sections de l'espace",
+          de: "Bereichsabschnitte",
+        })}
+        idPrefix="portal-space-detail"
+      />
 
       {activeTab === "files" ? (
         <>
@@ -1162,7 +1256,7 @@ export default function PortalStorageSpaceDetailPage() {
                   {t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
                 </div>
                 <Link
-                  to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=links`}
+                  to={`/portal/shares?view=links&space_id=${encodeURIComponent(space.id)}`}
                   className="mt-1 inline-flex text-sm font-bold text-primary hover:underline dark:text-primary-200"
                 >
                   {t({
@@ -1176,6 +1270,13 @@ export default function PortalStorageSpaceDetailPage() {
 
             {accessSummary.can_manage_access ? (
               <div className="space-y-3 border-t border-[color:var(--ui-border-soft)] pt-4">
+                <PageBanner tone="info">
+                  {t({
+                    en: "Project membership makes a person eligible to be invited. File access is controlled here for this space.",
+                    fr: "Être membre du projet permet d'être invité. L'accès réel aux fichiers se règle ici, pour cet espace.",
+                    de: "Die Projektmitgliedschaft ermöglicht eine Einladung. Der tatsächliche Dateizugriff wird hier für diesen Bereich festgelegt.",
+                  })}
+                </PageBanner>
                 <PortalAccessModeFields
                   mode={accessMode}
                   onModeChange={setAccessMode}
@@ -1208,12 +1309,13 @@ export default function PortalStorageSpaceDetailPage() {
                 <h3 className={cx("text-sm font-bold", uiTitleTextClass)}>
                   {t({ en: "Direct collaborators", fr: "Collaborateurs directs", de: "Direkte Mitwirkende" })}
                 </h3>
-                <Link
-                  to={`/portal/shares?space_id=${encodeURIComponent(space.id)}&tab=by`}
-                  className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
-                >
-                  {t({ en: "Manage collaborators", fr: "Gérer les collaborateurs", de: "Mitwirkende verwalten" })}
-                </Link>
+                <span className={cx("text-[11px] font-semibold", uiMutedTextClass)}>
+                  {t({
+                    en: "Roles below apply only to this space.",
+                    fr: "Les rôles ci-dessous s'appliquent uniquement à cet espace.",
+                    de: "Die folgenden Rollen gelten nur für diesen Bereich.",
+                  })}
+                </span>
               </div>
               {accessSummary.explicit_shares.length > 0 ? (
                 <div className="space-y-2">
@@ -1385,16 +1487,53 @@ export default function PortalStorageSpaceDetailPage() {
         >
           <div className="space-y-4">
             {accessError ? <PageBanner tone="error">{accessError}</PageBanner> : null}
-            <p className={cx("ui-caption", uiMutedTextClass)}>
-              {t({
-                en: "Choose collaborators and assign the role they need for this space.",
-                fr: "Choisissez les collaborateurs et attribuez-leur le rôle nécessaire pour cet espace.",
-                de: "Wählen Sie Mitwirkende aus und vergeben Sie die passende Rolle für diesen Bereich.",
-              })}
-            </p>
+            {accessRequestMessage ? (
+              <PageBanner tone="success">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span>{accessRequestMessage}</span>
+                  <Link
+                    to="/portal/requests"
+                    className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
+                  >
+                    {t({
+                      en: "Open Help requests",
+                      fr: "Ouvrir les demandes d'aide",
+                      de: "Hilfeanfragen öffnen",
+                    })}
+                  </Link>
+                </div>
+              </PageBanner>
+            ) : null}
+            <div className={cx(uiPanelMutedClass, "grid gap-3 p-3 sm:grid-cols-2")}>
+              <div>
+                <div className={cx("text-xs font-bold", uiTitleTextClass)}>
+                  {portalRoleLabel("Viewer", t)}
+                </div>
+                <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
+                  {t({
+                    en: "Can browse and download files in this space.",
+                    fr: "Peut consulter et télécharger les fichiers de cet espace.",
+                    de: "Kann Dateien in diesem Bereich ansehen und herunterladen.",
+                  })}
+                </p>
+              </div>
+              <div>
+                <div className={cx("text-xs font-bold", uiTitleTextClass)}>
+                  {portalRoleLabel("Editor", t)}
+                </div>
+                <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
+                  {t({
+                    en: "Can also upload, create folders, and remove files.",
+                    fr: "Peut aussi ajouter des fichiers, créer des dossiers et supprimer des fichiers.",
+                    de: "Kann außerdem Dateien hochladen, Ordner erstellen und Dateien entfernen.",
+                  })}
+                </p>
+              </div>
+            </div>
             <PortalShareCandidatePicker
               candidates={accessCandidates}
               selectedRolesByUserId={accessRolesByUserId}
+              existingRolesByUserId={existingAccessRolesByUserId}
               query={accessCandidateQuery}
               loading={accessCandidatesLoading}
               error={null}
@@ -1411,6 +1550,7 @@ export default function PortalStorageSpaceDetailPage() {
                   return next;
                 });
               }}
+              onRequestPerson={handleRequestCollaboratorAccess}
             />
             <WorkflowActions>
               <UiButton
@@ -1695,6 +1835,48 @@ export default function PortalStorageSpaceDetailPage() {
           ]}
           onCancel={() => setPendingAccessRevoke(null)}
           onConfirm={() => confirmAccessRevoke(pendingAccessRevoke)}
+        />
+      ) : null}
+
+      {pendingAccessRoleChange ? (
+        <ConfirmActionDialog
+          title={t({
+            en: "Change access role",
+            fr: "Modifier le rôle d'accès",
+            de: "Zugriffsrolle ändern",
+          })}
+          description={t({
+            en: "Review the new role before applying it to this space.",
+            fr: "Vérifiez le nouveau rôle avant de l'appliquer à cet espace.",
+            de: "Prüfen Sie die neue Rolle, bevor Sie sie auf diesen Bereich anwenden.",
+          })}
+          confirmLabel={t({
+            en: "Update role",
+            fr: "Mettre à jour le rôle",
+            de: "Rolle aktualisieren",
+          })}
+          tone="primary"
+          loading={accessBusy}
+          details={[
+            {
+              label: t({ en: "Person", fr: "Personne", de: "Person" }),
+              value: pendingAccessRoleChange.share.email,
+            },
+            {
+              label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
+              value: space.name,
+            },
+            {
+              label: t({ en: "Current role", fr: "Rôle actuel", de: "Aktuelle Rolle" }),
+              value: portalRoleLabel(pendingAccessRoleChange.share.role, t),
+            },
+            {
+              label: t({ en: "New role", fr: "Nouveau rôle", de: "Neue Rolle" }),
+              value: portalRoleLabel(pendingAccessRoleChange.role, t),
+            },
+          ]}
+          onCancel={() => setPendingAccessRoleChange(null)}
+          onConfirm={() => confirmAccessRoleChange(pendingAccessRoleChange)}
         />
       ) : null}
 

@@ -31,6 +31,7 @@ import {
 } from "./portalUi";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
+import PortalPageTabs from "./PortalPageTabs";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
@@ -931,11 +932,10 @@ export default function PortalTransfersPage() {
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
       />
 
-      <PageTabs
+      <PortalPageTabs
         tabs={logsTabs}
         activeTab={activeLogsTab}
         onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
-        variant="bar"
       />
 
       {activeLogsTab === "server" && serverAccessLoggingEnabled ? (

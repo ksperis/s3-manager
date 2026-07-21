@@ -7,6 +7,7 @@ import BrowserEmbed from "../browser/BrowserEmbed";
 
 const mocks = vi.hoisted(() => ({
   createPublicLinkMock: vi.fn(),
+  createPortalRequestMock: vi.fn(),
   deleteStorageSpaceMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
   grantShareMock: vi.fn(),
@@ -121,6 +122,11 @@ vi.mock("../../api/portal", () => ({
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 
+vi.mock("../../api/portalRequests", () => ({
+  createPortalRequest: (...args: unknown[]) =>
+    mocks.createPortalRequestMock(...args),
+}));
+
 vi.mock("../browser/BrowserEmbed", () => ({
   default: vi.fn(() => <div data-testid="portal-browser-embed" />),
 }));
@@ -229,6 +235,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       created_at: "2026-06-01T10:00:00Z",
       expires_at: null,
     });
+    mocks.createPortalRequestMock.mockResolvedValue({ id: 42, status: "pending" });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].name = "Research Data";
@@ -260,16 +267,16 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByTestId("portal-browser-embed")).toBeInTheDocument();
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Collaborators" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collaborators" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
     expect(screen.getByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
 
@@ -313,9 +320,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       "href",
       "/portal/storage-spaces/research-data#space-files"
     );
-    expect(screen.getAllByRole("link", { name: "Invite people" }).some((link) =>
-      link.getAttribute("href") === "/portal/shares?space_id=research-data&tab=by"
-    )).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Invite people" }).length).toBeGreaterThan(0);
   });
 
   it("lets users dismiss the start guide for an empty active space", () => {
@@ -331,9 +336,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       "href",
       "/portal/storage-spaces/research-data#space-files"
     );
-    expect(screen.getAllByRole("link", { name: "Invite people" }).some((link) =>
-      link.getAttribute("href") === "/portal/shares?space_id=research-data&tab=by"
-    )).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Invite people" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Dismiss guide" }));
     expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
     expect(window.localStorage.getItem("portal.storage-space-detail.start-guide.dismissed.101.research-data")).toBe("true");
@@ -435,7 +438,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
     expect(screen.getByLabelText("Space name")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Space name")).toBeDisabled();
@@ -456,7 +459,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("shows the collaborator panel with public link context", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collaborators" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
     expect(await screen.findByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
     expect(screen.getAllByText("Selected people").length).toBeGreaterThan(0);
     expect(screen.getByText("Manager User")).toBeInTheDocument();
@@ -465,12 +468,10 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByLabelText("People")).not.toBeInTheDocument();
     expect(screen.getByText("2 public links")).toHaveAttribute(
       "href",
-      "/portal/shares?space_id=research-data&tab=links"
+      "/portal/shares?view=links&space_id=research-data"
     );
-    expect(screen.getByRole("link", { name: "Manage collaborators" })).toHaveAttribute(
-      "href",
-      "/portal/shares?space_id=research-data&tab=by"
-    );
+    expect(screen.getByText("Roles below apply only to this space.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Manage collaborators" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add people" }));
     await screen.findAllByRole("heading", { name: "Add people" });
@@ -491,13 +492,105 @@ describe("PortalStorageSpaceDetailPage", () => {
         role: "Editor",
       });
     });
-    expect(await screen.findByText("People added.")).toBeInTheDocument();
+    expect(await screen.findByText("1 person added to Research Data.")).toBeInTheDocument();
+  });
+
+  it("opens the contextual collaborator workflow from a direct link and header action", async () => {
+    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+
+    expect(
+      await screen.findByRole("tab", { name: "Collaborators" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("heading", { name: "Collaborators" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Invite people" }));
+    const workflow = document.querySelector(".workflow-page");
+    if (!workflow) throw new Error("Add people workflow page not found");
+    expect(within(workflow).getByRole("heading", { name: "Add people" })).toBeInTheDocument();
+    expect(await within(workflow).findByText("Already invited · Viewer")).toBeInTheDocument();
+  });
+
+  it("confirms role changes before applying them to the current space", async () => {
+    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+
+    const roleSelect = await screen.findByRole("combobox", {
+      name: "Access for viewer@example.com",
+    });
+    fireEvent.change(roleSelect, { target: { value: "Editor" } });
+
+    expect(mocks.updateShareMock).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Change access role" });
+    expect(within(dialog).getByText("viewer@example.com")).toBeInTheDocument();
+    expect(within(dialog).getByText("Current role")).toBeInTheDocument();
+    expect(within(dialog).getByText("New role")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update role" }));
+
+    await waitFor(() => {
+      expect(mocks.updateShareMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        12,
+        "Editor",
+      );
+    });
+    expect(
+      await screen.findByText(
+        "viewer@example.com now has Editor access to Research Data.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("requests a missing project member without leaving the space workflow", async () => {
+    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add people" }));
+    const workflow = document.querySelector(".workflow-page");
+    if (!workflow) throw new Error("Add people workflow page not found");
+    fireEvent.change(
+      await within(workflow).findByPlaceholderText(
+        "Search people by name or email...",
+      ),
+      { target: { value: "missing@example.org" } },
+    );
+    fireEvent.click(
+      within(workflow).getByRole("button", {
+        name: "Request collaborator access",
+      }),
+    );
+    const requestDialog = screen.getByRole("dialog", {
+      name: "Request collaborator access",
+    });
+    fireEvent.change(within(requestDialog).getByLabelText("Name"), {
+      target: { value: "Missing Person" },
+    });
+    fireEvent.click(
+      within(requestDialog).getByRole("button", { name: "Send request" }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.createPortalRequestMock).toHaveBeenCalledWith("101", {
+        request_type: "portal_user_access",
+        target_name: "Missing Person",
+        target_email: "missing@example.org",
+      });
+    });
+    expect(
+      await within(workflow).findByText(
+        "Request sent. Track it in Help requests, then return to Research Data to finish the invitation.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(workflow).getByRole("link", { name: "Open Help requests" })).toHaveAttribute(
+      "href",
+      "/portal/requests",
+    );
   });
 
   it("shows external-tool mapping without replacing the space name", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
     expect(screen.getByText("research-data-internal")).toBeInTheDocument();
     expect(screen.getByText("Manual storage name")).toBeInTheDocument();
@@ -512,7 +605,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("runs history cleanup with confirmation, progress, and gained-space summary", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
     expect(screen.getByRole("heading", { name: "Clean up history" }).closest(".workflow-page")).toBeInTheDocument();
@@ -545,7 +638,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
     const startButton = screen.getByRole("button", { name: "Start cleanup" });
@@ -561,7 +654,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(await screen.findByText("History cleanup is disabled for this project.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clean up history" })).toBeDisabled();
   });
@@ -569,7 +662,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("confirms access mode changes from the Access panel", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collaborators" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
     const accessSelect = await screen.findByLabelText("Who can access this space?");
     fireEvent.change(accessSelect, { target: { value: "account" } });
     fireEvent.click(screen.getByRole("button", { name: "Save access" }));
@@ -593,7 +686,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
 
     await waitFor(() => {
@@ -605,7 +698,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("explains how to empty a non-empty space without calling deletion", () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
 
     expect(screen.getByRole("dialog", { name: "Delete space" })).toBeInTheDocument();
@@ -621,7 +714,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.deleteStorageSpaceMock.mockResolvedValue(undefined);
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
     const dialog = screen.getByRole("dialog", { name: "Delete space" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
@@ -639,7 +732,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.deleteStorageSpaceMock.mockRejectedValue(new Error("Deletion service unavailable"));
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
     const dialog = screen.getByRole("dialog", { name: "Delete space" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
@@ -655,7 +748,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].canDelete = false;
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
 
     expect(screen.queryByRole("button", { name: "Delete space" })).not.toBeInTheDocument();
   });
@@ -665,7 +758,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
 
     expect(screen.getByText(/Restore the space before removing files and cleaning its history/i)).toBeInTheDocument();
@@ -691,7 +784,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     expect(screen.getByText(/Files are not available for this private space/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
@@ -700,7 +793,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("confirms archive with explicit target and impacts", async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
 
     expect(screen.getByRole("heading", { name: "Archive space" })).toBeInTheDocument();

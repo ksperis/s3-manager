@@ -15,17 +15,17 @@ import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from 
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
 import UiBadge from "../../components/ui/UiBadge";
-import { cx, uiCardMutedClass, uiDividerClass, uiInputClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, uiCardMutedClass, uiInputClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import PortalPageTabs from "./PortalPageTabs";
 import { formatPortalCurrency } from "./portalI18n";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -337,14 +337,11 @@ export default function PortalUsagePage() {
         ]}
       />
 
-      <div className={cx("border-b pb-3", uiDividerClass)}>
-        <PageTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onChange={(tab) => setActiveTab(tab as PortalUsageTab)}
-          variant="bar"
-        />
-      </div>
+      <PortalPageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onChange={(tab) => setActiveTab(tab as PortalUsageTab)}
+      />
 
       {activeTab === "storage" ? (
         <div className="space-y-4">

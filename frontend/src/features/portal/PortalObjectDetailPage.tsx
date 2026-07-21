@@ -19,18 +19,18 @@ import DataTableShell, { type DataTableColumn } from "../../components/list/Data
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
-import { cx, uiCardMutedClass, uiDividerClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { formatBytes } from "../../utils/format";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import PortalPageTabs from "./PortalPageTabs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   PortalPageState,
@@ -482,19 +482,16 @@ export default function PortalObjectDetailPage() {
       {downloadMessage ? <PageBanner tone="info">{downloadMessage}</PageBanner> : null}
       {objectError ? <PageBanner tone="warning">{objectError}</PageBanner> : null}
 
-      <div className={cx("border-b pb-3", uiDividerClass)}>
-        <PageTabs
-          tabs={[
-            { id: "preview", label: t({ en: "Preview", fr: "Aperçu", de: "Vorschau" }) },
-            { id: "sharing", label: t({ en: "Sharing", fr: "Partage", de: "Freigabe" }) },
-            { id: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
-            { id: "events", label: t({ en: "Events", fr: "Événements", de: "Ereignisse" }) },
-          ]}
-          activeTab={activeTab}
-          onChange={(tab) => setActiveTab(tab as ObjectTab)}
-          variant="bar"
-        />
-      </div>
+      <PortalPageTabs
+        tabs={[
+          { id: "preview", label: t({ en: "Preview", fr: "Aperçu", de: "Vorschau" }) },
+          { id: "sharing", label: t({ en: "Sharing", fr: "Partage", de: "Freigabe" }) },
+          { id: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
+          { id: "events", label: t({ en: "Events", fr: "Événements", de: "Ereignisse" }) },
+        ]}
+        activeTab={activeTab}
+        onChange={(tab) => setActiveTab(tab as ObjectTab)}
+      />
 
       {activeTab === "preview" ? (
         <div className="space-y-4">

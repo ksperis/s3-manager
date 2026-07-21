@@ -26,7 +26,6 @@ import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
@@ -43,6 +42,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
+import PortalPageTabs from "./PortalPageTabs";
 import {
   formatPortalRequestDate,
   PortalRequestStatusBadge,
@@ -582,7 +582,7 @@ export default function PortalRequestsPage() {
         </PageBanner>
       ) : null}
 
-      <PageTabs
+      <PortalPageTabs
         tabs={[
           ...(showRequestHelpTab
             ? [
@@ -607,7 +607,6 @@ export default function PortalRequestsPage() {
         ]}
         activeTab={showRequestHelpTab ? activeTab : "history"}
         onChange={(tabId) => setActiveTab(tabId as RequestsTab)}
-        variant="bar"
         headerActions={
           !showRequestHelpTab || activeTab === "history" ? (
             <UiButton

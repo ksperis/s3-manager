@@ -1,8 +1,9 @@
 # Portal: Collaborators
 
-Use this page when you need to review workspace members, invite people to a
-space, check who can work there, or review links that send a file outside the
-workspace.
+Use this page when you need to review project members, check access across
+spaces, or review links that send a file outside the project. Invitations and
+role changes are managed from the relevant space so the affected files and
+permissions always remain clear.
 
 ## Before you start
 
@@ -35,30 +36,32 @@ Portal managers can browse and manage every project space.
 ## Main tasks
 
 1. Open **Portal > Collaborators**.
-2. **Workspace members** opens by default. Use it to search every active member
-   of the selected workspace. Each row shows the member avatar, full name on
-   hover, and whether workspace access is direct, inherited through a group, or
-   both.
-3. Use **Start collaborating** to follow the recommended order: pick a space,
-   invite collaborators, review access, then create file links only when needed.
-4. Open the last tab, **Invite**, then choose the space you want to open to
-   collaborators.
-5. Search for people by name or email, select the least-powerful role that fits
-   the work, then choose **Invite people**.
+2. **Project members** opens by default. Use it to search every active member
+   of the selected project. Project membership makes a person available for
+   collaboration; it does not automatically grant access to every file.
+3. Open **Access by space** for a read-only overview of spaces shared with you
+   and direct access you granted. Choose **Manage in space** on a row when a
+   role or access needs to change.
+4. To invite someone, open **Portal > Spaces**, choose the space, then open its
+   **Collaborators** tab. You can also use **Invite people** from the space
+   header or file area to open the same contextual workflow.
+5. Choose **Add people**, search by name or email, select the least-powerful
+   role that fits the work, then confirm **Add people**.
 6. If no person matches, choose **Request collaborator access**, add their name
    and email, then send the request. An admin must add them to the project
    before you can invite them to a space. Follow the status in **Portal > Help
-   requests**.
-7. In **Review access > People with access**, confirm the people and roles now
-   match the intended collaboration.
-8. To share outside the workspace, open **Public links**, choose a team
-   space, then open its files and create the link from the selected file.
-9. In **Spaces shared with me**, review spaces where someone else invited you.
+   requests**, then return to the same space to finish the invitation.
+7. Change a direct collaborator's role from the space's **Collaborators** tab.
+   Review the person, current role, new role, and space in the confirmation
+   dialog before applying the change.
+8. To share outside the project, open **External links** in the global
+   Collaborators page. Filter by space to copy or revoke an existing link. New
+   links are always created from the actions of the file being shared.
 
 ## You are done when
 
-The intended collaborator appears with the right role, or the public link appears
-with the expected status and expiry.
+The intended collaborator appears in the relevant space with the right role,
+or the external link appears with the expected status and expiry.
 
 ## If sharing is unavailable
 

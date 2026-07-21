@@ -8,29 +8,20 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
 import {
-  grantPortalStorageSpaceShare,
-  listPortalStorageSpaceShareCandidates,
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   revokePortalStorageSpacePublicLink,
   type PortalCollaborator,
   type PortalPublicLink,
-  revokePortalStorageSpaceShare,
-  updatePortalStorageSpaceShare,
-  type PortalStorageSpaceGrantRole,
-  type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
-import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
-import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -39,7 +30,6 @@ import {
   tableDeleteActionClasses,
 } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
-import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -55,10 +45,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
-import {
-  PortalShareCandidatePicker,
-  selectedPortalShares,
-} from "./PortalAccessControls";
+import PortalPageTabs from "./PortalPageTabs";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import {
   storageSpacePath,
@@ -74,13 +61,10 @@ import {
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-const roles: PortalStorageSpaceGrantRole[] = ["Viewer", "Editor"];
-
-type ShareTab = "with" | "by" | "links";
-type CollaboratorsViewTab = "invite" | "members" | "access";
+type ShareTab = "with" | "by";
+type CollaboratorsViewTab = "members" | "access" | "links";
 type PendingShareAction =
-  | { type: "revoke-share"; share: ShareRow }
-  | { type: "revoke-public-link"; link: PortalPublicLink };
+  { type: "revoke-public-link"; link: PortalPublicLink };
 type ShareRow = {
   id: string;
   userId?: number | null;
@@ -91,40 +75,6 @@ type ShareRow = {
   activityLabel: string;
 };
 type PublicLinkRow = PortalPublicLink & { rowKey: string };
-
-function CollaborationStep({
-  step,
-  title,
-  description,
-  action,
-}: {
-  step: string;
-  title: string;
-  description: string;
-  action: ReactNode;
-}) {
-  return (
-    <li className="flex min-h-[136px] flex-col justify-between rounded-md border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface)] p-3">
-      <div>
-        <div
-          className={cx(
-            "text-[11px] font-semibold uppercase",
-            uiMutedTextClass,
-          )}
-        >
-          {step}
-        </div>
-        <h3 className="mt-1 text-sm font-bold text-[var(--ui-text)]">
-          {title}
-        </h3>
-        <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
-          {description}
-        </p>
-      </div>
-      <div className="mt-3">{action}</div>
-    </li>
-  );
-}
 
 function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
   return {
@@ -140,18 +90,13 @@ function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
 
 function SharesTable({
   shares,
-  editable,
-  busyShareId,
-  onRoleChange,
-  onRevoke,
+  direction,
 }: {
   shares: ShareRow[];
-  editable: boolean;
-  busyShareId: string | null;
-  onRoleChange: (share: ShareRow, role: PortalStorageSpaceGrantRole) => void;
-  onRevoke: (share: ShareRow) => void;
+  direction: ShareTab;
 }) {
   const { t } = useI18n();
+  const sharedByMe = direction === "by";
   const tableStatus = shares.length === 0 ? "empty" : "ready";
   const columns = useMemo<DataTableColumn<ShareRow>[]>(
     () => [
@@ -160,48 +105,33 @@ function SharesTable({
         label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         mobileLabel: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         primary: true,
-        render: (share) => share.spaceName,
+        render: (share) => (
+          <Link
+            to={`/portal/storage-spaces/${encodeURIComponent(share.spaceId)}?tab=collaborators`}
+            className="font-bold text-primary hover:underline dark:text-primary-200"
+          >
+            {share.spaceName}
+          </Link>
+        ),
       },
       {
         id: "person",
-        label: editable
+        label: sharedByMe
           ? t({ en: "Collaborator", fr: "Collaborateur", de: "Mitwirkende" })
+          : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
+        mobileLabel: sharedByMe
+          ? t({ en: "Person", fr: "Personne", de: "Person" })
           : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
         render: (share) => share.person,
       },
       {
         id: "access",
         label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
-        render: (share) =>
-          editable && share.userId ? (
-            <UiSelect
-              size="compact"
-              className="h-8"
-              value={share.access}
-              disabled={busyShareId === share.id}
-              onChange={(event) =>
-                onRoleChange(
-                  share,
-                  event.target.value as PortalStorageSpaceGrantRole,
-                )
-              }
-              aria-label={t({
-                en: `Access for ${share.person}`,
-                fr: `Accès pour ${share.person}`,
-                de: `Zugriff für ${share.person}`,
-              })}
-            >
-              {roles.map((role) => (
-                <option key={role} value={role}>
-                  {portalRoleLabel(role, t)}
-                </option>
-              ))}
-            </UiSelect>
-          ) : (
-            <UiBadge tone={portalRoleTone(share.access)}>
-              {portalRoleLabel(share.access, t)}
-            </UiBadge>
-          ),
+        render: (share) => (
+          <UiBadge tone={portalRoleTone(share.access)}>
+            {portalRoleLabel(share.access, t)}
+          </UiBadge>
+        ),
       },
       {
         id: "activity",
@@ -211,29 +141,30 @@ function SharesTable({
             ? t({ en: "Active", fr: "Actif", de: "Aktiv" })
             : share.activityLabel,
       },
-      ...(editable
+      ...(sharedByMe
         ? [
             {
               id: "action",
               label: t({ en: "Action", fr: "Action", de: "Aktion" }),
               align: "right" as const,
               mobileRole: "actions" as const,
-              render: (share: ShareRow) =>
-                share.userId ? (
-                  <button
-                    type="button"
-                    disabled={busyShareId === share.id}
-                    onClick={() => onRevoke(share)}
-                    className={tableDeleteActionClasses}
-                  >
-                    {t({ en: "Revoke", fr: "Révoquer", de: "Widerrufen" })}
-                  </button>
-                ) : null,
+              render: (share: ShareRow) => (
+                <Link
+                  to={`/portal/storage-spaces/${encodeURIComponent(share.spaceId)}?tab=collaborators`}
+                  className={tableActionButtonClasses}
+                >
+                  {t({
+                    en: "Manage in space",
+                    fr: "Gérer dans l'espace",
+                    de: "Im Bereich verwalten",
+                  })}
+                </Link>
+              ),
             },
           ]
         : []),
     ],
-    [busyShareId, editable, onRevoke, onRoleChange, t],
+    [sharedByMe, t],
   );
 
   return (
@@ -253,11 +184,11 @@ function SharesTable({
         de: "Mitwirkende können nicht geladen werden.",
       })}
       emptyMessage={
-        editable
+        sharedByMe
           ? t({
-              en: "No collaborators invited yet.",
-              fr: "Aucun collaborateur invité pour l'instant.",
-              de: "Noch keine Mitwirkenden eingeladen.",
+              en: "No direct access has been granted yet.",
+              fr: "Aucun accès direct n'a encore été accordé.",
+              de: "Es wurde noch kein direkter Zugriff vergeben.",
             })
           : t({
               en: "No spaces have been shared with you yet.",
@@ -341,9 +272,9 @@ function CollaboratorsInventory({
       {
         id: "role",
         label: t({
-          en: "Workspace role",
-          fr: "Rôle workspace",
-          de: "Workspace-Rolle",
+          en: "Project role",
+          fr: "Rôle projet",
+          de: "Projektrolle",
         }),
         render: (collaborator) => (
           <UiBadge
@@ -382,12 +313,19 @@ function CollaboratorsInventory({
   return (
     <UiCard
       title={t({
-        en: "Workspace members",
-        fr: "Membres du workspace",
-        de: "Workspace-Mitglieder",
+        en: "Project members",
+        fr: "Membres du projet",
+        de: "Projektmitglieder",
       })}
     >
       <div className="space-y-3">
+        <p className={cx("ui-caption", uiMutedTextClass)}>
+          {t({
+            en: "Project membership makes someone available for collaboration. Access to files is granted separately in each space.",
+            fr: "L'appartenance au projet rend une personne disponible pour collaborer. L'accès aux fichiers est accordé séparément dans chaque espace.",
+            de: "Die Projektmitgliedschaft macht eine Person für die Zusammenarbeit verfügbar. Der Dateizugriff wird in jedem Bereich separat vergeben.",
+          })}
+        </p>
         <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-end">
           <UiInput
             label={t({
@@ -424,16 +362,16 @@ function CollaboratorsInventory({
           rowKey={(collaborator) => collaborator.user_id}
           status={tableStatus}
           loadingMessage={t({
-            en: "Loading workspace members...",
-            fr: "Chargement des membres du workspace...",
-            de: "Workspace-Mitglieder werden geladen...",
+            en: "Loading project members...",
+            fr: "Chargement des membres du projet...",
+            de: "Projektmitglieder werden geladen...",
           })}
           errorMessage={
             error ??
             t({
-              en: "Unable to load workspace members.",
-              fr: "Impossible de charger les membres du workspace.",
-              de: "Workspace-Mitglieder können nicht geladen werden.",
+              en: "Unable to load project members.",
+              fr: "Impossible de charger les membres du projet.",
+              de: "Projektmitglieder können nicht geladen werden.",
             })
           }
           emptyMessage={
@@ -444,9 +382,9 @@ function CollaboratorsInventory({
                   de: "Kein Mitglied passt zu dieser Suche.",
                 })
               : t({
-                  en: "No workspace members to display.",
-                  fr: "Aucun membre du workspace à afficher.",
-                  de: "Keine Workspace-Mitglieder zum Anzeigen.",
+                  en: "No project members to display.",
+                  fr: "Aucun membre du projet à afficher.",
+                  de: "Keine Projektmitglieder zum Anzeigen.",
                 })
           }
           responsiveCards
@@ -467,24 +405,13 @@ export default function PortalSharesPage() {
   const [sharesLoadedKey, setSharesLoadedKey] = useState<string | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
   const [sharesError, setSharesError] = useState<string | null>(null);
-  const [shareCandidateQuery, setShareCandidateQuery] = useState("");
-  const [shareCandidates, setShareCandidates] = useState<
-    PortalStorageSpaceShareCandidate[]
-  >([]);
-  const [shareCandidatesLoading, setShareCandidatesLoading] = useState(false);
-  const [selectedShareRolesByUserId, setSelectedShareRolesByUserId] = useState<
-    Record<number, PortalStorageSpaceGrantRole>
-  >({});
-  const [selectedSpaceId, setSelectedSpaceId] = useState("");
+  const [selectedLinkSpaceId, setSelectedLinkSpaceId] = useState("");
   const [collaboratorQuery, setCollaboratorQuery] = useState("");
   const [sharesMessage, setSharesMessage] = useState<string | null>(null);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(
     null,
   );
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [collaborationGuideDismissed, setCollaborationGuideDismissed] =
-    useState(false);
   const {
     workspace,
     loading,
@@ -516,22 +443,9 @@ export default function PortalSharesPage() {
       accountIdForApi ? `${accountIdForApi}:${activeCollaboratorSpaceIds}` : "",
     [accountIdForApi, activeCollaboratorSpaceIds],
   );
-  const selectedShareEntries = selectedPortalShares(selectedShareRolesByUserId);
-  const selectedInviteSpace =
-    activeManagedTeamSpaces.find((space) => space.id === selectedSpaceId) ??
-    activeManagedTeamSpaces[0] ??
-    null;
   const selectedPublicLinkSpace =
-    activeManagedTeamSpaces.find((space) => space.id === selectedSpaceId) ??
-    activeManagedTeamSpaces[0] ??
+    activeManagedTeamSpaces.find((space) => space.id === selectedLinkSpaceId) ??
     null;
-  const collaborationGuideStorageKey = `portal.collaborators.start-guide.dismissed.${accountIdForApi ?? "default"}`;
-
-  useEffect(() => {
-    setCollaborationGuideDismissed(
-      window.localStorage.getItem(collaborationGuideStorageKey) === "1",
-    );
-  }, [collaborationGuideStorageKey]);
 
   useEffect(() => {
     if (initialUrlContextApplied.current || workspace.spaces.length === 0)
@@ -539,42 +453,32 @@ export default function PortalSharesPage() {
     const params = new URLSearchParams(window.location.search);
     const requestedTab = params.get("tab");
     const requestedSpaceId = params.get("space_id");
-    if (
-      requestedTab === "with" ||
-      requestedTab === "by" ||
-      requestedTab === "links"
-    ) {
+    if (requestedTab === "with" || requestedTab === "by") {
       setActiveTab(requestedTab);
       setActiveViewTab("access");
+    } else if (requestedTab === "links") {
+      setActiveViewTab("links");
     }
     const requestedView = params.get("view");
-    if (
-      requestedView === "invite" ||
-      requestedView === "members" ||
-      requestedView === "access"
-    ) {
+    if (requestedView === "members" || requestedView === "access" || requestedView === "links") {
       setActiveViewTab(requestedView);
+    } else if (requestedView === "invite") {
+      setActiveViewTab("access");
     }
     if (
       requestedSpaceId &&
       workspace.spaces.some((space) => space.id === requestedSpaceId)
     ) {
-      setSelectedSpaceId(requestedSpaceId);
+      setSelectedLinkSpaceId(requestedSpaceId);
     }
     initialUrlContextApplied.current = true;
   }, [workspace.spaces]);
 
   useEffect(() => {
-    if (!selectedSpaceId && activeManagedTeamSpaces[0]) {
-      setSelectedSpaceId(activeManagedTeamSpaces[0].id);
+    if (selectedLinkSpaceId && !activeManagedTeamSpaces.some((space) => space.id === selectedLinkSpaceId)) {
+      setSelectedLinkSpaceId("");
     }
-    if (
-      selectedSpaceId &&
-      !activeManagedTeamSpaces.some((space) => space.id === selectedSpaceId)
-    ) {
-      setSelectedSpaceId(activeManagedTeamSpaces[0]?.id ?? "");
-    }
-  }, [activeManagedTeamSpaces, selectedSpaceId]);
+  }, [activeManagedTeamSpaces, selectedLinkSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -648,68 +552,6 @@ export default function PortalSharesPage() {
     };
   }, [accountIdForApi, activeManagedTeamSpaces]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!accountIdForApi || !selectedInviteSpace) {
-      setShareCandidates([]);
-      setShareCandidatesLoading(false);
-      setSelectedShareRolesByUserId({});
-      return () => {
-        cancelled = true;
-      };
-    }
-    setShareCandidatesLoading(true);
-    listPortalStorageSpaceShareCandidates(
-      accountIdForApi,
-      selectedInviteSpace.id,
-    )
-      .then((candidates) => {
-        if (cancelled) return;
-        setShareCandidates(candidates);
-        const availableUserIds = new Set(
-          candidates
-            .filter((candidate) => !candidate.already_shared)
-            .map((candidate) => candidate.user_id),
-        );
-        setSelectedShareRolesByUserId(
-          (current) =>
-            Object.fromEntries(
-              Object.entries(current).filter(([userId]) =>
-                availableUserIds.has(Number(userId)),
-              ),
-            ) as Record<number, PortalStorageSpaceGrantRole>,
-        );
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) {
-          setShareCandidates([]);
-          setSelectedShareRolesByUserId({});
-          setSharesError(
-            extractApiError(
-              err,
-              t({
-                en: "Unable to load people.",
-                fr: "Impossible de charger les personnes.",
-                de: "Personen können nicht geladen werden.",
-              }),
-            ),
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setShareCandidatesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountIdForApi, selectedInviteSpace, t]);
-
-  useEffect(() => {
-    setShareCandidateQuery("");
-    setSelectedShareRolesByUserId({});
-  }, [selectedSpaceId]);
-
   const rows = useMemo(() => {
     return {
       with: (apiShares ?? [])
@@ -721,192 +563,6 @@ export default function PortalSharesPage() {
       links: [],
     };
   }, [apiShares]);
-
-  const refreshSpaceShares = async (spaceId: string) => {
-    if (!accountIdForApi) return;
-    const updated = await listPortalStorageSpaceShares(
-      accountIdForApi,
-      spaceId,
-    );
-    setApiShares((current) => {
-      const rest = (current ?? []).filter(
-        (share) => share.storage_space_id !== spaceId,
-      );
-      return [...rest, ...updated];
-    });
-  };
-
-  const handleCreateShare = async () => {
-    if (
-      !accountIdForApi ||
-      !selectedInviteSpace ||
-      selectedShareEntries.length === 0
-    )
-      return;
-    const selectedSpace = selectedInviteSpace;
-    setBusyShareId("new");
-    setSharesError(null);
-    setSharesMessage(null);
-    try {
-      const createdShares = await Promise.all(
-        selectedShareEntries.map((entry) =>
-          grantPortalStorageSpaceShare(accountIdForApi, selectedSpace.id, {
-            user_id: entry.user_id,
-            role: entry.role,
-          }),
-        ),
-      );
-      setShareCandidateQuery("");
-      setSelectedShareRolesByUserId({});
-      setApiShares((current) => {
-        const createdIds = new Set(createdShares.map((share) => share.id));
-        const filtered = (current ?? []).filter(
-          (item) => !createdIds.has(item.id),
-        );
-        return [...filtered, ...createdShares];
-      });
-      const sharedUserIds = new Set(
-        selectedShareEntries.map((entry) => entry.user_id),
-      );
-      setShareCandidates((current) =>
-        current.map((candidate) =>
-          sharedUserIds.has(candidate.user_id)
-            ? { ...candidate, already_shared: true }
-            : candidate,
-        ),
-      );
-      setSharesMessage(
-        t({
-          en: "People invited.",
-          fr: "Personnes invitées.",
-          de: "Personen eingeladen.",
-        }),
-      );
-      setInviteDialogOpen(false);
-      setActiveTab("by");
-    } catch (err) {
-      console.error(err);
-      setSharesError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to invite collaborators.",
-            fr: "Impossible d'inviter les collaborateurs.",
-            de: "Mitwirkende können nicht eingeladen werden.",
-          }),
-        ),
-      );
-    } finally {
-      setBusyShareId(null);
-    }
-  };
-
-  const handleRequestCollaboratorAccess = async ({
-    targetName,
-    targetEmail,
-  }: {
-    targetName: string;
-    targetEmail: string;
-  }) => {
-    if (!accountIdForApi) return;
-    try {
-      await createPortalRequest(accountIdForApi, {
-        request_type: "portal_user_access",
-        target_name: targetName,
-        target_email: targetEmail,
-      });
-      setSharesMessage(
-        t({
-          en: "Request sent. Track it in Help requests; an admin will add the collaborator before you can invite them.",
-          fr: "Demande envoyée. Suivez-la dans Demandes d'aide ; un admin ajoutera le collaborateur avant que vous puissiez l'inviter.",
-          de: "Anfrage gesendet. Verfolgen Sie sie unter Hilfeanfragen; ein Admin fügt die Person hinzu, bevor Sie sie einladen können.",
-        }),
-      );
-    } catch (err) {
-      console.error(err);
-      throw new Error(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to send this request.",
-            fr: "Impossible d'envoyer cette demande.",
-            de: "Diese Anfrage kann nicht gesendet werden.",
-          }),
-        ),
-      );
-    }
-  };
-
-  const handleRoleChange = async (
-    share: ShareRow,
-    role: PortalStorageSpaceGrantRole,
-  ) => {
-    if (!accountIdForApi || !share.userId) return;
-    setBusyShareId(share.id);
-    setSharesError(null);
-    try {
-      const updated = await updatePortalStorageSpaceShare(
-        accountIdForApi,
-        share.spaceId,
-        share.userId,
-        role,
-      );
-      setApiShares((current) =>
-        (current ?? []).map((item) =>
-          item.id === updated.id ? updated : item,
-        ),
-      );
-    } catch (err) {
-      console.error(err);
-      setSharesError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to update this collaborator.",
-            fr: "Impossible de mettre à jour ce collaborateur.",
-            de: "Dieser Mitwirkende kann nicht aktualisiert werden.",
-          }),
-        ),
-      );
-    } finally {
-      setBusyShareId(null);
-    }
-  };
-
-  const handleRevoke = async (share: ShareRow) => {
-    if (!accountIdForApi || !share.userId) return;
-    setPendingAction({ type: "revoke-share", share });
-  };
-
-  const confirmRevoke = async (share: ShareRow) => {
-    if (!accountIdForApi || !share.userId) return;
-    setBusyShareId(share.id);
-    setSharesError(null);
-    try {
-      await revokePortalStorageSpaceShare(
-        accountIdForApi,
-        share.spaceId,
-        share.userId,
-      );
-      await refreshSpaceShares(share.spaceId);
-      setPendingAction(null);
-    } catch (err) {
-      console.error(err);
-      setSharesError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to remove this collaborator.",
-            fr: "Impossible de retirer ce collaborateur.",
-            de: "Dieser Mitwirkende kann nicht entfernt werden.",
-          }),
-        ),
-      );
-      setPendingAction(null);
-    } finally {
-      setBusyShareId(null);
-    }
-  };
 
   const handleRevokePublicLink = useCallback(
     (link: PortalPublicLink) => {
@@ -974,24 +630,20 @@ export default function PortalSharesPage() {
   };
 
   const shares = rows[activeTab];
-  const displayedCount =
-    activeTab === "links" ? publicLinks.length : shares.length;
-  const activePublicLinkCount = publicLinks.filter(
+  const publicLinkRows = useMemo<PublicLinkRow[]>(
+    () =>
+      publicLinks
+        .filter(
+          (link) =>
+            !selectedLinkSpaceId ||
+            link.storage_space_id === selectedLinkSpaceId,
+        )
+        .map((link) => ({ ...link, rowKey: String(link.id) })),
+    [publicLinks, selectedLinkSpaceId],
+  );
+  const activePublicLinkCount = publicLinkRows.filter(
     (link) => link.status === "Active",
   ).length;
-  const invitedCollaboratorCount = rows.by.length;
-  const sharedWithMeCount = rows.with.length;
-  const collaborationStarted =
-    activeCollaboratorSpaces.length > 0 ||
-    invitedCollaboratorCount > 0 ||
-    sharedWithMeCount > 0 ||
-    activePublicLinkCount > 0;
-  const showCollaborationGuide =
-    !collaborationStarted && !collaborationGuideDismissed;
-  const publicLinkRows = useMemo<PublicLinkRow[]>(
-    () => publicLinks.map((link) => ({ ...link, rowKey: String(link.id) })),
-    [publicLinks],
-  );
   const publicLinksTableStatus =
     publicLinkRows.length === 0 ? "empty" : "ready";
   const publicLinkColumns = useMemo<DataTableColumn<PublicLinkRow>[]>(
@@ -1084,13 +736,9 @@ export default function PortalSharesPage() {
     }),
   });
   if (pageState) return pageState;
-  const dismissCollaborationGuide = () => {
-    window.localStorage.setItem(collaborationGuideStorageKey, "1");
-    setCollaborationGuideDismissed(true);
-  };
 
   return (
-    <div className={workflowPageHostClass(inviteDialogOpen)}>
+    <div className="space-y-4">
       <PageHeader
         title={t({
           en: "Collaborators",
@@ -1098,9 +746,9 @@ export default function PortalSharesPage() {
           de: "Mitwirkende",
         })}
         description={t({
-          en: "Share spaces with people you trust and keep track of file links sent outside the workspace.",
-          fr: "Partagez des espaces avec les personnes de confiance et suivez les liens envoyés hors du workspace.",
-          de: "Teilen Sie Bereiche mit vertrauenswürdigen Personen und behalten Sie Dateilinks außerhalb des Workspace im Blick.",
+          en: "See who belongs to the project, review access by space, and track links shared outside it.",
+          fr: "Consultez les membres du projet, contrôlez les accès par espace et suivez les liens partagés à l'extérieur.",
+          de: "Sehen Sie Projektmitglieder, prüfen Sie Zugriffe pro Bereich und verfolgen Sie extern geteilte Links.",
         })}
         breadcrumbs={portalBreadcrumbs({
           label: t({
@@ -1109,6 +757,16 @@ export default function PortalSharesPage() {
             de: "Mitwirkende",
           }),
         })}
+        actions={[
+          {
+            label: t({
+              en: "Open spaces",
+              fr: "Ouvrir les espaces",
+              de: "Bereiche öffnen",
+            }),
+            to: "/portal/storage-spaces",
+          },
+        ]}
       />
       {sharesError ? (
         <PageBanner tone="warning">{sharesError}</PageBanner>
@@ -1117,298 +775,50 @@ export default function PortalSharesPage() {
         <PageBanner tone="info">{sharesMessage}</PageBanner>
       ) : null}
 
-      {showCollaborationGuide ? (
-        <section
-          className={cx(uiPanelMutedClass, "p-4")}
-          aria-labelledby="portal-collaboration-start-title"
-        >
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 id="portal-collaboration-start-title" className="ui-subtitle">
-                {t({
-                  en: "Start collaborating",
-                  fr: "Démarrer la collaboration",
-                  de: "Zusammenarbeit starten",
-                })}
-              </h2>
-              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                {t({
-                  en: "Choose a space, invite people, then review who can work there. Use public links only when one file needs to leave the workspace.",
-                  fr: "Choisissez un espace, invitez des personnes, puis vérifiez qui peut y travailler. Utilisez les liens publics seulement quand un fichier doit sortir du workspace.",
-                  de: "Wählen Sie einen Bereich, laden Sie Personen ein und prüfen Sie dann, wer dort arbeiten kann. Nutzen Sie öffentliche Links nur, wenn eine Datei den Workspace verlassen muss.",
-                })}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
-                {t({
-                  en: `${activeManagedTeamSpaces.length} team space${activeManagedTeamSpaces.length === 1 ? "" : "s"} you can manage`,
-                  fr: `${activeManagedTeamSpaces.length} espace${activeManagedTeamSpaces.length > 1 ? "s" : ""} d'équipe géré${activeManagedTeamSpaces.length > 1 ? "s" : ""}`,
-                  de: `${activeManagedTeamSpaces.length} verwaltete${activeManagedTeamSpaces.length === 1 ? "r Teambereich" : " Teambereiche"}`,
-                })}
-              </div>
-              <UiButton
-                size="xs"
-                variant="ghost"
-                onClick={dismissCollaborationGuide}
-              >
-                {t({
-                  en: "Dismiss guide",
-                  fr: "Masquer le guide",
-                  de: "Anleitung ausblenden",
-                })}
-              </UiButton>
-            </div>
-          </div>
-          <ol className="grid gap-3 md:grid-cols-4">
-            <CollaborationStep
-              step={t({ en: "Step 1", fr: "Étape 1", de: "Schritt 1" })}
-              title={t({
-                en: "Pick a space",
-                fr: "Choisir un espace",
-                de: "Bereich wählen",
-              })}
-              description={t({
-                en: "Start from the project or dataset where the files already live.",
-                fr: "Partez du projet ou du jeu de données où les fichiers se trouvent déjà.",
-                de: "Beginnen Sie mit dem Projekt oder Datensatz, in dem die Dateien liegen.",
-              })}
-              action={
-                activeManagedTeamSpaces.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setInviteDialogOpen(true)}
-                    className={cx(
-                      uiButtonBaseClass,
-                      uiButtonVariants.primary,
-                      "h-8 px-3 py-1 text-xs",
-                    )}
-                  >
-                    {t({
-                      en: "Choose people",
-                      fr: "Choisir des personnes",
-                      de: "Personen wählen",
-                    })}
-                  </button>
-                ) : (
-                  <Link
-                    to="/portal/storage-spaces?create=1"
-                    className={cx(
-                      uiButtonBaseClass,
-                      uiButtonVariants.primary,
-                      "h-8 px-3 py-1 text-xs",
-                    )}
-                  >
-                    {t({
-                      en: "Create a space",
-                      fr: "Créer un espace",
-                      de: "Bereich erstellen",
-                    })}
-                  </Link>
-                )
-              }
-            />
-            <CollaborationStep
-              step={t({ en: "Step 2", fr: "Étape 2", de: "Schritt 2" })}
-              title={t({
-                en: "Invite collaborators",
-                fr: "Inviter des collaborateurs",
-                de: "Mitwirkende einladen",
-              })}
-              description={t({
-                en: "Give each person the least access they need: view or edit.",
-                fr: "Donnez à chacun le niveau nécessaire : consulter ou modifier.",
-                de: "Geben Sie jeder Person nur den nötigen Zugriff: ansehen oder bearbeiten.",
-              })}
-              action={
-                <button
-                  type="button"
-                  disabled={activeManagedTeamSpaces.length === 0}
-                  onClick={() => setActiveTab("by")}
-                  className={cx(
-                    uiButtonBaseClass,
-                    uiButtonVariants.secondary,
-                    "h-8 px-3 py-1 text-xs",
-                  )}
-                >
-                  {t({
-                    en: "Review invited",
-                    fr: "Vérifier les invités",
-                    de: "Eingeladene prüfen",
-                  })}
-                </button>
-              }
-            />
-            <CollaborationStep
-              step={t({ en: "Step 3", fr: "Étape 3", de: "Schritt 3" })}
-              title={t({
-                en: "Check access",
-                fr: "Contrôler les accès",
-                de: "Zugriff prüfen",
-              })}
-              description={t({
-                en: "See spaces shared with you and spaces you have opened to others.",
-                fr: "Voyez les espaces partagés avec vous et ceux que vous avez ouverts aux autres.",
-                de: "Sehen Sie Bereiche, die mit Ihnen geteilt wurden, und Bereiche, die Sie geteilt haben.",
-              })}
-              action={
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveTab(sharedWithMeCount > 0 ? "with" : "by")
-                  }
-                  className={cx(
-                    uiButtonBaseClass,
-                    uiButtonVariants.secondary,
-                    "h-8 px-3 py-1 text-xs",
-                  )}
-                >
-                  {t({
-                    en: `${invitedCollaboratorCount + sharedWithMeCount} access item${invitedCollaboratorCount + sharedWithMeCount === 1 ? "" : "s"}`,
-                    fr: `${invitedCollaboratorCount + sharedWithMeCount} accès à vérifier`,
-                    de: `${invitedCollaboratorCount + sharedWithMeCount} Zugriff${invitedCollaboratorCount + sharedWithMeCount === 1 ? "" : "e"}`,
-                  })}
-                </button>
-              }
-            />
-            <CollaborationStep
-              step={t({ en: "Step 4", fr: "Étape 4", de: "Schritt 4" })}
-              title={t({
-                en: "Share one file",
-                fr: "Partager un fichier",
-                de: "Eine Datei teilen",
-              })}
-              description={t({
-                en: "Open file links when someone outside the workspace needs a single file.",
-                fr: "Ouvrez les liens de fichiers quand une personne externe a besoin d'un seul fichier.",
-                de: "Öffnen Sie Dateilinks, wenn jemand außerhalb des Workspace eine einzelne Datei braucht.",
-              })}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("links")}
-                  className={cx(
-                    uiButtonBaseClass,
-                    uiButtonVariants.secondary,
-                    "h-8 px-3 py-1 text-xs",
-                  )}
-                >
-                  {activePublicLinkCount > 0
-                    ? t({
-                        en: `${activePublicLinkCount} active link${activePublicLinkCount === 1 ? "" : "s"}`,
-                        fr: `${activePublicLinkCount} lien${activePublicLinkCount > 1 ? "s" : ""} actif${activePublicLinkCount > 1 ? "s" : ""}`,
-                        de: `${activePublicLinkCount} aktive Link${activePublicLinkCount === 1 ? "" : "s"}`,
-                      })
-                    : t({
-                        en: "Open file links",
-                        fr: "Ouvrir les liens",
-                        de: "Dateilinks öffnen",
-                      })}
-                </button>
-              }
-            />
-          </ol>
-        </section>
-      ) : null}
+      <PageBanner tone="info">
+        {t({
+          en: "A project member does not automatically have access to every file. Invite and manage people from the Collaborators tab of the relevant space.",
+          fr: "Un membre du projet n'accède pas automatiquement à tous les fichiers. Invitez et gérez les personnes depuis l'onglet Collaborateurs de l'espace concerné.",
+          de: "Ein Projektmitglied hat nicht automatisch Zugriff auf alle Dateien. Laden Sie Personen im Tab Mitwirkende des jeweiligen Bereichs ein und verwalten Sie sie dort.",
+        })}
+      </PageBanner>
 
-      <PageTabs
+      <PortalPageTabs
         tabs={[
           {
             id: "members",
             label: t({
-              en: "Workspace members",
-              fr: "Membres du workspace",
-              de: "Workspace-Mitglieder",
+              en: "Project members",
+              fr: "Membres du projet",
+              de: "Projektmitglieder",
             }),
           },
           {
             id: "access",
             label: t({
-              en: "Review access",
-              fr: "Vérifier les accès",
-              de: "Zugriff prüfen",
+              en: "Access by space",
+              fr: "Accès par espace",
+              de: "Zugriff nach Bereich",
             }),
           },
           {
-            id: "invite",
+            id: "links",
             label: t({
-              en: "Invite",
-              fr: "Inviter",
-              de: "Einladen",
+              en: "External links",
+              fr: "Liens externes",
+              de: "Externe Links",
             }),
           },
         ]}
         activeTab={activeViewTab}
         onChange={(tab) => setActiveViewTab(tab as CollaboratorsViewTab)}
-        variant="bar"
+        ariaLabel={t({
+          en: "Collaborator overview",
+          fr: "Vue d'ensemble des collaborateurs",
+          de: "Mitwirkendenübersicht",
+        })}
+        idPrefix="portal-collaborators"
       />
-
-      {activeViewTab === "invite" ? (
-        activeManagedTeamSpaces.length > 0 ? (
-          <div id="share-space" className="scroll-mt-6">
-            <UiCard
-              title={t({
-                en: "Invite people",
-                fr: "Inviter des personnes",
-                de: "Personen einladen",
-              })}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="max-w-2xl">
-                  <p className={cx("ui-caption", uiMutedTextClass)}>
-                    {t({
-                      en: "Choose a space, pick the people who should work there, and assign the right level of access in a focused dialog.",
-                      fr: "Choisissez un espace, sélectionnez les personnes qui doivent y travailler et donnez le bon niveau d'accès dans une fenêtre dédiée.",
-                      de: "Wählen Sie einen Bereich, die Personen, die dort arbeiten sollen, und die passende Zugriffsstufe in einem fokussierten Dialog.",
-                    })}
-                  </p>
-                  <p
-                    className={cx(
-                      "mt-1 text-xs font-semibold",
-                      uiMutedTextClass,
-                    )}
-                  >
-                    {t({
-                      en: `${activeManagedTeamSpaces.length} team space${activeManagedTeamSpaces.length === 1 ? "" : "s"} available`,
-                      fr: `${activeManagedTeamSpaces.length} espace${activeManagedTeamSpaces.length > 1 ? "s" : ""} d'équipe disponible${activeManagedTeamSpaces.length > 1 ? "s" : ""}`,
-                      de: `${activeManagedTeamSpaces.length} Teambereich${activeManagedTeamSpaces.length === 1 ? "" : "e"} verfügbar`,
-                    })}
-                  </p>
-                </div>
-                <UiButton onClick={() => setInviteDialogOpen(true)}>
-                  {t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
-                </UiButton>
-              </div>
-            </UiCard>
-          </div>
-        ) : (
-          <PageBanner tone="info">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span>
-                {t({
-                  en: "Only project managers can invite people to active team spaces.",
-                  fr: "Seuls les gestionnaires du projet peuvent inviter des personnes dans les espaces d'équipe actifs.",
-                  de: "Nur Projektmanager können Personen in aktive Teambereiche einladen.",
-                })}
-              </span>
-              <Link
-                to="/portal/storage-spaces"
-                className={cx(
-                  uiButtonBaseClass,
-                  uiButtonVariants.secondary,
-                  "h-8 px-3 py-1 text-xs",
-                )}
-              >
-                {t({
-                  en: "Open spaces",
-                  fr: "Ouvrir les espaces",
-                  de: "Bereiche öffnen",
-                })}
-              </Link>
-            </div>
-          </PageBanner>
-        )
-      ) : null}
 
       {activeViewTab === "members" ? (
         <CollaboratorsInventory
@@ -1423,98 +833,110 @@ export default function PortalSharesPage() {
       {activeViewTab === "access" ? (
         <UiCard
           title={t({
-            en: "Review access",
-            fr: "Vérifier les accès",
-            de: "Zugriff prüfen",
+            en: "Access by space",
+            fr: "Accès par espace",
+            de: "Zugriff nach Bereich",
           })}
         >
-        <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
-          <PageTabs
-            tabs={[
-              {
-                id: "with",
-                label: t({
-                  en: "Spaces shared with me",
-                  fr: "Espaces partagés avec moi",
-                  de: "Mit mir geteilte Bereiche",
-                }),
-              },
-              {
-                id: "by",
-                label: t({
-                  en: "People with access",
-                  fr: "Personnes avec accès",
-                  de: "Personen mit Zugriff",
-                }),
-              },
-              {
-                id: "links",
-                label: t({
-                  en: "Public links",
-                  fr: "Liens publics",
-                  de: "Öffentliche Links",
-                }),
-              },
-            ]}
-            activeTab={activeTab}
-            onChange={(tab) => setActiveTab(tab as ShareTab)}
-            variant="bar"
-          />
-        </div>
-        {activeTab === "links" ? (
+          <p className={cx("mb-3 ui-caption", uiMutedTextClass)}>
+            {t({
+              en: "This overview is read-only. Open a space to invite someone, change a role, or remove access.",
+              fr: "Cette vue est en lecture seule. Ouvrez un espace pour inviter une personne, modifier un rôle ou retirer un accès.",
+              de: "Diese Übersicht ist schreibgeschützt. Öffnen Sie einen Bereich, um Personen einzuladen, Rollen zu ändern oder Zugriffe zu entfernen.",
+            })}
+          </p>
+          <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
+            <PageTabs
+              tabs={[
+                {
+                  id: "with",
+                  label: t({
+                    en: "Shared with me",
+                    fr: "Partagés avec moi",
+                    de: "Mit mir geteilt",
+                  }),
+                },
+                {
+                  id: "by",
+                  label: t({
+                    en: "Granted by me",
+                    fr: "Accordés par moi",
+                    de: "Von mir vergeben",
+                  }),
+                },
+              ]}
+              activeTab={activeTab}
+              onChange={(tab) => setActiveTab(tab as ShareTab)}
+              variant="bar"
+              ariaLabel={t({
+                en: "Access direction",
+                fr: "Direction des accès",
+                de: "Zugriffsrichtung",
+              })}
+              idPrefix="portal-space-access"
+            />
+          </div>
+          <SharesTable shares={shares} direction={activeTab} />
+          <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>
+            {t({
+              en: `${shares.length} ${shares.length === 1 ? "entry" : "entries"}`,
+              fr: `${shares.length} entrée${shares.length > 1 ? "s" : ""}`,
+              de: `${shares.length} Eintrag${shares.length === 1 ? "" : "e"}`,
+            })}
+          </div>
+        </UiCard>
+      ) : null}
+
+      {activeViewTab === "links" ? (
+        <UiCard
+          title={t({
+            en: "External links",
+            fr: "Liens externes",
+            de: "Externe Links",
+          })}
+        >
           <div className="space-y-3">
             <section
               className={cx(uiPanelMutedClass, "p-4")}
               aria-labelledby="portal-public-link-guidance-title"
             >
-              <div className="mb-3">
-                <h2
-                  id="portal-public-link-guidance-title"
-                  className="ui-subtitle"
-                >
-                  {t({
-                    en: "Create a public link from a file",
-                    fr: "Créer un lien public depuis un fichier",
-                    de: "Öffentlichen Link aus einer Datei erstellen",
-                  })}
-                </h2>
-                <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
-                  {t({
-                    en: "Open a shared space, choose the file, then create the public link from the file actions.",
-                    fr: "Ouvrez un espace partagé, choisissez le fichier, puis créez le lien public depuis les actions du fichier.",
-                    de: "Öffnen Sie einen geteilten Bereich, wählen Sie die Datei und erstellen Sie den öffentlichen Link über die Dateiaktionen.",
-                  })}
-                </p>
-              </div>
+              <h2 id="portal-public-link-guidance-title" className="ui-subtitle">
+                {t({
+                  en: "Create links from a file",
+                  fr: "Créer les liens depuis un fichier",
+                  de: "Links aus einer Datei erstellen",
+                })}
+              </h2>
+              <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
+                {t({
+                  en: "Public links are created from file actions. Use this overview to copy or revoke existing links.",
+                  fr: "Les liens publics se créent depuis les actions d'un fichier. Utilisez cette vue pour copier ou révoquer les liens existants.",
+                  de: "Öffentliche Links werden über Dateiaktionen erstellt. In dieser Übersicht können Sie vorhandene Links kopieren oder widerrufen.",
+                })}
+              </p>
               {activeManagedTeamSpaces.length > 0 ? (
-                <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
+                <div className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
                   <UiSelect
+                    label={t({ en: "Filter by space", fr: "Filtrer par espace", de: "Nach Bereich filtern" })}
                     size="compact"
                     className="h-9"
-                    value={selectedPublicLinkSpace?.id ?? ""}
-                    onChange={(event) => setSelectedSpaceId(event.target.value)}
-                    aria-label={t({
-                      en: "Space for public link",
-                      fr: "Espace pour le lien public",
-                      de: "Bereich für öffentlichen Link",
-                    })}
+                    value={selectedLinkSpaceId}
+                    onChange={(event) => setSelectedLinkSpaceId(event.target.value)}
                   >
+                    <option value="">
+                      {t({ en: "All spaces", fr: "Tous les espaces", de: "Alle Bereiche" })}
+                    </option>
                     {activeManagedTeamSpaces.map((space) => (
                       <option key={space.id} value={space.id}>
                         {space.name}
                       </option>
                     ))}
                   </UiSelect>
-                  <div
-                    className={cx(
-                      "self-center text-xs font-medium",
-                      uiMutedTextClass,
-                    )}
-                  >
+                  <div className={cx("self-center text-xs font-medium", uiMutedTextClass)}>
                     {t({
-                      en: "Public links are created from file context so you never have to type a storage path.",
-                      fr: "Les liens publics se créent depuis le contexte du fichier : aucun chemin technique à saisir.",
-                      de: "Öffentliche Links entstehen direkt aus der Datei, ohne dass ein Speicherpfad eingegeben werden muss.",
+                      en: `${activePublicLinkCount} active link${activePublicLinkCount === 1 ? "" : "s"} in this view`,
+                      fr: `${activePublicLinkCount} lien${activePublicLinkCount > 1 ? "s" : ""} actif${activePublicLinkCount > 1 ? "s" : ""} dans cette vue`,
+                      de: `${activePublicLinkCount} aktive Link${activePublicLinkCount === 1 ? "" : "s"} in dieser Ansicht`,
                     })}
                   </div>
                   <Link
@@ -1529,11 +951,9 @@ export default function PortalSharesPage() {
                       "h-9 px-3 py-1.5 text-xs",
                     )}
                   >
-                    {t({
-                      en: "Open files",
-                      fr: "Ouvrir les fichiers",
-                      de: "Dateien öffnen",
-                    })}
+                    {selectedPublicLinkSpace
+                      ? t({ en: "Open files", fr: "Ouvrir les fichiers", de: "Dateien öffnen" })
+                      : t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" })}
                   </Link>
                 </div>
               ) : (
@@ -1552,210 +972,24 @@ export default function PortalSharesPage() {
               rowKey={(link) => link.rowKey}
               status={publicLinksTableStatus}
               loadingMessage={t({
-                en: "Loading public links...",
-                fr: "Chargement des liens publics...",
-                de: "Öffentliche Links werden geladen...",
+                en: "Loading external links...",
+                fr: "Chargement des liens externes...",
+                de: "Externe Links werden geladen...",
               })}
               errorMessage={t({
-                en: "Unable to load public links.",
-                fr: "Impossible de charger les liens publics.",
-                de: "Öffentliche Links können nicht geladen werden.",
+                en: "Unable to load external links.",
+                fr: "Impossible de charger les liens externes.",
+                de: "Externe Links können nicht geladen werden.",
               })}
               emptyMessage={t({
-                en: "No public links yet.",
-                fr: "Aucun lien public pour l'instant.",
-                de: "Noch keine öffentlichen Links.",
+                en: "No external links in this view.",
+                fr: "Aucun lien externe dans cette vue.",
+                de: "Keine externen Links in dieser Ansicht.",
               })}
               responsiveCards
             />
           </div>
-        ) : (
-          <SharesTable
-            shares={shares}
-            editable={activeTab === "by"}
-            busyShareId={busyShareId}
-            onRoleChange={handleRoleChange}
-            onRevoke={handleRevoke}
-          />
-        )}
-        <div
-          className={cx(
-            "mt-4 flex items-center justify-between text-[11px] font-semibold",
-            uiMutedTextClass,
-          )}
-        >
-          <span>
-            {activeTab === "links"
-              ? t({
-                  en: `${activePublicLinkCount} active link${activePublicLinkCount === 1 ? "" : "s"}`,
-                  fr: `${activePublicLinkCount} lien${activePublicLinkCount > 1 ? "s" : ""} actif${activePublicLinkCount > 1 ? "s" : ""}`,
-                  de: `${activePublicLinkCount} aktive Link${activePublicLinkCount === 1 ? "" : "s"}`,
-                })
-              : t({
-                  en: `${displayedCount} ${displayedCount === 1 ? "entry" : "entries"}`,
-                  fr: `${displayedCount} entrée${displayedCount > 1 ? "s" : ""}`,
-                  de: `${displayedCount} Eintrag${displayedCount === 1 ? "" : "e"}`,
-                })}
-          </span>
-        </div>
         </UiCard>
-      ) : null}
-
-      {inviteDialogOpen && activeManagedTeamSpaces.length > 0 ? (
-        <WorkflowPage
-          title={t({
-            en: "Invite people",
-            fr: "Inviter des personnes",
-            de: "Personen einladen",
-          })}
-          description={t({
-            en: "Select a space, choose collaborators and assign their roles in one focused workflow.",
-            fr: "Sélectionnez un espace, choisissez les collaborateurs et attribuez leurs rôles dans un seul parcours.",
-            de: "Wählen Sie einen Bereich, Mitwirkende und deren Rollen in einem fokussierten Ablauf.",
-          })}
-          breadcrumbs={[{ label: "Portal" }, { label: t({ en: "Shares", fr: "Partages", de: "Freigaben" }), to: "/portal/shares" }, { label: t({ en: "Invite", fr: "Inviter", de: "Einladen" }) }]}
-          backLabel={t({ en: "Back to shares", fr: "Retour aux partages", de: "Zurück zu Freigaben" })}
-          onBack={busyShareId === "new" ? undefined : () => setInviteDialogOpen(false)}
-          contentClassName="mx-auto max-w-6xl"
-        >
-          <div className="space-y-4">
-            {sharesError ? <PageBanner tone="error">{sharesError}</PageBanner> : null}
-            <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)] md:items-end">
-              <UiSelect
-                label={t({ en: "Space", fr: "Espace", de: "Bereich" })}
-                size="compact"
-                className="h-9"
-                value={selectedInviteSpace?.id ?? ""}
-                onChange={(event) => setSelectedSpaceId(event.target.value)}
-                aria-label={t({
-                  en: "Space to share",
-                  fr: "Espace à partager",
-                  de: "Zu teilender Bereich",
-                })}
-              >
-                {activeManagedTeamSpaces.map((space) => (
-                  <option key={space.id} value={space.id}>
-                    {space.name}
-                  </option>
-                ))}
-              </UiSelect>
-              <p
-                className={cx(
-                  "self-center text-xs font-medium",
-                  uiMutedTextClass,
-                )}
-              >
-                {t({
-                  en: "Choose people already added to this workspace, then give them Viewer or Editor access.",
-                  fr: "Choisissez des personnes déjà ajoutées à ce workspace, puis donnez-leur un accès Lecteur ou Éditeur.",
-                  de: "Wählen Sie Personen aus diesem Workspace aus und geben Sie ihnen Viewer- oder Editor-Zugriff.",
-                })}
-              </p>
-            </div>
-            <PortalShareCandidatePicker
-              candidates={shareCandidates}
-              selectedRolesByUserId={selectedShareRolesByUserId}
-              query={shareCandidateQuery}
-              loading={shareCandidatesLoading}
-              error={null}
-              includeAlreadyShared
-              onQueryChange={setShareCandidateQuery}
-              onRoleChange={(userId, role) => {
-                setSelectedShareRolesByUserId((current) => {
-                  const next = { ...current };
-                  if (role) {
-                    next[userId] = role;
-                  } else {
-                    delete next[userId];
-                  }
-                  return next;
-                });
-              }}
-              onRequestPerson={handleRequestCollaboratorAccess}
-            />
-            <WorkflowActions>
-              <UiButton
-                variant="secondary"
-                onClick={() => setInviteDialogOpen(false)}
-                disabled={busyShareId === "new"}
-              >
-                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
-              </UiButton>
-              <UiButton
-                disabled={
-                  !accountIdForApi ||
-                  !selectedInviteSpace ||
-                  selectedShareEntries.length === 0 ||
-                  busyShareId === "new"
-                }
-                loading={busyShareId === "new"}
-                onClick={handleCreateShare}
-              >
-                {busyShareId === "new"
-                  ? t({
-                      en: "Inviting...",
-                      fr: "Invitation...",
-                      de: "Einladung läuft...",
-                    })
-                  : t({ en: "Invite people", fr: "Inviter", de: "Einladen" })}
-              </UiButton>
-            </WorkflowActions>
-          </div>
-        </WorkflowPage>
-      ) : null}
-
-      {pendingAction?.type === "revoke-share" ? (
-        <ConfirmActionDialog
-          title={t({
-            en: "Revoke access",
-            fr: "Révoquer l'accès",
-            de: "Zugriff widerrufen",
-          })}
-          description={t({
-            en: "Confirm that you want to remove this person's access.",
-            fr: "Confirmez que vous voulez retirer l'accès de cette personne.",
-            de: "Bestätigen Sie, dass Sie den Zugriff dieser Person entfernen möchten.",
-          })}
-          confirmLabel={t({
-            en: "Revoke access",
-            fr: "Révoquer l'accès",
-            de: "Zugriff widerrufen",
-          })}
-          loading={busyShareId === pendingAction.share.id}
-          details={[
-            {
-              label: t({ en: "Person", fr: "Personne", de: "Person" }),
-              value: pendingAction.share.person,
-            },
-            {
-              label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-              value: pendingAction.share.spaceName,
-            },
-            {
-              label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
-              value: portalRoleLabel(pendingAction.share.access, t),
-            },
-          ]}
-          impacts={[
-            t({
-              en: "This person loses access to the space immediately.",
-              fr: "Cette personne perd immédiatement l'accès à l'espace.",
-              de: "Diese Person verliert sofort den Zugriff auf den Bereich.",
-            }),
-            t({
-              en: "Files in the space are not deleted.",
-              fr: "Les fichiers de l'espace ne sont pas supprimés.",
-              de: "Dateien im Bereich werden nicht gelöscht.",
-            }),
-            t({
-              en: "You can invite the person again later if needed.",
-              fr: "Vous pourrez réinviter cette personne plus tard si nécessaire.",
-              de: "Sie können diese Person später bei Bedarf erneut einladen.",
-            }),
-          ]}
-          onCancel={() => setPendingAction(null)}
-          onConfirm={() => confirmRevoke(pendingAction.share)}
-        />
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (

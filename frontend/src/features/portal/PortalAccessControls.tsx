@@ -154,6 +154,7 @@ export function PortalAccessModeFields({
 export function PortalShareCandidatePicker({
   candidates,
   selectedRolesByUserId,
+  existingRolesByUserId = {},
   query,
   loading = false,
   error,
@@ -164,6 +165,7 @@ export function PortalShareCandidatePicker({
 }: {
   candidates: PortalStorageSpaceShareCandidate[];
   selectedRolesByUserId: Record<number, PortalStorageSpaceGrantRole>;
+  existingRolesByUserId?: Record<number, PortalStorageSpaceGrantRole>;
   query: string;
   loading?: boolean;
   error?: string | null;
@@ -264,6 +266,7 @@ export function PortalShareCandidatePicker({
         <div className="max-h-56 overflow-y-auto rounded-md border border-[color:var(--ui-border)]">
           {visibleCandidates.map((candidate) => {
             const selectedRole = selectedRolesByUserId[candidate.user_id] ?? null;
+            const existingRole = existingRolesByUserId[candidate.user_id] ?? null;
             const disabled = Boolean(candidate.already_shared);
             return (
               <div key={candidate.user_id} className="grid gap-2 border-b border-[color:var(--ui-border-soft)] px-3 py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_150px_130px]">
@@ -284,7 +287,15 @@ export function PortalShareCandidatePicker({
                   {portalAccountRoleLabel(candidate.account_role, t)} · {portalAccessSourceLabel(candidate.access_source, t)}
                 </div>
                 {disabled ? (
-                  <UiBadge tone="neutral">{t({ en: "Already invited", fr: "Déjà invité", de: "Bereits eingeladen" })}</UiBadge>
+                  <UiBadge tone="neutral">
+                    {existingRole
+                      ? t({
+                          en: `Already invited · ${portalRoleLabel(existingRole, t)}`,
+                          fr: `Déjà invité · ${portalRoleLabel(existingRole, t)}`,
+                          de: `Bereits eingeladen · ${portalRoleLabel(existingRole, t)}`,
+                        })
+                      : t({ en: "Already invited", fr: "Déjà invité", de: "Bereits eingeladen" })}
+                  </UiBadge>
                 ) : (
                   <UiSelect
                     size="compact"
