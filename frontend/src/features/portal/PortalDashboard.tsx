@@ -738,11 +738,6 @@ export default function PortalDashboard() {
         title={t({ en: "Portal dashboard", fr: "Tableau de bord Portal", de: "Portal-Dashboard" })}
         description={t({ en: `Workspace overview for ${workspace.accountName}.`, fr: `Vue de l'espace de travail ${workspace.accountName}.`, de: `Arbeitsbereichsübersicht für ${workspace.accountName}.` })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Dashboard", fr: "Tableau de bord", de: "Dashboard" }) })}
-        rightContent={
-          <div className="flex h-8 items-center gap-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 text-xs font-semibold text-[var(--ui-text-muted)]">
-            <span>{t({ en: "Current period", fr: "Période en cours", de: "Aktueller Zeitraum" })}</span>
-          </div>
-        }
       />
 
       {(stateError || storageSpacesError) && (
