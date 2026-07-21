@@ -47,7 +47,7 @@ class PortalStorageSpaceVersionCleanupMixin:
         portal_settings = self._effective_portal_settings(access.account)
         if not portal_settings.storage_space_version_cleanup_enabled:
             raise RuntimeError("Storage Space history cleanup is not allowed for this account.")
-        self._require_storage_space_content_owner(user, access, bucket_name)
+        self._require_storage_space_full_content_access(user, access, bucket_name)
         self._require_storage_space_active(access.account, bucket_name)
         metadata = self._storage_space_metadata(access.account, bucket_name)
         storage_space_name = self._display_storage_space_name(bucket_name, metadata)

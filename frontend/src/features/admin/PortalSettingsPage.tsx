@@ -12,7 +12,6 @@ import {
   SettingsSection,
   SettingsToggleAction,
   settingsCompactInputClassName,
-  settingsInlineButtonClassName,
   settingsTextareaClassName,
 } from "../../components/settings/SettingsLayout";
 import UiButton from "../../components/ui/UiButton";
@@ -30,7 +29,6 @@ export default function PortalSettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [corsOriginsText, setCorsOriginsText] = useState("");
   const initRef = useRef(false);
-  const [resettingPolicy, setResettingPolicy] = useState<"manager" | "user" | null>(null);
 
   const normalizeListInput = (value: string): string[] =>
     value
@@ -57,7 +55,7 @@ export default function PortalSettingsPage() {
   }, [settings]);
 
   const handleToggleAllowPortalBucketCreate = (value: boolean) => {
-    setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_bucket_create: value } } : prev));
+    setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_private_storage_space_create: value } } : prev));
   };
 
   const handleToggleAllowPortalNamedBucketCreate = (value: boolean) => {
@@ -141,36 +139,6 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleManagerActionsChange = (value: string) => {
-    const actions = normalizeListInput(value);
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            portal: {
-              ...prev.portal,
-              iam_group_manager_policy: { ...prev.portal.iam_group_manager_policy, actions, advanced_policy: null },
-            },
-          }
-        : prev
-    );
-  };
-
-  const handleUserActionsChange = (value: string) => {
-    const actions = normalizeListInput(value);
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            portal: {
-              ...prev.portal,
-              iam_group_user_policy: { ...prev.portal.iam_group_user_policy, actions, advanced_policy: null },
-            },
-          }
-        : prev
-    );
-  };
-
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -222,32 +190,7 @@ export default function PortalSettingsPage() {
     }
   };
 
-  const handleResetPolicy = async (scope: "manager" | "user") => {
-    if (!settings) return;
-    setResettingPolicy(scope);
-    setError(null);
-    setSavedMessage(null);
-    try {
-      const defaults = await fetchDefaultAppSettings();
-      setSettings((prev) => {
-        if (!prev) return defaults;
-        const portal = { ...prev.portal };
-        if (scope === "manager") {
-          portal.iam_group_manager_policy = defaults.portal.iam_group_manager_policy;
-        } else {
-          portal.iam_group_user_policy = defaults.portal.iam_group_user_policy;
-        }
-        return { ...prev, portal };
-      });
-    } catch (err) {
-      console.error(err);
-      setError(extractApiError(err, "Unable to load default settings."));
-    } finally {
-      setResettingPolicy(null);
-    }
-  };
-
-  const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
+  const portalBucketCreateEnabled = Boolean(settings?.portal.allow_private_storage_space_create);
   const portalNamedBucketCreateEnabled = Boolean(settings?.portal.allow_portal_named_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
   const portalServerAccessLoggingEnabled = Boolean(settings?.portal.server_access_logging_enabled);
@@ -269,14 +212,14 @@ export default function PortalSettingsPage() {
             <UiButton
               variant="ghost"
               onClick={handleResetDefaults}
-              disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+              disabled={!settings || saving || resetting}
               className="py-1.5 disabled:pointer-events-none"
             >
               {resetting ? "Resetting..." : "Reset to defaults"}
             </UiButton>
             <UiButton
               onClick={handleSave}
-              disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+              disabled={!settings || saving || resetting}
               className="py-1.5 disabled:pointer-events-none"
             >
               {saving ? "Saving..." : "Save changes"}
@@ -290,14 +233,14 @@ export default function PortalSettingsPage() {
         <SettingsCard>
           <SettingsSection title="UI" description="Portal UI switches and account defaults." layout="grid">
             <SettingsItem
-              title="Portal user Storage Space creation"
-              description="Allow portal-user members to create their own Storage Spaces from the Portal. Storage-side permissions and the Portal service still enforce the actual bucket creation workflow."
+              title="Private Storage Space creation"
+              description="Allow Portal users and Portal managers to create private Storage Spaces. Team Storage Spaces remain manager-only."
               action={
                 <SettingsToggleAction
                   checked={portalBucketCreateEnabled}
                   onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
                   disabled={!settings}
-                  ariaLabel="Portal user Storage Space creation"
+                  ariaLabel="Private Storage Space creation"
                 />
               }
             />
@@ -381,66 +324,6 @@ export default function PortalSettingsPage() {
                 />
               }
             />
-          </SettingsSection>
-        </SettingsCard>
-        <SettingsCard>
-          <SettingsSection
-            title="STORAGE ACCESS PROJECTIONS"
-            description="Action lists used by Portal IAM bootstrap groups and Storage Space access projections."
-            layout="stack"
-          >
-            <div className="grid gap-x-6 md:grid-cols-2 md:[&>*:nth-child(2)]:border-t-0 md:[&>*:nth-child(2)]:pt-0">
-              <SettingsItem
-                title="Portal manager bootstrap policy"
-                description="Actions granted to the portal-manager IAM group before Storage Space-specific projections are applied."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => handleResetPolicy("manager")}
-                    disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                    className={settingsInlineButtonClassName}
-                  >
-                    {resettingPolicy === "manager" ? "Resetting..." : "Reset policy"}
-                  </button>
-                }
-              >
-                <div className="mt-3">
-                  <textarea
-                    value={(settings?.portal.iam_group_manager_policy.actions || []).join("\n")}
-                    onChange={(e) => handleManagerActionsChange(e.target.value)}
-                    className={settingsTextareaClassName}
-                    rows={6}
-                    placeholder="s3:ListAllMyBuckets"
-                    disabled={!settings}
-                  />
-                </div>
-              </SettingsItem>
-              <SettingsItem
-                title="Portal user bootstrap policy"
-                description="Actions granted to the portal-user IAM group before Storage Space-specific projections are applied."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => handleResetPolicy("user")}
-                    disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-                    className={settingsInlineButtonClassName}
-                  >
-                    {resettingPolicy === "user" ? "Resetting..." : "Reset policy"}
-                  </button>
-                }
-              >
-                <div className="mt-3">
-                  <textarea
-                    value={(settings?.portal.iam_group_user_policy.actions || []).join("\n")}
-                    onChange={(e) => handleUserActionsChange(e.target.value)}
-                    className={settingsTextareaClassName}
-                    rows={4}
-                    placeholder="s3:ListAllMyBuckets"
-                    disabled={!settings}
-                  />
-                </div>
-              </SettingsItem>
-            </div>
           </SettingsSection>
         </SettingsCard>
         <SettingsCard>

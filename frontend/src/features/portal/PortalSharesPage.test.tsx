@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
         {
           id: "research-data",
           name: "Research Data",
-          role: "Owner",
+          role: "Manager",
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -137,7 +137,7 @@ describe("PortalSharesPage", () => {
       {
         id: "research-data",
         name: "Research Data",
-        role: "Owner",
+        role: "Manager",
         status: "Active",
         access: "Shared",
         ownerUserId: 7,
@@ -501,7 +501,7 @@ describe("PortalSharesPage", () => {
       storage_space_name: "Research Data",
       user_id: 13,
       email: "editor@example.com",
-      role: "Owner",
+      role: "Editor",
       direction: "by_me",
       activity_label: "Active",
     });
@@ -524,7 +524,7 @@ describe("PortalSharesPage", () => {
       within(inviteDialog).getByRole("combobox", {
         name: "Access for editor@example.com",
       }),
-      "Owner",
+      "Editor",
     );
     await user.click(
       within(inviteDialog).getByRole("button", { name: "Invite people" }),
@@ -536,7 +536,7 @@ describe("PortalSharesPage", () => {
         "research-data",
         {
           user_id: 13,
-          role: "Owner",
+          role: "Editor",
         },
       );
     });
@@ -596,7 +596,7 @@ describe("PortalSharesPage", () => {
       {
         id: "research-data",
         name: "Research Data",
-        role: "Owner",
+        role: "Manager",
         status: "Active",
         access: "Shared",
         ownerUserId: 7,
@@ -620,7 +620,7 @@ describe("PortalSharesPage", () => {
       {
         id: "archived-data",
         name: "Archived Data",
-        role: "Owner",
+        role: "Manager",
         status: "Archived",
         access: "Shared",
         ownerUserId: 7,
@@ -644,7 +644,7 @@ describe("PortalSharesPage", () => {
     );
   });
 
-  it("makes a private owner space invite-ready before granting collaborators", async () => {
+  it("keeps private owner spaces outside the team sharing workflow", async () => {
     const user = userEvent.setup();
     mocks.hookResult.workspace.spaces = [
       {
@@ -660,57 +660,13 @@ describe("PortalSharesPage", () => {
         shareCount: 0,
       },
     ];
-    mocks.grantShareMock.mockResolvedValue({
-      id: "private-data:13",
-      storage_space_id: "private-data",
-      storage_space_name: "Private Data",
-      user_id: 13,
-      email: "editor@example.com",
-      role: "Editor",
-      direction: "by_me",
-      activity_label: "Active",
-    });
-
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "Invite" }));
-    await user.click(
-      await screen.findByRole("button", { name: "Invite people" }),
-    );
-    const inviteDialog = getInviteWorkflowPage();
-    await waitFor(() => {
-      expect(
-        within(inviteDialog).getAllByText("Editor User").length,
-      ).toBeGreaterThan(0);
-    });
-    const checkboxes = within(inviteDialog).getAllByRole("checkbox");
-    await user.click(checkboxes[1]);
-    await user.selectOptions(
-      within(inviteDialog).getByRole("combobox", {
-        name: "Access for editor@example.com",
-      }),
-      "Editor",
-    );
-    await user.click(
-      within(inviteDialog).getByRole("button", { name: "Invite people" }),
-    );
-
-    await waitFor(() => {
-      expect(mocks.updateStorageSpaceMock).toHaveBeenCalledWith(
-        "101",
-        "private-data",
-        {
-          visibility: "shared",
-          share_scope: "restricted",
-          account_member_role: null,
-        },
-      );
-    });
-    expect(mocks.grantShareMock).toHaveBeenCalledWith("101", "private-data", {
-      user_id: 13,
-      role: "Editor",
-    });
-    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Only project managers can invite people to active team spaces.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite people" })).not.toBeInTheDocument();
+    expect(mocks.updateStorageSpaceMock).not.toHaveBeenCalled();
+    expect(mocks.grantShareMock).not.toHaveBeenCalled();
   });
 
   it("loads public links from real portal endpoints", async () => {
@@ -817,7 +773,7 @@ describe("PortalSharesPage", () => {
     );
     expect(
       await screen.findByText(
-        /Public links need an active shared space that you own/i,
+        /Only project managers can create public links from active team spaces/i,
       ),
     ).toBeInTheDocument();
     expect(

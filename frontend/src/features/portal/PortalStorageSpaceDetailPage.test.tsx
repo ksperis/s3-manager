@@ -49,7 +49,7 @@ const mocks = vi.hoisted(() => ({
           name: "Research Data",
           internalName: "research-data-internal",
           description: "Research Data shared storage",
-          role: "Owner",
+          role: "Manager",
           contentRole: "Owner",
           canBrowse: true,
           canDelete: true,
@@ -232,10 +232,11 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
     mocks.hookResult.workspace.spaces[0].name = "Research Data";
-    mocks.hookResult.workspace.spaces[0].role = "Owner";
-    mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
+    mocks.hookResult.workspace.spaces[0].role = "Manager";
     mocks.hookResult.workspace.spaces[0].canBrowse = true;
     mocks.hookResult.workspace.spaces[0].canDelete = true;
+    mocks.hookResult.workspace.spaces[0].visibility = "shared";
+    mocks.hookResult.workspace.spaces[0].canTakeOwnership = false;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";

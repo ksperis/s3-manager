@@ -47,6 +47,12 @@ from app.models.user import (
     validate_password_policy,
 )
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.portal_ownership import require_no_private_storage_space_ownership
+from app.services.portal_role_sync import (
+    capture_effective_portal_roles,
+    sync_portal_role_downgrades,
+    sync_portal_role_promotions,
+)
 from app.services.user_avatar_service import UserAvatarService
 logger = logging.getLogger(__name__)
 
@@ -304,6 +310,7 @@ class UsersService:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("User not found")
+        require_no_private_storage_space_ownership(self.db, user_id=user.id)
         created_connection_rows = (
             self.db.query(S3Connection.id, S3Connection.is_shared)
             .filter(S3Connection.created_by_user_id == user.id)
@@ -320,6 +327,21 @@ class UsersService:
             for row in created_connection_rows
             if not bool(row[1])
         ]
+        from app.services.portal_service import PortalService
+
+        portal_service = PortalService(self.db)
+        portal_accounts = (
+            self.db.query(S3Account)
+            .join(AccountIAMUser, AccountIAMUser.account_id == S3Account.id)
+            .filter(AccountIAMUser.user_id == user.id)
+            .all()
+        )
+        for account in portal_accounts:
+            portal_service.sync_existing_portal_user_access(
+                user,
+                account,
+                AccountRole.PORTAL_NONE.value,
+            )
         # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
         (
             self.db.query(AccountIAMUser)
@@ -554,6 +576,11 @@ class UsersService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
+        before_roles = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=[account.id],
+        )
         link = (
             self.db.query(UserS3Account)
             .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
@@ -584,7 +611,19 @@ class UsersService:
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
-        self.db.commit()
+        self.db.flush()
+        after_roles = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=[account.id],
+        )
+        try:
+            sync_portal_role_downgrades(self.db, before=before_roles, after=after_roles)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        sync_portal_role_promotions(self.db, before=before_roles, after=after_roles)
         self.db.refresh(user)
         return user
 

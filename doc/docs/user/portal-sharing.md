@@ -7,7 +7,7 @@ workspace.
 ## Before you start
 
 - The space is active.
-- You own the space or have permission to manage its collaborators.
+- You are a Portal manager; team-space sharing is a project-management action.
 - The person you want to add appears in the people list, or you know their name
   and email so you can request that they be added to the project.
 - Public links are enabled when you need to share one file by link.
@@ -18,19 +18,19 @@ workspace.
 |---|---|
 | Viewer | List, read, and download. |
 | Editor | Viewer actions plus upload, folder creation, and file deletion. |
-| Owner | Editor actions plus sharing management. |
+| Manager | Full project Storage Space access plus team-space sharing management. |
 
-Portal uses the space owner, the access mode, and the collaborator list shown in
-Portal to decide who can browse files. Portal managers may administer a private
-space's settings without receiving file access to that private content.
+Private spaces have one owner. Team spaces have no owner: Portal uses their
+access mode and collaborator list to decide which Portal users can browse files.
+Portal managers can browse and manage every project space.
 
 ## Access modes
 
 | Mode | How sharing works |
 |---|---|
-| Private | No normal collaborator grants. File access stays with the owner. |
+| Private | No collaborator grants. File access stays with the owner and project managers. |
 | Team | Every current and future Portal member of the selected project receives the default role, usually Editor. |
-| Selected people | Owners choose specific people and assign Viewer, Editor, or Owner. |
+| Selected people | Project managers choose specific people and assign Viewer or Editor. |
 
 ## Main tasks
 
@@ -51,7 +51,7 @@ space's settings without receiving file access to that private content.
    requests**.
 7. In **Review access > People with access**, confirm the people and roles now
    match the intended collaboration.
-8. To share outside the workspace, open **Public links**, choose an owned shared
+8. To share outside the workspace, open **Public links**, choose a team
    space, then open its files and create the link from the selected file.
 9. In **Spaces shared with me**, review spaces where someone else invited you.
 
@@ -62,8 +62,8 @@ with the expected status and expiry.
 
 ## If sharing is unavailable
 
-Private spaces become Selected people spaces when you invite collaborators from
-**Portal > Collaborators**. If the person is missing from the people list, send
+Private spaces cannot be converted into team spaces. Create a team space when
+collaboration is required. If the person is missing from the people list, send
 a collaborator access request from the picker, then follow it from **Portal >
 Help requests**. Archived spaces keep saved collaborators and links for future
 restoration, but those entries are inactive while archived.

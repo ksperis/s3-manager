@@ -13,6 +13,7 @@ import {
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpaceShare,
   streamPortalStorageSpaceVersionCleanup,
+  takePortalStorageSpaceOwnership,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
   type PortalStorageSpaceVersionCleanupProgress,
@@ -20,7 +21,7 @@ import {
   type PortalPublicLink,
   type PortalStorageSpaceAccountMemberRole,
   type PortalStorageSpaceAccessSummary,
-  type PortalStorageSpaceRole,
+  type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceShare,
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
@@ -159,7 +160,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [accessAccountMemberRole, setAccessAccountMemberRole] = useState<PortalStorageSpaceAccountMemberRole>("Editor");
   const [accessCandidates, setAccessCandidates] = useState<PortalStorageSpaceShareCandidate[]>([]);
   const [accessCandidateQuery, setAccessCandidateQuery] = useState("");
-  const [accessRolesByUserId, setAccessRolesByUserId] = useState<Record<number, PortalStorageSpaceRole>>({});
+  const [accessRolesByUserId, setAccessRolesByUserId] = useState<Record<number, PortalStorageSpaceGrantRole>>({});
   const [accessCandidatesLoading, setAccessCandidatesLoading] = useState(false);
   const [accessBusy, setAccessBusy] = useState(false);
   const [accessPeopleDialogOpen, setAccessPeopleDialogOpen] = useState(false);
@@ -169,6 +170,8 @@ export default function PortalStorageSpaceDetailPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [takeOwnershipDialogOpen, setTakeOwnershipDialogOpen] = useState(false);
+  const [takeOwnershipBusy, setTakeOwnershipBusy] = useState(false);
   const [publicLinkTarget, setPublicLinkTarget] = useState<PublicLinkTarget | null>(null);
   const [publicLinkExpiration, setPublicLinkExpiration] = useState("");
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
@@ -362,7 +365,7 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
-  const handleAccessRoleChange = async (share: PortalStorageSpaceShare, role: PortalStorageSpaceRole) => {
+  const handleAccessRoleChange = async (share: PortalStorageSpaceShare, role: PortalStorageSpaceGrantRole) => {
     if (!space || !accountIdForApi || share.user_id == null) return;
     setAccessBusy(true);
     setMessage(null);
@@ -454,6 +457,24 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
+  const confirmTakeOwnership = async () => {
+    if (!space || !accountIdForApi || !space.canTakeOwnership) return;
+    setTakeOwnershipBusy(true);
+    setMessage(null);
+    try {
+      await takePortalStorageSpaceOwnership(accountIdForApi, space.id);
+      setTakeOwnershipDialogOpen(false);
+      refreshWorkspaceData();
+      await loadAccessSummary();
+      setMessage(t({ en: "You now own this private space.", fr: "Vous êtes désormais propriétaire de cet espace privé.", de: "Sie besitzen nun diesen privaten Bereich." }));
+    } catch (err) {
+      console.error(err);
+      setMessage(extractApiError(err, t({ en: "Unable to take ownership.", fr: "Impossible de reprendre la propriété.", de: "Eigentümerschaft kann nicht übernommen werden." })));
+    } finally {
+      setTakeOwnershipBusy(false);
+    }
+  };
+
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -473,9 +494,9 @@ export default function PortalStorageSpaceDetailPage() {
     Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
   const isArchived = space.status === "Archived";
   const canBrowse = Boolean(space.canBrowse) && !isArchived;
-  const contentRole = space.contentRole;
-  const canRename = space.role === "Owner" && space.nameEditable;
-  const canModifyObjects = canBrowse && (contentRole === "Owner" || contentRole === "Editor");
+  const hasFullAccess = space.role === "Owner" || space.role === "Manager";
+  const canRename = hasFullAccess && space.nameEditable;
+  const canModifyObjects = canBrowse && (hasFullAccess || space.role === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
   const quotaPercent =
     space.quotaBytes && space.usedBytes
@@ -487,7 +508,7 @@ export default function PortalStorageSpaceDetailPage() {
       : null;
   const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
   const accessKeysPath = `/portal/access-keys?space_id=${encodeURIComponent(lockedBucketName)}&create=external`;
-  const canInvitePeople = !isArchived && (space.visibility === "shared" || accessSummary?.can_manage_access);
+  const canInvitePeople = !isArchived && space.role === "Manager" && space.visibility === "shared";
   const knownCollaboratorCount = Math.max(
     space.shareCount ?? 0,
     accessSummary?.explicit_shares.length ?? 0
@@ -502,13 +523,12 @@ export default function PortalStorageSpaceDetailPage() {
     (showSpaceReadyBanner || space.objectCount === 0);
   const canCreatePublicLinks = Boolean(
     canBrowse &&
-    space.role === "Owner" &&
-    contentRole === "Owner" &&
+    space.role === "Manager" &&
     space.visibility === "shared" &&
     accessSummary?.can_create_public_links
   );
   const historyCleanupEnabled = Boolean(state?.storage_space_version_cleanup_enabled);
-  const canCleanHistory = Boolean(historyCleanupEnabled && !isArchived && space.role === "Owner" && contentRole === "Owner");
+  const canCleanHistory = Boolean(historyCleanupEnabled && !isArchived && hasFullAccess);
   const deletionStatsKnown = space.objectCount != null && space.usedBytes != null;
   const storageSpaceIsEmpty = deletionStatsKnown && space.objectCount === 0 && space.usedBytes === 0;
   const expectedHistoryCleanupConfirmation = portalStorageSpaceVersionCleanupConfirmationPhrase(space.name);
@@ -681,7 +701,7 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
-  const storageSpaceSettingsCard = space.role === "Owner" ? (
+  const storageSpaceSettingsCard = hasFullAccess ? (
     <UiCard
       title={t({ en: "Space settings", fr: "Paramètres de l'espace", de: "Bereichseinstellungen" })}
       description={t({
@@ -691,6 +711,11 @@ export default function PortalStorageSpaceDetailPage() {
       })}
       actions={
         <div className="flex flex-wrap justify-end gap-2">
+          {space.canTakeOwnership ? (
+            <UiButton size="sm" variant="secondary" disabled={takeOwnershipBusy} onClick={() => setTakeOwnershipDialogOpen(true)}>
+              {t({ en: "Take ownership", fr: "Reprendre la propriété", de: "Eigentümerschaft übernehmen" })}
+            </UiButton>
+          ) : null}
           <UiButton size="sm" variant="secondary" disabled={metadataBusy} onClick={() => setSettingsDialogOpen(true)}>
             {t({ en: "Edit details", fr: "Modifier", de: "Details bearbeiten" })}
           </UiButton>
@@ -970,7 +995,7 @@ export default function PortalStorageSpaceDetailPage() {
     </UiCard>
   );
 
-  const historyCleanupCard = space.role === "Owner" ? (
+  const historyCleanupCard = hasFullAccess ? (
     <UiCard
       title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}
       description={t({
@@ -1004,14 +1029,6 @@ export default function PortalStorageSpaceDetailPage() {
               en: "Restore this space before running history cleanup.",
               fr: "Restaurez cet espace avant de nettoyer son historique.",
               de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen.",
-            })}
-          </PageBanner>
-        ) : contentRole !== "Owner" ? (
-          <PageBanner tone="warning">
-            {t({
-              en: "Only the content owner can clean up this space history.",
-              fr: "Seul le propriétaire du contenu peut nettoyer l'historique de cet espace.",
-              de: "Nur der Inhaltseigentümer kann die Historie dieses Bereichs bereinigen.",
             })}
           </PageBanner>
         ) : (
@@ -1127,12 +1144,18 @@ export default function PortalStorageSpaceDetailPage() {
               </div>
               <div>
                 <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
-                  {t({ en: "Owner", fr: "Propriétaire", de: "Eigentümer" })}
+                  {accessSummary.owner
+                    ? t({ en: "Owner", fr: "Propriétaire", de: "Eigentümer" })
+                    : t({ en: "Managed by", fr: "Géré par", de: "Verwaltet von" })}
                 </div>
                 <div className={cx("mt-1 font-bold", uiTitleTextClass)}>
-                  {accessSummary.owner.display_name || accessSummary.owner.email}
+                  {accessSummary.owner
+                    ? accessSummary.owner.display_name || accessSummary.owner.email
+                    : t({ en: "Project managers", fr: "Gestionnaires du projet", de: "Projektmanager" })}
                 </div>
-                <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{accessSummary.owner.email}</div>
+                {accessSummary.owner ? (
+                  <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>{accessSummary.owner.email}</div>
+                ) : null}
               </div>
               <div>
                 <div className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
@@ -1159,6 +1182,7 @@ export default function PortalStorageSpaceDetailPage() {
                   accountMemberRole={accessAccountMemberRole}
                   onAccountMemberRoleChange={setAccessAccountMemberRole}
                   disabled={accessBusy || isArchived}
+                  allowedModes={["account", "restricted"]}
                   modeLabel={t({ en: "Who can access this space?", fr: "Qui peut accéder à cet espace ?", de: "Wer kann auf diesen Bereich zugreifen?" })}
                   roleLabel={t({ en: "Default role for team members", fr: "Rôle par défaut des membres", de: "Standardrolle für Teammitglieder" })}
                 />
@@ -1209,12 +1233,11 @@ export default function PortalStorageSpaceDetailPage() {
                           className="h-8"
                           value={share.role}
                           disabled={accessBusy || accessChanged || isArchived}
-                          onChange={(event) => handleAccessRoleChange(share, event.target.value as PortalStorageSpaceRole)}
+                          onChange={(event) => handleAccessRoleChange(share, event.target.value as PortalStorageSpaceGrantRole)}
                           aria-label={t({ en: `Access for ${share.email}`, fr: `Accès pour ${share.email}`, de: `Zugriff für ${share.email}` })}
                         >
                           <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
                           <option value="Editor">{portalRoleLabel("Editor", t)}</option>
-                          <option value="Owner">{portalRoleLabel("Owner", t)}</option>
                         </UiSelect>
                       ) : (
                         <PortalRoleBadge role={share.role} />
@@ -1561,7 +1584,7 @@ export default function PortalStorageSpaceDetailPage() {
         </WorkflowPage>
       ) : null}
 
-      {settingsDialogOpen && space.role === "Owner" ? (
+      {settingsDialogOpen && hasFullAccess ? (
         <Modal
           title={t({ en: "Edit space details", fr: "Modifier les détails de l'espace", de: "Bereichsdetails bearbeiten" })}
           onClose={() => {
@@ -1672,6 +1695,30 @@ export default function PortalStorageSpaceDetailPage() {
           ]}
           onCancel={() => setPendingAccessRevoke(null)}
           onConfirm={() => confirmAccessRevoke(pendingAccessRevoke)}
+        />
+      ) : null}
+
+      {takeOwnershipDialogOpen ? (
+        <ConfirmActionDialog
+          title={t({ en: "Take ownership", fr: "Reprendre la propriété", de: "Eigentümerschaft übernehmen" })}
+          description={t({
+            en: "Confirm that you want to become the owner of this private space.",
+            fr: "Confirmez que vous souhaitez devenir propriétaire de cet espace privé.",
+            de: "Bestätigen Sie, dass Sie Eigentümer dieses privaten Bereichs werden möchten.",
+          })}
+          confirmLabel={t({ en: "Take ownership", fr: "Reprendre la propriété", de: "Übernehmen" })}
+          loading={takeOwnershipBusy}
+          details={[
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
+            { label: t({ en: "Current owner", fr: "Propriétaire actuel", de: "Aktueller Eigentümer" }), value: space.ownerLabel ?? "-" },
+          ]}
+          impacts={[
+            t({ en: "You receive the Owner role for this private space.", fr: "Vous recevez le rôle Propriétaire pour cet espace privé.", de: "Sie erhalten die Eigentümerrolle für diesen privaten Bereich." }),
+            t({ en: "The previous owner loses their access to this private space.", fr: "L'ancien propriétaire perd son accès à cet espace privé.", de: "Der vorherige Eigentümer verliert den Zugriff auf diesen privaten Bereich." }),
+          ]}
+          warning={t({ en: "Ownership transfer is immediate.", fr: "Le transfert de propriété est immédiat.", de: "Die Eigentumsübertragung erfolgt sofort." })}
+          onCancel={() => setTakeOwnershipDialogOpen(false)}
+          onConfirm={confirmTakeOwnership}
         />
       ) : null}
 

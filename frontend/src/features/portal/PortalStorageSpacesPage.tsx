@@ -16,6 +16,7 @@ import {
   importPortalStorageSpace,
   listPortalShareCandidates,
   type PortalStorageSpaceAccountMemberRole,
+  type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceRole,
   type PortalStorageSpaceShareCandidate,
 } from "../../api/portal";
@@ -150,12 +151,12 @@ export default function PortalStorageSpacesPage() {
     string | null
   >(null);
   const [restrictedRolesByUserId, setRestrictedRolesByUserId] = useState<
-    Record<number, PortalStorageSpaceRole>
+    Record<number, PortalStorageSpaceGrantRole>
   >({});
   const [importShareCandidateQuery, setImportShareCandidateQuery] =
     useState("");
   const [importRestrictedRolesByUserId, setImportRestrictedRolesByUserId] =
-    useState<Record<number, PortalStorageSpaceRole>>({});
+    useState<Record<number, PortalStorageSpaceGrantRole>>({});
   const [newNamingMode, setNewNamingMode] = useState<
     "generic_uuid" | "named_bucket"
   >("generic_uuid");
@@ -247,9 +248,19 @@ export default function PortalStorageSpacesPage() {
         render: (space) => {
           const status = visibleStatus(space);
           const collaborators = space.collaborators ?? [];
+          const isWholeTeam =
+            space.visibility === "shared" && space.shareScope === "account";
           return (
             <div className="flex min-w-[132px] flex-col items-start gap-2">
-              {collaborators.length > 0 ? (
+              {isWholeTeam ? (
+                <span className={cx("text-xs", uiMutedTextClass)}>
+                  {t({
+                    en: "All team members",
+                    fr: "Toute l’équipe",
+                    de: "Alle Teammitglieder",
+                  })}
+                </span>
+              ) : collaborators.length > 0 ? (
                 <UserAvatarStack
                   people={collaborators}
                   totalCount={space.collaboratorCount ?? collaborators.length}
@@ -316,26 +327,42 @@ export default function PortalStorageSpacesPage() {
     [t],
   );
 
-  const canCreate = Boolean(state?.can_create_storage_spaces);
+  const canCreatePrivate = Boolean(state?.can_create_private_storage_spaces);
+  const canCreateTeam = Boolean(state?.can_create_team_storage_spaces);
+  const canCreate = canCreatePrivate || canCreateTeam;
   const canImport =
     state?.account_role === "portal_manager" &&
     Boolean(state?.can_manage_buckets);
   const canUseNamedBucket = Boolean(state?.allow_named_bucket_create);
-  const canChooseVisibility = state?.account_role === "portal_manager";
+  const createAccessModes = useMemo<PortalAccessMode[]>(
+    () => [
+      ...(canCreatePrivate ? (["private"] as PortalAccessMode[]) : []),
+      ...(canCreateTeam ? (["account", "restricted"] as PortalAccessMode[]) : []),
+    ],
+    [canCreatePrivate, canCreateTeam],
+  );
+  const importAccessModes = useMemo<PortalAccessMode[]>(
+    () => [
+      ...(canCreatePrivate ? (["private"] as PortalAccessMode[]) : []),
+      "account",
+      "restricted",
+    ],
+    [canCreatePrivate],
+  );
   const firstWritableSpace =
     activeSpaces.find(
-      (space) => space.role === "Owner" || space.role === "Editor",
+      (space) => space.role === "Manager" || space.role === "Owner" || space.role === "Editor",
     ) ??
     activeSpaces[0] ??
     null;
-  const firstOwnerSpace =
-    activeSpaces.find((space) => space.role === "Owner") ?? null;
+  const firstManagedTeamSpace =
+    activeSpaces.find((space) => space.role === "Manager" && space.visibility === "shared") ?? null;
   const effectiveNamingMode = canUseNamedBucket
     ? newNamingMode
     : "generic_uuid";
-  const effectiveNewAccessMode: PortalAccessMode = canChooseVisibility
+  const effectiveNewAccessMode: PortalAccessMode = createAccessModes.includes(newAccessMode)
     ? newAccessMode
-    : "private";
+    : createAccessModes[0] ?? "private";
   const effectiveNewAccessPayload = portalAccessPayloadFromMode(
     effectiveNewAccessMode,
     newAccountMemberRole,
@@ -361,6 +388,18 @@ export default function PortalStorageSpacesPage() {
   }, [canCreate, createRequested]);
 
   useEffect(() => {
+    if (!createAccessModes.includes(newAccessMode) && createAccessModes[0]) {
+      setNewAccessMode(createAccessModes[0]);
+    }
+  }, [createAccessModes, newAccessMode]);
+
+  useEffect(() => {
+    if (!importAccessModes.includes(importAccessMode) && importAccessModes[0]) {
+      setImportAccessMode(importAccessModes[0]);
+    }
+  }, [importAccessMode, importAccessModes]);
+
+  useEffect(() => {
     setStartGuideDismissed(
       window.localStorage.getItem(startGuideStorageKey) === "1",
     );
@@ -373,7 +412,7 @@ export default function PortalStorageSpacesPage() {
   useEffect(() => {
     let cancelled = false;
     const needsCandidates =
-      (showCreate && newAccessMode !== "private" && canChooseVisibility) ||
+      (showCreate && effectiveNewAccessMode !== "private") ||
       (showImport && importAccessMode !== "private" && canImport);
     if (!needsCandidates || !accountIdForApi) {
       setShareCandidates([]);
@@ -413,8 +452,8 @@ export default function PortalStorageSpacesPage() {
     };
   }, [
     accountIdForApi,
-    canChooseVisibility,
     canImport,
+    effectiveNewAccessMode,
     importAccessMode,
     newAccessMode,
     showCreate,
@@ -423,9 +462,9 @@ export default function PortalStorageSpacesPage() {
   ]);
 
   const updateRestrictedRoles = (
-    setter: Dispatch<SetStateAction<Record<number, PortalStorageSpaceRole>>>,
+    setter: Dispatch<SetStateAction<Record<number, PortalStorageSpaceGrantRole>>>,
     userId: number,
-    role: PortalStorageSpaceRole | null,
+    role: PortalStorageSpaceGrantRole | null,
   ) => {
     setter((current) => {
       const next = { ...current };
@@ -729,14 +768,14 @@ export default function PortalStorageSpacesPage() {
                 de: "Personen einladen",
               })}
               description={t({
-                en: "Give internal collaborators Viewer, Editor, or Owner access when the space is ready.",
-                fr: "Donnez aux collaborateurs internes un accès Lecteur, Éditeur ou Propriétaire quand l'espace est prêt.",
-                de: "Geben Sie internen Mitwirkenden Viewer-, Editor- oder Owner-Zugriff, sobald der Bereich bereit ist.",
+                en: "Managers can give internal collaborators Viewer or Editor access to team spaces.",
+                fr: "Les gestionnaires peuvent donner aux collaborateurs un accès Lecteur ou Éditeur aux espaces d'équipe.",
+                de: "Manager können internen Mitwirkenden Viewer- oder Editor-Zugriff auf Teambereiche geben.",
               })}
               action={
-                firstOwnerSpace ? (
+                firstManagedTeamSpace ? (
                   <Link
-                    to={`/portal/shares?space_id=${encodeURIComponent(firstOwnerSpace.id)}&tab=by`}
+                    to={`/portal/shares?space_id=${encodeURIComponent(firstManagedTeamSpace.id)}&tab=by`}
                     className={cx(
                       uiButtonBaseClass,
                       uiButtonVariants.secondary,
@@ -750,9 +789,9 @@ export default function PortalStorageSpacesPage() {
                     className={cx("text-xs font-semibold", uiMutedTextClass)}
                   >
                     {t({
-                      en: "Owner access needed",
-                      fr: "Accès propriétaire requis",
-                      de: "Owner-Zugriff nötig",
+                      en: "A managed team space is needed",
+                      fr: "Un espace d'équipe géré est requis",
+                      de: "Ein verwalteter Teambereich ist erforderlich",
                     })}
                   </span>
                 )
@@ -771,9 +810,9 @@ export default function PortalStorageSpacesPage() {
                 de: "Wählen Sie bei Bedarf eine Datei im Bereich aus, um einen externen Link zu erstellen.",
               })}
               action={
-                firstOwnerSpace ? (
+                firstManagedTeamSpace ? (
                   <Link
-                    to={`${storageSpacePath(firstOwnerSpace)}#space-files`}
+                    to={`${storageSpacePath(firstManagedTeamSpace)}#space-files`}
                     className={cx(
                       uiButtonBaseClass,
                       uiButtonVariants.secondary,
@@ -791,9 +830,9 @@ export default function PortalStorageSpacesPage() {
                     className={cx("text-xs font-semibold", uiMutedTextClass)}
                   >
                     {t({
-                      en: "Owner access needed",
-                      fr: "Accès propriétaire requis",
-                      de: "Owner-Zugriff nötig",
+                      en: "A managed team space is needed",
+                      fr: "Un espace d'équipe géré est requis",
+                      de: "Ein verwalteter Teambereich ist erforderlich",
                     })}
                   </span>
                 )
@@ -925,12 +964,13 @@ export default function PortalStorageSpacesPage() {
               />
             </div>
             <div className="space-y-3">
-              {canChooseVisibility ? (
+              {createAccessModes.length > 1 ? (
                 <PortalAccessModeFields
                   mode={newAccessMode}
                   onModeChange={setNewAccessMode}
                   accountMemberRole={newAccountMemberRole}
                   onAccountMemberRoleChange={setNewAccountMemberRole}
+                  allowedModes={createAccessModes}
                   modeLabel={t({
                     en: "Who can access this space?",
                     fr: "Qui peut accéder à cet espace ?",
@@ -958,7 +998,7 @@ export default function PortalStorageSpacesPage() {
                 )}
               </div>
             </div>
-            {canChooseVisibility && newAccessMode === "restricted" ? (
+            {effectiveNewAccessMode === "restricted" ? (
               <PortalShareCandidatePicker
                 candidates={shareCandidates}
                 selectedRolesByUserId={restrictedRolesByUserId}
@@ -1063,6 +1103,7 @@ export default function PortalStorageSpacesPage() {
                 onModeChange={setImportAccessMode}
                 accountMemberRole={importAccountMemberRole}
                 onAccountMemberRoleChange={setImportAccountMemberRole}
+                allowedModes={importAccessModes}
                 modeLabel={t({
                   en: "Who can access this space?",
                   fr: "Qui peut accéder à cet espace ?",
@@ -1185,6 +1226,7 @@ export default function PortalStorageSpacesPage() {
             <option value="all">
               {t({ en: "All roles", fr: "Tous les rôles", de: "Alle Rollen" })}
             </option>
+            <option value="Manager">{portalRoleLabel("Manager", t)}</option>
             <option value="Owner">{portalRoleLabel("Owner", t)}</option>
             <option value="Editor">{portalRoleLabel("Editor", t)}</option>
             <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>

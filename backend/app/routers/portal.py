@@ -117,8 +117,11 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
     if (
         "not allowed" in lowered
         or "not provisioned" in lowered
-        or "owner role required" in lowered
-        or "owner content role required" in lowered
+        or "full management access required" in lowered
+        or "full content access required" in lowered
+        or "only project managers" in lowered
+        or "ownership applies only" in lowered
+        or "already own" in lowered
         or "cannot be changed" in lowered
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=safe_detail) from exc
@@ -894,7 +897,6 @@ def create_portal_storage_space(
             name=payload.name,
             naming_mode=payload.naming_mode,
             description=payload.description,
-            owner_label=payload.owner_label,
             visibility=payload.visibility,
             share_scope=payload.share_scope,
             account_member_role=payload.account_member_role,
@@ -939,7 +941,6 @@ def import_portal_storage_space(
             access,
             bucket_name=payload.bucket_name,
             description=payload.description,
-            owner_label=payload.owner_label,
             visibility=payload.visibility,
             share_scope=payload.share_scope,
             account_member_role=payload.account_member_role,
@@ -986,7 +987,6 @@ def update_portal_storage_space(
             space_id,
             name=payload.name,
             description=payload.description,
-            owner_label=payload.owner_label,
             visibility=payload.visibility,
             share_scope=payload.share_scope,
             account_member_role=payload.account_member_role,
@@ -1015,6 +1015,37 @@ def update_portal_storage_space(
                 "account_member_role": storage_space.account_member_role,
                 "owner_user_id": storage_space.owner_user_id,
                 "archived": storage_space.archived_at is not None,
+            },
+        )
+        return storage_space
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post("/storage-spaces/{space_id}/take-ownership", response_model=PortalStorageSpace)
+def take_portal_storage_space_ownership(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpace:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        previous = service.get_storage_space(actor, access, space_id)
+        storage_space = service.take_private_storage_space_ownership(actor, access, space_id)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="take_storage_space_ownership",
+            entity_type="storage_space",
+            entity_id=storage_space.id,
+            account=access.account,
+            metadata={
+                "storage_space_id": storage_space.id,
+                "previous_owner_user_id": previous.owner_user_id if previous else None,
+                "owner_user_id": storage_space.owner_user_id,
             },
         )
         return storage_space

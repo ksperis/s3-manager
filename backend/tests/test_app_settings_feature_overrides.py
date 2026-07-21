@@ -226,32 +226,6 @@ def test_endpoint_status_and_usage_history_default_enabled():
     assert settings.general.usage_history_enabled is True
 
 
-def test_portal_manager_bucket_create_policy_normalizes_to_session_actions():
-    settings = AppSettings(
-        portal={
-            "iam_group_manager_policy": {
-                "actions": ["s3:ListAllMyBuckets", "s3:CreateBucket"],
-                "advanced_policy": None,
-            },
-        }
-    )
-
-    assert settings.portal.iam_group_manager_policy.actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
-
-
-def test_portal_manager_create_bucket_only_policy_normalizes_to_session_actions():
-    settings = AppSettings(
-        portal={
-            "iam_group_manager_policy": {
-                "actions": ["s3:CreateBucket"],
-                "advanced_policy": None,
-            },
-        }
-    )
-
-    assert settings.portal.iam_group_manager_policy.actions == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
-
-
 def test_portal_browser_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.browser_portal_enabled is True

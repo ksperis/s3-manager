@@ -83,7 +83,7 @@ function keyScopeLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"])
 }
 
 function isOwnerStorageSpace(space: PortalStorageSpaceSummary): boolean {
-  return (space.content_role ?? space.role) === "Owner" && !space.archived_at;
+  return (space.role === "Owner" || space.role === "Manager") && !space.archived_at;
 }
 
 export default function PortalAccessKeysPage() {

@@ -13,7 +13,7 @@ Use this page when you work with files inside a Portal space.
 | Task | Where | Notes |
 |---|---|---|
 | Browse folders | Space file list | Breadcrumbs and folder rows keep navigation scoped to the selected space. |
-| Upload files | Object list action bar | Available for Editor and Owner roles when storage permissions allow writes. |
+| Upload files | Object list action bar | Available for Editor, Owner, and Manager roles when storage permissions allow writes. |
 | Download files | Object row or detail page | Available when your role and storage permissions allow reads. |
 | Share a file outside the workspace | File detail > Public links | Open the file, use **Share** or **Set up public link** to reach the public-link panel, create the link only when anyone with the link should have access, then use **Copy link** from the link row. |
 | Create folders | Object list action bar | Creates a prefix marker or equivalent folder representation. |

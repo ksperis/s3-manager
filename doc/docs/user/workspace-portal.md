@@ -18,6 +18,8 @@ simple preferences.
 
 1. Open `/portal`.
 2. Select the project in the top bar.
+   - The selected project is recorded in `?project=`. Each open Portal tab uses
+     the project shown in its own URL.
 3. Use **Home** for the dashboard, quota, usage by space, collaborators,
    active external tool access, recent activity, shared spaces, transfers, and
    simple alerts.
@@ -42,7 +44,7 @@ simple preferences.
 |---|---|---|
 | Open, create, import, or archive a space | [Portal: Spaces](portal-storage-spaces.md) | Access modes, active/archived states, creation, and imports. |
 | Browse, upload, download, or inspect files | [Portal: Files](portal-files.md) | Object list, folders, safe details, and Portal-specific limits. |
-| Share with collaborators or understand roles | [Portal: Collaborators](portal-sharing.md) | Viewer, Editor, Owner, public links, and archived-space behavior. |
+| Share with collaborators or understand roles | [Portal: Collaborators](portal-sharing.md) | Viewer, Editor, Manager, public links, and archived-space behavior. |
 | Create credentials for external S3 tools | [Portal: External tools](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
 | Understand room left, growth, movement, and alerts | [Portal: Storage Health](portal-usage-alerts.md) | Storage used, per-space usage, trends, costs, and unavailable metrics. |
 | Follow admin-help requests | [Portal: Help Requests](portal-requests.md) | Missing collaborators, user removal, storage-limit changes, statuses, and admin messages. |
@@ -56,13 +58,12 @@ simple preferences.
   to buckets internally, but buckets that are not registered as Portal spaces
   stay hidden from Portal lists.
 - **Private** spaces are visible to their owner and Portal managers. Portal
-  managers can administer private-space metadata, visibility, and archive state,
-  but they cannot browse files in a private space owned by someone else.
+  managers have full UI and file access and can explicitly take ownership.
 - **Team** spaces are shared with current and future Portal members of the
   selected project. **Selected people** spaces are shared only with selected
-  collaborators with Viewer, Editor, and Owner grants.
-- Regular `portal_user` members can create only private spaces, and only when
-  Portal user space creation is enabled for the project.
+  collaborators with Viewer or Editor grants. Team spaces have no owner.
+- Both Portal roles can create private spaces when private Storage Space
+  creation is enabled. Only Portal managers can create or import team spaces.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
 - **Storage health** can show the project total and quota. For regular Portal
   users, space details, activity, and transfers are limited to spaces
@@ -70,7 +71,7 @@ simple preferences.
   aggregate.
 - File browsing inside a space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
 - `/browser` can also run with a Portal project context when Portal Browser is enabled. It still uses Portal wording and permissions instead of management controls.
-- Portal roles come from the owner, the space access mode, and
+- Portal roles come from a private owner, the manager project role, the team access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.
 - The dashboard **Collaborators** KPI counts active workspace members for the

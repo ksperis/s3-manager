@@ -17,11 +17,11 @@ when needed.
 | Task | Where | Notes |
 |---|---|---|
 | Open an assigned space | **Portal > Spaces** | Select a space to browse files and view usage. |
-| Create a new space | **Spaces > Create space** | Regular Portal users create private spaces only, when Portal user space creation is enabled. Portal managers choose Private, Team, or Selected people access before creation. The new space opens with the next steps to add files and invite people. |
+| Create a new space | **Spaces > Create space** | Any Portal user can create a private space when private creation is enabled. Portal managers can also create Team or Selected people spaces. The new space opens with the next steps to add files and invite people. |
 | Add existing storage | **Spaces > Add existing space** | Portal managers can expose existing buckets as spaces and choose the initial access mode. Selected people imports can include collaborators immediately. The added space opens with the same file and collaborator next steps. |
 | Archive a space | Space actions | Archived spaces keep their bucket and metadata but suspend browsing, sharing, and public links. This is reversible. |
-| Delete a space | Space settings > **Delete space** | Content Owners can permanently delete active, archived, and imported spaces only after current files and file history have been removed. |
-| Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, owner, covered member count, direct collaborators, and public-link count. |
+| Delete a space | Space settings > **Delete space** | Private owners and Portal managers can permanently delete active, archived, and imported spaces only after current files and file history have been removed. |
+| Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, the private owner or project managers, covered member count, direct collaborators, and public-link count. |
 | Connect an external S3 tool | Space details > Connect external tools | Copy the space-to-bucket mapping, then open External tools with the space preselected. |
 
 ## Starting a new space
@@ -39,16 +39,19 @@ come back later and still see the next step.
 
 | Mode | Meaning |
 |---|---|
-| Private | Only the owner can browse files. Portal managers can still administer metadata and archive state. |
+| Private | The owner and Portal managers can browse and manage files. A Portal manager can explicitly take ownership. |
 | Team | Current and future Portal members of the selected project receive the chosen default access automatically. |
-| Selected people | Only selected people receive Viewer, Editor, or Owner access. Users outside the project must be added by an admin before they can be selected. |
+| Selected people | Only selected people receive Viewer or Editor access. Users outside the project must be added by an admin before they can be selected. |
+
+Private and team modes cannot be changed after creation. Team spaces never have
+an owner; Portal managers administer them for the project.
 
 When a Portal manager creates or imports a Selected people space, selected collaborators are saved with the space. If a searched person is not already available in the current project, ask an admin to add that external collaborator first.
 
 ## Archiving and permanent deletion
 
 Archiving keeps the Storage Space and its bucket. It suspends file access and
-public links until an Owner restores the space.
+public links until a private owner or Portal manager restores the space.
 
 Permanent deletion removes both the Storage Space and its underlying bucket,
 including for a space added from an existing bucket. Portal never empties a

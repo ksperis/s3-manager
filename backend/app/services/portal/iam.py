@@ -59,38 +59,34 @@ class PortalIamMixin:
         group_key: str,
     ) -> Optional[dict]:
         if group_key == "manager":
-            group_policy = portal_settings.iam_group_manager_policy
-        else:
-            group_policy = portal_settings.iam_group_user_policy
-        if group_policy.advanced_policy:
-            policy = copy.deepcopy(group_policy.advanced_policy)
-            if group_key == "manager":
-                policy = self._without_allowed_policy_actions(policy, {"s3:createbucket"})
-                if not self._policy_statements(policy):
-                    return None
-        else:
-            actions = self._normalize_actions(group_policy.actions)
-            if group_key == "manager":
-                action_keys = {action.lower() for action in actions}
-                if action_keys == {"s3:listallmybuckets", "s3:createbucket"}:
-                    actions = ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
-                else:
-                    actions = [action for action in actions if action.lower() != "s3:createbucket"]
-            if not actions:
-                return None
-            policy = {
+            return {
                 "Version": "2012-10-17",
                 "Statement": [
                     {
+                        "Sid": "PortalManagerBootstrap",
                         "Effect": "Allow",
-                        "Action": actions,
+                        "Action": ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
                         "Resource": ["*"],
-                    }
+                    },
+                    {
+                        "Sid": "PortalManagerProjectStorage",
+                        "Effect": "Allow",
+                        "Action": self._storage_space_role_actions("Manager"),
+                        "Resource": ["arn:aws:s3:::*", "arn:aws:s3:::*/*"],
+                    },
                 ],
             }
-        if isinstance(policy, dict) and "Version" not in policy:
-            policy["Version"] = "2012-10-17"
-        return policy
+        return {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "PortalUserBootstrap",
+                    "Effect": "Allow",
+                    "Action": ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
+                    "Resource": ["*"],
+                }
+            ],
+        }
 
     def _storage_space_share_sid(self, role: PortalStorageSpaceRole) -> str:
         return f"{self._storage_space_share_sid_prefix}{role}"
@@ -106,7 +102,12 @@ class PortalIamMixin:
         viewer_actions = [
             "s3:GetBucketLocation",
             "s3:ListBucket",
+            "s3:ListBucketVersions",
+            "s3:ListBucketMultipartUploads",
             "s3:GetObject",
+            "s3:GetObjectVersion",
+            "s3:GetObjectTagging",
+            "s3:GetObjectVersionTagging",
         ]
         if role == "Viewer":
             return viewer_actions
@@ -114,10 +115,24 @@ class PortalIamMixin:
             *viewer_actions,
             "s3:PutObject",
             "s3:DeleteObject",
+            "s3:DeleteObjectVersion",
+            "s3:AbortMultipartUpload",
+            "s3:ListMultipartUploadParts",
         ]
         if role == "Editor":
             return editor_actions
-        return ["s3:*"]
+        return [
+            *editor_actions,
+            "s3:PutObjectTagging",
+            "s3:DeleteObjectTagging",
+            "s3:PutObjectVersionTagging",
+            "s3:DeleteObjectVersionTagging",
+            "s3:GetBucketVersioning",
+            "s3:GetBucketCORS",
+            "s3:GetBucketAcl",
+            "s3:GetBucketPolicy",
+            "s3:GetLifecycleConfiguration",
+        ]
 
     def _bucket_arns(self, bucket_name: str) -> list[str]:
         return [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"]
@@ -163,7 +178,7 @@ class PortalIamMixin:
         return "Editor"
 
     def _storage_space_role_is_valid(self, role: Optional[str]) -> bool:
-        return role in {"Viewer", "Editor", "Owner"}
+        return role in {"Viewer", "Editor", "Owner", "Manager"}
 
     def _best_storage_space_role(self, *roles: Optional[str]) -> Optional[PortalStorageSpaceRole]:
         best: Optional[PortalStorageSpaceRole] = None
@@ -238,20 +253,18 @@ class PortalIamMixin:
         return rows_by_user
 
     def _is_portal_manager_access(self, access: "AccountAccess") -> bool:
-        return access.role == AccountRole.PORTAL_MANAGER.value or access.capabilities.can_manage_portal_users
+        return access.role == AccountRole.PORTAL_MANAGER.value
 
     def _storage_space_owner_label(
         self,
         account: S3Account,
         metadata: PortalStorageSpaceMetadata | None,
     ) -> str:
-        if metadata and metadata.owner_label:
-            return metadata.owner_label
         if metadata and metadata.owner_user_id:
             owner = self.db.query(User).filter(User.id == metadata.owner_user_id).first()
             if owner and owner.email:
                 return owner.email
-        return account.name
+        return account.name if self._metadata_visibility(metadata) == "private" else ""
 
     def _storage_space_effective_role(
         self,
@@ -266,12 +279,12 @@ class PortalIamMixin:
             return None
         if metadata.archived_at and not include_archived:
             return None
-        if self._is_portal_manager_access(access):
-            return "Owner"
         if metadata.owner_user_id == user.id:
             return "Owner"
+        if self._is_portal_manager_access(access):
+            return "Manager"
         if metadata.archived_at:
-            return role if include_archived and role == "Owner" else None
+            return role if include_archived and role in {"Owner", "Manager"} else None
         if self._metadata_visibility(metadata) != "shared":
             return None
         return role
@@ -287,6 +300,8 @@ class PortalIamMixin:
             return None
         if metadata.owner_user_id == user.id:
             return "Owner"
+        if self._is_portal_manager_access(access):
+            return "Manager"
         if self._metadata_visibility(metadata) != "shared":
             return None
         return role
@@ -351,6 +366,14 @@ class PortalIamMixin:
             principals.update(self._portal_iam_principal_arns(account, iam_username, iam_user_id))
         return sorted(principals)
 
+    def _portal_manager_principal_arns(self, account: S3Account) -> list[str]:
+        manager_user_ids = {
+            user_id
+            for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
+            if role == AccountRole.PORTAL_MANAGER.value
+        }
+        return self._portal_policy_principals_for_user_ids(account, manager_user_ids)
+
     def _portal_storage_space_allowed_user_ids(
         self,
         account: S3Account,
@@ -358,7 +381,11 @@ class PortalIamMixin:
     ) -> set[int]:
         if metadata.archived_at:
             return set()
-        allowed_user_ids: set[int] = set()
+        allowed_user_ids: set[int] = {
+            user_id
+            for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
+            if role == AccountRole.PORTAL_MANAGER.value
+        }
         if metadata.owner_user_id is not None:
             allowed_user_ids.add(metadata.owner_user_id)
         if self._metadata_visibility(metadata) != "shared":
@@ -533,7 +560,7 @@ class PortalIamMixin:
         return buckets
 
     def _role_precedence(self, role: PortalStorageSpaceRole) -> int:
-        return {"Viewer": 1, "Editor": 2, "Owner": 3}[role]
+        return {"Viewer": 1, "Editor": 2, "Owner": 3, "Manager": 4}[role]
 
     def _merge_storage_space_role(
         self,
@@ -588,7 +615,7 @@ class PortalIamMixin:
             if metadata.archived_at and not include_archived:
                 continue
             if account_role == AccountRole.PORTAL_MANAGER.value:
-                access_by_bucket[metadata.bucket_name] = "Owner"
+                access_by_bucket[metadata.bucket_name] = "Manager"
                 continue
             if metadata.owner_user_id == target.id:
                 access_by_bucket[metadata.bucket_name] = "Owner"
@@ -626,6 +653,9 @@ class PortalIamMixin:
         access_by_bucket: dict[str, PortalStorageSpaceRole] = {}
         for metadata, grant_role in rows:
             if metadata.archived_at and not include_archived:
+                continue
+            if account_role == AccountRole.PORTAL_MANAGER.value:
+                access_by_bucket[metadata.bucket_name] = "Manager"
                 continue
             if metadata.owner_user_id == target.id:
                 access_by_bucket[metadata.bucket_name] = "Owner"
@@ -700,7 +730,11 @@ class PortalIamMixin:
         iam_service: RGWIAMService,
         iam_username: Optional[str],
     ) -> None:
-        access_by_bucket = self._db_storage_space_content_access(user, account, account_role)
+        access_by_bucket = (
+            {}
+            if account_role == AccountRole.PORTAL_MANAGER.value
+            else self._db_storage_space_content_access(user, account, account_role)
+        )
         self._sync_user_storage_space_policy_projection(iam_service, iam_username, access_by_bucket)
 
     def _storage_space_participant_user_ids(self, metadata: PortalStorageSpaceMetadata) -> set[int]:
@@ -713,17 +747,14 @@ class PortalIamMixin:
             .all()
         )
         user_ids.update(user_id for (user_id,) in grant_rows if user_id is not None)
-        manager_rows = (
-            self.db.query(UserS3Account.user_id)
-            .filter(
-                UserS3Account.account_id == metadata.account_id,
-                UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+        account = self.db.query(S3Account).filter(S3Account.id == metadata.account_id).first()
+        if account is not None:
+            user_ids.update(
+                user_id
+                for user_id, (_target, role, _sources) in self._portal_account_member_map(account).items()
+                if role == AccountRole.PORTAL_MANAGER.value
             )
-            .all()
-        )
-        user_ids.update(user_id for (user_id,) in manager_rows if user_id is not None)
         if self._metadata_account_member_role(metadata):
-            account = self.db.query(S3Account).filter(S3Account.id == metadata.account_id).first()
             if account is not None:
                 user_ids.update(self._portal_account_member_map(account))
         return user_ids
@@ -769,6 +800,7 @@ class PortalIamMixin:
                 iam_username,
                 account_role,
                 portal_settings=self._effective_portal_settings(account),
+                account=account,
             )
             self._sync_user_storage_space_projection(target, account, account_role, iam_service, iam_username)
 
@@ -1139,6 +1171,8 @@ class PortalIamMixin:
         iam_username: Optional[str],
         account_role: Optional[str],
         portal_settings: Optional[PortalSettings] = None,
+        *,
+        account: Optional[S3Account] = None,
     ) -> None:
         if not iam_username:
             raise RuntimeError("IAM username missing for this portal user")
@@ -1150,18 +1184,30 @@ class PortalIamMixin:
                     logger.warning("Unable to remove %s from %s: %s", iam_username, group, exc)
             return
 
+        # The manager group grants account-wide S3 data access. Protect the
+        # technical bucket before its policy is created or updated, then remove
+        # a stale deny only after a manager has left the group.
+        if account is not None and account_role == AccountRole.PORTAL_MANAGER.value:
+            self._sync_portal_server_access_log_bucket_policy_if_present(account)
+
         settings = portal_settings or self._portal_settings()
         self._ensure_portal_groups(iam_service, settings)
         target_group = self._manager_group_name if account_role == AccountRole.PORTAL_MANAGER.value else self._user_group_name
         other_group = self._user_group_name if target_group == self._manager_group_name else self._manager_group_name
 
+        other_members = iam_service.list_group_users(other_group)
+        remove_other_first = target_group == self._user_group_name
+        if remove_other_first and any(m.name == iam_username for m in other_members):
+            iam_service.remove_user_from_group(other_group, iam_username)
+
         members = iam_service.list_group_users(target_group)
         if not any(m.name == iam_username for m in members):
             iam_service.add_user_to_group(target_group, iam_username)
 
-        other_members = iam_service.list_group_users(other_group)
-        if any(m.name == iam_username for m in other_members):
+        if not remove_other_first and any(m.name == iam_username for m in other_members):
             iam_service.remove_user_from_group(other_group, iam_username)
+        if account is not None and account_role == AccountRole.PORTAL_USER.value:
+            self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
     def _clear_user_bucket_policy(self, iam_service: RGWIAMService, iam_username: Optional[str]) -> None:
         if not iam_username:
@@ -1195,7 +1241,13 @@ class PortalIamMixin:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            account_role,
+            portal_settings=portal_settings,
+            account=account,
+        )
         self._sync_user_storage_space_projection(user, account, account_role, iam_service, link.iam_username)
         return self._active_credentials(link, iam_service)
 
@@ -1321,7 +1373,13 @@ class PortalIamMixin:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            account_role,
+            portal_settings=portal_settings,
+            account=account,
+        )
         self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
         return self.list_existing_user_bucket_access(target, account, account_role)
 

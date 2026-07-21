@@ -95,6 +95,29 @@ def _put_external_s3_object(
     raise AssertionError(f"External S3 upload did not succeed: {last_error}") from last_error
 
 
+def _assert_s3_bucket_access_denied(
+    ceph_test_settings: CephTestSettings,
+    *,
+    endpoint_url: str,
+    access_key_id: str,
+    secret_access_key: str,
+    bucket_name: str,
+) -> None:
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        region_name=ceph_test_settings.rgw_admin_region or "us-east-1",
+        verify=ceph_test_settings.rgw_ca_bundle or ceph_test_settings.rgw_verify_tls,
+        config=Config(s3={"addressing_style": "path"}),
+    )
+    with pytest.raises(ClientError) as exc_info:
+        client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
+    error = exc_info.value.response.get("Error") or {}
+    assert str(error.get("Code") or "").lower() in {"accessdenied", "403"}
+
+
 def _delete_test_bucket(
     manager_session: BackendSession,
     resource_tracker: ResourceTracker,
@@ -161,6 +184,7 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
     )
     bucket_name: str | None = None
     external_access_key_id: str | None = None
+    personal_access_key_id: str | None = None
 
     super_admin_session.post(
         f"/admin/users/{provisioned_account.manager_user_id}/assign-account",
@@ -223,6 +247,40 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
         assert managed_statement["Condition"]["StringEquals"] == {
             "aws:SourceAccount": provisioned_account.rgw_account_id
         }
+        manager_deny = _statement_by_sid(policy_payload["policy"], "S3ManagerPortalManagerDeny")
+        assert manager_deny is not None
+        assert manager_deny["Effect"] == "Deny"
+        assert manager_deny["Action"] == "s3:*"
+        assert manager_deny["Resource"] == [
+            f"arn:aws:s3:::{log_bucket}",
+            f"arn:aws:s3:::{log_bucket}/*",
+        ]
+
+        personal_key = manager_session.post(
+            "/portal/access-keys",
+            params=_account_params(account_id),
+            json={"target_type": "self"},
+            expected_status=201,
+        )
+        personal_access_key_id = str(personal_key["access_key_id"])
+        personal_secret_access_key = str(personal_key.get("secret_access_key") or "")
+        assert personal_secret_access_key
+        access_key_state = manager_session.get("/portal/access-keys", params=_account_params(account_id))
+        endpoint_url = str(access_key_state.get("s3_endpoint") or ceph_test_settings.rgw_admin_endpoint or "")
+        assert endpoint_url
+        _assert_s3_bucket_access_denied(
+            ceph_test_settings,
+            endpoint_url=endpoint_url,
+            access_key_id=personal_access_key_id,
+            secret_access_key=personal_secret_access_key,
+            bucket_name=log_bucket,
+        )
+        manager_session.delete(
+            f"/portal/access-keys/{personal_access_key_id}",
+            params=_account_params(account_id),
+            expected_status=204,
+        )
+        personal_access_key_id = None
 
         _upload_via_portal_browser(
             manager_session,
@@ -293,6 +351,15 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
         )
         raise
     finally:
+        if personal_access_key_id:
+            try:
+                manager_session.delete(
+                    f"/portal/access-keys/{personal_access_key_id}",
+                    params=_account_params(account_id),
+                    expected_status=(204, 404),
+                )
+            except BackendAPIError:
+                pass
         if external_access_key_id:
             try:
                 manager_session.delete(

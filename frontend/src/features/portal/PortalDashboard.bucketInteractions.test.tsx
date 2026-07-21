@@ -56,7 +56,7 @@ const mocks = vi.hoisted(() => {
           name: "Research Data",
           internalName: "research-data",
           description: "Research Data shared storage",
-          role: "Owner",
+          role: "Manager",
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -333,7 +333,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(within(topStorageSpaces!).getByText("Other")).toBeInTheDocument();
     expect(within(topStorageSpaces!).queryByRole("link", { name: "Other" })).not.toBeInTheDocument();
     expect(within(topStorageSpaces!).queryByText("Research Data")).not.toBeInTheDocument();
-    expect(within(topStorageSpaces!).getAllByText("Owner")).toHaveLength(3);
+    expect(within(topStorageSpaces!).getAllByText("Manager")).toHaveLength(3);
     expect(within(topStorageSpaces!).queryByText("Active")).not.toBeInTheDocument();
   });
 

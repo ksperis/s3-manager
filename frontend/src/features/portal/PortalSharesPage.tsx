@@ -17,12 +17,11 @@ import {
   listPortalStorageSpacePublicLinks,
   listPortalStorageSpaceShares,
   revokePortalStorageSpacePublicLink,
-  updatePortalStorageSpace,
   type PortalCollaborator,
   type PortalPublicLink,
   revokePortalStorageSpaceShare,
   updatePortalStorageSpaceShare,
-  type PortalStorageSpaceRole,
+  type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
@@ -75,7 +74,7 @@ import {
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-const roles: PortalStorageSpaceRole[] = ["Viewer", "Editor", "Owner"];
+const roles: PortalStorageSpaceGrantRole[] = ["Viewer", "Editor"];
 
 type ShareTab = "with" | "by" | "links";
 type CollaboratorsViewTab = "invite" | "members" | "access";
@@ -149,7 +148,7 @@ function SharesTable({
   shares: ShareRow[];
   editable: boolean;
   busyShareId: string | null;
-  onRoleChange: (share: ShareRow, role: PortalStorageSpaceRole) => void;
+  onRoleChange: (share: ShareRow, role: PortalStorageSpaceGrantRole) => void;
   onRevoke: (share: ShareRow) => void;
 }) {
   const { t } = useI18n();
@@ -183,7 +182,7 @@ function SharesTable({
               onChange={(event) =>
                 onRoleChange(
                   share,
-                  event.target.value as PortalStorageSpaceRole,
+                  event.target.value as PortalStorageSpaceGrantRole,
                 )
               }
               aria-label={t({
@@ -474,7 +473,7 @@ export default function PortalSharesPage() {
   >([]);
   const [shareCandidatesLoading, setShareCandidatesLoading] = useState(false);
   const [selectedShareRolesByUserId, setSelectedShareRolesByUserId] = useState<
-    Record<number, PortalStorageSpaceRole>
+    Record<number, PortalStorageSpaceGrantRole>
   >({});
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [collaboratorQuery, setCollaboratorQuery] = useState("");
@@ -497,20 +496,15 @@ export default function PortalSharesPage() {
     collaborators,
     collaboratorsLoading,
     collaboratorsError,
-    refreshWorkspaceData = () => undefined,
   } = usePortalWorkspaceData({ includeCollaborators: true });
   const initialUrlContextApplied = useRef(false);
   const activeCollaboratorSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived"),
     [workspace.spaces],
   );
-  const activeOwnerSpaces = useMemo(
-    () => activeCollaboratorSpaces.filter((space) => space.role === "Owner"),
+  const activeManagedTeamSpaces = useMemo(
+    () => activeCollaboratorSpaces.filter((space) => space.role === "Manager" && space.visibility === "shared"),
     [activeCollaboratorSpaces],
-  );
-  const activeSharedOwnerSpaces = useMemo(
-    () => activeOwnerSpaces.filter((space) => space.visibility === "shared"),
-    [activeOwnerSpaces],
   );
 
   const activeCollaboratorSpaceIds = useMemo(
@@ -524,12 +518,12 @@ export default function PortalSharesPage() {
   );
   const selectedShareEntries = selectedPortalShares(selectedShareRolesByUserId);
   const selectedInviteSpace =
-    activeOwnerSpaces.find((space) => space.id === selectedSpaceId) ??
-    activeOwnerSpaces[0] ??
+    activeManagedTeamSpaces.find((space) => space.id === selectedSpaceId) ??
+    activeManagedTeamSpaces[0] ??
     null;
   const selectedPublicLinkSpace =
-    activeSharedOwnerSpaces.find((space) => space.id === selectedSpaceId) ??
-    activeSharedOwnerSpaces[0] ??
+    activeManagedTeamSpaces.find((space) => space.id === selectedSpaceId) ??
+    activeManagedTeamSpaces[0] ??
     null;
   const collaborationGuideStorageKey = `portal.collaborators.start-guide.dismissed.${accountIdForApi ?? "default"}`;
 
@@ -571,16 +565,16 @@ export default function PortalSharesPage() {
   }, [workspace.spaces]);
 
   useEffect(() => {
-    if (!selectedSpaceId && activeOwnerSpaces[0]) {
-      setSelectedSpaceId(activeOwnerSpaces[0].id);
+    if (!selectedSpaceId && activeManagedTeamSpaces[0]) {
+      setSelectedSpaceId(activeManagedTeamSpaces[0].id);
     }
     if (
       selectedSpaceId &&
-      !activeOwnerSpaces.some((space) => space.id === selectedSpaceId)
+      !activeManagedTeamSpaces.some((space) => space.id === selectedSpaceId)
     ) {
-      setSelectedSpaceId(activeOwnerSpaces[0]?.id ?? "");
+      setSelectedSpaceId(activeManagedTeamSpaces[0]?.id ?? "");
     }
-  }, [activeOwnerSpaces, selectedSpaceId]);
+  }, [activeManagedTeamSpaces, selectedSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -629,14 +623,14 @@ export default function PortalSharesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!accountIdForApi || activeOwnerSpaces.length === 0) {
+    if (!accountIdForApi || activeManagedTeamSpaces.length === 0) {
       setPublicLinks([]);
       return () => {
         cancelled = true;
       };
     }
     Promise.all(
-      activeOwnerSpaces.map((space) =>
+      activeManagedTeamSpaces.map((space) =>
         listPortalStorageSpacePublicLinks(accountIdForApi, space.id, {
           includeRevoked: true,
         }),
@@ -652,7 +646,7 @@ export default function PortalSharesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeOwnerSpaces]);
+  }, [accountIdForApi, activeManagedTeamSpaces]);
 
   useEffect(() => {
     let cancelled = false;
@@ -683,7 +677,7 @@ export default function PortalSharesPage() {
               Object.entries(current).filter(([userId]) =>
                 availableUserIds.has(Number(userId)),
               ),
-            ) as Record<number, PortalStorageSpaceRole>,
+            ) as Record<number, PortalStorageSpaceGrantRole>,
         );
       })
       .catch((err) => {
@@ -754,14 +748,6 @@ export default function PortalSharesPage() {
     setSharesError(null);
     setSharesMessage(null);
     try {
-      if (selectedSpace.visibility === "private") {
-        await updatePortalStorageSpace(accountIdForApi, selectedSpace.id, {
-          visibility: "shared",
-          share_scope: "restricted",
-          account_member_role: null,
-        });
-        refreshWorkspaceData();
-      }
       const createdShares = await Promise.all(
         selectedShareEntries.map((entry) =>
           grantPortalStorageSpaceShare(accountIdForApi, selectedSpace.id, {
@@ -853,7 +839,7 @@ export default function PortalSharesPage() {
 
   const handleRoleChange = async (
     share: ShareRow,
-    role: PortalStorageSpaceRole,
+    role: PortalStorageSpaceGrantRole,
   ) => {
     if (!accountIdForApi || !share.userId) return;
     setBusyShareId(share.id);
@@ -1156,9 +1142,9 @@ export default function PortalSharesPage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
                 {t({
-                  en: `${activeOwnerSpaces.length} space${activeOwnerSpaces.length === 1 ? "" : "s"} you can share`,
-                  fr: `${activeOwnerSpaces.length} espace${activeOwnerSpaces.length > 1 ? "s" : ""} partageable${activeOwnerSpaces.length > 1 ? "s" : ""}`,
-                  de: `${activeOwnerSpaces.length} teilbare${activeOwnerSpaces.length === 1 ? "r Bereich" : " Bereiche"}`,
+                  en: `${activeManagedTeamSpaces.length} team space${activeManagedTeamSpaces.length === 1 ? "" : "s"} you can manage`,
+                  fr: `${activeManagedTeamSpaces.length} espace${activeManagedTeamSpaces.length > 1 ? "s" : ""} d'équipe géré${activeManagedTeamSpaces.length > 1 ? "s" : ""}`,
+                  de: `${activeManagedTeamSpaces.length} verwaltete${activeManagedTeamSpaces.length === 1 ? "r Teambereich" : " Teambereiche"}`,
                 })}
               </div>
               <UiButton
@@ -1188,7 +1174,7 @@ export default function PortalSharesPage() {
                 de: "Beginnen Sie mit dem Projekt oder Datensatz, in dem die Dateien liegen.",
               })}
               action={
-                activeOwnerSpaces.length > 0 ? (
+                activeManagedTeamSpaces.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => setInviteDialogOpen(true)}
@@ -1230,14 +1216,14 @@ export default function PortalSharesPage() {
                 de: "Mitwirkende einladen",
               })}
               description={t({
-                en: "Give each person the least access they need: view, edit, or manage.",
-                fr: "Donnez à chacun le niveau nécessaire : consulter, modifier ou gérer.",
-                de: "Geben Sie jeder Person nur den nötigen Zugriff: ansehen, bearbeiten oder verwalten.",
+                en: "Give each person the least access they need: view or edit.",
+                fr: "Donnez à chacun le niveau nécessaire : consulter ou modifier.",
+                de: "Geben Sie jeder Person nur den nötigen Zugriff: ansehen oder bearbeiten.",
               })}
               action={
                 <button
                   type="button"
-                  disabled={activeOwnerSpaces.length === 0}
+                  disabled={activeManagedTeamSpaces.length === 0}
                   onClick={() => setActiveTab("by")}
                   className={cx(
                     uiButtonBaseClass,
@@ -1358,7 +1344,7 @@ export default function PortalSharesPage() {
       />
 
       {activeViewTab === "invite" ? (
-        activeOwnerSpaces.length > 0 ? (
+        activeManagedTeamSpaces.length > 0 ? (
           <div id="share-space" className="scroll-mt-6">
             <UiCard
               title={t({
@@ -1383,9 +1369,9 @@ export default function PortalSharesPage() {
                     )}
                   >
                     {t({
-                      en: `${activeOwnerSpaces.length} space${activeOwnerSpaces.length === 1 ? "" : "s"} available`,
-                      fr: `${activeOwnerSpaces.length} espace${activeOwnerSpaces.length > 1 ? "s" : ""} disponible${activeOwnerSpaces.length > 1 ? "s" : ""}`,
-                      de: `${activeOwnerSpaces.length} Bereich${activeOwnerSpaces.length === 1 ? "" : "e"} verfügbar`,
+                      en: `${activeManagedTeamSpaces.length} team space${activeManagedTeamSpaces.length === 1 ? "" : "s"} available`,
+                      fr: `${activeManagedTeamSpaces.length} espace${activeManagedTeamSpaces.length > 1 ? "s" : ""} d'équipe disponible${activeManagedTeamSpaces.length > 1 ? "s" : ""}`,
+                      de: `${activeManagedTeamSpaces.length} Teambereich${activeManagedTeamSpaces.length === 1 ? "" : "e"} verfügbar`,
                     })}
                   </p>
                 </div>
@@ -1400,9 +1386,9 @@ export default function PortalSharesPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>
                 {t({
-                  en: "You do not own an active space yet. Create a space or ask an Owner to invite people.",
-                  fr: "Vous ne possédez pas encore d'espace actif. Créez un espace ou demandez à un Owner d'inviter des personnes.",
-                  de: "Sie besitzen noch keinen aktiven Bereich. Erstellen Sie einen Bereich oder bitten Sie einen Owner, Personen einzuladen.",
+                  en: "Only project managers can invite people to active team spaces.",
+                  fr: "Seuls les gestionnaires du projet peuvent inviter des personnes dans les espaces d'équipe actifs.",
+                  de: "Nur Projektmanager können Personen in aktive Teambereiche einladen.",
                 })}
               </span>
               <Link
@@ -1500,7 +1486,7 @@ export default function PortalSharesPage() {
                   })}
                 </p>
               </div>
-              {activeSharedOwnerSpaces.length > 0 ? (
+              {activeManagedTeamSpaces.length > 0 ? (
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
                   <UiSelect
                     size="compact"
@@ -1513,7 +1499,7 @@ export default function PortalSharesPage() {
                       de: "Bereich für öffentlichen Link",
                     })}
                   >
-                    {activeSharedOwnerSpaces.map((space) => (
+                    {activeManagedTeamSpaces.map((space) => (
                       <option key={space.id} value={space.id}>
                         {space.name}
                       </option>
@@ -1553,9 +1539,9 @@ export default function PortalSharesPage() {
               ) : (
                 <PageBanner tone="info">
                   {t({
-                    en: "Public links need an active shared space that you own. Invite collaborators to a space first, then open its files to create a link.",
-                    fr: "Les liens publics nécessitent un espace partagé actif dont vous êtes propriétaire. Invitez d'abord des collaborateurs, puis ouvrez les fichiers de l'espace pour créer un lien.",
-                    de: "Öffentliche Links benötigen einen aktiven geteilten Bereich, den Sie besitzen. Laden Sie zuerst Mitwirkende ein und öffnen Sie dann die Dateien, um einen Link zu erstellen.",
+                    en: "Only project managers can create public links from active team spaces.",
+                    fr: "Seuls les gestionnaires du projet peuvent créer des liens publics depuis les espaces d'équipe actifs.",
+                    de: "Nur Projektmanager können öffentliche Links aus aktiven Teambereichen erstellen.",
                   })}
                 </PageBanner>
               )}
@@ -1615,7 +1601,7 @@ export default function PortalSharesPage() {
         </UiCard>
       ) : null}
 
-      {inviteDialogOpen && activeOwnerSpaces.length > 0 ? (
+      {inviteDialogOpen && activeManagedTeamSpaces.length > 0 ? (
         <WorkflowPage
           title={t({
             en: "Invite people",
@@ -1647,7 +1633,7 @@ export default function PortalSharesPage() {
                   de: "Zu teilender Bereich",
                 })}
               >
-                {activeOwnerSpaces.map((space) => (
+                {activeManagedTeamSpaces.map((space) => (
                   <option key={space.id} value={space.id}>
                     {space.name}
                   </option>
@@ -1660,9 +1646,9 @@ export default function PortalSharesPage() {
                 )}
               >
                 {t({
-                  en: "Choose people already added to this workspace, then decide whether they can view, edit, or manage the space.",
-                  fr: "Choisissez des personnes déjà ajoutées à ce workspace, puis décidez si elles peuvent consulter, modifier ou gérer l'espace.",
-                  de: "Wählen Sie Personen aus diesem Workspace aus und legen Sie fest, ob sie den Bereich ansehen, bearbeiten oder verwalten können.",
+                  en: "Choose people already added to this workspace, then give them Viewer or Editor access.",
+                  fr: "Choisissez des personnes déjà ajoutées à ce workspace, puis donnez-leur un accès Lecteur ou Éditeur.",
+                  de: "Wählen Sie Personen aus diesem Workspace aus und geben Sie ihnen Viewer- oder Editor-Zugriff.",
                 })}
               </p>
             </div>

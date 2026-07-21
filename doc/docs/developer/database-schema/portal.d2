@@ -24,13 +24,12 @@ Legend: {
   style.stroke: "#cbd5e1"
   "portal_storage_space_metadata": {
     class: table
-    tooltip: "PK: id\nUnique: uq_portal_storage_space_metadata_account_bucket(account_id, bucket_name)\nCheck: ck_portal_storage_space_metadata_account_member_role: account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor'); ck_portal_storage_space_metadata_share_scope: share_scope IN ('restricted', 'account')\nIndexes: ix_portal_storage_space_metadata_account(account_id) [index]; ix_portal_storage_space_metadata_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_metadata_account_bucket(account_id, bucket_name)\nCheck: ck_portal_storage_space_metadata_account_member_role: account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor'); ck_portal_storage_space_metadata_private_owner: (visibility = 'private' AND owner_user_id IS NOT NULL) OR (visibility = 'shared' AND owner_user_id IS NULL); ck_portal_storage_space_metadata_share_scope: share_scope IN ('restricted', 'account')\nIndexes: ix_portal_storage_space_metadata_account(account_id) [index]; ix_portal_storage_space_metadata_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "account_id": "INTEGER [FK, NN]"
     "bucket_name": "VARCHAR [NN]"
     "display_name": "VARCHAR"
     "description": "TEXT"
-    "owner_label": "VARCHAR"
     "owner_user_id": "INTEGER [FK]"
     "visibility": "VARCHAR [NN]"
     "share_scope": "VARCHAR [NN]"
@@ -45,7 +44,7 @@ Legend: {
   }
   "portal_storage_space_grants": {
     class: table
-    tooltip: "PK: id\nUnique: uq_portal_storage_space_grants_space_user(storage_space_metadata_id, user_id)\nCheck: ck_portal_storage_space_grants_role: role IN ('Viewer', 'Editor', 'Owner')\nIndexes: ix_portal_storage_space_grants_id(id) [index]; ix_portal_storage_space_grants_space(storage_space_metadata_id) [index]; ix_portal_storage_space_grants_user(user_id) [index]"
+    tooltip: "PK: id\nUnique: uq_portal_storage_space_grants_space_user(storage_space_metadata_id, user_id)\nCheck: ck_portal_storage_space_grants_role: role IN ('Viewer', 'Editor')\nIndexes: ix_portal_storage_space_grants_id(id) [index]; ix_portal_storage_space_grants_space(storage_space_metadata_id) [index]; ix_portal_storage_space_grants_user(user_id) [index]"
     "id": "INTEGER [PK, NN]"
     "storage_space_metadata_id": "INTEGER [FK, NN]"
     "user_id": "INTEGER [FK, NN]"

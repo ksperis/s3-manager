@@ -38,7 +38,7 @@ on its job.
 | --- | --- | --- | --- | --- |
 | `/browser` standalone | Selected Browser context: S3 account, S3 connection, legacy S3 user, session context, or Portal account context. | Classic root Browser uses `browser_enabled` and `browser_root_enabled`; Portal account contexts use `browser_enabled`, `portal_enabled`, and `browser_portal_enabled` with `X-S3-Workspace: portal`. User or group `browser_advanced_features_enabled` controls advanced chrome on the root route. | Root Browser is enabled by default. When advanced Browser access is false, `/browser` uses Manager-equivalent compact chrome: no folder panel, no inspector panel, no action bar toggle, no root-only column/layout controls, and no bucket creation shortcut. Portal account contexts use a user-oriented workspace sidebar, display Storage Space names instead of bucket names, and keep the `portal-basic` action profile. | Good default for technical users and Portal users who need a broader file workspace. Portal context must stay read/file-oriented and must not expose account-management features. |
 | `/manager/browser` embedded Browser | Active Manager execution context. | `browser_enabled`, `browser_manager_enabled`, and the selected S3 connection `access_browser` flag when the context is a connection. | Disabled by default. Even when enabled, it uses embedded compact chrome: no folders panel, no inspector panel, no panel toggles, and no Browser-owned bucket management shortcut. | Useful only when object navigation must stay close to Manager context. Keep disabled when Manager should remain a configuration surface only. |
-| `/portal/storage-spaces/:spaceId` locked Browser | Portal execution identity resolved for the selected account and DB-backed Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, DB grant role, content role, and the `portal-basic` profile. | Enabled by default but locked to one active Storage Space. Bucket switching and bucket search are hidden and backend bucket lists are filtered to active Storage Spaces with Portal metadata and content access. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, details, download, delete, and opening a single folder. Viewer Storage Spaces hide upload, folder creation, and delete actions. The details action routes to the Portal object detail page, not the advanced Browser modal. | This is the current minimal end-user file profile. Archived Storage Spaces must be blocked even if older Portal credentials still have storage-side access. Portal managers may list and administer a private Storage Space without content access when they are not its owner. Backend Portal checks use DB metadata and grants; IAM policies are projection/enforcement for S3 keys, not the source for listings or roles. |
+| `/portal/storage-spaces/:spaceId` locked Browser | Portal execution identity resolved for the selected account and DB-backed Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, DB grant role, and the `portal-basic` profile. | Enabled by default but locked to one active Storage Space. Bucket switching and bucket search are hidden and backend bucket lists are filtered to active Storage Spaces with Portal metadata and content access. Backend allows only the basic Portal route subset: settings, bucket search, object list/download/CORS, presign/delete/folders/proxy upload, and multipart upload lifecycle calls. UI action allowlist keeps upload files, upload folder, new folder, copy path, details, download, delete, and opening a single folder. Viewer Storage Spaces hide upload, folder creation, and delete actions. The details action routes to the Portal object detail page, not the advanced Browser modal. | This is the current minimal end-user file profile. Archived Storage Spaces must be blocked even if older Portal credentials still have storage-side access. Portal managers have full content access to every project Storage Space. Backend Portal checks use DB metadata and grants; IAM policies are projection/enforcement for S3 keys, not the source for listings or roles. |
 | `/ceph-admin/browser` embedded Browser | Endpoint-wide Ceph Admin credentials for the selected Ceph endpoint. | `browser_enabled`, `browser_ceph_admin_enabled`, `ceph_admin_enabled`, admin UI role, endpoint admin access, Ceph provider check, and an explicit risk acknowledgement dialog. | Disabled by default. It uses embedded compact chrome and requires endpoint admin access. The UI warns that operations may execute with an owner identity different from the tenant owner. | Keep disabled for regular object work. Prefer S3 Connections with the expected owner when tenant ownership matters. |
 
 ### Feature Families To Evaluate
@@ -91,19 +91,18 @@ placeholder.
 - Do not reintroduce a Storage Space `Type` field. Use `visibility` for
   `private` or `shared`, `share_scope` for restricted versus all-account
   sharing, and `archived_at`/`status` for archived state.
-- Portal user Storage Space creation is exposed through the dedicated
-  `can_create_storage_spaces` Portal state flag. Do not reuse
+- Private Storage Space creation is exposed through the dedicated
+  `can_create_private_storage_spaces` Portal state flag. Team creation uses
+  `can_create_team_storage_spaces`. Do not reuse
   `can_manage_buckets` for portal-user creation UI, because bucket management
   remains a broader portal-manager/operator capability.
-  `portal_user` requests must create `private` Storage Spaces only. A
-  `portal_manager` can create `private` or `shared` Storage Spaces regardless
-  of the portal-user creation flag; named bucket mode still requires the named
-  bucket creation setting.
+  Both Portal roles need the private-creation setting to create a private
+  space. Only a `portal_manager` can create or import a team space; named
+  bucket mode still requires the named bucket creation setting.
 - Private Storage Spaces are visible only to their owner and Portal managers.
-  Portal managers can edit metadata, visibility, and archive state for those
-  spaces, but content access, object routes, Browser bucket filters, and IAM
-  projections must exclude private spaces owned by another user.
-  Shared Storage Spaces either use DB-backed Viewer, Editor, and Owner grants
+  Portal managers have full UI and content access and can explicitly take
+  ownership. Visibility is immutable after creation. Team Storage Spaces have
+  no owner and either use DB-backed Viewer and Editor grants
   from `portal_storage_space_grants`, or `share_scope = account` to grant the
   configured default role to current and future effective Portal members of the
   account. Portal must not silently create account membership when adding an
@@ -118,14 +117,16 @@ placeholder.
 - Portal-managed bucket policies must only add, replace, or remove dedicated
   `Sid` statements such as `PortalStorageSpaceAccess` and
   `PortalStorageSpaceArchived`. They must preserve unrelated bucket policy
-  statements. The Portal role templates for `Viewer`, `Editor`, and `Owner`
+  statements. The Portal role templates for `Viewer`, `Editor`, `Owner`, and `Manager`
   are code-owned backend projections from DB grants; they are not an editable
   bucket/IAM policy document in Portal.
-- The default `portal-manager` IAM group policy must stay limited to global
-  Portal bootstrap actions such as `s3:ListAllMyBuckets` and
-  `sts:GetSessionToken`. Do not reintroduce `iam:*`, `s3:*`,
-  `s3:CreateBucket`, or bucket-configuration actions there to compensate for
-  missing service orchestration.
+- Because one RGW account maps to one Portal project, the code-owned
+  `portal-manager` IAM group carries both the minimal global bootstrap actions
+  (`s3:ListAllMyBuckets`, `sts:GetSessionToken`) and the explicit Manager
+  data-plane action set on that account's bucket and object ARNs. Do not
+  reintroduce `iam:*`, `s3:*`, `s3:CreateBucket`, or mutating
+  bucket-configuration actions. Technical buckets must override this group
+  access with a resource-policy `Deny` for manager IAM user principals.
 - Keep Portal authorization backed by Portal database metadata and grants.
   Storage IAM policies are synchronized projections for personal S3 keys and
   external enforcement; they must not be read back as the Portal source of
@@ -227,19 +228,18 @@ The current backend flow is:
    ownership, Portal manager status, visibility, share scope, archive state,
    effective account membership, and DB grants. Buckets without Portal metadata
    are not Storage Spaces.
-3. Map Storage Spaces to a user-facing management role and a separate content
-   role. Portal managers get management `Owner` on every Storage Space, but
-   content access comes only from ownership, all-account scope, or explicit
-   grants.
+3. Map private owners to `Owner`, project managers to `Manager`, and team
+   collaborators to `Viewer` or `Editor`. Portal managers have full content
+   access to every project Storage Space.
 4. Block archived Storage Spaces from Portal object routes, embedded Browser
    bucket targets, sharing, and public-link downloads.
 5. Execute file and sharing operations with the Portal execution identity.
    The locked Browser embed must send `X-S3-Workspace: portal` so `/browser`
    routes resolve Portal credentials and enforce the minimal file profile.
-6. Apply platform-owned bucket defaults and synchronize IAM projections from
-   the DB grants through backend orchestration with the account credentials,
-   not by widening the `portal-manager` group policy or exposing
-   `bucket_access_policy` as a Portal permission control.
+6. Apply platform-owned bucket defaults and synchronize code-owned IAM group,
+   user, and bucket-policy projections from database state. The manager group
+   grants account-wide Storage Space data access; technical buckets deny the
+   individual manager principals with resource policies.
 7. Record mutating Portal actions through audit logging.
 8. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.

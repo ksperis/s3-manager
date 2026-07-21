@@ -16,7 +16,7 @@ describe("buildPortalWorkspaceModel", () => {
         {
           id: "research-data",
           name: "Research Data",
-          role: "Owner",
+          role: "Manager",
           can_delete: true,
           status: "Active",
           owner_user_id: 7,
@@ -41,7 +41,7 @@ describe("buildPortalWorkspaceModel", () => {
       internalName: "research-data",
       origin: "portal_generic",
       nameEditable: true,
-      role: "Owner",
+      role: "Manager",
       canDelete: true,
       status: "Active",
       ownerUserId: 7,
@@ -129,7 +129,7 @@ describe("buildPortalWorkspaceModel", () => {
     });
   });
 
-  it("treats legacy Private and Shared statuses as visibility, not operational states", () => {
+  it("uses the explicit visibility field independently from operational status", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
       state: {
@@ -142,13 +142,14 @@ describe("buildPortalWorkspaceModel", () => {
           id: "shared-space",
           name: "Shared Space",
           role: "Viewer",
-          status: "Shared",
+          status: "Active",
+          visibility: "shared",
         },
         {
           id: "private-space",
           name: "Private Space",
-          role: "Owner",
-          status: "Private",
+          role: "Manager",
+          status: "Active",
           visibility: "private",
         },
       ],

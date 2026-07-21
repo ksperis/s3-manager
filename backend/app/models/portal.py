@@ -79,7 +79,8 @@ class PortalState(BaseModel):
     just_created: bool = False
     account_role: Optional[str] = None
     can_manage_buckets: bool = False
-    can_create_storage_spaces: bool = False
+    can_create_private_storage_spaces: bool = False
+    can_create_team_storage_spaces: bool = False
     can_manage_portal_users: bool = False
     allow_named_bucket_create: bool = False
     server_access_logging_enabled: bool = True
@@ -113,7 +114,8 @@ class PortalUsage(BaseModel):
     other_storage_space: Optional[PortalUsageStorageSpace] = None
 
 
-PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner"]
+PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner", "Manager"]
+PortalStorageSpaceGrantRole = Literal["Viewer", "Editor"]
 PortalStorageSpaceOrigin = Literal["portal_generic", "portal_named", "imported"]
 PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
 PortalStorageSpaceVisibility = Literal["private", "shared"]
@@ -138,8 +140,8 @@ class PortalStorageSpaceSummary(BaseModel):
     id: str
     name: str
     role: PortalStorageSpaceRole
-    content_role: Optional[PortalStorageSpaceRole] = None
     can_browse: bool = True
+    can_take_ownership: bool = False
     can_delete: bool = False
     status: str = "Active"
     description: Optional[str] = None
@@ -170,14 +172,13 @@ class PortalStorageSpace(PortalStorageSpaceSummary):
 
 class PortalStorageSpaceInitialShare(BaseModel):
     user_id: int
-    role: PortalStorageSpaceRole
+    role: PortalStorageSpaceGrantRole
 
 
 class PortalStorageSpaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     naming_mode: PortalStorageSpaceNamingMode = "generic_uuid"
     description: Optional[str] = Field(default=None, max_length=2000)
-    owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: PortalStorageSpaceVisibility = "private"
     share_scope: PortalStorageSpaceShareScope = "restricted"
     account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
@@ -197,7 +198,6 @@ class PortalStorageSpaceCreate(BaseModel):
 class PortalStorageSpaceImport(BaseModel):
     bucket_name: str = Field(min_length=1, max_length=63)
     description: Optional[str] = Field(default=None, max_length=2000)
-    owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: PortalStorageSpaceVisibility = "private"
     share_scope: PortalStorageSpaceShareScope = "restricted"
     account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
@@ -217,7 +217,6 @@ class PortalStorageSpaceImport(BaseModel):
 class PortalStorageSpaceUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=2000)
-    owner_label: Optional[str] = Field(default=None, max_length=120)
     visibility: Optional[PortalStorageSpaceVisibility] = None
     share_scope: Optional[PortalStorageSpaceShareScope] = None
     account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
@@ -300,7 +299,7 @@ class PortalStorageSpaceShare(BaseModel):
     storage_space_name: str
     user_id: Optional[int] = None
     email: str
-    role: PortalStorageSpaceRole
+    role: PortalStorageSpaceGrantRole
     direction: PortalStorageSpaceShareDirection
     activity_label: str = "Active"
 
@@ -318,7 +317,7 @@ class PortalStorageSpaceAccessPerson(BaseModel):
 class PortalStorageSpaceAccessSummary(BaseModel):
     mode: Literal["private", "all", "restricted"]
     default_account_member_role: Optional[PortalStorageSpaceAccountMemberRole] = None
-    owner: PortalStorageSpaceAccessPerson
+    owner: Optional[PortalStorageSpaceAccessPerson] = None
     effective_member_count: int = 0
     explicit_shares: list[PortalStorageSpaceShare] = Field(default_factory=list)
     public_link_count: int = 0
@@ -367,11 +366,11 @@ class PortalCollaboratorsResponse(BaseModel):
 class PortalStorageSpaceSharePayload(BaseModel):
     email: Optional[str] = None
     user_id: Optional[int] = None
-    role: PortalStorageSpaceRole
+    role: PortalStorageSpaceGrantRole
 
 
 class PortalStorageSpaceShareUpdate(BaseModel):
-    role: PortalStorageSpaceRole
+    role: PortalStorageSpaceGrantRole
 
 
 class PortalPublicLink(BaseModel):

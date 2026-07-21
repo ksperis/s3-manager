@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   type PortalStorageSpaceCreate,
   type PortalStorageSpaceAccountMemberRole,
-  type PortalStorageSpaceRole,
+  type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceShareCandidate,
   type PortalStorageSpaceShareScope,
   type PortalStorageSpaceVisibility,
@@ -28,7 +28,7 @@ import {
 import { portalRoleTone } from "./portalUi";
 
 export type PortalAccessMode = "private" | "account" | "restricted";
-export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceRole };
+export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceGrantRole };
 
 export function portalAccessModeFromParts(
   visibility?: PortalStorageSpaceVisibility | null,
@@ -65,9 +65,9 @@ export function portalAccessModeDescription(mode: PortalAccessMode, t: ReturnTyp
     });
   }
   return t({
-    en: "Only you can access this space until you invite collaborators.",
-    fr: "Vous seul pouvez accéder à cet espace tant que vous n'invitez pas de collaborateurs.",
-    de: "Nur Sie können auf diesen Bereich zugreifen, bis Sie Mitwirkende einladen.",
+    en: "Only you and project managers can access this space.",
+    fr: "Seuls vous et les gestionnaires du projet pouvez accéder à cet espace.",
+    de: "Nur Sie und die Projektmanager können auf diesen Bereich zugreifen.",
   });
 }
 
@@ -94,7 +94,7 @@ export function portalAccessModeSummary(
       de: `Ausgewählte Personen: ${selectedCount}`,
     });
   }
-  return t({ en: "Private: only you", fr: "Privé : vous uniquement", de: "Privat: nur Sie" });
+  return t({ en: "Private: you and project managers", fr: "Privé : vous et les gestionnaires du projet", de: "Privat: Sie und Projektmanager" });
 }
 
 export function PortalAccessModeFields({
@@ -103,6 +103,8 @@ export function PortalAccessModeFields({
   accountMemberRole,
   onAccountMemberRoleChange,
   disabled = false,
+  modeLocked = false,
+  allowedModes = ["private", "account", "restricted"],
   modeLabel,
   roleLabel,
 }: {
@@ -111,6 +113,8 @@ export function PortalAccessModeFields({
   accountMemberRole: PortalStorageSpaceAccountMemberRole;
   onAccountMemberRoleChange: (role: PortalStorageSpaceAccountMemberRole) => void;
   disabled?: boolean;
+  modeLocked?: boolean;
+  allowedModes?: PortalAccessMode[];
   modeLabel: string;
   roleLabel: string;
 }) {
@@ -123,11 +127,11 @@ export function PortalAccessModeFields({
         className="h-9"
         value={mode}
         onChange={(event) => onModeChange(event.target.value as PortalAccessMode)}
-        disabled={disabled}
+        disabled={disabled || modeLocked}
       >
-        <option value="private">{portalShareScopeLabel("private", "restricted", t)}</option>
-        <option value="account">{portalShareScopeLabel("shared", "account", t)}</option>
-        <option value="restricted">{portalShareScopeLabel("shared", "restricted", t)}</option>
+        {allowedModes.includes("private") ? <option value="private">{portalShareScopeLabel("private", "restricted", t)}</option> : null}
+        {allowedModes.includes("account") ? <option value="account">{portalShareScopeLabel("shared", "account", t)}</option> : null}
+        {allowedModes.includes("restricted") ? <option value="restricted">{portalShareScopeLabel("shared", "restricted", t)}</option> : null}
       </UiSelect>
       <UiSelect
         label={roleLabel}
@@ -159,13 +163,13 @@ export function PortalShareCandidatePicker({
   onRequestPerson,
 }: {
   candidates: PortalStorageSpaceShareCandidate[];
-  selectedRolesByUserId: Record<number, PortalStorageSpaceRole>;
+  selectedRolesByUserId: Record<number, PortalStorageSpaceGrantRole>;
   query: string;
   loading?: boolean;
   error?: string | null;
   includeAlreadyShared?: boolean;
   onQueryChange: (value: string) => void;
-  onRoleChange: (userId: number, role: PortalStorageSpaceRole | null) => void;
+  onRoleChange: (userId: number, role: PortalStorageSpaceGrantRole | null) => void;
   onRequestPerson?: (payload: { targetName: string; targetEmail: string }) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -287,12 +291,11 @@ export function PortalShareCandidatePicker({
                     className="h-8"
                     value={selectedRole ?? "Viewer"}
                     disabled={!selectedRole}
-                    onChange={(event) => onRoleChange(candidate.user_id, event.target.value as PortalStorageSpaceRole)}
+                    onChange={(event) => onRoleChange(candidate.user_id, event.target.value as PortalStorageSpaceGrantRole)}
                     aria-label={t({ en: `Access for ${candidate.email}`, fr: `Accès pour ${candidate.email}`, de: `Zugriff für ${candidate.email}` })}
                   >
                     <option value="Viewer">{portalRoleLabel("Viewer", t)}</option>
                     <option value="Editor">{portalRoleLabel("Editor", t)}</option>
-                    <option value="Owner">{portalRoleLabel("Owner", t)}</option>
                   </UiSelect>
                 )}
               </div>
@@ -364,13 +367,13 @@ export function PortalShareCandidatePicker({
   );
 }
 
-export function selectedPortalShares(rolesByUserId: Record<number, PortalStorageSpaceRole>): PortalSelectedShare[] {
+export function selectedPortalShares(rolesByUserId: Record<number, PortalStorageSpaceGrantRole>): PortalSelectedShare[] {
   return Object.entries(rolesByUserId)
     .map(([userId, role]) => ({ user_id: Number(userId), role }))
     .filter((entry) => Number.isFinite(entry.user_id));
 }
 
-export function PortalRoleBadge({ role }: { role: PortalStorageSpaceRole }) {
+export function PortalRoleBadge({ role }: { role: PortalStorageSpaceGrantRole }) {
   const { t } = useI18n();
   return <UiBadge tone={portalRoleTone(role)}>{portalRoleLabel(role, t)}</UiBadge>;
 }

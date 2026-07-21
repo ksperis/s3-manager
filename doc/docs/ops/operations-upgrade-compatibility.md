@@ -1,5 +1,24 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-07 Portal Storage Space access migration
+
+Migration `0066_portal_storage_space_access_model` clears the database state of
+existing Portal Storage Spaces before installing the strict private/team access
+model. It removes their grants, external-credential records, and public links.
+It does not contact RGW or delete storage-side resources.
+
+1. Back up the application database and record the spaces that must be recreated.
+2. Before upgrading, remove the old Storage Spaces and revoke their external IAM
+   credentials through the application workflow. This must happen before Alembic
+   because a database migration cannot revoke RGW-side credentials.
+3. Apply the database migration. Any remaining Portal database metadata is
+   purged transactionally; unrelated public links are preserved.
+4. Recreate private spaces or re-import team spaces so bucket policies, IAM
+   identities, and fixed Portal groups are provisioned with the strict model.
+
+There is no runtime conversion or compatibility path for old Owner grants,
+shared-space owners, or editable Portal IAM policies.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:

@@ -36,8 +36,6 @@ from app.db import (
 from app.models.app_settings import (
     PortalBucketDefaults,
     PortalBucketDefaultsOverride,
-    PortalIAMPolicyOverride,
-    PortalIAMPolicySettings,
     PortalSettings,
     PortalSettingsOverride,
 )
@@ -70,6 +68,7 @@ from app.models.portal import (
     PortalStorageSpaceCollaboratorPreview,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceNamingMode,
+    PortalStorageSpaceGrantRole,
     PortalStorageSpaceRole,
     PortalStorageSpaceShare,
     PortalStorageSpaceShareCandidate,

@@ -47,25 +47,13 @@ function buildSettings(): AppSettings {
     },
     portal: {
       allow_portal_key: false,
-      allow_portal_user_bucket_create: true,
+      allow_private_storage_space_create: true,
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
       server_access_logging_enabled: true,
       server_access_log_retention_days: 30,
       storage_space_version_cleanup_enabled: true,
       max_portal_user_access_keys: 2,
-      iam_group_manager_policy: {
-        actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
-        advanced_policy: null,
-      },
-      iam_group_user_policy: {
-        actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"],
-        advanced_policy: null,
-      },
-      bucket_access_policy: {
-        actions: ["s3:GetBucketLocation"],
-        advanced_policy: null,
-      },
       bucket_defaults: {
         versioning: true,
         enable_cors: true,
@@ -170,10 +158,10 @@ describe("PortalSettingsPage", () => {
   it("labels portal user Storage Space creation without bucket management wording", async () => {
     render(<PortalSettingsPage />);
 
-    expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(await screen.findByText("Private Storage Space creation")).toBeInTheDocument();
     expect(screen.queryByText("Bucket management")).not.toBeInTheDocument();
     expect(screen.queryByText("Policy bucket access")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage Space access policy")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(screen.getByLabelText("Private Storage Space creation")).toBeInTheDocument();
   });
 });

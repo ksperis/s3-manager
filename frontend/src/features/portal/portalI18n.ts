@@ -20,6 +20,7 @@ export function portalIntlLocale(locale: UiLanguage): string {
 }
 
 export function portalRoleLabel(role: PortalWorkspaceRole, t: TFunction): string {
+  if (role === "Manager") return t({ en: "Manager", fr: "Gestionnaire", de: "Manager" });
   if (role === "Owner") return t({ en: "Owner", fr: "Propriétaire", de: "Eigentümer" });
   if (role === "Editor") return t({ en: "Editor", fr: "Éditeur", de: "Bearbeiter" });
   return t({ en: "Viewer", fr: "Lecteur", de: "Betrachter" });

@@ -6,22 +6,14 @@ import client, { timeoutForRequestProfile } from "./client";
 
 export type PortalSettings = {
   allow_portal_key: boolean;
-  allow_portal_user_bucket_create: boolean;
+  allow_private_storage_space_create: boolean;
   allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
   server_access_logging_enabled: boolean;
   server_access_log_retention_days: number;
   storage_space_version_cleanup_enabled: boolean;
   max_portal_user_access_keys: number;
-  iam_group_manager_policy: PortalIAMPolicySettings;
-  iam_group_user_policy: PortalIAMPolicySettings;
-  bucket_access_policy: PortalIAMPolicySettings;
   bucket_defaults: PortalBucketDefaults;
-};
-
-export type PortalIAMPolicySettings = {
-  actions: string[];
-  advanced_policy?: Record<string, unknown> | null;
 };
 
 export type PortalBucketDefaults = {
@@ -29,11 +21,6 @@ export type PortalBucketDefaults = {
   enable_cors: boolean;
   enable_lifecycle: boolean;
   cors_allowed_origins: string[];
-};
-
-export type PortalIAMPolicyOverride = {
-  actions?: string[] | null;
-  advanced_policy?: Record<string, unknown> | null;
 };
 
 export type PortalBucketDefaultsOverride = {
@@ -45,14 +32,11 @@ export type PortalBucketDefaultsOverride = {
 
 export type PortalSettingsOverride = {
   allow_portal_key?: boolean | null;
-  allow_portal_user_bucket_create?: boolean | null;
+  allow_private_storage_space_create?: boolean | null;
   allow_portal_named_bucket_create?: boolean | null;
   allow_portal_user_access_key_create?: boolean | null;
   server_access_logging_enabled?: boolean | null;
   storage_space_version_cleanup_enabled?: boolean | null;
-  iam_group_manager_policy?: PortalIAMPolicyOverride | null;
-  iam_group_user_policy?: PortalIAMPolicyOverride | null;
-  bucket_access_policy?: PortalIAMPolicyOverride | null;
   bucket_defaults?: PortalBucketDefaultsOverride | null;
 };
 

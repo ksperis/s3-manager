@@ -62,6 +62,7 @@ from app.services.portal_service import (
     PortalService,
 )
 from app.services.portal.version_cleanup import PortalStorageSpaceVersionCleanupTarget
+from app.services.portal_role_sync import sync_portal_role_downgrades
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
@@ -190,6 +191,73 @@ def test_portal_storage_space_grants_migration_creates_constraints(monkeypatch):
 
         migration.downgrade()
         assert "portal_storage_space_grants" not in sa.inspect(connection).get_table_names()
+
+
+def test_strict_storage_space_access_migration_purges_old_state_and_enforces_roles(monkeypatch):
+    migration_path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0066_portal_storage_space_access_model.py"
+    spec = import_util.spec_from_file_location("migration_0066_portal_storage_space_access_model", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = import_util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    def create_schema(connection):
+        connection.execute(sa.text(
+            "CREATE TABLE portal_storage_space_metadata ("
+            "id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, bucket_name VARCHAR NOT NULL, "
+            "visibility VARCHAR NOT NULL, owner_user_id INTEGER, owner_label VARCHAR)"
+        ))
+        connection.execute(sa.text(
+            "CREATE TABLE portal_storage_space_grants ("
+            "id INTEGER PRIMARY KEY, storage_space_metadata_id INTEGER NOT NULL, role VARCHAR NOT NULL, "
+            "CONSTRAINT ck_portal_storage_space_grants_role "
+            "CHECK (role IN ('Viewer', 'Editor', 'Owner')))"
+        ))
+        connection.execute(sa.text(
+            "CREATE TABLE portal_external_access_credentials ("
+            "id INTEGER PRIMARY KEY, storage_space_metadata_id INTEGER NOT NULL)"
+        ))
+        connection.execute(sa.text(
+            "CREATE TABLE portal_public_links ("
+            "id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, bucket_name VARCHAR NOT NULL)"
+        ))
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        create_schema(connection)
+        connection.execute(sa.text(
+            "INSERT INTO portal_storage_space_metadata "
+            "(id, account_id, bucket_name, visibility, owner_user_id, owner_label) "
+            "VALUES (1, 4, 'private-space', 'private', 7, 'owner@example.test')"
+        ))
+        connection.execute(sa.text(
+            "INSERT INTO portal_storage_space_grants (id, storage_space_metadata_id, role) "
+            "VALUES (1, 1, 'Owner')"
+        ))
+        connection.execute(sa.text(
+            "INSERT INTO portal_external_access_credentials (id, storage_space_metadata_id) VALUES (1, 1)"
+        ))
+        connection.execute(sa.text(
+            "INSERT INTO portal_public_links (id, account_id, bucket_name) "
+            "VALUES (1, 4, 'private-space'), (2, 4, 'unrelated-bucket')"
+        ))
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert connection.execute(sa.text("SELECT COUNT(*) FROM portal_storage_space_metadata")).scalar_one() == 0
+        assert connection.execute(sa.text("SELECT COUNT(*) FROM portal_storage_space_grants")).scalar_one() == 0
+        assert connection.execute(sa.text("SELECT COUNT(*) FROM portal_external_access_credentials")).scalar_one() == 0
+        assert connection.execute(sa.text("SELECT bucket_name FROM portal_public_links")).scalar_one() == "unrelated-bucket"
+        assert "owner_label" not in {column["name"] for column in inspector.get_columns("portal_storage_space_metadata")}
+        metadata_checks = " ".join(
+            constraint.get("sqltext") or ""
+            for constraint in inspector.get_check_constraints("portal_storage_space_metadata")
+        )
+        grant_checks = " ".join(
+            constraint.get("sqltext") or ""
+            for constraint in inspector.get_check_constraints("portal_storage_space_grants")
+        )
+        assert "private" in metadata_checks and "shared" in metadata_checks
+        assert "Viewer" in grant_checks and "Editor" in grant_checks and "Owner" not in grant_checks
 
 
 def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(monkeypatch, db_session):
@@ -361,12 +429,10 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
 
 
-def test_portal_user_group_policy_does_not_grant_direct_bucket_creation(db_session):
+def test_portal_user_group_policy_is_fixed_and_does_not_grant_direct_bucket_creation(db_session):
     service = PortalService(db_session)
     portal_settings = PortalSettings()
-    portal_settings.allow_portal_user_bucket_create = True
-    portal_settings.iam_group_user_policy.actions = ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
-    portal_settings.iam_group_user_policy.advanced_policy = None
+    portal_settings.allow_private_storage_space_create = True
 
     policy = service._resolve_group_policy(portal_settings, "user")
 
@@ -396,26 +462,74 @@ def test_portal_manager_group_policy_defaults_to_minimal_global_actions(db_sessi
     assert not any(action.startswith("iam:") for action in actions)
 
 
-def test_portal_manager_group_policy_filters_create_bucket_from_advanced_policy(db_session):
+def test_portal_manager_group_policy_uses_fixed_account_access(db_session):
     service = PortalService(db_session)
-    portal_settings = PortalSettings()
-    portal_settings.iam_group_manager_policy.advanced_policy = {
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:ListAllMyBuckets", "s3:CreateBucket"],
-                "Resource": "*",
-            }
-        ]
-    }
-
-    policy = service._resolve_group_policy(portal_settings, "manager")
+    policy = service._resolve_group_policy(PortalSettings(), "manager")
 
     assert isinstance(policy, dict)
     statements = policy.get("Statement") or []
     assert isinstance(statements, list) and statements
-    actions = statements[0].get("Action") or []
-    assert actions == ["s3:ListAllMyBuckets"]
+    assert statements[0]["Action"] == ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+    assert statements[1]["Resource"] == ["arn:aws:s3:::*", "arn:aws:s3:::*/*"]
+    assert "s3:CreateBucket" not in statements[1]["Action"]
+    assert "s3:*" not in statements[1]["Action"]
+
+
+def test_manager_group_access_is_protected_before_policy_update(monkeypatch, db_session):
+    service = PortalService(db_session)
+    account = S3Account(name="ordering")
+    events = []
+
+    class FakeIAM:
+        def list_group_users(self, group_name):
+            return []
+
+        def add_user_to_group(self, group_name, username):
+            events.append(("add", group_name, username))
+
+        def remove_user_from_group(self, group_name, username):
+            events.append(("remove", group_name, username))
+
+    monkeypatch.setattr(
+        service,
+        "_sync_portal_server_access_log_bucket_policy_if_present",
+        lambda _account: events.append(("protect-technical-bucket",)),
+    )
+    monkeypatch.setattr(service, "_ensure_portal_groups", lambda *_args, **_kwargs: events.append(("update-groups",)))
+
+    service._sync_user_group_membership(
+        FakeIAM(),
+        "portal-manager-1",
+        AccountRole.PORTAL_MANAGER.value,
+        account=account,
+    )
+
+    assert events[0] == ("protect-technical-bucket",)
+    assert events[1] == ("update-groups",)
+    assert events[2] == ("add", "portal-manager", "portal-manager-1")
+
+
+def test_manager_demotion_removes_manager_group_before_adding_user_group(monkeypatch, db_session):
+    service = PortalService(db_session)
+    events = []
+
+    class FakeIAM:
+        def list_group_users(self, group_name):
+            return [IAMUser(name="portal-1")] if group_name == "portal-manager" else []
+
+        def add_user_to_group(self, group_name, username):
+            events.append(("add", group_name, username))
+
+        def remove_user_from_group(self, group_name, username):
+            events.append(("remove", group_name, username))
+
+    monkeypatch.setattr(service, "_ensure_portal_groups", lambda *_args, **_kwargs: None)
+    service._sync_user_group_membership(FakeIAM(), "portal-1", AccountRole.PORTAL_USER.value)
+
+    assert events == [
+        ("remove", "portal-manager", "portal-1"),
+        ("add", "portal-user", "portal-1"),
+    ]
 
 
 def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkeypatch, db_session):
@@ -447,7 +561,7 @@ def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkey
             user,
             access,
             "denied-bucket",
-            portal_settings=PortalSettings(allow_portal_user_bucket_create=False),
+            portal_settings=PortalSettings(allow_private_storage_space_create=False),
         )
 
 
@@ -842,7 +956,6 @@ def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session
         PortalStorageSpaceMetadata(
             account_id=account.id,
             bucket_name="bucket-user",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -880,7 +993,8 @@ def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session
     state = service.get_state(user, access)
 
     assert state.can_manage_buckets is False
-    assert state.can_create_storage_spaces is True
+    assert state.can_create_private_storage_spaces is True
+    assert state.can_create_team_storage_spaces is False
 
 
 def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_is_disabled(
@@ -894,13 +1008,14 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    portal_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    portal_settings = PortalSettings(allow_private_storage_space_create=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
 
     state = service.get_state(user, access)
 
     assert state.can_manage_buckets is False
-    assert state.can_create_storage_spaces is False
+    assert state.can_create_private_storage_spaces is False
+    assert state.can_create_team_storage_spaces is False
 
 
 def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, db_session):
@@ -986,7 +1101,6 @@ def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_sessi
             account_id=account.id,
             bucket_name="research-data",
             display_name="Research Data",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -1000,8 +1114,8 @@ def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_sessi
     assert len(spaces) == 1
     assert spaces[0].id == "research-data"
     assert spaces[0].name == "Research Data"
-    assert spaces[0].role == "Owner"
-    assert spaces[0].status == "Shared"
+    assert spaces[0].role == "Manager"
+    assert spaces[0].status == "Active"
     assert spaces[0].internal_bucket_name == "research-data"
     assert spaces[0].used_bytes is None
     assert spaces[0].object_count is None
@@ -1020,8 +1134,6 @@ def test_storage_space_metadata_filters_sorting_and_archive(db_session):
                 bucket_name="research-data",
                 display_name="Genome Project",
                 description="Primary sequencing dataset",
-                owner_label="Lab Team",
-                owner_user_id=user.id,
                 visibility="shared",
                 project_key="GEN-2026",
             ),
@@ -1043,7 +1155,7 @@ def test_storage_space_metadata_filters_sorting_and_archive(db_session):
     archived = service.list_storage_spaces(user, access, include_archived=True, status="Archived")
 
     assert [(space.id, space.name, space.description, space.owner_label, space.visibility) for space in spaces] == [
-        ("research-data", "Genome Project", "Primary sequencing dataset", "Lab Team", "shared")
+        ("research-data", "Genome Project", "Primary sequencing dataset", "", "shared")
     ]
     assert [(space.id, space.status) for space in archived] == [("old-data", "Archived")]
 
@@ -1076,18 +1188,85 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_s
     )
 
     assert [(space.id, space.role, space.status, space.visibility) for space in owner_spaces] == [
-        ("private-data", "Owner", "Private", "private")
+        ("private-data", "Owner", "Active", "private")
     ]
     assert owner_spaces[0].can_browse is True
-    assert owner_spaces[0].content_role == "Owner"
     assert owner_spaces[0].can_delete is True
     assert other_spaces == []
     assert [(space.id, space.role, space.status) for space in manager_spaces] == [
-        ("private-data", "Owner", "Private")
+        ("private-data", "Manager", "Active")
     ]
-    assert manager_spaces[0].can_browse is False
-    assert manager_spaces[0].content_role is None
-    assert manager_spaces[0].can_delete is False
+    assert manager_spaces[0].can_browse is True
+    assert manager_spaces[0].can_take_ownership is True
+    assert manager_spaces[0].can_delete is True
+
+
+def test_portal_manager_can_take_private_storage_space_ownership(monkeypatch, db_session):
+    account = S3Account(name="take-private-owner")
+    previous_owner = User(email="previous-owner@example.test", hashed_password="x", role="ui_user")
+    manager = User(email="taking-manager@example.test", hashed_password="x", role="ui_user")
+    db_session.add_all([account, previous_owner, manager])
+    db_session.commit()
+    metadata = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="private-space",
+        display_name="Private space",
+        visibility="private",
+        owner_user_id=previous_owner.id,
+    )
+    db_session.add(metadata)
+    db_session.commit()
+
+    service = PortalService(db_session)
+    projection_calls = []
+    policy_calls = []
+    sentinel = object()
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "private-space")
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_user_projections",
+        lambda _account, user_ids: projection_calls.append(set(user_ids)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_sync_storage_space_bucket_policy",
+        lambda _account, bucket_name, _metadata: policy_calls.append(bucket_name),
+    )
+    monkeypatch.setattr(service, "get_storage_space", lambda *_args, **_kwargs: sentinel)
+
+    result = service.take_private_storage_space_ownership(
+        manager,
+        _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
+        "private-space",
+    )
+
+    db_session.refresh(metadata)
+    assert result is sentinel
+    assert metadata.owner_user_id == manager.id
+    assert projection_calls == [{previous_owner.id, manager.id}]
+    assert policy_calls == ["private-space"]
+
+
+def test_private_owner_cannot_lose_final_portal_role(db_session):
+    account = S3Account(name="owned-role-guard")
+    owner = User(email="guarded-owner@example.test", hashed_password="x", role="ui_user")
+    db_session.add_all([account, owner])
+    db_session.commit()
+    db_session.add(
+        PortalStorageSpaceMetadata(
+            account_id=account.id,
+            bucket_name="guarded-private-space",
+            visibility="private",
+            owner_user_id=owner.id,
+        )
+    )
+    db_session.commit()
+
+    before = {(owner.id, account.id): AccountRole.PORTAL_USER.value}
+    after = {(owner.id, account.id): AccountRole.PORTAL_NONE.value}
+
+    with pytest.raises(ValueError, match="take ownership"):
+        sync_portal_role_downgrades(db_session, before=before, after=after)
 
 
 def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(monkeypatch, db_session):
@@ -1099,7 +1278,7 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
             UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
             UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
         ]
@@ -1108,7 +1287,6 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
         account_id=account.id,
         bucket_name="imported-data",
         display_name="Imported Data",
-        owner_user_id=owner.id,
         visibility="shared",
         origin="imported",
     )
@@ -1119,7 +1297,7 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
             PortalStorageSpaceGrant(
                 storage_space_metadata_id=metadata.id,
                 user_id=delegated_owner.id,
-                role="Owner",
+                role="Editor",
             ),
             PortalStorageSpaceGrant(
                 storage_space_metadata_id=metadata.id,
@@ -1179,8 +1357,8 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
     )
 
     result = service.delete_storage_space(
-        delegated_owner,
-        _portal_access(account, delegated_owner),
+        owner,
+        _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
         "imported-data",
     )
 
@@ -1210,7 +1388,7 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
     assert link.revoked_at is not None
 
 
-def test_delete_storage_space_rejects_administrative_owner_without_content_ownership(monkeypatch, db_session):
+def test_delete_storage_space_allows_portal_manager_on_private_space(monkeypatch, db_session):
     account = S3Account(name="portal-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-denied@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-delete-denied@example.com", hashed_password="x", role="ui_user")
@@ -1226,18 +1404,16 @@ def test_delete_storage_space_rejects_administrative_owner_without_content_owner
     )
     db_session.commit()
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "_storage_space_deletion_usage",
-        lambda *_args: pytest.fail("Stats must not be fetched for an unauthorized deletion"),
-    )
+    calls = []
+    monkeypatch.setattr(service, "_storage_space_deletion_usage", lambda *_args: calls.append(True) or (True, 1, 0))
 
-    with pytest.raises(RuntimeError, match="Owner content role required"):
+    with pytest.raises(PortalStorageSpaceNotEmpty):
         service.delete_storage_space(
             manager,
             _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True),
             "private-delete-denied",
         )
+    assert calls == [True]
 
 
 @pytest.mark.parametrize("role", ["Editor", "Viewer"])
@@ -1251,7 +1427,6 @@ def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_se
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name=f"shared-delete-{role.lower()}",
-        owner_user_id=owner.id,
         visibility="shared",
     )
     db_session.add(metadata)
@@ -1271,7 +1446,7 @@ def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_se
         lambda *_args: pytest.fail("Stats must not be fetched for an unauthorized deletion"),
     )
 
-    with pytest.raises(RuntimeError, match="Owner content role required"):
+    with pytest.raises(RuntimeError, match="Full content access required"):
         service.delete_storage_space(
             participant,
             _portal_access(account, participant),
@@ -1522,7 +1697,6 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
         account_id=account.id,
         bucket_name="shared-avatar-data",
         display_name="Shared Avatar Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -1543,15 +1717,14 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
     )
 
     assert len(spaces) == 1
-    assert spaces[0].collaborator_count == 2
+    assert spaces[0].collaborator_count == 1
     assert [(item.display_name, item.role, item.avatar.source) for item in spaces[0].collaborators] == [
-        ("Owner Avatar", "Owner", "provider"),
         ("Viewer Avatar", "Viewer", "gravatar"),
     ]
-    assert spaces[0].collaborators[0].avatar.url == "https://identity.example.com/owner.png"
+    assert spaces[0].collaborators[0].avatar.url
 
 
-def test_portal_manager_content_access_excludes_private_spaces_owned_by_others(monkeypatch, db_session):
+def test_portal_manager_content_access_is_carried_only_by_the_manager_group(monkeypatch, db_session):
     account = S3Account(name="portal-manager-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-content@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-content@example.com", hashed_password="x", role="ui_user")
@@ -1570,7 +1743,6 @@ def test_portal_manager_content_access_excludes_private_spaces_owned_by_others(m
                 account_id=account.id,
                 bucket_name="owner-shared",
                 display_name="Owner Shared",
-                owner_user_id=owner.id,
                 visibility="shared",
             ),
             PortalStorageSpaceMetadata(
@@ -1608,13 +1780,10 @@ def test_portal_manager_content_access_excludes_private_spaces_owned_by_others(m
         "manager-iam",
     )
 
-    policy = iam.policies[("manager-iam", service._bucket_access_policy_name)]
-    assert service._extract_storage_space_access(policy) == {
-        "manager-private": "Owner",
-    }
+    assert ("manager-iam", service._bucket_access_policy_name) not in iam.policies
 
 
-def test_portal_manager_cannot_read_private_storage_space_content_owned_by_others(monkeypatch, db_session):
+def test_portal_manager_can_read_and_modify_private_storage_space_content_owned_by_others(monkeypatch, db_session):
     account = S3Account(name="portal-manager-private-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private-content@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-private-content@example.com", hashed_password="x", role="ui_user")
@@ -1632,19 +1801,22 @@ def test_portal_manager_cannot_read_private_storage_space_content_owned_by_other
     db_session.commit()
 
     service = PortalService(db_session)
-    monkeypatch.setattr(
-        service,
-        "_portal_object_client",
-        lambda *_args, **_kwargs: pytest.fail("S3 client should not be opened without content access"),
-    )
+    class FakeClient:
+        def head_object(self, **_kwargs):
+            return {"ContentLength": 4, "ContentType": "text/plain"}
+
+        def get_object(self, **_kwargs):
+            return {"Body": type("Body", (), {"read": lambda self, *_args: b"data"})()}
+
+        def delete_object(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: FakeClient())
     access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
-    with pytest.raises(RuntimeError, match="content access not allowed"):
-        service.get_storage_space_object_detail(manager, access, "private-data", "file.txt")
-    with pytest.raises(RuntimeError, match="content access not allowed"):
-        service.download_storage_space_object(manager, access, "private-data", "file.txt")
-    with pytest.raises(RuntimeError, match="content access not allowed"):
-        service.delete_storage_space_object(manager, access, "private-data", "file.txt")
+    assert service.get_storage_space_object_detail(manager, access, "private-data", "file.txt").size == 4
+    assert service.download_storage_space_object(manager, access, "private-data", "file.txt")[0].read() == b"data"
+    service.delete_storage_space_object(manager, access, "private-data", "file.txt")
 
 
 def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_session):
@@ -1670,16 +1842,14 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
             PortalStorageSpaceSummary(
                 id="owner-private",
                 name="Owner Private",
-                role="Owner",
-                content_role=None,
+                role="Manager",
                 can_browse=False,
                 internal_bucket_name="owner-private",
             ),
             PortalStorageSpaceSummary(
                 id="shared-data",
                 name="Shared Data",
-                role="Owner",
-                content_role="Owner",
+                role="Manager",
                 can_browse=True,
                 internal_bucket_name="shared-data",
             ),
@@ -1768,8 +1938,8 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     assert "Condition" not in private_statement
     assert "arn:aws:iam:::user/owner-iam" in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:user/owner-iam" in allowed_principals
-    assert "arn:aws:iam:::user/manager-iam" not in allowed_principals
-    assert "arn:aws:iam::rgw-policy-account:user/manager-iam" not in allowed_principals
+    assert "arn:aws:iam:::user/manager-iam" in allowed_principals
+    assert "arn:aws:iam::rgw-policy-account:user/manager-iam" in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:root" not in allowed_principals
 
     metadata.archived_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -1779,11 +1949,12 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
 
     metadata.archived_at = None
     metadata.visibility = "shared"
+    metadata.owner_user_id = None
     restored_policy = service._storage_space_bucket_policy(account, "research-data", metadata, archived_policy)
     assert restored_policy is not None
     assert [stmt["Sid"] for stmt in restored_policy["Statement"]] == ["ExternalRule", service._storage_space_access_sid]
     restored_principals = _storage_space_policy_principals(restored_policy["Statement"][1])
-    assert "arn:aws:iam:::user/owner-iam" in restored_principals
+    assert "arn:aws:iam:::user/owner-iam" not in restored_principals
     assert "arn:aws:iam::rgw-policy-account:root" in restored_principals
 
 
@@ -1821,7 +1992,6 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name="team-data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="account",
         account_member_role="Editor",
@@ -1834,7 +2004,7 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
     assert policy is not None
     statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
     principals = _storage_space_policy_principals(statement)
-    for username in ("owner-iam", "direct-iam", "grouped-iam", "manager-iam"):
+    for username in ("direct-iam", "grouped-iam", "manager-iam"):
         assert f"arn:aws:iam:::user/{username}" in principals
         assert f"arn:aws:iam::rgw-policy-account:user/{username}" in principals
     assert "arn:aws:iam::rgw-policy-account:root" in principals
@@ -1874,7 +2044,6 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name="restricted-data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -1884,7 +2053,6 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
         [
             PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=viewer.id, role="Viewer"),
             PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=editor.id, role="Editor"),
-            PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=delegated_owner.id, role="Owner"),
         ]
     )
     db_session.commit()
@@ -1894,7 +2062,7 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
     assert policy is not None
     statement = _storage_space_policy_statement(policy, service._storage_space_access_sid)
     principals = _storage_space_policy_principals(statement)
-    for username in ("owner-iam", "viewer-iam", "editor-iam", "delegated-owner-iam"):
+    for username in ("viewer-iam", "editor-iam", "delegated-owner-iam"):
         assert f"arn:aws:iam:::user/{username}" in principals
         assert f"arn:aws:iam::rgw-policy-account:user/{username}" in principals
     assert "arn:aws:iam::rgw-policy-account:root" in principals
@@ -1910,7 +2078,6 @@ def test_storage_space_bucket_policy_denies_everyone_without_projectable_princip
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name="empty-data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -1934,10 +2101,12 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
         PortalStorageSpaceMetadata(
             account_id=account.id,
             bucket_name="allowed-bucket",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
+    db_session.flush()
+    metadata = db_session.query(PortalStorageSpaceMetadata).filter_by(bucket_name="allowed-bucket").one()
+    db_session.add(PortalStorageSpaceGrant(storage_space_metadata_id=metadata.id, user_id=user.id, role="Viewer"))
     db_session.commit()
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
@@ -1955,8 +2124,8 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
     assert visible is not None
     assert visible.id == "allowed-bucket"
     assert visible.name == "Allowed Bucket"
-    assert visible.role == "Owner"
-    assert visible.status == "Shared"
+    assert visible.role == "Viewer"
+    assert visible.status == "Active"
     assert visible.used_bytes == 4096
     assert visible.object_count == 24
     assert hidden is None
@@ -1971,7 +2140,7 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     created_buckets = []
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(
         service,
@@ -2004,7 +2173,6 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
     assert metadata.display_name == "Research Data"
     assert metadata.description == "Lab files"
     assert metadata.owner_user_id == user.id
-    assert metadata.owner_label == user.email
     assert metadata.visibility == "private"
     assert metadata.origin == "portal_generic"
     assert metadata.name_editable is True
@@ -2121,7 +2289,6 @@ def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkey
             account_id=account.id,
             bucket_name="research-data",
             display_name="Research Data",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -2154,7 +2321,6 @@ def test_prepare_storage_space_version_cleanup_uses_long_running_profile(monkeyp
             account_id=account.id,
             bucket_name="research-data",
             display_name="Research Data",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -2190,7 +2356,7 @@ def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatc
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    portal_settings = PortalSettings(allow_portal_user_bucket_create=True)
+    portal_settings = PortalSettings(allow_private_storage_space_create=True)
     created_buckets = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
@@ -2235,7 +2401,7 @@ def test_portal_user_cannot_create_shared_storage_space(monkeypatch, db_session)
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    portal_settings = PortalSettings(allow_portal_user_bucket_create=True)
+    portal_settings = PortalSettings(allow_private_storage_space_create=True)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
     monkeypatch.setattr(
         service,
@@ -2255,14 +2421,14 @@ def test_portal_user_cannot_create_storage_space_when_setting_is_disabled(monkey
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
-    portal_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    portal_settings = PortalSettings(allow_private_storage_space_create=False)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
 
     with pytest.raises(RuntimeError, match="Storage Space creation not allowed"):
         service.create_storage_space(user, access, name="Research Data")
 
 
-def test_portal_manager_creates_private_and_shared_without_user_create_setting(monkeypatch, db_session):
+def test_portal_manager_needs_private_create_setting_but_can_always_create_team_space(monkeypatch, db_session):
     account = S3Account(name="portal-storage-manager-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-manager-create@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -2270,7 +2436,7 @@ def test_portal_manager_creates_private_and_shared_without_user_create_setting(m
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
-    portal_settings = PortalSettings(allow_portal_user_bucket_create=False)
+    portal_settings = PortalSettings(allow_private_storage_space_create=False)
     created_buckets: list[str] = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
     monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda existing: f"bucket-{len(existing) + 1}")
@@ -2286,11 +2452,11 @@ def test_portal_manager_creates_private_and_shared_without_user_create_setting(m
         lambda _user, _access, bucket_name: Bucket(name=bucket_name),
     )
 
-    private_space = service.create_storage_space(user, access, name="Private Space", visibility="private")
+    with pytest.raises(RuntimeError, match="Private Storage Space creation is disabled"):
+        service.create_storage_space(user, access, name="Private Space", visibility="private")
     shared_space = service.create_storage_space(user, access, name="Shared Space", visibility="shared")
 
-    assert created_buckets == ["bucket-1", "bucket-2"]
-    assert private_space.visibility == "private"
+    assert created_buckets == ["bucket-1"]
     assert shared_space.visibility == "shared"
 
 
@@ -2304,14 +2470,14 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     db_session.add_all(
         [
             UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
         ]
     )
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda _existing: "restricted-bucket")
     monkeypatch.setattr(service, "create_bucket", lambda *_args, **_kwargs: None)
@@ -2349,12 +2515,12 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
 @pytest.mark.parametrize(
     ("shares", "message"),
     [
-        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=owner.id, role="Viewer")], "owner already"),
+        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=owner.id, role="Viewer")], "Only Portal users"),
         (lambda owner, viewer, outsider: [
             PortalStorageSpaceInitialShare(user_id=viewer.id, role="Viewer"),
             PortalStorageSpaceInitialShare(user_id=viewer.id, role="Editor"),
         ], "Duplicate"),
-        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=outsider.id, role="Viewer")], "not allowed"),
+        (lambda owner, viewer, outsider: [PortalStorageSpaceInitialShare(user_id=outsider.id, role="Viewer")], "Only Portal users"),
     ],
 )
 def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_bucket(monkeypatch, db_session, shares, message):
@@ -2438,6 +2604,7 @@ def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monke
     db_session.commit()
 
     portal_settings = PortalSettings()
+    portal_settings.allow_private_storage_space_create = True
     portal_settings.allow_portal_named_bucket_create = True
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
@@ -2497,7 +2664,7 @@ def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatc
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(
         service,
@@ -2521,7 +2688,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     projection_calls = []
     monkeypatch.setattr(s3_client, "list_buckets", lambda **_kwargs: [{"name": "existing-bucket"}])
     monkeypatch.setattr(service, "_get_iam_service", lambda _account: object())
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "_ensure_portal_user", lambda *_args, **_kwargs: (link, IAMUser(name="portal-iam"), False))
     monkeypatch.setattr(service, "_sync_user_group_membership", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *_args, **_kwargs: None)
@@ -2555,7 +2722,6 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
     assert metadata.display_name == "existing-bucket"
     assert metadata.description == "Imported bucket"
     assert metadata.owner_user_id == user.id
-    assert metadata.owner_label == user.email
     assert metadata.visibility == "private"
     assert metadata.origin == "imported"
     assert metadata.name_editable is False
@@ -2622,6 +2788,7 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
         bucket_name=f"{origin}-bucket",
         display_name=f"{origin.title()} Bucket",
         description="Initial",
+        owner_user_id=user.id,
         origin=origin,
         name_editable=False,
     )
@@ -2631,7 +2798,6 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: f"{origin}-bucket")
-    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "get_storage_space",
@@ -2663,6 +2829,7 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
         account_id=account.id,
         bucket_name="uuid-bucket",
         display_name="Original Name",
+        owner_user_id=user.id,
         origin="portal_generic",
         name_editable=True,
     )
@@ -2672,7 +2839,6 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "uuid-bucket")
-    monkeypatch.setattr(service, "_require_storage_space_owner", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "get_storage_space",
@@ -2701,7 +2867,6 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
         account_id=account.id,
         bucket_name="restore-data",
         display_name="Restore Data",
-        owner_user_id=owner.id,
         visibility="shared",
         archived_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
@@ -2717,7 +2882,7 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     db_session.add_all([metadata, public_link])
     db_session.commit()
 
-    access = _portal_access(account, owner)
+    access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
     sync_archived_values = []
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "restore-data")
@@ -2755,7 +2920,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
         rgw_secret_key="ROOT-SK",
         portal_settings_override=json.dumps(
             {
-                "admin": {"allow_portal_user_bucket_create": False},
+                "admin": {"allow_private_storage_space_create": False},
                 "portal_manager": {
                     "allow_portal_named_bucket_create": True,
                     "allow_portal_user_access_key_create": False,
@@ -2772,7 +2937,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
 
     effective = service.get_effective_portal_settings(account)
-    assert effective.allow_portal_user_bucket_create is False
+    assert effective.allow_private_storage_space_create is False
     assert effective.allow_portal_named_bucket_create is False
     assert effective.allow_portal_user_access_key_create is True
     assert effective.server_access_logging_enabled is True
@@ -2780,14 +2945,14 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     assert effective.bucket_defaults.enable_cors is True
 
     account_settings = service.get_portal_account_settings(account).model_dump(exclude_unset=True)
-    assert account_settings["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert account_settings["admin_override"]["allow_private_storage_space_create"] is False
     assert "portal_manager_override" not in account_settings
     assert "override_policy" not in account_settings
 
     service.update_admin_portal_settings_override(
         account,
         PortalSettingsOverride(
-            allow_portal_user_bucket_create=True,
+            allow_private_storage_space_create=True,
             server_access_logging_enabled=False,
             storage_space_version_cleanup_enabled=False,
             bucket_defaults={"enable_cors": False},
@@ -2797,7 +2962,7 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     stored = json.loads(account.portal_settings_override)
     assert stored == {
         "admin": {
-            "allow_portal_user_bucket_create": True,
+            "allow_private_storage_space_create": True,
             "server_access_logging_enabled": False,
             "storage_space_version_cleanup_enabled": False,
             "bucket_defaults": {"enable_cors": False},
@@ -2815,7 +2980,24 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
     )
-    db_session.add(account)
+    manager = User(email="log-manager@example.test", hashed_password="x", role="ui_user")
+    db_session.add_all([account, manager])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=manager.id,
+                account_id=account.id,
+                account_role=AccountRole.PORTAL_MANAGER.value,
+            ),
+            AccountIAMUser(
+                user_id=manager.id,
+                account_id=account.id,
+                iam_user_id="arn:aws:iam::rgw-policy-account:user/portal-manager-1",
+                iam_username="portal-manager-1",
+            ),
+        ]
+    )
     db_session.commit()
 
     service = PortalService(db_session)
@@ -2843,6 +3025,44 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
     assert managed["Resource"] == f"arn:aws:s3:::{bucket_name}/portal-server-access/*"
     assert managed["Condition"]["StringEquals"] == {"aws:SourceAccount": "rgw-policy-account"}
     assert managed["Condition"]["ArnLike"] == {"aws:SourceArn": "arn:aws:s3:::*"}
+    manager_deny = statements["S3ManagerPortalManagerDeny"]
+    assert manager_deny["Effect"] == "Deny"
+    assert manager_deny["Action"] == "s3:*"
+    assert manager_deny["Resource"] == [
+        f"arn:aws:s3:::{bucket_name}",
+        f"arn:aws:s3:::{bucket_name}/*",
+    ]
+    assert manager_deny["Principal"]["AWS"] == [
+        "arn:aws:iam:::user/portal-manager-1",
+        "arn:aws:iam::rgw-policy-account:user/portal-manager-1",
+    ]
+
+
+def test_portal_server_access_log_bucket_policy_removes_manager_deny_when_no_manager_remains(db_session):
+    account = S3Account(name="portal-log-policy-user", rgw_account_id="rgw-policy-user")
+    db_session.add(account)
+    db_session.commit()
+    service = PortalService(db_session)
+    bucket_name = service._portal_server_access_log_bucket_name(account)
+
+    policy = service._portal_server_access_log_policy(
+        account,
+        bucket_name,
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "S3ManagerPortalManagerDeny",
+                    "Effect": "Deny",
+                    "Principal": {"AWS": ["arn:aws:iam::rgw-policy-user:user/former-manager"]},
+                    "Action": "s3:*",
+                    "Resource": [f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"],
+                }
+            ],
+        },
+    )
+
+    assert not any(statement.get("Sid") == "S3ManagerPortalManagerDeny" for statement in policy["Statement"])
 
 
 def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monkeypatch, db_session):
@@ -3193,8 +3413,8 @@ def test_reconcile_portal_server_access_logging_enables_and_disables_managed_buc
     db_session.commit()
     db_session.add_all(
         [
-            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-a", display_name="Space A"),
-            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-b", display_name="Space B"),
+            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-a", display_name="Space A", visibility="shared"),
+            PortalStorageSpaceMetadata(account_id=account.id, bucket_name="space-b", display_name="Space B", visibility="shared"),
         ]
     )
     db_session.commit()
@@ -3397,16 +3617,15 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
             with pytest.raises(RuntimeError, match="Delete not allowed"):
                 service.delete_storage_space_object(actor, access, "research-data", "raw-data/file.txt")
 
-        if can_share:
-            share = service.set_storage_space_share(actor, access, target, "research-data", "Viewer")
-            assert share.email == target.email
-        else:
-            with pytest.raises(RuntimeError, match="Owner role required"):
-                service.set_storage_space_share(actor, access, target, "research-data", "Viewer")
+        assert can_share is False
+        with pytest.raises(RuntimeError, match="Full management access required"):
+            service.set_storage_space_share(actor, access, target, "research-data", "Viewer")
 
     assert_file_capabilities("Viewer", can_write=False, can_share=False)
     assert_file_capabilities("Editor", can_write=True, can_share=False)
-    assert_file_capabilities("Owner", can_write=True, can_share=True)
+    manager_access = _portal_access(account, actor, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
+    share = service.set_storage_space_share(actor, manager_access, target, "research-data", "Viewer")
+    assert share.email == target.email
     target_grant = (
         db_session.query(PortalStorageSpaceGrant)
         .filter_by(storage_space_metadata_id=metadata.id, user_id=target.id)
@@ -3432,7 +3651,6 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
             account_id=account.id,
             bucket_name="bucket-research-data",
             display_name="Research Data",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -3440,6 +3658,7 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
         service,
         "list_storage_spaces",
@@ -3523,7 +3742,7 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     assert access == {"research-data": "Viewer"}
     viewer_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceViewer")
-    assert viewer_statement["Action"] == ["s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"]
+    assert {"s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}.issubset(viewer_statement["Action"])
 
     service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Editor"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
@@ -3541,7 +3760,8 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     assert access == {"research-data": "Owner"}
     owner_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceOwner")
-    assert owner_statement["Action"] == ["s3:*"]
+    assert "s3:*" not in owner_statement["Action"]
+    assert {"s3:PutObject", "s3:DeleteObject", "s3:GetBucketPolicy"}.issubset(owner_statement["Action"])
 
 
 def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
@@ -3560,7 +3780,6 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
         account_id=account.id,
         bucket_name="research-data",
         display_name="Research Data",
-        owner_user_id=owner.id,
         visibility="shared",
     )
     db_session.add(metadata)
@@ -3619,10 +3838,9 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
         account_id=account.id,
         bucket_name="team-data",
         display_name="Team Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="account",
-        account_member_role="Editor",
+        account_member_role="Viewer",
     )
     db_session.add(metadata)
     db_session.commit()
@@ -3633,18 +3851,18 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
         member,
         account,
         AccountRole.PORTAL_USER.value,
-    ) == {"team-data": "Editor"}
+    ) == {"team-data": "Viewer"}
     assert service.list_existing_user_storage_space_content_access(
         manager,
         account,
         AccountRole.PORTAL_MANAGER.value,
-    ) == {"team-data": "Editor"}
+    ) == {"team-data": "Manager"}
 
     db_session.add(
         PortalStorageSpaceGrant(
             storage_space_metadata_id=metadata.id,
             user_id=member.id,
-            role="Owner",
+            role="Editor",
             created_by_user_id=owner.id,
         )
     )
@@ -3654,7 +3872,7 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
         member,
         account,
         AccountRole.PORTAL_USER.value,
-    ) == {"team-data": "Owner"}
+    ) == {"team-data": "Editor"}
 
 
 def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch, db_session):
@@ -3678,7 +3896,6 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
         account_id=account.id,
         bucket_name="research-data",
         display_name="Research Data",
-        owner_user_id=owner.id,
         visibility="shared",
     )
     db_session.add(metadata)
@@ -3712,7 +3929,6 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
 
     assert [(candidate.email, candidate.account_role, candidate.access_source, candidate.already_shared) for candidate in candidates] == [
         ("direct-candidates@example.com", "portal_user", "direct", True),
-        ("grouped-candidates@example.com", "portal_manager", "group", False),
     ]
     assert all(candidate.email != outsider.email for candidate in candidates)
 
@@ -3775,14 +3991,12 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
         account_id=account.id,
         bucket_name="visible-data",
         display_name="Visible Data",
-        owner_user_id=actor.id,
         visibility="shared",
     )
     hidden_metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name="hidden-data",
         display_name="Hidden Data",
-        owner_user_id=actor.id,
         visibility="shared",
     )
     db_session.add_all([visible_metadata, hidden_metadata])
@@ -3896,7 +4110,6 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
         account_id=account.id,
         bucket_name="all-data",
         display_name="All Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="account",
         account_member_role="Viewer",
@@ -3905,7 +4118,6 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
         account_id=account.id,
         bucket_name="restricted-data",
         display_name="Restricted Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -3913,7 +4125,6 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
         account_id=account.id,
         bucket_name="archived-data",
         display_name="Archived Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
         archived_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -3949,8 +4160,7 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
             PortalStorageSpaceSummary(
                 id=bucket_name,
                 name=display_name,
-                role="Owner",
-                content_role="Owner",
+                role="Manager",
                 internal_bucket_name=bucket_name,
             )
             for bucket_name, display_name in rows
@@ -3963,19 +4173,20 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
     manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     private_summary = service.get_storage_space_access_summary(owner, owner_access, "private-data")
-    all_summary = service.get_storage_space_access_summary(owner, owner_access, "all-data")
-    restricted_summary = service.get_storage_space_access_summary(owner, owner_access, "restricted-data")
-    archived_summary = service.get_storage_space_access_summary(owner, owner_access, "archived-data")
+    all_summary = service.get_storage_space_access_summary(manager, manager_access, "all-data")
+    restricted_summary = service.get_storage_space_access_summary(manager, manager_access, "restricted-data")
+    archived_summary = service.get_storage_space_access_summary(manager, manager_access, "archived-data")
     manager_summary = service.get_storage_space_access_summary(manager, manager_access, "restricted-data")
 
     assert private_summary.mode == "private"
-    assert private_summary.effective_member_count == 1
+    assert private_summary.effective_member_count == 2
     assert private_summary.owner.email == owner.email
-    assert private_summary.can_manage_access is True
+    assert private_summary.can_manage_access is False
 
     assert all_summary.mode == "all"
     assert all_summary.default_account_member_role == "Viewer"
-    assert all_summary.effective_member_count == 3
+    assert all_summary.effective_member_count == 2
+    assert all_summary.owner is None
 
     assert restricted_summary.mode == "restricted"
     assert restricted_summary.effective_member_count == 2
@@ -3988,7 +4199,7 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
     assert archived_summary.can_manage_access is False
 
     assert manager_summary.can_manage_access is True
-    assert manager_summary.owner.email == owner.email
+    assert manager_summary.owner is None
 
 
 def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db_session):
@@ -4001,7 +4212,6 @@ def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db
         account_id=account.id,
         bucket_name="research-data",
         display_name="Research Data",
-        owner_user_id=owner.id,
         visibility="shared",
     )
     db_session.add(metadata)
@@ -4022,7 +4232,7 @@ def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db
     )
     owner_access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
-    with pytest.raises(RuntimeError, match="not allowed for this Portal account"):
+    with pytest.raises(RuntimeError, match="Only Portal users"):
         service.set_storage_space_share(owner, owner_access, target, "research-data", "Viewer")
 
     assert db_session.query(PortalStorageSpaceGrant).filter_by(storage_space_metadata_id=metadata.id).all() == []
@@ -4045,7 +4255,6 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
         account_id=account.id,
         bucket_name="research-data",
         display_name="Research Data",
-        owner_user_id=owner.id,
         visibility="shared",
     )
     db_session.add(metadata)
@@ -4101,7 +4310,6 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
         account_id=account.id,
         bucket_name="research-data",
         display_name="Research Data",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -4153,7 +4361,6 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
             account_id=account.id,
             bucket_name="research-data",
             display_name="Research Data",
-            owner_user_id=owner.id,
             visibility="shared",
         )
     )
@@ -4224,7 +4431,6 @@ def test_public_link_creation_rejects_missing_objects(monkeypatch, db_session):
             account_id=account.id,
             bucket_name="research-data",
             display_name="Research Data",
-            owner_user_id=owner.id,
             visibility="shared",
         )
     )
@@ -4328,7 +4534,6 @@ def test_archived_storage_space_suspends_public_link_download(db_session):
                 account_id=account.id,
                 bucket_name="archived-data",
                 display_name="Archived Data",
-                owner_user_id=owner.id,
                 visibility="shared",
                 archived_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             ),
@@ -4488,13 +4693,11 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
             PortalStorageSpaceMetadata(
                 account_id=account.id,
                 bucket_name="research-data",
-                owner_user_id=user.id,
                 visibility="shared",
             ),
             PortalStorageSpaceMetadata(
                 account_id=account.id,
                 bucket_name="archive",
-                owner_user_id=user.id,
                 visibility="shared",
             ),
         ]
@@ -5069,7 +5272,6 @@ def test_download_storage_space_object_streams_visible_object(monkeypatch, db_se
             account_id=account.id,
             bucket_name="bucket-research-data",
             display_name="Research Data",
-            owner_user_id=user.id,
             visibility="shared",
         )
     )
@@ -5077,6 +5279,7 @@ def test_download_storage_space_object_streams_visible_object(monkeypatch, db_se
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "_user_storage_space_content_role", lambda *_args, **_kwargs: "Editor")
     monkeypatch.setattr(
         service,
         "list_storage_spaces",
@@ -5436,7 +5639,6 @@ def test_create_external_access_key_requires_content_owner(monkeypatch, db_sessi
         account_id=account.id,
         bucket_name="shared-viewer",
         display_name="Shared Viewer",
-        owner_user_id=owner.id,
         visibility="shared",
         share_scope="restricted",
     )
@@ -5456,7 +5658,7 @@ def test_create_external_access_key_requires_content_owner(monkeypatch, db_sessi
     monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("IAM should not be reached when owner check fails"))
 
-    with pytest.raises(RuntimeError, match="Owner content role required"):
+    with pytest.raises(RuntimeError, match="Full content access required"):
         service.create_access_key(
             viewer,
             _portal_access(account, viewer),

@@ -166,7 +166,7 @@ export default function PortalObjectDetailPage() {
     setObjectError(null);
     Promise.all([
       fetchPortalStorageSpaceObjectDetail(accountIdForApi, space.id, objectPath),
-      space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived"
+      space.role === "Manager" && space.visibility === "shared" && space.status !== "Archived"
         ? listPortalStorageSpacePublicLinks(accountIdForApi, space.id, { objectKey: objectPath, includeRevoked: true })
         : Promise.resolve([] as PortalPublicLink[]),
     ])
@@ -225,14 +225,14 @@ export default function PortalObjectDetailPage() {
 
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
-  const canCreatePublicLink = space.role === "Owner" && space.visibility === "shared" && space.status !== "Archived";
+  const canCreatePublicLink = space.role === "Manager" && space.visibility === "shared" && space.status !== "Archived";
   const activePublicLinkCount = publicLinks.filter((link) => link.status === "Active").length;
   const publicLinkUnavailableReason = !accountIdForApi
     ? t({ en: "Select a project first.", fr: "Sélectionnez d'abord un projet.", de: "Wählen Sie zuerst ein Projekt aus." })
     : space.status === "Archived"
       ? t({ en: "Archived spaces cannot create public links.", fr: "Les espaces archivés ne peuvent pas créer de liens publics.", de: "Archivierte Bereiche können keine öffentlichen Links erstellen." })
-      : space.role !== "Owner"
-        ? t({ en: "Only Owners can create public links.", fr: "Seuls les Propriétaires peuvent créer des liens publics.", de: "Nur Eigentümer können öffentliche Links erstellen." })
+      : space.role !== "Manager"
+        ? t({ en: "Only project managers can create public links.", fr: "Seuls les gestionnaires du projet peuvent créer des liens publics.", de: "Nur Projektmanager können öffentliche Links erstellen." })
         : space.visibility !== "shared"
           ? t({ en: "Public links are available only for shared spaces.", fr: "Les liens publics sont disponibles uniquement pour les espaces partagés.", de: "Öffentliche Links sind nur für geteilte Bereiche verfügbar." })
           : null;
@@ -551,7 +551,7 @@ export default function PortalObjectDetailPage() {
               {publicLinkUnavailableReason}
             </div>
           ) : null}
-          {space.role === "Owner" ? (
+          {space.role === "Manager" ? (
             <DataTableShell
               columns={publicLinkColumns}
               rows={publicLinks}

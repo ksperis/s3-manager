@@ -29,16 +29,13 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
 const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
   effective: {
     allow_portal_key: false,
-    allow_portal_user_bucket_create: true,
+    allow_private_storage_space_create: true,
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
     server_access_logging_enabled: true,
     server_access_log_retention_days: 30,
     storage_space_version_cleanup_enabled: true,
     max_portal_user_access_keys: 2,
-    iam_group_manager_policy: { actions: ["s3:ListAllMyBuckets", "sts:GetSessionToken"], advanced_policy: null },
-    iam_group_user_policy: { actions: ["s3:ListAllMyBuckets"], advanced_policy: null },
-    bucket_access_policy: { actions: ["s3:GetObject"], advanced_policy: null },
     bucket_defaults: {
       versioning: false,
       enable_cors: false,
@@ -538,7 +535,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
-    expect(await screen.findByText("Portal user Storage Space creation")).toBeInTheDocument();
+    expect(await screen.findByText("Private Storage Space creation")).toBeInTheDocument();
     expect(screen.getByText("Server access logging")).toBeInTheDocument();
     expect(screen.getByText("Storage Space history cleanup")).toBeInTheDocument();
     expect(screen.queryByText("Portal manager overrides are active for this account.")).not.toBeInTheDocument();
@@ -559,7 +556,7 @@ describe("AccountsPage modal tabs", () => {
     portalEnabled = true;
     updateAccountPortalSettingsMock.mockResolvedValueOnce(
       makePortalAccountSettings({
-        admin_override: { allow_portal_user_bucket_create: false },
+        admin_override: { allow_private_storage_space_create: false },
       })
     );
 
@@ -568,10 +565,10 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Portal user Storage Space creation");
+    await screen.findByText("Private Storage Space creation");
 
     const storageSpaceCreation = screen
-      .getByText("Portal user Storage Space creation")
+      .getByText("Private Storage Space creation")
       .closest("div")?.parentElement?.parentElement;
     const namedBucketCreation = screen.getByText("Named bucket creation").closest("div")?.parentElement?.parentElement;
     const historyCleanup = screen.getByText("Storage Space history cleanup").closest("div")?.parentElement?.parentElement;
@@ -587,7 +584,7 @@ describe("AccountsPage modal tabs", () => {
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
-        allow_portal_user_bucket_create: false,
+        allow_private_storage_space_create: false,
         allow_portal_named_bucket_create: true,
         storage_space_version_cleanup_enabled: false,
       });
@@ -602,7 +599,7 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
-    await screen.findByText("Portal user Storage Space creation");
+    await screen.findByText("Private Storage Space creation");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
 

@@ -33,7 +33,7 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
     account = _seed_account(
         db_session,
         overrides={
-            "admin": {"allow_portal_user_bucket_create": False},
+            "admin": {"allow_private_storage_space_create": False},
             "portal_manager": {"allow_portal_user_access_key_create": True},
         },
     )
@@ -42,7 +42,7 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert body["admin_override"]["allow_private_storage_space_create"] is False
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
 
@@ -63,21 +63,21 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
     response = client.put(
         f"/api/admin/accounts/{account.id}/portal-settings",
         json={
-            "allow_portal_user_bucket_create": False,
+            "allow_private_storage_space_create": False,
             "bucket_defaults": {"versioning": True},
         },
     )
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["admin_override"]["allow_portal_user_bucket_create"] is False
+    assert body["admin_override"]["allow_private_storage_space_create"] is False
     assert body["admin_override"]["bucket_defaults"]["versioning"] is True
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
 
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
-    assert stored["admin"]["allow_portal_user_bucket_create"] is False
+    assert stored["admin"]["allow_private_storage_space_create"] is False
     assert "portal_manager" not in stored
 
     assert len(audit.actions) == 1

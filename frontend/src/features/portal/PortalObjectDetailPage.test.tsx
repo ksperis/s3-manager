@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
           name: "Research Data",
           internalName: "research-data",
           description: "Research Data shared storage",
-          role: "Owner",
+          role: "Manager",
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -69,7 +69,7 @@ describe("PortalObjectDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.assign(mocks.hookResult.workspace.spaces[0], {
-      role: "Owner",
+      role: "Manager",
       status: "Active",
       visibility: "shared",
     });
@@ -192,10 +192,10 @@ describe("PortalObjectDetailPage", () => {
     expect(await screen.findByText("hello content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Set up public link" })).toBeDisabled();
-    expect(screen.getAllByText("Only Owners can create public links.").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Only project managers can create public links.").length).toBeGreaterThan(1);
     await user.click(screen.getByRole("button", { name: "Sharing" }));
     expect(screen.getByText("Public links")).toBeInTheDocument();
-    expect(screen.getAllByText("Only Owners can create public links.").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Only project managers can create public links.").length).toBeGreaterThan(1);
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview" }));
     expect(screen.getByRole("button", { name: "Delete file" })).toBeDisabled();

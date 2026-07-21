@@ -18,7 +18,7 @@ import { portalDateLabel } from "./portalI18n";
 
 type TFunction = (message: I18nMessage) => string;
 
-export type PortalWorkspaceRole = "Viewer" | "Editor" | "Owner";
+export type PortalWorkspaceRole = "Viewer" | "Editor" | "Owner" | "Manager";
 export type PortalWorkspaceStatus = "Active" | "Attention";
 export type PortalWorkspaceAccess = "Private" | "Shared" | "Public" | "Public Read" | "Unavailable";
 export type PortalWorkspaceAlertTone = "info" | "warning" | "danger";
@@ -52,9 +52,9 @@ export type PortalWorkspaceSpace = {
   projectKey: string | null;
   datasetLabel: string | null;
   role: PortalWorkspaceRole;
-  contentRole: PortalWorkspaceRole | null;
   canBrowse: boolean;
   canDelete: boolean;
+  canTakeOwnership: boolean;
   status: PortalWorkspaceStatus | "Archived";
   access: PortalWorkspaceAccess;
   region: string | null;
@@ -137,17 +137,10 @@ function prettyName(raw: string): string {
 }
 
 function roleFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspaceRole {
-  if (space.role === "Owner" || space.role === "Editor" || space.role === "Viewer") {
+  if (space.role === "Manager" || space.role === "Owner" || space.role === "Editor" || space.role === "Viewer") {
     return space.role;
   }
   return "Viewer";
-}
-
-function optionalRoleFromStorageSpace(role?: string | null): PortalWorkspaceRole | null {
-  if (role === "Owner" || role === "Editor" || role === "Viewer") {
-    return role;
-  }
-  return null;
 }
 
 function statusFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspaceStatus {
@@ -162,8 +155,7 @@ function statusFromStorageSpace(space: PortalStorageSpaceSummary): PortalWorkspa
 
 function visibilityFromStorageSpace(space: PortalStorageSpaceSummary): PortalStorageSpaceVisibility {
   if (space.visibility === "shared") return "shared";
-  if (space.visibility === "private") return "private";
-  return space.status === "Shared" ? "shared" : "private";
+  return "private";
 }
 
 function createdLabel(raw?: string | null, locale: UiLanguage = "en"): string {
@@ -212,7 +204,6 @@ export function buildPortalWorkspaceModel({
     const usageSpace = usageBySpace.get(storageSpace.id);
     const role = roleFromStorageSpace(storageSpace);
     const canBrowse = storageSpace.can_browse ?? true;
-    const contentRole = optionalRoleFromStorageSpace(storageSpace.content_role) ?? (canBrowse ? role : null);
     const name = storageSpace.name || prettyName(storageSpace.id);
     const visibility = visibilityFromStorageSpace(storageSpace);
     const shareScope: PortalStorageSpaceShareScope =
@@ -238,9 +229,9 @@ export function buildPortalWorkspaceModel({
       projectKey: storageSpace.project_key ?? null,
       datasetLabel: storageSpace.dataset_label ?? null,
       role,
-      contentRole,
       canBrowse,
       canDelete: Boolean(storageSpace.can_delete),
+      canTakeOwnership: Boolean(storageSpace.can_take_ownership),
       status,
       access,
       region: storageSpace.region ?? null,

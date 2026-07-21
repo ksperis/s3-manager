@@ -38,17 +38,22 @@ def _install_portal_access_override(
     user: User,
     *,
     role: str = AccountRole.PORTAL_MANAGER.value,
+    can_manage: bool | None = None,
 ) -> None:
     def override_portal_access():
-        can_manage = role == AccountRole.PORTAL_MANAGER.value
+        effective_can_manage = (
+            role == AccountRole.PORTAL_MANAGER.value
+            if can_manage is None
+            else can_manage
+        )
         return AccountAccess(
             account=account,
             actor=user,
             membership=None,
             role=role,
             capabilities=AccountCapabilities(
-                can_manage_buckets=can_manage,
-                can_manage_portal_users=can_manage,
+                can_manage_buckets=effective_can_manage,
+                can_manage_portal_users=effective_can_manage,
             ),
         )
 
@@ -98,6 +103,28 @@ def test_portal_request_routes_require_manager_for_creation(client: TestClient, 
     response = client.post(
         "/api/portal/requests",
         json={
+            "request_type": "portal_user_access",
+            "target_name": "Jane Viewer",
+            "target_email": "jane@example.org",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_portal_request_routes_use_effective_manager_role_for_creation(client: TestClient, db_session):
+    account = _seed_account(db_session)
+    requester = _seed_user(db_session, email="manager@example.org")
+    _install_portal_access_override(
+        account,
+        requester,
+        role=AccountRole.PORTAL_MANAGER.value,
+        can_manage=False,
+    )
+
+    response = client.post(
+        "/api/portal/requests",
+        json={
             "request_type": "account_quota_change",
             "direction": "increase",
             "target_quota_value": 20,
@@ -105,7 +132,7 @@ def test_portal_request_routes_require_manager_for_creation(client: TestClient, 
         },
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
 def test_admin_request_routes_approve_and_conflict(client: TestClient, db_session):

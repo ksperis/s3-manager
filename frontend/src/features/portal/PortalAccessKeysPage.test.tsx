@@ -104,8 +104,8 @@ describe("PortalAccessKeysPage", () => {
     };
     mocks.fetchPortalAccessKeysState.mockImplementation(async () => mocks.state);
     mocks.listPortalStorageSpaces.mockResolvedValue([
-      { id: "research-data", name: "Research Data", role: "Owner", content_role: "Owner", internal_bucket_name: "research-data-internal" },
-      { id: "shared-readonly", name: "Shared Readonly", role: "Viewer", content_role: "Viewer", internal_bucket_name: "shared-readonly-internal" },
+      { id: "research-data", name: "Research Data", role: "Owner", internal_bucket_name: "research-data-internal" },
+      { id: "shared-readonly", name: "Shared Readonly", role: "Viewer", internal_bucket_name: "shared-readonly-internal" },
     ]);
     mocks.createPortalAccessKey.mockResolvedValue({
       access_key_id: "AK-NEW",

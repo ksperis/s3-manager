@@ -15,6 +15,7 @@ from app.db import (
     UiGroupS3Account,
     User,
     UserS3Account,
+    UserUiGroup,
     is_admin_ui_role,
 )
 from app.models.s3_account import (
@@ -27,6 +28,11 @@ from app.models.s3_account import (
     S3AccountUpdate,
 )
 from app.services.mappers.s3_account import s3_account_from_db, s3_account_summary_from_db
+from app.services.portal_role_sync import (
+    capture_effective_portal_roles,
+    sync_portal_role_downgrades,
+    sync_portal_role_promotions,
+)
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -935,6 +941,41 @@ class S3AccountsService:
         if not account:
             raise ValueError("S3Account not found")
 
+        affected_portal_user_ids: set[int] = set()
+        if payload.user_links is not None or payload.user_ids is not None:
+            affected_portal_user_ids.update(
+                row[0]
+                for row in self.db.query(UserS3Account.user_id)
+                .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
+                .all()
+            )
+            affected_portal_user_ids.update(
+                int(link.user_id)
+                for link in (payload.user_links or [])
+            )
+            affected_portal_user_ids.update(int(user_id) for user_id in (payload.user_ids or []))
+        if payload.group_links is not None or payload.group_ids is not None:
+            affected_group_ids = {
+                row[0]
+                for row in self.db.query(UiGroupS3Account.group_id)
+                .filter(UiGroupS3Account.account_id == account.id)
+                .all()
+            }
+            affected_group_ids.update(int(link.group_id) for link in (payload.group_links or []))
+            affected_group_ids.update(int(group_id) for group_id in (payload.group_ids or []))
+            if affected_group_ids:
+                affected_portal_user_ids.update(
+                    row[0]
+                    for row in self.db.query(UserUiGroup.user_id)
+                    .filter(UserUiGroup.group_id.in_(affected_group_ids))
+                    .all()
+                )
+        portal_roles_before = capture_effective_portal_roles(
+            self.db,
+            user_ids=affected_portal_user_ids,
+            account_ids=[account.id],
+        )
+
         if payload.name:
             account.name = payload.name
         if payload.email is not None:
@@ -1070,7 +1111,27 @@ class S3AccountsService:
                 self.db.add(db_link)
 
         self.db.add(account)
-        self.db.commit()
+        self.db.flush()
+        portal_roles_after = capture_effective_portal_roles(
+            self.db,
+            user_ids=affected_portal_user_ids,
+            account_ids=[account.id],
+        )
+        try:
+            sync_portal_role_downgrades(
+                self.db,
+                before=portal_roles_before,
+                after=portal_roles_after,
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        sync_portal_role_promotions(
+            self.db,
+            before=portal_roles_before,
+            after=portal_roles_after,
+        )
         self.db.refresh(account)
 
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])

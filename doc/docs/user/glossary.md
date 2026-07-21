@@ -12,7 +12,7 @@ Use this page when a term in the UI or documentation is unclear.
 | S3 connection | A credential-first connection to an S3-compatible endpoint. It is used for day-to-day bucket and object work across supported backends. |
 | Execution context | The selected identity and scope used to execute an action. It can be an account, connection, legacy S3 user, or authorized Ceph Admin endpoint context. |
 | Storage Space | The Portal name for an assigned storage area. It can map to a bucket internally, but Portal keeps the user-facing language simple. |
-| Portal role | Viewer, Editor, or Owner access inside a shared Portal Storage Space. These roles translate into storage-side permissions. |
+| Portal role | Owner for a private space, Viewer or Editor for a team space, and Manager for project-wide administration. These roles translate into storage-side permissions. |
 | Manager tool access | Per-user or inherited access to advanced Manager tools such as Bucket compare, integrity, purge, migration, and feature rules. |
 | Feature flag | A setting that enables or disables a workspace or feature globally or for a surface. |
 | Endpoint capability | A backend capability reported or configured for an endpoint, such as IAM, SNS, metrics, usage, SSE, replication, or static website support. |
@@ -29,7 +29,7 @@ Use this page when a term in the UI or documentation is unclear.
 | activity, history, audit | Portal Activity, Admin audit, usage history |
 | transfer, upload progress, queue | Portal Transfers, Browser object operations, bucket migration |
 | quota, capacity, usage | Admin Usage and Metrics, usage stats, quota monitoring, Portal usage, billing |
-| sharing, collaborator, public link | Portal sharing, Viewer, Editor, Owner |
+| sharing, collaborator, public link | Portal sharing, Viewer, Editor, Manager |
 | delete, empty bucket, purge | Bucket purge, safe destructive operations, object delete |
 | migrate, sync, copy bucket | Bucket migration, Bucket compare |
 | endpoint down, latency, incident | Endpoint Status, healthchecks, observability |

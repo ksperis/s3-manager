@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
           name: "Research Data",
           internalName: "research-data",
           description: "Research Data shared storage",
-          role: "Owner",
+          role: "Manager",
           status: "Active",
           access: "Shared",
           ownerUserId: 7,
@@ -72,7 +72,8 @@ const mocks = vi.hoisted(() => ({
     state: {
       account_role: "portal_manager",
       can_manage_buckets: true,
-      can_create_storage_spaces: true,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: true,
       allow_named_bucket_create: false,
     },
     loading: false,
@@ -130,7 +131,7 @@ describe("PortalStorageSpacesPage", () => {
         name: "Research Data",
         internalName: "research-data",
         description: "Research Data shared storage",
-        role: "Owner",
+        role: "Manager",
         status: "Active",
         access: "Shared",
         ownerUserId: 7,
@@ -167,7 +168,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_manager",
       can_manage_buckets: true,
-      can_create_storage_spaces: true,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: true,
       allow_named_bucket_create: false,
     };
   });
@@ -258,6 +260,27 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
+  it("shows the whole team instead of no collaborators for account-wide spaces", () => {
+    mocks.hookResult.workspace.spaces = [
+      {
+        ...mocks.hookResult.workspace.spaces[0],
+        shareScope: "account",
+        accountMemberRole: "Editor",
+        collaborators: [],
+        collaboratorCount: 0,
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("All team members")).toBeInTheDocument();
+    expect(screen.queryByText("No collaborators")).not.toBeInTheDocument();
+  });
+
   it("shows the start guide only before the first space and lets users dismiss it", async () => {
     const user = userEvent.setup();
     mocks.hookResult.workspace.spaces = [];
@@ -306,7 +329,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
       can_manage_buckets: false,
-      can_create_storage_spaces: false,
+      can_create_private_storage_spaces: false,
+      can_create_team_storage_spaces: false,
       allow_named_bucket_create: false,
     };
 
@@ -422,7 +446,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_manager",
       can_manage_buckets: true,
-      can_create_storage_spaces: true,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: true,
       allow_named_bucket_create: true,
     };
 
@@ -463,7 +488,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
       can_manage_buckets: false,
-      can_create_storage_spaces: true,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: false,
       allow_named_bucket_create: false,
     };
 
@@ -485,7 +511,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
       can_manage_buckets: false,
-      can_create_storage_spaces: true,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: false,
       allow_named_bucket_create: false,
     };
 
@@ -699,7 +726,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
       can_manage_buckets: true,
-      can_create_storage_spaces: false,
+      can_create_private_storage_spaces: false,
+      can_create_team_storage_spaces: false,
       allow_named_bucket_create: false,
     };
 
@@ -722,7 +750,8 @@ describe("PortalStorageSpacesPage", () => {
     mocks.hookResult.state = {
       account_role: "portal_user",
       can_manage_buckets: false,
-      can_create_storage_spaces: false,
+      can_create_private_storage_spaces: false,
+      can_create_team_storage_spaces: false,
       allow_named_bucket_create: false,
     };
 

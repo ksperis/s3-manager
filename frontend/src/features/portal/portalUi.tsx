@@ -65,6 +65,7 @@ export function portalStorageSpaceStatusTone(space: PortalWorkspaceSpace): UiTon
 }
 
 export function portalRoleTone(role: PortalWorkspaceRole): UiTone {
+  if (role === "Manager") return "primary";
   if (role === "Owner") return "success";
   if (role === "Editor") return "primary";
   return "neutral";

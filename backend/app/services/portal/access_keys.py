@@ -167,7 +167,13 @@ class PortalAccessKeysMixin:
             raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            access.role,
+            portal_settings=portal_settings,
+            account=access.account,
+        )
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         existing_user_keys = self._list_access_keys(link, iam_service, include_portal=False)
@@ -228,7 +234,7 @@ class PortalAccessKeysMixin:
         bucket_name = self._resolve_storage_space_bucket_name(user, access, storage_space_id)
         if not bucket_name:
             raise RuntimeError("Storage space not found or not allowed.")
-        self._require_storage_space_content_owner(user, access, bucket_name)
+        self._require_storage_space_full_content_access(user, access, bucket_name)
         metadata = self._require_storage_space_active(access.account, bucket_name)
         if metadata is None:
             raise RuntimeError("Storage space metadata is missing.")
@@ -323,7 +329,13 @@ class PortalAccessKeysMixin:
         iam_service = self._get_iam_service(account)
         link, _, created = self._ensure_portal_user(user, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            access.role,
+            portal_settings=portal_settings,
+            account=account,
+        )
         self._ensure_policy_and_key(link, iam_service)
         state = self.get_state(user, access)
         state.just_created = created
@@ -333,7 +345,13 @@ class PortalAccessKeysMixin:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
         portal_settings = self._effective_portal_settings(access.account)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            access.role,
+            portal_settings=portal_settings,
+            account=access.account,
+        )
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         new_key = iam_service.create_access_key(link.iam_username)
@@ -368,7 +386,13 @@ class PortalAccessKeysMixin:
                 storage_space_name=self._display_storage_space_name(external.bucket_name, metadata),
             )
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            access.role,
+            portal_settings=portal_settings,
+            account=access.account,
+        )
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         if access_key_id == link.active_access_key:
@@ -413,7 +437,13 @@ class PortalAccessKeysMixin:
             self.db.commit()
             return deleted
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        self._sync_user_group_membership(
+            iam_service,
+            link.iam_username,
+            access.role,
+            portal_settings=portal_settings,
+            account=access.account,
+        )
         if access_key_id == link.active_access_key:
             raise PortalAccessKeyProtected("Cannot delete the portal access key")
         if not link.iam_username:

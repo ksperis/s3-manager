@@ -49,31 +49,6 @@ class PortalSettingsMixin:
         self.db.commit()
         self.db.refresh(account)
 
-    def _policy_override_flags(self, override: Optional[PortalIAMPolicyOverride]) -> tuple[bool, bool]:
-        if not override:
-            return False, False
-        fields_set = override.model_fields_set
-        return "actions" in fields_set, "advanced_policy" in fields_set
-
-    def _apply_policy_override(
-        self,
-        target: PortalIAMPolicySettings,
-        override: Optional[PortalIAMPolicyOverride],
-        allow_actions: bool,
-        allow_advanced: bool,
-        lock_actions: bool,
-        lock_advanced: bool,
-    ) -> None:
-        if not override:
-            return
-        actions_set, advanced_set = self._policy_override_flags(override)
-        if actions_set and allow_actions and not lock_actions:
-            target.actions = override.actions or []
-            if not advanced_set:
-                target.advanced_policy = None
-        if advanced_set and allow_advanced and not lock_advanced:
-            target.advanced_policy = override.advanced_policy
-
     def _apply_bucket_defaults_override(
         self,
         target: PortalBucketDefaults,
@@ -97,8 +72,8 @@ class PortalSettingsMixin:
     ) -> None:
         if override.allow_portal_key is not None:
             portal_settings.allow_portal_key = override.allow_portal_key
-        if override.allow_portal_user_bucket_create is not None:
-            portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        if override.allow_private_storage_space_create is not None:
+            portal_settings.allow_private_storage_space_create = override.allow_private_storage_space_create
         if override.allow_portal_named_bucket_create is not None:
             portal_settings.allow_portal_named_bucket_create = override.allow_portal_named_bucket_create
         if override.allow_portal_user_access_key_create is not None:
@@ -107,30 +82,6 @@ class PortalSettingsMixin:
             portal_settings.server_access_logging_enabled = override.server_access_logging_enabled
         if override.storage_space_version_cleanup_enabled is not None:
             portal_settings.storage_space_version_cleanup_enabled = override.storage_space_version_cleanup_enabled
-        self._apply_policy_override(
-            portal_settings.iam_group_manager_policy,
-            override.iam_group_manager_policy,
-            allow_actions=True,
-            allow_advanced=True,
-            lock_actions=False,
-            lock_advanced=False,
-        )
-        self._apply_policy_override(
-            portal_settings.iam_group_user_policy,
-            override.iam_group_user_policy,
-            allow_actions=True,
-            allow_advanced=True,
-            lock_actions=False,
-            lock_advanced=False,
-        )
-        self._apply_policy_override(
-            portal_settings.bucket_access_policy,
-            override.bucket_access_policy,
-            allow_actions=True,
-            allow_advanced=True,
-            lock_actions=False,
-            lock_advanced=False,
-        )
         if override.bucket_defaults:
             self._apply_bucket_defaults_override(
                 portal_settings.bucket_defaults,

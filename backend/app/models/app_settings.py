@@ -16,77 +16,6 @@ def _default_portal_cors_origins() -> list[str]:
     return list(_settings.cors_origins or [])
 
 
-def _default_portal_global_actions() -> list[str]:
-    return ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
-
-
-def _default_portal_manager_actions() -> list[str]:
-    return _default_portal_global_actions()
-
-
-def _default_portal_user_actions() -> list[str]:
-    return _default_portal_global_actions()
-
-
-def _normalize_portal_manager_actions(actions: list[str]) -> list[str]:
-    cleaned = [action for action in actions if action.lower() != "s3:createbucket"]
-    action_keys = {action.lower() for action in cleaned}
-    if not action_keys or action_keys == {"s3:listallmybuckets"}:
-        return _default_portal_manager_actions()
-    return cleaned
-
-
-def _default_portal_bucket_access_actions() -> list[str]:
-    return [
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-        "s3:ListBucketVersions",
-        "s3:ListBucketMultipartUploads",
-        "s3:GetObject",
-        "s3:GetObjectVersion",
-        "s3:GetObjectTagging",
-        "s3:GetObjectVersionTagging",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:DeleteObjectVersion",
-        "s3:AbortMultipartUpload",
-        "s3:ListMultipartUploadParts",
-        "s3:GetBucketVersioning",
-        "s3:GetBucketCORS",
-        "s3:GetBucketAcl",
-        "s3:GetBucketPolicy",
-        "s3:GetLifecycleConfiguration",
-    ]
-
-
-class PortalIAMPolicySettings(BaseModel):
-    actions: list[str] = Field(default_factory=list)
-    advanced_policy: Optional[dict] = None
-
-    @field_validator("actions", mode="before")
-    @classmethod
-    def normalize_actions(cls, value: Optional[list[str]]) -> list[str]:
-        if not value:
-            return []
-        if isinstance(value, str):
-            return [entry.strip() for entry in value.split(",") if entry.strip()]
-        return [entry for entry in value if isinstance(entry, str) and entry.strip()]
-
-
-class PortalIAMPolicyOverride(BaseModel):
-    actions: Optional[list[str]] = None
-    advanced_policy: Optional[dict] = None
-
-    @field_validator("actions", mode="before")
-    @classmethod
-    def normalize_actions(cls, value: Optional[list[str]]) -> Optional[list[str]]:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            return [entry.strip() for entry in value.split(",") if entry.strip()]
-        return [entry for entry in value if isinstance(entry, str) and entry.strip()]
-
-
 class PortalBucketDefaultsOverride(BaseModel):
     versioning: Optional[bool] = None
     enable_cors: Optional[bool] = None
@@ -96,14 +25,11 @@ class PortalBucketDefaultsOverride(BaseModel):
 
 class PortalSettingsOverride(BaseModel):
     allow_portal_key: Optional[bool] = None
-    allow_portal_user_bucket_create: Optional[bool] = None
+    allow_private_storage_space_create: Optional[bool] = None
     allow_portal_named_bucket_create: Optional[bool] = None
     allow_portal_user_access_key_create: Optional[bool] = None
     server_access_logging_enabled: Optional[bool] = None
     storage_space_version_cleanup_enabled: Optional[bool] = None
-    iam_group_manager_policy: Optional[PortalIAMPolicyOverride] = None
-    iam_group_user_policy: Optional[PortalIAMPolicyOverride] = None
-    bucket_access_policy: Optional[PortalIAMPolicyOverride] = None
     bucket_defaults: Optional[PortalBucketDefaultsOverride] = None
 
 
@@ -208,32 +134,14 @@ class LoginSettings(BaseModel):
 
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
-    allow_portal_user_bucket_create: bool = True
+    allow_private_storage_space_create: bool = True
     allow_portal_named_bucket_create: bool = False
     allow_portal_user_access_key_create: bool = True
     server_access_logging_enabled: bool = True
     server_access_log_retention_days: int = Field(default=30, ge=1)
     storage_space_version_cleanup_enabled: bool = True
     max_portal_user_access_keys: int = Field(default=2, ge=1)
-    iam_group_manager_policy: PortalIAMPolicySettings = Field(
-        default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_manager_actions())
-    )
-    iam_group_user_policy: PortalIAMPolicySettings = Field(
-        default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_user_actions())
-    )
-    bucket_access_policy: PortalIAMPolicySettings = Field(
-        default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_bucket_access_actions())
-    )
     bucket_defaults: PortalBucketDefaults = Field(default_factory=PortalBucketDefaults)
-
-    @model_validator(mode="after")
-    def normalize_manager_policy_actions(self):
-        self.iam_group_manager_policy.actions = _normalize_portal_manager_actions(
-            self.iam_group_manager_policy.actions
-        )
-        return self
-
-
 class ManagerSettings(BaseModel):
     allow_manager_user_usage_stats: bool = True
     bucket_migration_parallelism_default: int = Field(

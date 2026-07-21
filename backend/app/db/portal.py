@@ -20,6 +20,11 @@ class PortalStorageSpaceMetadata(Base):
             "account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor')",
             name="ck_portal_storage_space_metadata_account_member_role",
         ),
+        CheckConstraint(
+            "(visibility = 'private' AND owner_user_id IS NOT NULL) OR "
+            "(visibility = 'shared' AND owner_user_id IS NULL)",
+            name="ck_portal_storage_space_metadata_private_owner",
+        ),
         Index("ix_portal_storage_space_metadata_account", "account_id"),
     )
 
@@ -28,7 +33,6 @@ class PortalStorageSpaceMetadata(Base):
     bucket_name = Column(String, nullable=False)
     display_name = Column(String, nullable=True)
     description = Column(Text, nullable=True)
-    owner_label = Column(String, nullable=True)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     visibility = Column(String, nullable=False, default="private")
     share_scope = Column(String, nullable=False, default="restricted")
@@ -59,7 +63,7 @@ class PortalStorageSpaceGrant(Base):
             name="uq_portal_storage_space_grants_space_user",
         ),
         CheckConstraint(
-            "role IN ('Viewer', 'Editor', 'Owner')",
+            "role IN ('Viewer', 'Editor')",
             name="ck_portal_storage_space_grants_role",
         ),
         Index("ix_portal_storage_space_grants_space", "storage_space_metadata_id"),

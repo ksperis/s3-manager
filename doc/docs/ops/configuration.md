@@ -132,7 +132,7 @@ Managed from Admin UI:
 - Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, and private S3 connections for UI users).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
-- Portal settings (`portal`): IAM key policy, portal user Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, IAM group policies, bucket defaults, and super-admin account overrides.
+- Portal settings (`portal`): IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, bucket defaults, and super-admin account overrides.
 - Manager tool flags and behavior: bucket migration, compare, integrity check,
   purge, usage stats, Ceph S3 User key management, and migration parallelism.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
@@ -152,17 +152,14 @@ LDAP providers are persisted separately in their own database tables.
 
 `FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
 
-The default `portal-manager` IAM group policy grants only
-`s3:ListAllMyBuckets` and `sts:GetSessionToken`. Storage Space creation, object
-access, and bucket defaults stay behind the Portal workflow: bucket creation and
-defaults are applied by backend orchestration with account credentials, and
-object access is kept in per-user Storage Space policies. Storage Space
-permissions are Portal roles projected from database grants; `Viewer`, `Editor`,
-and `Owner` are not configured by editing bucket policy or IAM policy documents
-from the Portal. The legacy `portal.bucket_access_policy` setting may still be
-accepted by the settings API for compatibility, but it is not presented as an
-active Admin control unless a future implementation wires it back to those
-roles explicitly.
+The code-owned `portal-user` IAM group policy grants only
+`s3:ListAllMyBuckets` and `sts:GetSessionToken`. The code-owned
+`portal-manager` group adds the explicit Storage Space data-plane actions on
+all buckets in the single RGW Account backing the project. Technical Portal
+buckets add an explicit resource-policy denial for manager IAM principals.
+Storage Space creation and bucket defaults remain backend workflows. Private
+Owner and team Viewer/Editor projections are generated from database state;
+Portal IAM policies are not editable settings.
 
 ## Frontend runtime settings
 

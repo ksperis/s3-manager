@@ -13,6 +13,7 @@ import {
 } from "../../api/portalRequests";
 import {
   fetchPortalCollaborators,
+  fetchPortalState,
   fetchPortalUsage,
   type PortalCollaborator,
   type PortalUsage,
@@ -111,9 +112,57 @@ export default function PortalRequestsPage() {
   const [collaboratorsError, setCollaboratorsError] = useState<string | null>(
     null,
   );
-  const canRequestManagedChanges =
+  const [requestPermission, setRequestPermission] = useState<{
+    accountId: string;
+    canManage: boolean;
+  } | null>(null);
+  const selectedAccountKey = accountIdForApi == null ? null : String(accountIdForApi);
+  const summaryAllowsManagedRequests =
     selectedAccount?.account_role === "portal_manager";
-  const showRequestHelpTab = accountLoading || canRequestManagedChanges;
+  const stateAllowsManagedRequests =
+    requestPermission?.accountId === selectedAccountKey
+      ? requestPermission.canManage
+      : null;
+  const requestPermissionResolved =
+    summaryAllowsManagedRequests || stateAllowsManagedRequests !== null;
+  const canRequestManagedChanges =
+    stateAllowsManagedRequests ?? summaryAllowsManagedRequests;
+  const showRequestHelpTab =
+    accountLoading || !requestPermissionResolved || canRequestManagedChanges;
+
+  useEffect(() => {
+    if (!hasAccountContext || !accountIdForApi || !selectedAccountKey) {
+      setRequestPermission(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchPortalState(accountIdForApi)
+      .then((state) => {
+        if (cancelled) return;
+        setRequestPermission({
+          accountId: selectedAccountKey,
+          canManage:
+            state.account_role === "portal_manager" ||
+            state.can_manage_portal_users === true,
+        });
+      })
+      .catch((err) => {
+        console.error(err);
+        if (cancelled) return;
+        setRequestPermission({
+          accountId: selectedAccountKey,
+          canManage: summaryAllowsManagedRequests,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountIdForApi,
+    hasAccountContext,
+    selectedAccountKey,
+    summaryAllowsManagedRequests,
+  ]);
 
   const loadRequests = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {
@@ -148,10 +197,20 @@ export default function PortalRequestsPage() {
   }, [loadRequests]);
 
   useEffect(() => {
-    if (!accountLoading && hasAccountContext && !canRequestManagedChanges) {
+    if (
+      !accountLoading &&
+      requestPermissionResolved &&
+      hasAccountContext &&
+      !canRequestManagedChanges
+    ) {
       setActiveTab("history");
     }
-  }, [accountLoading, canRequestManagedChanges, hasAccountContext]);
+  }, [
+    accountLoading,
+    canRequestManagedChanges,
+    hasAccountContext,
+    requestPermissionResolved,
+  ]);
 
   const loadUsage = useCallback(async () => {
     if (!hasAccountContext || !accountIdForApi) {

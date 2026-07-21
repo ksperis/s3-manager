@@ -71,13 +71,11 @@ class PortalStateUsageMixin:
         quota_max_objects = None
         max_buckets = None
         portal_settings = self._effective_portal_settings(account)
-        can_create_storage_spaces = bool(
-            access.capabilities.can_manage_buckets
-            or (
-                access.role == AccountRole.PORTAL_USER.value
-                and portal_settings.allow_portal_user_bucket_create
-            )
+        can_create_private_storage_spaces = bool(
+            portal_settings.allow_private_storage_space_create
+            and access.role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}
         )
+        can_create_team_storage_spaces = access.role == AccountRole.PORTAL_MANAGER.value
         return PortalState(
             account_id=account.id,
             iam_user=PortalIAMUser(
@@ -97,7 +95,8 @@ class PortalStateUsageMixin:
             just_created=False,
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
-            can_create_storage_spaces=can_create_storage_spaces,
+            can_create_private_storage_spaces=can_create_private_storage_spaces,
+            can_create_team_storage_spaces=can_create_team_storage_spaces,
             can_manage_portal_users=access.capabilities.can_manage_portal_users,
             allow_named_bucket_create=portal_settings.allow_portal_named_bucket_create,
             server_access_logging_enabled=portal_settings.server_access_logging_enabled,

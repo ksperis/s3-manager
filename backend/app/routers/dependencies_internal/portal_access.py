@@ -199,7 +199,7 @@ def get_portal_account_access(
 
 
 def require_portal_manager(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
-    if not access.capabilities.can_manage_portal_users:
+    if access.role != AccountRole.PORTAL_MANAGER.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
     return access
 

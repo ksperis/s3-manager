@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listPortalRequests: vi.fn(),
   createPortalRequest: vi.fn(),
   fetchPortalUsage: vi.fn(),
+  fetchPortalState: vi.fn(),
   fetchPortalCollaborators: vi.fn(),
   usePortalAccountContext: vi.fn(),
 }));
@@ -25,6 +26,7 @@ vi.mock("../../api/portalRequests", () => ({
 
 vi.mock("../../api/portal", () => ({
   fetchPortalUsage: mocks.fetchPortalUsage,
+  fetchPortalState: mocks.fetchPortalState,
   fetchPortalCollaborators: mocks.fetchPortalCollaborators,
 }));
 
@@ -72,6 +74,11 @@ describe("PortalRequestsPage", () => {
     });
     mocks.listPortalRequests.mockResolvedValue([pendingRequest]);
     mocks.createPortalRequest.mockResolvedValue({ ...pendingRequest, id: 8 });
+    mocks.fetchPortalState.mockResolvedValue({
+      account_id: 101,
+      account_role: "portal_manager",
+      can_manage_portal_users: true,
+    });
     mocks.fetchPortalUsage.mockResolvedValue({
       used_bytes: 16 * 1024 ** 3,
       used_objects: 42,
@@ -239,6 +246,11 @@ describe("PortalRequestsPage", () => {
   });
 
   it("keeps managed request actions unavailable for non-manager Portal users", async () => {
+    mocks.fetchPortalState.mockResolvedValue({
+      account_id: 101,
+      account_role: "portal_user",
+      can_manage_portal_users: false,
+    });
     mocks.usePortalAccountContext.mockReturnValue({
       accountIdForApi: "101",
       hasAccountContext: true,
@@ -261,5 +273,28 @@ describe("PortalRequestsPage", () => {
     expect(screen.queryByRole("heading", { name: "Add or remove a collaborator" })).not.toBeInTheDocument();
     expect(screen.getByText("Only storage managers can submit collaborator or storage-limit requests for this project.")).toBeInTheDocument();
     expect(mocks.fetchPortalCollaborators).not.toHaveBeenCalled();
+  });
+
+  it("uses the authoritative Portal capability when the account summary omits the manager role", async () => {
+    mocks.usePortalAccountContext.mockReturnValue({
+      accountIdForApi: "101",
+      hasAccountContext: true,
+      selectedAccount: {
+        id: "101",
+        name: "Research Account",
+        tags: [],
+      },
+      loading: false,
+      error: null,
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("button", { name: "Request help" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Manage membership" }),
+    ).toBeEnabled();
   });
 });

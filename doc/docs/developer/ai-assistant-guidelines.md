@@ -50,12 +50,17 @@ It defines the executor identity used for S3 operations and may be:
 
 - Native S3 and IAM workflows must not bypass a storage-side decision.
 - For Portal Storage Spaces, the application source of truth is the database:
-  `portal_storage_space_metadata` defines the space and primary owner, and
-  `portal_storage_space_grants` defines delegated `Viewer`, `Editor`, and
-  `Owner` roles.
+  `portal_storage_space_metadata` defines the space and, only for a private
+  space, its owner. `portal_storage_space_grants` defines delegated `Viewer`
+  and `Editor` roles for team spaces.
 - Portal IAM policies are projections used for personal S3 keys and external
   enforcement. They must not be imported as grants or used to derive Portal
   listings.
+- Every `portal_manager` has full Portal UI and object access to every Storage
+  Space in the project. This data-plane access is carried by the code-owned
+  account-wide `portal-manager` IAM group policy. Technical buckets must add a
+  resource-policy `Deny` for the individual manager IAM principals before that
+  group access is granted.
 - The application must never silently widen storage privileges outside the
   documented Portal orchestration.
 - UI rights such as manager, portal, browser, ceph-admin, or storage-ops gate

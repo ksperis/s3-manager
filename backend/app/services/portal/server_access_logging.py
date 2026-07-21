@@ -13,6 +13,7 @@ from ._shared import *
 
 
 SERVER_ACCESS_LOGGING_SID = "S3ManagerPortalServerAccessLogging"
+SERVER_ACCESS_LOGGING_MANAGER_DENY_SID = "S3ManagerPortalManagerDeny"
 SERVER_ACCESS_LOGGING_PREFIX_ROOT = "portal-server-access/"
 SERVER_ACCESS_LOGGING_RETENTION_RULE_ID = "ExpirePortalServerAccessLogs"
 SERVER_ACCESS_LOGGING_RETENTION_DEFAULT_DAYS = 30
@@ -199,7 +200,12 @@ class PortalServerAccessLoggingMixin:
         statements = policy.get("Statement") or []
         if not isinstance(statements, list):
             statements = [statements]
-        filtered = [stmt for stmt in statements if not (isinstance(stmt, dict) and stmt.get("Sid") == SERVER_ACCESS_LOGGING_SID)]
+        managed_sids = {SERVER_ACCESS_LOGGING_SID, SERVER_ACCESS_LOGGING_MANAGER_DENY_SID}
+        filtered = [
+            stmt
+            for stmt in statements
+            if not (isinstance(stmt, dict) and stmt.get("Sid") in managed_sids)
+        ]
         filtered.append(
             {
                 "Sid": SERVER_ACCESS_LOGGING_SID,
@@ -213,6 +219,20 @@ class PortalServerAccessLoggingMixin:
                 },
             }
         )
+        manager_principals = self._portal_manager_principal_arns(account)
+        if manager_principals:
+            filtered.append(
+                {
+                    "Sid": SERVER_ACCESS_LOGGING_MANAGER_DENY_SID,
+                    "Effect": "Deny",
+                    "Principal": {"AWS": manager_principals},
+                    "Action": "s3:*",
+                    "Resource": [
+                        f"arn:aws:s3:::{log_bucket}",
+                        f"arn:aws:s3:::{log_bucket}/*",
+                    ],
+                }
+            )
         policy["Statement"] = filtered
         if "Version" not in policy:
             policy["Version"] = "2012-10-17"
@@ -235,6 +255,22 @@ class PortalServerAccessLoggingMixin:
             secret_key=secret_key,
             **kwargs,
         )
+
+    def _sync_portal_server_access_log_bucket_policy_if_present(self, account: S3Account) -> None:
+        if not self._portal_server_access_logging_account_ready(account):
+            return
+        log_bucket = self._portal_server_access_log_bucket_name(account)
+        client = self._portal_server_access_client(account)
+        try:
+            client.head_bucket(Bucket=log_bucket)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else "")
+            if code.lower() in {"404", "notfound", "nosuchbucket"}:
+                return
+            raise RuntimeError(f"Unable to inspect Portal access log bucket '{log_bucket}': {exc}") from exc
+        except BotoCoreError as exc:
+            raise RuntimeError(f"Unable to inspect Portal access log bucket '{log_bucket}': {exc}") from exc
+        self._ensure_portal_server_access_log_bucket_policy(account, log_bucket)
 
     def _put_portal_server_access_logging(self, account: S3Account, source_bucket: str, log_bucket: str) -> None:
         if source_bucket == log_bucket:
