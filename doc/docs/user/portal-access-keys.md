@@ -1,4 +1,4 @@
-# Portal: External Tools
+# Portal: External S3 Tools
 
 Use this page when an app, script, desktop client, or external partner cannot
 work through the Portal directly.
@@ -17,7 +17,9 @@ workflow.
 
 ## Steps
 
-1. Open **Portal > External tools**.
+1. Open **Portal > External tools**. This page exposes the S3 endpoint, bucket
+   name, access key, and other technical connection details required by S3
+   clients.
 2. Read **Before connecting a tool** and confirm that Portal sharing is not a
    better fit.
 3. Start **New tool access**.
@@ -38,7 +40,9 @@ workflow.
 ## Important limits
 
 - The Portal runtime access used by the application is intentionally hidden.
-- Tool access entries may have a maximum count set by admins.
+- The configured key limit applies to each IAM user. When your personal IAM
+  user reaches it, **For myself** is unavailable, but an external access can
+  still be created because it receives a separate IAM user.
 - Personal tool access follows your current Portal space grants.
 - External tool access is limited to one space and to the selected
   permission level.
@@ -55,8 +59,8 @@ intended space with the selected permission level.
 
 ## If tool access creation is unavailable
 
-Ask an admin whether External tools is enabled and whether your project reached
-the maximum number of tool access entries.
+Ask an admin whether External tools is enabled. If only **For myself** is
+unavailable, delete an unused personal S3 access key before creating another.
 
 ## Related pages
 

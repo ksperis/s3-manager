@@ -37,24 +37,26 @@ Portal managers can browse and manage every project space.
 
 1. Open **Portal > Collaborators**.
 2. **Project members** opens by default. Use it to search every active member
-   of the selected project. Project membership makes a person available for
-   collaboration; it does not automatically grant access to every file.
-3. Open **Access by space** for a read-only overview of spaces shared with you
+   of the selected project.
+3. Use **Request member** to ask a storage admin to add someone to the project.
+   For a direct Portal member, use **Request removal** in the row actions to
+   ask for their removal. Follow both requests in **Portal > Help requests**.
+4. Open **Access by space** for a read-only overview of spaces shared with you
    and direct access you granted. Choose **Manage in space** on a row when a
    role or access needs to change.
-4. To invite someone, open **Portal > Spaces**, choose the space, then open its
+5. To invite someone, open **Portal > Spaces**, choose the space, then open its
    **Collaborators** tab. You can also use **Invite people** from the space
    header or file area to open the same contextual workflow.
-5. Choose **Add people**, search by name or email, select the least-powerful
+6. Choose **Add people**, search by name or email, select the least-powerful
    role that fits the work, then confirm **Add people**.
-6. If no person matches, choose **Request collaborator access**, add their name
+7. If no person matches, choose **Request collaborator access**, add their name
    and email, then send the request. An admin must add them to the project
    before you can invite them to a space. Follow the status in **Portal > Help
    requests**, then return to the same space to finish the invitation.
-7. Change a direct collaborator's role from the space's **Collaborators** tab.
+8. Change a direct collaborator's role from the space's **Collaborators** tab.
    Review the person, current role, new role, and space in the confirmation
    dialog before applying the change.
-8. To share outside the project, open **External links** in the global
+9. To share outside the project, open **External links** in the global
    Collaborators page. Filter by space to copy or revoke an existing link. New
    links are always created from the actions of the file being shared.
 

@@ -61,13 +61,16 @@ function renderPage(initialEntry = "/portal/access-keys") {
 }
 
 async function openSetupDialog(user: ReturnType<typeof userEvent.setup>) {
+  if (!screen.queryByRole("button", { name: "Download setup" })) {
+    await user.click(screen.getByRole("button", { name: "Connect tool" }));
+  }
   await user.click(await screen.findByRole("button", { name: "Download setup" }));
   return screen.getByRole("dialog", { name: "Download setup details" });
 }
 
 function getCreateWorkflowPage(): HTMLElement {
-  const page = screen.getByRole("heading", { name: "Create tool access" }).closest(".workflow-page");
-  if (!page) throw new Error("Create tool access workflow page not found");
+  const page = screen.getByRole("heading", { name: "Create S3 tool access" }).closest(".workflow-page");
+  if (!page) throw new Error("Create S3 tool access workflow page not found");
   return page as HTMLElement;
 }
 
@@ -121,10 +124,17 @@ describe("PortalAccessKeysPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "External tools" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "External S3 tools" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect tool" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tool access (1)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Connect an external tool" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button").filter((button) => ["Tool access (1)", "Connect tool"].includes(button.textContent ?? "")).map((button) => button.textContent)).toEqual([
+      "Tool access (1)",
+      "Connect tool",
+    ]);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(await screen.findByText("AK-USER")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect tool" }));
+    expect(screen.getByRole("heading", { name: "Connect an external S3 tool" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByText(/Use external-tool access only when someone cannot work through Portal sharing/i)).toBeInTheDocument();
@@ -151,6 +161,7 @@ describe("PortalAccessKeysPage", () => {
     const user = userEvent.setup();
     renderPage();
 
+    await user.click(await screen.findByRole("button", { name: "Connect tool" }));
     expect(await screen.findByRole("heading", { name: "Before connecting a tool" })).toBeInTheDocument();
     expect(screen.getByText("Use Portal sharing when a collaborator can sign in. Use tool access for apps, scripts, or partners that need a direct storage client.")).toBeInTheDocument();
     expect(screen.getByText("1. Pick the space")).toBeInTheDocument();
@@ -165,7 +176,8 @@ describe("PortalAccessKeysPage", () => {
     mocks.state = { ...mocks.state, access_keys: [] };
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Connect an external tool" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Connect tool" }));
+    expect(await screen.findByRole("heading", { name: "Connect an external S3 tool" })).toBeInTheDocument();
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
 
     expect(screen.queryByRole("heading", { name: "Before connecting a tool" })).not.toBeInTheDocument();
@@ -176,7 +188,7 @@ describe("PortalAccessKeysPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByRole("heading", { name: "Connect an external tool" });
+    await screen.findByRole("heading", { name: "External S3 tools" });
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     const setupDialog = await openSetupDialog(user);
     await user.click(within(setupDialog).getByRole("button", { name: "Connection details" }));
@@ -196,7 +208,7 @@ describe("PortalAccessKeysPage", () => {
     mocks.state = { ...mocks.state, s3_endpoint: "mailto:user@example.test" };
     renderPage();
 
-    await screen.findByRole("heading", { name: "Connect an external tool" });
+    await screen.findByRole("heading", { name: "External S3 tools" });
     const setupDialog = await openSetupDialog(userEvent.setup());
     expect(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" })).toBeDisabled();
     expect(within(setupDialog).getByRole("button", { name: "Connection details" })).toBeEnabled();
@@ -216,6 +228,46 @@ describe("PortalAccessKeysPage", () => {
     expect(await screen.findByText("The secret is shown only once.")).toBeInTheDocument();
     expect(screen.getAllByText("AK-NEW").length).toBeGreaterThan(0);
     expect(screen.getByText("SK-NEW")).toBeInTheDocument();
+  });
+
+  it("limits only the personal IAM user when the create workflow opens", async () => {
+    mocks.state = {
+      ...mocks.state,
+      max_access_keys: 1,
+      access_keys: [
+        {
+          access_key_id: "AK-PERSONAL",
+          status: "Active",
+          is_active: true,
+          target_type: "self",
+        },
+        {
+          access_key_id: "AK-EXTERNAL",
+          status: "Active",
+          is_active: true,
+          target_type: "external",
+          external_email: "existing@example.org",
+          storage_space_id: "research-data",
+          storage_space_name: "Research Data",
+          bucket_name: "research-data-internal",
+          permission: "read_only",
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "New tool access" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "New tool access" }));
+    const workflow = getCreateWorkflowPage();
+
+    expect(within(workflow).getByLabelText("For myself")).toBeDisabled();
+    expect(within(workflow).getByLabelText("For an external user")).toBeChecked();
+    expect(within(workflow).getByText(/personal IAM user already has the maximum of 1 S3 access keys/i)).toBeInTheDocument();
+    expect(within(workflow).getByRole("button", { name: "Create access" })).toBeDisabled();
+
+    await user.type(within(workflow).getByPlaceholderText("name@example.org"), "new-partner@example.org");
+    expect(within(workflow).getByRole("button", { name: "Create access" })).toBeEnabled();
   });
 
   it("creates an external credential for an owned space", async () => {
@@ -265,13 +317,13 @@ describe("PortalAccessKeysPage", () => {
     const user = userEvent.setup();
     renderPage("/portal/access-keys?space_id=research-data-internal&create=external");
 
-    await screen.findByRole("heading", { name: "Create tool access" });
+    await screen.findByRole("heading", { name: "Create S3 tool access" });
     const dialog = getCreateWorkflowPage();
     await waitFor(() => expect(mocks.listPortalStorageSpaces).toHaveBeenCalledWith("101", { sort: "name" }));
     expect(within(dialog).getByLabelText("For an external user")).toBeChecked();
     expect(within(dialog).getByLabelText("Space")).toHaveValue("research-data");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("heading", { name: "Create tool access" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Create S3 tool access" })).not.toBeInTheDocument();
   });
 
   it("never offers a secret-inclusive download for existing keys", async () => {

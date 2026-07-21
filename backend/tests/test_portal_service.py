@@ -5556,6 +5556,21 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     )
     db_session.add(metadata)
     db_session.commit()
+    db_session.add(
+        PortalExternalAccessCredential(
+            account_id=account.id,
+            storage_space_metadata_id=metadata.id,
+            bucket_name=metadata.bucket_name,
+            created_by_user_id=user.id,
+            external_email="existing-partner@example.org",
+            permission="read_only",
+            iam_user_id=f"existing-uid-{permission}",
+            iam_username=f"existing-user-{permission}",
+            access_key_id=f"AK-EXISTING-{permission}",
+            status="Active",
+        )
+    )
+    db_session.commit()
 
     class _FakeIAMService:
         def __init__(self):
@@ -5592,7 +5607,7 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     synced = []
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=4))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(max_portal_user_access_keys=1))
     monkeypatch.setattr(
         service,
         "_sync_storage_space_access_projection",

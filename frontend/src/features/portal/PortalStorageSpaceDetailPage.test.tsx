@@ -602,21 +602,16 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(1);
   });
 
-  it("runs history cleanup with confirmation, progress, and gained-space summary", async () => {
+  it("runs history cleanup after a button-only confirmation and shows progress", async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
-    expect(screen.getByRole("heading", { name: "Clean up history" }).closest(".workflow-page")).toBeInTheDocument();
-    expect(screen.getByText(/deletes older file versions/i)).toBeInTheDocument();
-    const startButton = screen.getByRole("button", { name: "Start cleanup" });
-    expect(startButton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY RESEARCH DATA"), {
-      target: { value: "CLEAN HISTORY RESEARCH DATA" },
-    });
-    fireEvent.click(startButton);
+    const confirmation = screen.getByRole("dialog", { name: "Clean up history" });
+    expect(within(confirmation).getByText(/permanently remove older file history/i)).toBeInTheDocument();
+    expect(within(confirmation).queryByRole("textbox")).not.toBeInTheDocument();
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Start cleanup" }));
 
     await waitFor(() => {
       expect(mocks.streamHistoryCleanupMock).toHaveBeenCalledWith(
@@ -631,22 +626,6 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Versions deleted")).toBeInTheDocument();
     expect(screen.getByText("Markers removed")).toBeInTheDocument();
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
-  });
-
-  it("enables history cleanup when a cased space name is typed as displayed uppercase", async () => {
-    mocks.hookResult.workspace.spaces[0].name = "Test1";
-
-    renderPage();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
-
-    const startButton = screen.getByRole("button", { name: "Start cleanup" });
-    fireEvent.change(screen.getByLabelText("Type CLEAN HISTORY TEST1"), {
-      target: { value: "CLEAN HISTORY TEST1" },
-    });
-
-    expect(startButton).toBeEnabled();
   });
 
   it("shows history cleanup disabled when the account override turns it off", async () => {

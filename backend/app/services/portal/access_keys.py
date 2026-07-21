@@ -66,17 +66,6 @@ class PortalAccessKeysMixin:
             max_access_keys=portal_settings.max_portal_user_access_keys,
         )
 
-    def _active_external_access_key_count(self, user: User, account: S3Account) -> int:
-        return (
-            self.db.query(PortalExternalAccessCredential)
-            .filter(
-                PortalExternalAccessCredential.account_id == account.id,
-                PortalExternalAccessCredential.created_by_user_id == user.id,
-                PortalExternalAccessCredential.revoked_at.is_(None),
-            )
-            .count()
-        )
-
     def _list_external_credentials(
         self,
         user: User,
@@ -128,24 +117,13 @@ class PortalAccessKeysMixin:
             raise PortalAccessKeyManagementDisabled("Portal access-key management is disabled for this account.")
         return portal_settings
 
-    def _personal_access_key_count(self, user: User, account: S3Account, iam_service: RGWIAMService) -> int:
-        link = self._existing_portal_link(user, account)
-        if not link or not link.iam_username:
-            return 0
-        if not iam_service.get_user(link.iam_username):
-            return 0
-        return len(self._list_access_keys(link, iam_service, include_portal=False))
-
-    def _ensure_user_access_key_limit(
+    def _ensure_personal_iam_user_access_key_limit(
         self,
         *,
-        user: User,
-        access: "AccountAccess",
         portal_settings: PortalSettings,
         personal_key_count: int,
     ) -> None:
-        total_keys = personal_key_count + self._active_external_access_key_count(user, access.account)
-        if total_keys >= portal_settings.max_portal_user_access_keys:
+        if personal_key_count >= portal_settings.max_portal_user_access_keys:
             raise PortalAccessKeyLimitExceeded(
                 f"Maximum IAM user keys reached ({portal_settings.max_portal_user_access_keys}). Delete a key before creating a new one."
             )
@@ -177,9 +155,7 @@ class PortalAccessKeysMixin:
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         existing_user_keys = self._list_access_keys(link, iam_service, include_portal=False)
-        self._ensure_user_access_key_limit(
-            user=user,
-            access=access,
+        self._ensure_personal_iam_user_access_key_limit(
             portal_settings=portal_settings,
             personal_key_count=len(existing_user_keys),
         )
@@ -247,15 +223,9 @@ class PortalAccessKeysMixin:
         access: "AccountAccess",
         payload: PortalAccessKeyCreate,
     ) -> PortalAccessKey:
-        portal_settings = self._ensure_access_key_management_allowed(access)
+        self._ensure_access_key_management_allowed(access)
         metadata, external_email, permission = self._validate_external_access_key_request(user, access, payload)
         iam_service = self._get_iam_service(access.account)
-        self._ensure_user_access_key_limit(
-            user=user,
-            access=access,
-            portal_settings=portal_settings,
-            personal_key_count=self._personal_access_key_count(user, access.account, iam_service),
-        )
         iam_username = self._external_username(access.account, metadata, external_email)
         iam_user: Optional[IAMUser] = None
         new_key: Optional[ModelAccessKey] = None

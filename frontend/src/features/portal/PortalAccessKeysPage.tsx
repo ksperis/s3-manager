@@ -97,7 +97,7 @@ export default function PortalAccessKeysPage() {
   const [createdKey, setCreatedKey] = useState<PortalAccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAccessKeyAction | null>(null);
-  const [activeTab, setActiveTab] = useState<AccessKeysTab>("connect");
+  const [activeTab, setActiveTab] = useState<AccessKeysTab>("access-list");
   const [guideDismissed, setGuideDismissed] = useState(false);
   const [createWizardOpen, setCreateWizardOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
@@ -224,9 +224,13 @@ export default function PortalAccessKeysPage() {
     return keys;
   }, [createdKey, state?.access_keys]);
   const activeKeys = useMemo(() => visibleKeys.filter(isKeyActive), [visibleKeys]);
+  const personalKeys = useMemo(
+    () => visibleKeys.filter((key) => key.target_type !== "external"),
+    [visibleKeys]
+  );
   const canManageAccessKeys = Boolean(state?.can_manage_access_keys);
   const maxAccessKeys = state?.max_access_keys ?? 0;
-  const maxReached = maxAccessKeys > 0 && visibleKeys.length >= maxAccessKeys;
+  const personalAccessLimitReached = maxAccessKeys > 0 && personalKeys.length >= maxAccessKeys;
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: visibleKeys.length });
   const selectedSpace = useMemo(
     () => storageSpaces.find((space) => space.id === selectedSpaceId) ?? null,
@@ -295,7 +299,6 @@ export default function PortalAccessKeysPage() {
       requestedCreateTarget !== "external" ||
       !state ||
       !canManageAccessKeys ||
-      maxReached ||
       !requestedSpaceId
     ) {
       return;
@@ -305,11 +308,11 @@ export default function PortalAccessKeysPage() {
     setStorageSpacesError(null);
     setCreateWizardOpen(true);
     setQueryCreateHandled(true);
-  }, [canManageAccessKeys, maxReached, queryCreateHandled, requestedCreateTarget, requestedSpaceId, state]);
+  }, [canManageAccessKeys, queryCreateHandled, requestedCreateTarget, requestedSpaceId, state]);
 
   const openCreateWizard = () => {
     if (createDisabled) return;
-    setCreateTarget("self");
+    setCreateTarget(personalAccessLimitReached ? "external" : "self");
     setExternalEmail("");
     setExternalPermission("read_only");
     setSelectedSpaceId(storageSpaces[0]?.id || "");
@@ -323,7 +326,8 @@ export default function PortalAccessKeysPage() {
   };
 
   const handleCreateKey = async () => {
-    if (!accountIdForApi || !canManageAccessKeys || maxReached) return;
+    if (!accountIdForApi || !canManageAccessKeys) return;
+    if (createTarget === "self" && personalAccessLimitReached) return;
     const payload: PortalAccessKeyCreate =
       createTarget === "external"
         ? {
@@ -455,10 +459,11 @@ export default function PortalAccessKeysPage() {
     }
   };
 
-  const createDisabled = !state || !canManageAccessKeys || maxReached || Boolean(busy);
+  const createDisabled = !state || !canManageAccessKeys || Boolean(busy);
   const createWizardSubmitDisabled =
     busy === "create" ||
     !accountIdForApi ||
+    (createTarget === "self" && personalAccessLimitReached) ||
     (createTarget === "external" &&
       (!selectedSpaceId || !externalEmail.trim() || storageSpacesLoading || Boolean(storageSpacesError)));
   const accessKeyColumns: DataTableColumn<PortalAccessKey>[] = [
@@ -544,13 +549,13 @@ export default function PortalAccessKeysPage() {
   return (
     <div className={workflowPageHostClass(createWizardOpen)}>
       <PageHeader
-        title={t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" })}
+        title={t({ en: "External S3 tools", fr: "Outils S3 externes", de: "Externe S3-Werkzeuge" })}
         description={t({
-          en: "Connect a desktop app or external partner only when they cannot work through the Portal. Keep each access limited to the right space.",
-          fr: "Connectez une application de bureau ou un partenaire externe uniquement lorsqu'ils ne peuvent pas travailler dans le portail. Limitez chaque accès au bon espace.",
-          de: "Verbinden Sie eine Desktop-App oder externe Partner nur, wenn sie nicht im Portal arbeiten können. Begrenzen Sie jeden Zugriff auf den passenden Bereich.",
+          en: "Create S3 credentials for a desktop app, script, or external partner. Keep each access limited to the right space.",
+          fr: "Créez des identifiants S3 pour une application de bureau, un script ou un partenaire externe. Limitez chaque accès au bon espace.",
+          de: "Erstellen Sie S3-Zugangsdaten für Desktop-Apps, Skripte oder externe Partner. Begrenzen Sie jeden Zugriff auf den passenden Bereich.",
         })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" }) })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "External S3 tools", fr: "Outils S3 externes", de: "Externe S3-Werkzeuge" }) })}
         actions={[
           {
             label: busy === "create" ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "New tool access", fr: "Nouvel accès outil", de: "Neuer Werkzeugzugriff" }),
@@ -576,16 +581,8 @@ export default function PortalAccessKeysPage() {
           })}
         </PageBanner>
       )}
-      {state && canManageAccessKeys && maxReached && (
-        <PageBanner tone="info">{t({ en: "The maximum number of tool access entries has been reached.", fr: "Le nombre maximal d'accès outil est atteint.", de: "Die maximale Anzahl von Werkzeugzugriffen wurde erreicht." })}</PageBanner>
-      )}
-
       <PortalPageTabs
         tabs={[
-          {
-            id: "connect",
-            label: t({ en: "Connect tool", fr: "Connecter un outil", de: "Werkzeug verbinden" }),
-          },
           {
             id: "access-list",
             label: t({
@@ -593,6 +590,10 @@ export default function PortalAccessKeysPage() {
               fr: `Accès outil (${visibleKeys.length})`,
               de: `Werkzeugzugriff (${visibleKeys.length})`,
             }),
+          },
+          {
+            id: "connect",
+            label: t({ en: "Connect tool", fr: "Connecter un outil", de: "Werkzeug verbinden" }),
           },
         ]}
         activeTab={activeTab}
@@ -703,7 +704,7 @@ export default function PortalAccessKeysPage() {
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 id="portal-external-tool-access" className={cx("text-sm font-bold", uiTitleTextClass)}>
-                {t({ en: "Connect an external tool", fr: "Connecter un outil externe", de: "Externes Werkzeug verbinden" })}
+                {t({ en: "Connect an external S3 tool", fr: "Connecter un outil S3 externe", de: "Externes S3-Werkzeug verbinden" })}
               </h2>
               <p className={cx("mt-1 ui-caption", uiMutedTextClass)}>
                 {t({
@@ -883,7 +884,7 @@ export default function PortalAccessKeysPage() {
               </p>
               <dl className="mt-3 grid gap-3 ui-caption md:grid-cols-4">
                 <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "Service address", fr: "Adresse du service", de: "Serviceadresse" })}</dt>
+                  <dt className={uiMutedTextClass}>{t({ en: "S3 endpoint", fr: "Endpoint S3", de: "S3-Endpunkt" })}</dt>
                   <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{connectionEndpointLabel}</dd>
                 </div>
                 <div>
@@ -891,7 +892,7 @@ export default function PortalAccessKeysPage() {
                   <dd className={cx("break-all font-semibold", uiTitleTextClass)}>{selectedConnection?.storageSpaceName ?? "-"}</dd>
                 </div>
                 <div>
-                  <dt className={uiMutedTextClass}>{t({ en: "Storage name", fr: "Nom de stockage", de: "Speichername" })}</dt>
+                  <dt className={uiMutedTextClass}>{t({ en: "S3 bucket name", fr: "Nom du bucket S3", de: "S3-Bucket-Name" })}</dt>
                   <dd className={cx("break-all font-mono font-semibold", uiTitleTextClass)}>{selectedConnection?.bucketName ?? "-"}</dd>
                 </div>
                 <div>
@@ -930,7 +931,7 @@ export default function PortalAccessKeysPage() {
               })
             }
             showHeading={false}
-            countLabel={t({ en: `${visibleKeys.length}/${maxAccessKeys || "-"} access`, fr: `${visibleKeys.length}/${maxAccessKeys || "-"} accès`, de: `${visibleKeys.length}/${maxAccessKeys || "-"} Zugriffe` })}
+            countLabel={t({ en: `${visibleKeys.length} access`, fr: `${visibleKeys.length} accès`, de: `${visibleKeys.length} Zugriffe` })}
           />
           <DataTableShell
             columns={accessKeyColumns}
@@ -953,11 +954,11 @@ export default function PortalAccessKeysPage() {
 
       {createWizardOpen ? (
         <WorkflowPage
-          title={t({ en: "Create tool access", fr: "Créer un accès outil", de: "Werkzeugzugriff erstellen" })}
+          title={t({ en: "Create S3 tool access", fr: "Créer un accès outil S3", de: "S3-Werkzeugzugriff erstellen" })}
           description={t({
-            en: "Choose the recipient, scope and permissions, then keep the one-time secret visible until you are done.",
-            fr: "Choisissez le destinataire, le périmètre et les droits, puis conservez le secret à usage unique jusqu'à la fin.",
-            de: "Wählen Sie Empfänger, Umfang und Rechte und behalten Sie das einmalige Geheimnis bis zum Abschluss sichtbar.",
+            en: "Choose the IAM user, S3 scope, and permissions, then keep the one-time secret visible until you are done.",
+            fr: "Choisissez l'utilisateur IAM, le périmètre S3 et les droits, puis conservez le secret à usage unique jusqu'à la fin.",
+            de: "Wählen Sie IAM-Benutzer, S3-Umfang und Rechte und behalten Sie das einmalige Geheimnis bis zum Abschluss sichtbar.",
           })}
           breadcrumbs={[
             { label: "Portal" },
@@ -971,6 +972,15 @@ export default function PortalAccessKeysPage() {
           <div className="space-y-4">
             {error ? <PageBanner tone="error">{error}</PageBanner> : null}
             {storageSpacesError ? <PageBanner tone="warning">{storageSpacesError}</PageBanner> : null}
+            {personalAccessLimitReached ? (
+              <PageBanner tone="info">
+                {t({
+                  en: `Your personal IAM user already has the maximum of ${maxAccessKeys} S3 access keys. You can still create access for an external user because it uses a separate IAM user.`,
+                  fr: `Votre utilisateur IAM personnel possède déjà le maximum de ${maxAccessKeys} clés d'accès S3. Vous pouvez encore créer un accès pour un utilisateur externe, car il utilise un utilisateur IAM distinct.`,
+                  de: `Ihr persönlicher IAM-Benutzer hat bereits das Maximum von ${maxAccessKeys} S3-Zugriffsschlüsseln. Für externe Benutzer können Sie weiterhin Zugriff erstellen, da dafür ein separater IAM-Benutzer verwendet wird.`,
+                })}
+              </PageBanner>
+            ) : null}
             <section className="space-y-2">
               <p className={uiLabelClass}>{t({ en: "Recipient", fr: "Destinataire", de: "Empfänger" })}</p>
               <div className="grid gap-2 md:grid-cols-2">
@@ -982,7 +992,7 @@ export default function PortalAccessKeysPage() {
                     className={cx("mt-1", uiRadioClass)}
                     checked={createTarget === "self"}
                     onChange={() => setCreateTarget("self")}
-                    disabled={busy === "create"}
+                    disabled={busy === "create" || personalAccessLimitReached}
                   />
                   <span className="space-y-1">
                     <span className={cx("block ui-body font-semibold", uiTitleTextClass)}>{t({ en: "For myself", fr: "Pour moi-même", de: "Für mich" })}</span>

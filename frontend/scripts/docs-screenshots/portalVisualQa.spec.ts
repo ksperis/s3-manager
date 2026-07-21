@@ -70,9 +70,9 @@ const portalRoutes = [
   {
     path: "/portal/access-keys",
     expected: {
-      en: "External tools",
-      fr: "Outils externes",
-      de: "Externe Werkzeuge",
+      en: "External S3 tools",
+      fr: "Outils S3 externes",
+      de: "Externe S3-Werkzeuge",
     },
   },
   {

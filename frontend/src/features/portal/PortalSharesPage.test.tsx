@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listSharesMock: vi.fn(),
   listPublicLinksMock: vi.fn(),
   revokePublicLinkMock: vi.fn(),
+  createPortalRequestMock: vi.fn(),
   hookResult: {
     workspace: {
       spaces: [
@@ -31,6 +32,10 @@ const mocks = vi.hoisted(() => ({
     accountError: null,
     hasAccountContext: true,
     accountIdForApi: "101",
+    state: {
+      account_role: "portal_manager",
+      can_manage_portal_users: true,
+    },
     collaborators: {
       summary: {
         collaborator_count: 2,
@@ -57,7 +62,7 @@ const mocks = vi.hoisted(() => ({
           email: "editor@example.com",
           display_name: "Editor User",
           account_role: "portal_user",
-          access_source: "group",
+          access_source: "direct",
           member_since: "2026-06-01T10:00:00Z",
           avatar: {
             preference: "auto",
@@ -85,6 +90,11 @@ vi.mock("../../api/portal", () => ({
     mocks.listSharesMock(...args),
   revokePortalStorageSpacePublicLink: (...args: unknown[]) =>
     mocks.revokePublicLinkMock(...args),
+}));
+
+vi.mock("../../api/portalRequests", () => ({
+  createPortalRequest: (...args: unknown[]) =>
+    mocks.createPortalRequestMock(...args),
 }));
 
 function renderPage() {
@@ -139,6 +149,7 @@ describe("PortalSharesPage", () => {
       },
     ]);
     mocks.revokePublicLinkMock.mockResolvedValue([]);
+    mocks.createPortalRequestMock.mockResolvedValue({ id: 73, status: "pending" });
   });
 
   it("separates project membership, space access, and external links", async () => {
@@ -152,23 +163,57 @@ describe("PortalSharesPage", () => {
       "Access by space",
       "External links",
     ]);
-    expect(
-      screen.getByText(
-        "A project member does not automatically have access to every file. Invite and manage people from the Collaborators tab of the relevant space.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/A project member does not automatically have access to every file/i)).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Project members" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getByText("Project role")).toBeInTheDocument();
     expect(screen.queryByText("Workspace role")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request member" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request removal" })).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("link", { name: "Open spaces" })
         .every((link) => link.getAttribute("href") === "/portal/storage-spaces"),
     ).toBe(true);
+  });
+
+  it("submits project member addition and removal requests from the members view", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Request member" }));
+    const addDialog = screen.getByRole("dialog", { name: "Request a project member" });
+    await user.type(within(addDialog).getByLabelText("Name"), "New Member");
+    await user.type(within(addDialog).getByLabelText("Email"), "new.member@example.org");
+    await user.type(within(addDialog).getByLabelText("Reason (optional)"), "Project onboarding");
+    await user.click(within(addDialog).getByRole("button", { name: "Send request" }));
+
+    await waitFor(() =>
+      expect(mocks.createPortalRequestMock).toHaveBeenCalledWith("101", {
+        request_type: "portal_user_access",
+        target_name: "New Member",
+        target_email: "new.member@example.org",
+        reason: "Project onboarding",
+      }),
+    );
+    expect(await screen.findByText("Member request sent. Track it in Help requests.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Request removal" }));
+    const removeDialog = screen.getByRole("dialog", { name: "Request member removal" });
+    expect(within(removeDialog).getByText("Editor User")).toBeInTheDocument();
+    await user.click(within(removeDialog).getByRole("button", { name: "Send removal request" }));
+
+    await waitFor(() =>
+      expect(mocks.createPortalRequestMock).toHaveBeenLastCalledWith("101", {
+        request_type: "portal_user_removal",
+        target_name: "Editor User",
+        target_email: "editor@example.com",
+        reason: null,
+      }),
+    );
+    expect(await screen.findByText("Removal request sent. Track it in Help requests.")).toBeInTheDocument();
   });
 
   it("keeps the global access overview read-only and routes management to the space", async () => {

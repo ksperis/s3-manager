@@ -58,7 +58,9 @@ including for a space added from an existing bucket. Portal never empties a
 bucket automatically during deletion. Before deleting a space:
 
 1. Remove every current file from the **Files** tab.
-2. Run **History cleanup** to remove older versions and remaining delete markers.
+2. Run **History cleanup**, review the impact in the confirmation dialog, and
+   confirm **Start cleanup** to remove older versions and remaining delete
+   markers. No confirmation phrase is required.
 3. Return to **Space settings** and confirm **Delete space** after usage shows
    zero files and zero storage.
 

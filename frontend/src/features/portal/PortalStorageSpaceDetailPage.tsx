@@ -151,8 +151,8 @@ export default function PortalStorageSpaceDetailPage() {
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataBusy, setMetadataBusy] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [historyCleanupConfirmOpen, setHistoryCleanupConfirmOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
-  const [historyCleanupConfirmation, setHistoryCleanupConfirmation] = useState("");
   const [historyCleanupRunning, setHistoryCleanupRunning] = useState(false);
   const [historyCleanupProgress, setHistoryCleanupProgress] = useState<PortalStorageSpaceVersionCleanupProgress | null>(null);
   const [historyCleanupResult, setHistoryCleanupResult] = useState<PortalStorageSpaceVersionCleanupResult | null>(null);
@@ -710,8 +710,7 @@ export default function PortalStorageSpaceDetailPage() {
 
   const openHistoryCleanupDialog = () => {
     if (!canCleanHistory) return;
-    setHistoryCleanupDialogOpen(true);
-    setHistoryCleanupConfirmation("");
+    setHistoryCleanupConfirmOpen(true);
     setHistoryCleanupProgress(null);
     setHistoryCleanupResult(null);
     setHistoryCleanupError(null);
@@ -721,7 +720,6 @@ export default function PortalStorageSpaceDetailPage() {
     if (historyCleanupRunning) return;
     historyCleanupAbortRef.current?.abort();
     setHistoryCleanupDialogOpen(false);
-    setHistoryCleanupConfirmation("");
     setHistoryCleanupProgress(null);
     setHistoryCleanupResult(null);
     setHistoryCleanupError(null);
@@ -733,7 +731,6 @@ export default function PortalStorageSpaceDetailPage() {
 
   const runHistoryCleanup = async () => {
     if (!accountIdForApi || !canCleanHistory || historyCleanupRunning) return;
-    if (historyCleanupConfirmation !== expectedHistoryCleanupConfirmation) return;
     const controller = new AbortController();
     historyCleanupAbortRef.current = controller;
     setHistoryCleanupRunning(true);
@@ -745,7 +742,7 @@ export default function PortalStorageSpaceDetailPage() {
       const result = await streamPortalStorageSpaceVersionCleanup(
         accountIdForApi,
         space.id,
-        { confirmation: historyCleanupConfirmation },
+        { confirmation: expectedHistoryCleanupConfirmation },
         {
           signal: controller.signal,
           onProgress: (event) => setHistoryCleanupProgress(event),
@@ -779,6 +776,13 @@ export default function PortalStorageSpaceDetailPage() {
       setHistoryCleanupRunning(false);
       historyCleanupAbortRef.current = null;
     }
+  };
+
+  const confirmHistoryCleanup = () => {
+    if (!canCleanHistory || historyCleanupRunning) return;
+    setHistoryCleanupConfirmOpen(false);
+    setHistoryCleanupDialogOpen(true);
+    void runHistoryCleanup();
   };
 
   const storageSpaceSettingsCard = hasFullAccess ? (
@@ -1572,6 +1576,45 @@ export default function PortalStorageSpaceDetailPage() {
         </WorkflowPage>
       ) : null}
 
+      {historyCleanupConfirmOpen ? (
+        <ConfirmActionDialog
+          title={t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
+          description={t({
+            en: "Confirm that you want to permanently remove older file history from this space.",
+            fr: "Confirmez la suppression définitive de l'ancien historique des fichiers de cet espace.",
+            de: "Bestätigen Sie, dass ältere Dateihistorie aus diesem Bereich dauerhaft entfernt werden soll.",
+          })}
+          confirmLabel={t({ en: "Start cleanup", fr: "Démarrer le nettoyage", de: "Bereinigung starten" })}
+          cancelLabel={t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+          details={[
+            { label: t({ en: "Space", fr: "Espace", de: "Bereich" }), value: space.name },
+            {
+              label: t({ en: "Current storage", fr: "Stockage courant", de: "Aktueller Speicher" }),
+              value: formatBytes(space.usedBytes),
+            },
+          ]}
+          impacts={[
+            t({
+              en: "Current files stay available.",
+              fr: "Les fichiers courants restent disponibles.",
+              de: "Aktuelle Dateien bleiben verfügbar.",
+            }),
+            t({
+              en: "Older file versions and leftover deletion records are permanently removed.",
+              fr: "Les anciennes versions de fichiers et les traces de suppression restantes sont supprimées définitivement.",
+              de: "Ältere Dateiversionen und verbliebene Löschvermerke werden dauerhaft entfernt.",
+            }),
+            t({
+              en: "The cleanup scans the entire space and can take some time.",
+              fr: "Le nettoyage parcourt tout l'espace et peut prendre du temps.",
+              de: "Die Bereinigung durchsucht den gesamten Bereich und kann einige Zeit dauern.",
+            }),
+          ]}
+          onCancel={() => setHistoryCleanupConfirmOpen(false)}
+          onConfirm={confirmHistoryCleanup}
+        />
+      ) : null}
+
       {historyCleanupDialogOpen ? (
         <WorkflowPage
           title={t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
@@ -1609,19 +1652,6 @@ export default function PortalStorageSpaceDetailPage() {
                 <dd className={cx("mt-1 font-bold", uiTitleTextClass)}>{formatBytes(space.usedBytes)}</dd>
               </div>
             </dl>
-
-            <UiInput
-              label={t({
-                en: `Type ${expectedHistoryCleanupConfirmation}`,
-                fr: `Tapez ${expectedHistoryCleanupConfirmation}`,
-                de: `${expectedHistoryCleanupConfirmation} eingeben`,
-              })}
-              size="compact"
-              className="h-9 font-mono"
-              value={historyCleanupConfirmation}
-              disabled={historyCleanupRunning || Boolean(historyCleanupResult)}
-              onChange={(event) => setHistoryCleanupConfirmation(event.target.value)}
-            />
 
             {historyCleanupProgress ? (
               <div className="rounded-md border border-[color:var(--ui-border)] p-3">
@@ -1712,7 +1742,6 @@ export default function PortalStorageSpaceDetailPage() {
                   onClick={runHistoryCleanup}
                   disabled={
                     Boolean(historyCleanupResult) ||
-                    historyCleanupConfirmation !== expectedHistoryCleanupConfirmation ||
                     !canCleanHistory
                   }
                 >

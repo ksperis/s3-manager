@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import {
+  type FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -18,6 +19,7 @@ import {
   type PortalPublicLink,
   type PortalStorageSpaceShare,
 } from "../../api/portal";
+import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
@@ -25,11 +27,13 @@ import DataTableShell, {
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
+import Modal from "../../components/Modal";
 import {
   tableActionButtonClasses,
   tableDeleteActionClasses,
 } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -39,6 +43,8 @@ import {
   uiButtonBaseClass,
   uiButtonVariants,
   uiDividerClass,
+  uiInputClass,
+  uiLabelClass,
   uiMutedTextClass,
   uiPanelMutedClass,
 } from "../../components/ui/styles";
@@ -64,7 +70,8 @@ import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 type ShareTab = "with" | "by";
 type CollaboratorsViewTab = "members" | "access" | "links";
 type PendingShareAction =
-  { type: "revoke-public-link"; link: PortalPublicLink };
+  | { type: "revoke-public-link"; link: PortalPublicLink }
+  | { type: "request-member-removal"; collaborator: PortalCollaborator };
 type ShareRow = {
   id: string;
   userId?: number | null;
@@ -207,12 +214,18 @@ function CollaboratorsInventory({
   error,
   query,
   onQueryChange,
+  canRequestRemoval,
+  requestBusy,
+  onRequestRemoval,
 }: {
   collaborators: PortalCollaborator[];
   loading: boolean;
   error?: string | null;
   query: string;
   onQueryChange: (value: string) => void;
+  canRequestRemoval: boolean;
+  requestBusy: boolean;
+  onRequestRemoval: (collaborator: PortalCollaborator) => void;
 }) {
   const { locale, t } = useI18n();
   const term = query.trim().toLowerCase();
@@ -306,8 +319,35 @@ function CollaboratorsInventory({
             ? portalDateLabel(collaborator.member_since, locale)
             : "-",
       },
+      ...(canRequestRemoval
+        ? [
+            {
+              id: "action",
+              label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+              align: "right" as const,
+              mobileRole: "actions" as const,
+              render: (collaborator: PortalCollaborator) =>
+                collaborator.account_role === "portal_user" && collaborator.access_source === "direct" ? (
+                  <button
+                    type="button"
+                    className={tableDeleteActionClasses}
+                    disabled={requestBusy}
+                    onClick={() => onRequestRemoval(collaborator)}
+                  >
+                    {t({
+                      en: "Request removal",
+                      fr: "Demander le retrait",
+                      de: "Entfernung anfragen",
+                    })}
+                  </button>
+                ) : (
+                  <span className={uiMutedTextClass}>-</span>
+                ),
+            },
+          ]
+        : []),
     ],
-    [locale, t],
+    [canRequestRemoval, locale, onRequestRemoval, requestBusy, t],
   );
 
   return (
@@ -412,18 +452,31 @@ export default function PortalSharesPage() {
   const [pendingAction, setPendingAction] = useState<PendingShareAction | null>(
     null,
   );
+  const [memberRequestOpen, setMemberRequestOpen] = useState(false);
+  const [memberRequestName, setMemberRequestName] = useState("");
+  const [memberRequestEmail, setMemberRequestEmail] = useState("");
+  const [memberRequestReason, setMemberRequestReason] = useState("");
+  const [memberRequestError, setMemberRequestError] = useState<string | null>(null);
+  const [memberRequestBusy, setMemberRequestBusy] = useState(false);
   const {
     workspace,
+    state,
     loading,
     error,
     hasAccountContext,
     accountError,
     accountLoading,
     accountIdForApi,
+    selectedAccount,
     collaborators,
     collaboratorsLoading,
     collaboratorsError,
   } = usePortalWorkspaceData({ includeCollaborators: true });
+  const canRequestMemberChanges = Boolean(
+    selectedAccount?.account_role === "portal_manager" ||
+      state?.account_role === "portal_manager" ||
+      state?.can_manage_portal_users,
+  );
   const initialUrlContextApplied = useRef(false);
   const activeCollaboratorSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived"),
@@ -571,6 +624,97 @@ export default function PortalSharesPage() {
     },
     [accountIdForApi],
   );
+
+  const closeMemberRequest = () => {
+    if (memberRequestBusy) return;
+    setMemberRequestOpen(false);
+    setMemberRequestName("");
+    setMemberRequestEmail("");
+    setMemberRequestReason("");
+    setMemberRequestError(null);
+  };
+
+  const handleMemberRequest = async (event: FormEvent) => {
+    event.preventDefault();
+    const targetName = memberRequestName.trim();
+    const targetEmail = memberRequestEmail.trim();
+    if (!accountIdForApi || !canRequestMemberChanges || !targetName || !targetEmail) return;
+    setMemberRequestBusy(true);
+    setMemberRequestError(null);
+    setSharesError(null);
+    setSharesMessage(null);
+    try {
+      await createPortalRequest(accountIdForApi, {
+        request_type: "portal_user_access",
+        target_name: targetName,
+        target_email: targetEmail,
+        reason: memberRequestReason.trim() || null,
+      });
+      setMemberRequestOpen(false);
+      setMemberRequestName("");
+      setMemberRequestEmail("");
+      setMemberRequestReason("");
+      setSharesMessage(
+        t({
+          en: "Member request sent. Track it in Help requests.",
+          fr: "Demande d'ajout envoyée. Suivez-la dans les demandes d'aide.",
+          de: "Mitgliedsanfrage gesendet. Verfolgen Sie sie unter Hilfeanfragen.",
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      setMemberRequestError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to send the member request.",
+            fr: "Impossible d'envoyer la demande d'ajout.",
+            de: "Mitgliedsanfrage kann nicht gesendet werden.",
+          }),
+        ),
+      );
+    } finally {
+      setMemberRequestBusy(false);
+    }
+  };
+
+  const confirmMemberRemovalRequest = async (collaborator: PortalCollaborator) => {
+    if (!accountIdForApi || !canRequestMemberChanges) return;
+    setMemberRequestBusy(true);
+    setSharesError(null);
+    setSharesMessage(null);
+    try {
+      await createPortalRequest(accountIdForApi, {
+        request_type: "portal_user_removal",
+        target_name: collaborator.display_name || null,
+        target_email: collaborator.email,
+        reason: null,
+      });
+      setPendingAction(null);
+      setSharesMessage(
+        t({
+          en: "Removal request sent. Track it in Help requests.",
+          fr: "Demande de retrait envoyée. Suivez-la dans les demandes d'aide.",
+          de: "Entfernungsanfrage gesendet. Verfolgen Sie sie unter Hilfeanfragen.",
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      setSharesError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to send the removal request.",
+            fr: "Impossible d'envoyer la demande de retrait.",
+            de: "Entfernungsanfrage kann nicht gesendet werden.",
+          }),
+        ),
+      );
+      setPendingAction(null);
+    } finally {
+      setMemberRequestBusy(false);
+    }
+  };
 
   const copyPublicLink = useCallback(
     async (link: PortalPublicLink) => {
@@ -758,6 +902,23 @@ export default function PortalSharesPage() {
           }),
         })}
         actions={[
+          ...(canRequestMemberChanges
+            ? [
+                {
+                  label: t({
+                    en: "Request member",
+                    fr: "Demander un membre",
+                    de: "Mitglied anfragen",
+                  }),
+                  onClick: () => {
+                    setMemberRequestError(null);
+                    setMemberRequestOpen(true);
+                  },
+                  variant: "primary" as const,
+                  disabled: memberRequestBusy,
+                },
+              ]
+            : []),
           {
             label: t({
               en: "Open spaces",
@@ -772,16 +933,8 @@ export default function PortalSharesPage() {
         <PageBanner tone="warning">{sharesError}</PageBanner>
       ) : null}
       {sharesMessage ? (
-        <PageBanner tone="info">{sharesMessage}</PageBanner>
+        <PageBanner tone="success">{sharesMessage}</PageBanner>
       ) : null}
-
-      <PageBanner tone="info">
-        {t({
-          en: "A project member does not automatically have access to every file. Invite and manage people from the Collaborators tab of the relevant space.",
-          fr: "Un membre du projet n'accède pas automatiquement à tous les fichiers. Invitez et gérez les personnes depuis l'onglet Collaborateurs de l'espace concerné.",
-          de: "Ein Projektmitglied hat nicht automatisch Zugriff auf alle Dateien. Laden Sie Personen im Tab Mitwirkende des jeweiligen Bereichs ein und verwalten Sie sie dort.",
-        })}
-      </PageBanner>
 
       <PortalPageTabs
         tabs={[
@@ -827,6 +980,11 @@ export default function PortalSharesPage() {
           error={collaboratorsError}
           query={collaboratorQuery}
           onQueryChange={setCollaboratorQuery}
+          canRequestRemoval={canRequestMemberChanges}
+          requestBusy={memberRequestBusy}
+          onRequestRemoval={(collaborator) =>
+            setPendingAction({ type: "request-member-removal", collaborator })
+          }
         />
       ) : null}
 
@@ -990,6 +1148,110 @@ export default function PortalSharesPage() {
             />
           </div>
         </UiCard>
+      ) : null}
+
+      {memberRequestOpen ? (
+        <Modal
+          title={t({
+            en: "Request a project member",
+            fr: "Demander l'ajout d'un membre",
+            de: "Projektmitglied anfragen",
+          })}
+          onClose={closeMemberRequest}
+          closeOnBackdropClick={!memberRequestBusy}
+          closeOnEscape={!memberRequestBusy}
+        >
+          <form className="grid gap-3" onSubmit={handleMemberRequest}>
+            {memberRequestError ? <PageBanner tone="error">{memberRequestError}</PageBanner> : null}
+            <UiInput
+              label={t({ en: "Name", fr: "Nom", de: "Name" })}
+              value={memberRequestName}
+              onChange={(event) => setMemberRequestName(event.target.value)}
+              disabled={memberRequestBusy}
+              required
+            />
+            <UiInput
+              label={t({ en: "Email", fr: "E-mail", de: "E-Mail" })}
+              type="email"
+              value={memberRequestEmail}
+              onChange={(event) => setMemberRequestEmail(event.target.value)}
+              disabled={memberRequestBusy}
+              required
+            />
+            <label className="grid gap-1">
+              <span className={uiLabelClass}>
+                {t({
+                  en: "Reason (optional)",
+                  fr: "Motif (optionnel)",
+                  de: "Grund (optional)",
+                })}
+              </span>
+              <textarea
+                className={cx(uiInputClass, "min-h-[72px] px-3 py-2 ui-body")}
+                value={memberRequestReason}
+                onChange={(event) => setMemberRequestReason(event.target.value)}
+                disabled={memberRequestBusy}
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <UiButton type="button" variant="secondary" onClick={closeMemberRequest} disabled={memberRequestBusy}>
+                {t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+              </UiButton>
+              <UiButton
+                type="submit"
+                loading={memberRequestBusy}
+                disabled={memberRequestBusy || !memberRequestName.trim() || !memberRequestEmail.trim()}
+              >
+                {t({ en: "Send request", fr: "Envoyer la demande", de: "Anfrage senden" })}
+              </UiButton>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {pendingAction?.type === "request-member-removal" ? (
+        <ConfirmActionDialog
+          title={t({
+            en: "Request member removal",
+            fr: "Demander le retrait du membre",
+            de: "Mitgliedsentfernung anfragen",
+          })}
+          description={t({
+            en: "Send this project membership removal request to a storage admin for approval.",
+            fr: "Envoyez cette demande de retrait du projet à un administrateur du stockage pour approbation.",
+            de: "Senden Sie diese Anfrage zur Entfernung aus dem Projekt an einen Speicheradministrator.",
+          })}
+          confirmLabel={t({
+            en: "Send removal request",
+            fr: "Envoyer la demande de retrait",
+            de: "Entfernungsanfrage senden",
+          })}
+          loading={memberRequestBusy}
+          details={[
+            {
+              label: t({ en: "Person", fr: "Personne", de: "Person" }),
+              value: pendingAction.collaborator.display_name || pendingAction.collaborator.email,
+            },
+            {
+              label: t({ en: "Email", fr: "E-mail", de: "E-Mail" }),
+              value: pendingAction.collaborator.email,
+            },
+          ]}
+          impacts={[
+            t({
+              en: "Nothing changes until a storage admin approves the request.",
+              fr: "Rien ne change tant qu'un administrateur du stockage n'a pas approuvé la demande.",
+              de: "Bis zur Genehmigung durch einen Speicheradministrator ändert sich nichts.",
+            }),
+            t({
+              en: "Approval removes this person's direct project membership and Portal access for the project.",
+              fr: "L'approbation retire l'appartenance directe de cette personne au projet et son accès Portal à ce projet.",
+              de: "Die Genehmigung entfernt die direkte Projektmitgliedschaft und den Portal-Zugriff dieser Person.",
+            }),
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => confirmMemberRemovalRequest(pendingAction.collaborator)}
+        />
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (
