@@ -67,8 +67,11 @@ describe("PortalActivityPage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Timeline" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Audit details" })).toBeInTheDocument();
+    const activityTabs = screen.getByRole("tablist", { name: "Activity views" });
+    expect(activityTabs.closest(".border-b")).toHaveClass("pb-3");
+    expect(activityTabs.closest(".ui-surface-card")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Timeline" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Audit details" })).toBeInTheDocument();
     expect(screen.getByText("Recent changes")).toBeInTheDocument();
     expect(screen.queryByText("Recent workspace history")).not.toBeInTheDocument();
     expect(screen.queryByText("People active")).not.toBeInTheDocument();
@@ -99,7 +102,7 @@ describe("PortalActivityPage", () => {
     expect(screen.getByText("IP address")).toBeInTheDocument();
     expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Audit details" }));
+    await user.click(screen.getByRole("tab", { name: "Audit details" }));
     expect(screen.getByText("Recent workspace history")).toBeInTheDocument();
     expect(screen.getByText("People active")).toBeInTheDocument();
     expect(screen.getByText("Spaces touched")).toBeInTheDocument();

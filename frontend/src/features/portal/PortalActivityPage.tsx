@@ -7,7 +7,6 @@ import { Link } from "react-router-dom";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
 import UiCard from "../../components/ui/UiCard";
 import UiSelect from "../../components/ui/UiSelect";
 import {
@@ -19,6 +18,7 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
+import PortalPageTabs from "./PortalPageTabs";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import type { PortalWorkspaceActivityItem } from "./portalWorkspaceModel";
 import { resolvePortalWorkspacePageState } from "./portalUi";
@@ -245,88 +245,98 @@ export default function PortalActivityPage() {
           primaryAction={{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces" }}
         />
       ) : (
-        <PageTabs
-          activeTab={activeTab}
-          onChange={setActiveTab}
-          tabs={[
-            {
-              id: "timeline",
-              label: t({ en: "Timeline", fr: "Fil d'activité", de: "Verlauf" }),
-              content: (
-                <UiCard
-                  title={t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}
-                  description={t({
-                    en: "Follow work across your spaces without the audit-only fields.",
-                    fr: "Suivez le travail dans vos espaces sans les champs réservés à l'audit.",
-                    de: "Verfolgen Sie Arbeit in Ihren Bereichen ohne reine Audit-Felder.",
-                  })}
-                >
-                  {activityFilters}
-                  {activityTable(timelineColumns)}
-                </UiCard>
-              ),
-            },
-            {
-              id: "audit",
-              label: t({ en: "Audit details", fr: "Détails d'audit", de: "Auditdetails" }),
-              content: (
-                <div className="space-y-4">
-                  <UiCard
-                    muted
-                    title={t({ en: "Recent workspace history", fr: "Historique récent de l'espace de travail", de: "Letzter Arbeitsbereichsverlauf" })}
-                    description={t({
-                      en: "Use this view when you need a fuller trace of collaboration across visible spaces.",
-                      fr: "Utilisez cette vue quand vous avez besoin d'une trace plus complète de la collaboration dans les espaces visibles.",
-                      de: "Nutzen Sie diese Ansicht, wenn Sie eine vollständigere Spur der Zusammenarbeit in sichtbaren Bereichen benötigen.",
-                    })}
-                  >
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="min-w-0">
-                        <div className={uiLabelClass}>{t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}</div>
-                        <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.events}</div>
-                        <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                          {t({ en: "Visible file and sharing events", fr: "Événements visibles de fichiers et partages", de: "Sichtbare Datei- und Freigabeereignisse" })}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <div className={uiLabelClass}>{t({ en: "People active", fr: "Personnes actives", de: "Aktive Personen" })}</div>
-                        <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.people}</div>
-                        <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                          {t({ en: "Collaborators who changed something", fr: "Collaborateurs ayant changé quelque chose", de: "Mitwirkende, die etwas geändert haben" })}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <div className={uiLabelClass}>{t({ en: "Spaces touched", fr: "Espaces concernés", de: "Betroffene Bereiche" })}</div>
-                        <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.spaces}</div>
-                        <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                          {t({ en: "Spaces with recent changes", fr: "Espaces avec des changements récents", de: "Bereiche mit letzten Änderungen" })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className={cx("mt-4 border-t pt-3 text-xs", uiDividerClass, uiMutedTextClass)}>
-                      {t({
-                        en: "IP addresses and detailed fields stay here, away from the everyday timeline.",
-                        fr: "Les adresses IP et les champs détaillés restent ici, à l'écart du fil quotidien.",
-                        de: "IP-Adressen und Detailfelder bleiben hier, getrennt vom täglichen Verlauf.",
-                      })}
-                    </div>
-                  </UiCard>
-                  <UiCard
-                    title={t({ en: "Detailed activity", fr: "Activité détaillée", de: "Detaillierte Aktivität" })}
-                    description={t({
-                      en: "Filter changes by action or space when you need to investigate a specific event.",
-                      fr: "Filtrez les changements par action ou par espace quand vous devez examiner un événement précis.",
-                      de: "Filtern Sie Änderungen nach Aktion oder Bereich, wenn Sie ein bestimmtes Ereignis prüfen müssen.",
-                    })}
-                  >
-                    {activityFilters}
-                    {activityTable(activityColumns)}
-                  </UiCard>
+        <>
+          <PortalPageTabs
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={[
+              {
+                id: "timeline",
+                label: t({ en: "Timeline", fr: "Fil d'activité", de: "Verlauf" }),
+              },
+              {
+                id: "audit",
+                label: t({ en: "Audit details", fr: "Détails d'audit", de: "Auditdetails" }),
+              },
+            ]}
+            ariaLabel={t({
+              en: "Activity views",
+              fr: "Vues de l'activité",
+              de: "Aktivitätsansichten",
+            })}
+            idPrefix="portal-activity"
+          />
+
+          {activeTab === "timeline" ? (
+            <UiCard
+              title={t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}
+              description={t({
+                en: "Follow work across your spaces without the audit-only fields.",
+                fr: "Suivez le travail dans vos espaces sans les champs réservés à l'audit.",
+                de: "Verfolgen Sie Arbeit in Ihren Bereichen ohne reine Audit-Felder.",
+              })}
+            >
+              {activityFilters}
+              {activityTable(timelineColumns)}
+            </UiCard>
+          ) : null}
+
+          {activeTab === "audit" ? (
+            <div className="space-y-4">
+              <UiCard
+                muted
+                title={t({ en: "Recent workspace history", fr: "Historique récent de l'espace de travail", de: "Letzter Arbeitsbereichsverlauf" })}
+                description={t({
+                  en: "Use this view when you need a fuller trace of collaboration across visible spaces.",
+                  fr: "Utilisez cette vue quand vous avez besoin d'une trace plus complète de la collaboration dans les espaces visibles.",
+                  de: "Nutzen Sie diese Ansicht, wenn Sie eine vollständigere Spur der Zusammenarbeit in sichtbaren Bereichen benötigen.",
+                })}
+              >
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="min-w-0">
+                    <div className={uiLabelClass}>{t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}</div>
+                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.events}</div>
+                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                      {t({ en: "Visible file and sharing events", fr: "Événements visibles de fichiers et partages", de: "Sichtbare Datei- und Freigabeereignisse" })}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <div className={uiLabelClass}>{t({ en: "People active", fr: "Personnes actives", de: "Aktive Personen" })}</div>
+                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.people}</div>
+                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                      {t({ en: "Collaborators who changed something", fr: "Collaborateurs ayant changé quelque chose", de: "Mitwirkende, die etwas geändert haben" })}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <div className={uiLabelClass}>{t({ en: "Spaces touched", fr: "Espaces concernés", de: "Betroffene Bereiche" })}</div>
+                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.spaces}</div>
+                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                      {t({ en: "Spaces with recent changes", fr: "Espaces avec des changements récents", de: "Bereiche mit letzten Änderungen" })}
+                    </p>
+                  </div>
                 </div>
-              ),
-            },
-          ]}
-        />
+                <div className={cx("mt-4 border-t pt-3 text-xs", uiDividerClass, uiMutedTextClass)}>
+                  {t({
+                    en: "IP addresses and detailed fields stay here, away from the everyday timeline.",
+                    fr: "Les adresses IP et les champs détaillés restent ici, à l'écart du fil quotidien.",
+                    de: "IP-Adressen und Detailfelder bleiben hier, getrennt vom täglichen Verlauf.",
+                  })}
+                </div>
+              </UiCard>
+              <UiCard
+                title={t({ en: "Detailed activity", fr: "Activité détaillée", de: "Detaillierte Aktivität" })}
+                description={t({
+                  en: "Filter changes by action or space when you need to investigate a specific event.",
+                  fr: "Filtrez les changements par action ou par espace quand vous devez examiner un événement précis.",
+                  de: "Filtern Sie Änderungen nach Aktion oder Bereich, wenn Sie ein bestimmtes Ereignis prüfen müssen.",
+                })}
+              >
+                {activityFilters}
+                {activityTable(activityColumns)}
+              </UiCard>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );
