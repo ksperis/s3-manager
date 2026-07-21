@@ -290,6 +290,7 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     expect(screen.getByRole("textbox", { name: "Search UI users" })).toHaveClass("ui-caption");
+    expect(screen.queryByRole("combobox", { name: "Portal role for ui7@example.com" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -345,6 +346,56 @@ describe("AccountsPage modal tabs", () => {
             group_name: "Research Group",
             account_admin: false,
             account_role: "portal_none",
+          }),
+        ],
+      })
+    );
+  });
+
+  it("assigns portal roles while linking UI users and groups when Portal is enabled", async () => {
+    portalEnabled = true;
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
+    fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for ui7@example.com" }), {
+      target: { value: "portal_manager" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "ui7@example.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Linked UI groups" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for Research Group" }), {
+      target: { value: "portal_user" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Research Group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        user_links: [
+          expect.objectContaining({
+            user_id: 7,
+            account_admin: false,
+            account_role: "portal_manager",
+          }),
+        ],
+        group_links: [
+          expect.objectContaining({
+            group_id: 31,
+            account_admin: false,
+            account_role: "portal_user",
           }),
         ],
       })

@@ -222,6 +222,8 @@ export default function S3AccountsPage() {
   const [groupSelections, setGroupSelections] = useState<number[]>([]);
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
   const [groupAdminChoice, setGroupAdminChoice] = useState<Record<number, boolean>>({});
+  const [userPortalRoleChoice, setUserPortalRoleChoice] = useState<Record<number, PortalAccountRole>>({});
+  const [groupPortalRoleChoice, setGroupPortalRoleChoice] = useState<Record<number, PortalAccountRole>>({});
   const MAX_LINK_OPTIONS = 10;
   const currentUser = useMemo(() => {
     return readStoredUser() as { role?: string | null } | null;
@@ -969,7 +971,10 @@ export default function S3AccountsPage() {
     setShowGroupPanel(false);
     setUserSelections([]);
     setGroupSelections([]);
+    setUserAdminChoice({});
     setGroupAdminChoice({});
+    setUserPortalRoleChoice({});
+    setGroupPortalRoleChoice({});
     setEditInitialSignature("");
     setPortalInitialSignature("");
   };
@@ -1026,6 +1031,8 @@ export default function S3AccountsPage() {
     setActionMessage(null);
     setUserAdminChoice({});
     setGroupAdminChoice({});
+    setUserPortalRoleChoice({});
+    setGroupPortalRoleChoice({});
     void loadUsersIfNeeded();
     void loadGroupsIfNeeded();
     void loadEndpointsIfNeeded();
@@ -1824,7 +1831,7 @@ export default function S3AccountsPage() {
                         const toAdd = userSelections.map((id) => ({
                           user_id: id,
                           account_admin: userAdminChoice[id] ?? false,
-                          account_role: "portal_none" as PortalAccountRole,
+                          account_role: userPortalRoleChoice[id] ?? "portal_none",
                           user_email: userLabelById.get(id) ?? undefined,
                         }));
                         setEditForm((prev) => ({
@@ -1840,6 +1847,7 @@ export default function S3AccountsPage() {
                         {visibleAvailableUsers.map((u) => {
                           const isSelected = userSelections.includes(u.id);
                           const adminChecked = userAdminChoice[u.id] ?? false;
+                          const portalRole = userPortalRoleChoice[u.id] ?? "portal_none";
                           return (
                             <div
                               key={u.id}
@@ -1854,15 +1862,37 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{u.label}</span>
                               </label>
-                              <AdminAssociationAdminCheckbox
-                                checked={Boolean(adminChecked)}
-                                onCheckedChange={(checked) =>
-                                  setUserAdminChoice((prev) => ({
-                                    ...prev,
-                                    [u.id]: checked,
-                                  }))
-                                }
-                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <AdminAssociationAdminCheckbox
+                                  checked={Boolean(adminChecked)}
+                                  onCheckedChange={(checked) =>
+                                    setUserAdminChoice((prev) => ({
+                                      ...prev,
+                                      [u.id]: checked,
+                                    }))
+                                  }
+                                />
+                                {portalEnabled && (
+                                  <UiSelect
+                                    aria-label={`Portal role for ${u.label}`}
+                                    size="compact"
+                                    fieldClassName="w-44"
+                                    value={portalRole}
+                                    onChange={(event) =>
+                                      setUserPortalRoleChoice((prev) => ({
+                                        ...prev,
+                                        [u.id]: normalizePortalRole(event.target.value),
+                                      }))
+                                    }
+                                  >
+                                    {PORTAL_ROLE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </UiSelect>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -1996,7 +2026,7 @@ export default function S3AccountsPage() {
                           group_id: id,
                           group_name: groupLabelById.get(id) ?? undefined,
                           account_admin: groupAdminChoice[id] ?? false,
-                          account_role: "portal_none" as PortalAccountRole,
+                          account_role: groupPortalRoleChoice[id] ?? "portal_none",
                         }));
                         setEditForm((prev) => ({
                           ...prev,
@@ -2011,6 +2041,7 @@ export default function S3AccountsPage() {
                         {visibleAvailableGroups.map((group) => {
                           const isSelected = groupSelections.includes(group.id);
                           const adminChecked = groupAdminChoice[group.id] ?? false;
+                          const portalRole = groupPortalRoleChoice[group.id] ?? "portal_none";
                           return (
                             <div
                               key={group.id}
@@ -2025,15 +2056,37 @@ export default function S3AccountsPage() {
                                 />
                                 <span>{group.name}</span>
                               </label>
-                              <AdminAssociationAdminCheckbox
-                                checked={Boolean(adminChecked)}
-                                onCheckedChange={(checked) =>
-                                  setGroupAdminChoice((prev) => ({
-                                    ...prev,
-                                    [group.id]: checked,
-                                  }))
-                                }
-                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <AdminAssociationAdminCheckbox
+                                  checked={Boolean(adminChecked)}
+                                  onCheckedChange={(checked) =>
+                                    setGroupAdminChoice((prev) => ({
+                                      ...prev,
+                                      [group.id]: checked,
+                                    }))
+                                  }
+                                />
+                                {portalEnabled && (
+                                  <UiSelect
+                                    aria-label={`Portal role for ${group.name}`}
+                                    size="compact"
+                                    fieldClassName="w-44"
+                                    value={portalRole}
+                                    onChange={(event) =>
+                                      setGroupPortalRoleChoice((prev) => ({
+                                        ...prev,
+                                        [group.id]: normalizePortalRole(event.target.value),
+                                      }))
+                                    }
+                                  >
+                                    {PORTAL_ROLE_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </UiSelect>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
