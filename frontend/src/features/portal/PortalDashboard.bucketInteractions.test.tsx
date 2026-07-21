@@ -334,7 +334,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(within(topStorageSpaces!).queryByRole("link", { name: "Other" })).not.toBeInTheDocument();
     expect(within(topStorageSpaces!).queryByText("Research Data")).not.toBeInTheDocument();
     expect(within(topStorageSpaces!).getAllByText("Owner")).toHaveLength(3);
-    expect(within(topStorageSpaces!).getAllByText("Active")).toHaveLength(3);
+    expect(within(topStorageSpaces!).queryByText("Active")).not.toBeInTheDocument();
   });
 
   it("opens only useful portal routes from dashboard cards and rows", () => {

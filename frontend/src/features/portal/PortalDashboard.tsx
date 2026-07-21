@@ -51,14 +51,12 @@ import {
 import { storageSpacePath, type PortalWorkspaceSpace, type PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import {
   portalRoleTone,
-  portalStorageSpaceStatusTone,
   portalTransferStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
   portalRoleLabel,
-  portalStatusLabel,
   portalTrendPeriodLabel,
   portalTransferDirectionLabel,
   portalTransferStatusLabel,
@@ -362,13 +360,10 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                     <span className="truncate ui-caption font-semibold text-[var(--ui-text)]">{row.name}</span>
                   )}
                 </div>
-                {row.space && row.role && row.status ? (
+                {row.space && row.role ? (
                   <div className="mt-1 flex flex-wrap gap-1.5 pl-9">
                     <UiBadge tone={portalRoleTone(row.role)} className="rounded-md px-2 py-0 text-[11px] leading-5">
                       {portalRoleLabel(row.role, t)}
-                    </UiBadge>
-                    <UiBadge tone={portalStorageSpaceStatusTone(row.space)} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                      {portalStatusLabel(row.status, t)}
                     </UiBadge>
                   </div>
                 ) : null}
