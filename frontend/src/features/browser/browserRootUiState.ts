@@ -2,9 +2,16 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
+import {
+  CLIENT_STORAGE_KEYS,
+  readClientJson,
+  readSessionJsonFromKey,
+  writeClientJson,
+  writeSessionJsonToKey,
+} from "../../utils/clientStorage";
 
 export const BROWSER_ROOT_UI_STATE_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootUiState;
+export const BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootContextSelections;
 export const DEFAULT_FOLDERS_PANEL_WIDTH_PX = 280;
 export const DEFAULT_INSPECTOR_PANEL_WIDTH_PX = 320;
 export const MIN_FOLDERS_PANEL_WIDTH_PX = 220;
@@ -129,7 +136,9 @@ export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
   if (!isRecord(parsed)) return null;
   return {
     layout: normalizeLayoutState(parsed.layout),
-    contextSelections: normalizeContextSelections(parsed.contextSelections),
+    contextSelections: normalizeContextSelections(
+      readSessionJsonFromKey<unknown>(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY),
+    ),
     objectColumns: normalizeObjectColumns(parsed.objectColumns),
     objectColumnWidths: normalizeObjectColumnWidths(parsed.objectColumnWidths),
   };
@@ -139,7 +148,11 @@ export const readBrowserRootUiState = (): BrowserRootUiState => readStoredBrowse
 
 const writeBrowserRootUiState = (value: BrowserRootUiState) => {
   if (typeof window === "undefined") return;
-  writeClientJson(BROWSER_ROOT_UI_STATE_STORAGE_KEY, value);
+  writeClientJson(BROWSER_ROOT_UI_STATE_STORAGE_KEY, {
+    layout: value.layout,
+    objectColumns: value.objectColumns,
+    objectColumnWidths: value.objectColumnWidths,
+  });
 };
 
 export const writeBrowserRootUiLayout = (layout: BrowserRootUiLayoutState) => {
@@ -173,8 +186,10 @@ export const writeBrowserRootUiPanelWidths = ({
 
 export const readBrowserRootContextSelection = (contextId: string | null): BrowserRootUiContextSelection | null => {
   if (!contextId) return null;
-  const current = readBrowserRootUiState();
-  return current.contextSelections[contextId] ?? null;
+  const selections = normalizeContextSelections(
+    readSessionJsonFromKey<unknown>(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY),
+  );
+  return selections[contextId] ?? null;
 };
 
 export const writeBrowserRootContextSelection = (
@@ -182,13 +197,12 @@ export const writeBrowserRootContextSelection = (
   selection: BrowserRootUiContextSelection
 ) => {
   if (!contextId) return;
-  const current = readBrowserRootUiState();
-  writeBrowserRootUiState({
+  const current = normalizeContextSelections(
+    readSessionJsonFromKey<unknown>(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY),
+  );
+  writeSessionJsonToKey(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY, {
     ...current,
-    contextSelections: {
-      ...current.contextSelections,
-      [contextId]: normalizeContextSelection(selection) ?? { bucketName: "", prefix: "" },
-    },
+    [contextId]: normalizeContextSelection(selection) ?? { bucketName: "", prefix: "" },
   });
 };
 

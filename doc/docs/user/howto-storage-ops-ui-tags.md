@@ -12,6 +12,7 @@ Use **UI tags** in **Storage Ops > Buckets** to build reusable operational selec
 ## Before you start
 
 Use Storage Ops UI tags for cross-context campaigns. They stay local to the browser and do not change backend S3 tags.
+Their identity is the physical bucket (endpoint, tenant, and bucket name), so two authorized contexts targeting the same bucket share its UI tags while homonymous buckets on different endpoints remain separate.
 
 ## Steps
 
@@ -38,7 +39,8 @@ Check Storage Ops access, the global feature flag, and whether rows are selected
 ## Limits / feature flags
 
 !!! note
-    UI tags are stored in browser localStorage and do not modify backend S3 tags. Storage Ops and Ceph Admin share the same root storage key with isolated namespaces.
+    UI tags are stored in browser localStorage and do not modify backend S3 tags. Storage Ops and Ceph Admin use separate endpoint-scoped keys and synchronize changes between tabs.
+    The endpoint-isolated v2 storage resets UI tags and active UI-tag filters created with the earlier browser-storage format.
 
 ## Related pages
 

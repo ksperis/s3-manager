@@ -19,7 +19,10 @@ import {
 import BrowserEmbed from "./BrowserEmbed";
 import BrowserPage from "./BrowserPage";
 import type { ExecutionContext } from "../../api/executionContexts";
-import { BROWSER_ROOT_UI_STATE_STORAGE_KEY } from "./browserRootUiState";
+import {
+  BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
+  BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+} from "./browserRootUiState";
 import {
   BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
   BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
@@ -385,10 +388,21 @@ async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
 }
 
 function seedBrowserRootUiState(value: unknown) {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   window.localStorage.setItem(
     BROWSER_ROOT_UI_STATE_STORAGE_KEY,
-    JSON.stringify(value),
+    JSON.stringify({
+      layout: record.layout,
+      objectColumns: record.objectColumns,
+      objectColumnWidths: record.objectColumnWidths,
+    }),
   );
+  if (record.contextSelections) {
+    window.sessionStorage.setItem(
+      BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
+      JSON.stringify(record.contextSelections),
+    );
+  }
 }
 
 function setBrowserLayoutRect(width: number, height = 720) {
@@ -558,6 +572,7 @@ describe("BrowserPage interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     setBrowserContext();
     browserLayoutSlotMock.setSidebarRendererForTest = null;
     createObjectUrlMock.mockReturnValue("blob:preview-url");
@@ -2669,7 +2684,7 @@ describe("BrowserPage interactions", () => {
 
     expect(window.localStorage.getItem("selectedPortalAccountId")).toBe("101");
     expect(window.localStorage.getItem("selectedWorkspace")).toBe("portal");
-    expect(screen.getByLabelText("Current location")).toHaveTextContent("/portal");
+    expect(screen.getByLabelText("Current location")).toHaveTextContent("/portal?project=101");
   });
 
   it("opens a manager-available Portal Browser account in Manager from the sidebar", async () => {
@@ -2693,7 +2708,7 @@ describe("BrowserPage interactions", () => {
     const sidebar = await screen.findByTestId("browser-workspace-sidebar");
     await user.click(await within(sidebar).findByRole("button", { name: "Open in Manager" }));
 
-    expect(window.localStorage.getItem("selectedExecutionContextId")).toBe("101");
+    expect(window.localStorage.getItem("selectedManagerExecutionContextId")).toBe("101");
     expect(window.localStorage.getItem("selectedWorkspace")).toBe("manager");
     expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=101");
   });
@@ -2719,7 +2734,7 @@ describe("BrowserPage interactions", () => {
     const sidebar = await screen.findByTestId("browser-workspace-sidebar");
     await user.click(await within(sidebar).findByRole("button", { name: "Open in Manager" }));
 
-    expect(window.localStorage.getItem("selectedExecutionContextId")).toBe("s3u-21215");
+    expect(window.localStorage.getItem("selectedManagerExecutionContextId")).toBe("s3u-21215");
     expect(window.localStorage.getItem("selectedWorkspace")).toBe("manager");
     expect(screen.getByLabelText("Current location")).toHaveTextContent("/manager?ctx=s3u-21215");
   });

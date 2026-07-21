@@ -10,6 +10,15 @@ import {
 const baseAdvancedFilter = (): AdvancedFilterState => sanitizeAdvancedFilter({});
 
 describe("BucketOpsWorkbench advanced filter storage-ops fields", () => {
+  it("filters UI tags by physical bucket identity in storage-ops mode", () => {
+    const rawPayload = buildAdvancedFilterPayload("", "contains", null, ["physical-7", "physical-8"], true);
+    const payload = JSON.parse(rawPayload ?? "{}") as { rules?: Array<Record<string, unknown>> };
+
+    expect(payload.rules).toEqual([
+      { field: "bucket_identity", op: "in", value: ["physical-7", "physical-8"] },
+    ]);
+  });
+
   it("emits selected context id rules in storage-ops mode", () => {
     const advanced: AdvancedFilterState = {
       ...baseAdvancedFilter(),

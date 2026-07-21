@@ -253,6 +253,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 kind="account",
                 id="1",
                 display_name="Account A",
+                endpoint_id=10,
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
@@ -260,6 +261,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
+                endpoint_id=11,
                 endpoint_name="Endpoint Two",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
@@ -267,6 +269,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 kind="legacy_user",
                 id="s3u-9",
                 display_name="Legacy User C",
+                endpoint_id=12,
                 endpoint_name="Endpoint Three",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=False, sts_capable=False, admin_api_capable=False),
             ),
@@ -314,7 +317,12 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
         assert "context_name" in first
         assert "context_kind" in first
         assert "endpoint_name" in first
+        assert "endpoint_id" in first
         assert "bucket_name" in first
+        assert "bucket_identity" in first
+        assert first["bucket_identity"] == storage_ops_router._build_bucket_identity(
+            first["endpoint_id"], first["tenant"], first["bucket_name"]
+        )
     finally:
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(dependencies.get_current_storage_ops_admin, None)
@@ -632,6 +640,65 @@ def test_storage_ops_advanced_filter_parsing_accepts_context_fields():
     )
     assert parsed.rules is not None
     assert [rule.field for rule in parsed.rules] == ["context_id", "context_name", "context_kind", "endpoint_name"]
+
+
+def test_storage_ops_bucket_identity_is_endpoint_scoped_and_shared_across_contexts():
+    primary_identity = storage_ops_router._build_bucket_identity(7, None, "shared")
+    archive_identity = storage_ops_router._build_bucket_identity(8, None, "shared")
+    assert primary_identity
+    assert archive_identity
+    assert primary_identity != archive_identity
+
+    buckets = [
+        StorageOpsBucketSummary(
+            name="account-1::shared",
+            bucket_name="shared",
+            bucket_identity=primary_identity,
+            endpoint_id=7,
+            context_id="account-1",
+            context_name="Account A",
+            context_kind="account",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="conn-2::shared",
+            bucket_name="shared",
+            bucket_identity=primary_identity,
+            endpoint_id=7,
+            context_id="conn-2",
+            context_name="Connection B",
+            context_kind="connection",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+        StorageOpsBucketSummary(
+            name="account-9::shared",
+            bucket_name="shared",
+            bucket_identity=archive_identity,
+            endpoint_id=8,
+            context_id="account-9",
+            context_name="Account C",
+            context_kind="account",
+            tenant=None,
+            owner=None,
+            owner_name=None,
+        ),
+    ]
+    parsed_filter = CephAdminBucketFilterQuery.model_validate(
+        {"match": "all", "rules": [{"field": "bucket_identity", "op": "in", "value": [primary_identity]}]}
+    )
+
+    result = storage_ops_router._apply_advanced_filter_for_context(
+        buckets,
+        parsed_filter,
+        service=SimpleNamespace(),
+        account=SimpleNamespace(),
+    )
+
+    assert [bucket.context_id for bucket in result] == ["account-1", "conn-2"]
 
 
 def test_storage_ops_context_filters_match_context_kind_and_endpoint():
@@ -1220,6 +1287,7 @@ def test_storage_ops_notifications_feature_filter_uses_enrichment(monkeypatch):
             context_id="1",
             context_name="Account A",
             context_kind="account",
+            endpoint_id=1,
             endpoint_name="Primary",
         ),
         account=account,
@@ -1292,6 +1360,7 @@ def test_storage_ops_notification_param_filter_uses_shared_snapshot_matching(mon
             context_id="1",
             context_name="Account A",
             context_kind="account",
+            endpoint_id=1,
             endpoint_name="Primary",
         ),
         account=account,

@@ -12,6 +12,7 @@ Use **UI tags** in **Ceph Admin > Buckets** to organize working sets for investi
 ## Before you start
 
 Use UI tags for local operational grouping, not as backend S3 tags. They help you remember and filter working sets in the console.
+Tags are isolated by Ceph endpoint. Tabs opened on the same endpoint stay synchronized, while tabs opened on different endpoints keep independent working sets.
 
 ## Steps
 
@@ -39,6 +40,7 @@ Check that rows are selected and that you are on the Ceph Admin bucket workbench
 
 !!! note
     UI tags are console-side organizational metadata and do not modify backend bucket tags unless you explicitly update S3 tags separately.
+    The endpoint-isolated v2 storage resets UI tags and active UI-tag filters created with the earlier browser-storage format.
 
 ## Related pages
 

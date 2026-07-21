@@ -551,6 +551,7 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
         "context_name",
         "context_kind",
         "endpoint_name",
+        "bucket_identity",
     }
     if field in string_fields:
         left = _normalize_text(str(value))

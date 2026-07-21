@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+  BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
   MAX_FOLDERS_PANEL_WIDTH_PX,
@@ -8,8 +9,10 @@ import {
   MIN_FOLDERS_PANEL_WIDTH_PX,
   MIN_INSPECTOR_PANEL_WIDTH_PX,
   readBrowserRootObjectColumnWidths,
+  readBrowserRootContextSelection,
   readStoredBrowserRootUiState,
   writeBrowserRootObjectColumnWidths,
+  writeBrowserRootContextSelection,
   writeBrowserRootUiLayout,
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
@@ -17,6 +20,7 @@ import {
 describe("browserRootUiState", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it("persists panel widths alongside layout state", () => {
@@ -165,5 +169,27 @@ describe("browserRootUiState", () => {
 
     expect(readBrowserRootObjectColumnWidths()).toEqual({});
     expect(readStoredBrowserRootUiState()?.objectColumnWidths).toEqual({});
+  });
+
+  it("keeps bucket and prefix selections in the current tab only", () => {
+    writeBrowserRootContextSelection("conn-1", { bucketName: "bucket-a", prefix: "docs/" });
+
+    expect(readBrowserRootContextSelection("conn-1")).toEqual({
+      bucketName: "bucket-a",
+      prefix: "docs/",
+    });
+    expect(window.sessionStorage.getItem(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY)).toContain("bucket-a");
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("ignores context selections from the former shared snapshot", () => {
+    window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify({
+      contextSelections: {
+        "conn-1": { bucketName: "other-tab", prefix: "stale/" },
+      },
+    }));
+
+    expect(readBrowserRootContextSelection("conn-1")).toBeNull();
+    expect(readStoredBrowserRootUiState()?.contextSelections).toEqual({});
   });
 });

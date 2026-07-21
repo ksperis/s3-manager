@@ -7,6 +7,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
+import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";
 
 const ENDPOINT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedCephAdminEndpoint;
 const ENDPOINT_URL_PARAM = "ep";
@@ -83,41 +84,32 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       setSelectedEndpointIdState(null);
       return;
     }
-    const hasEndpoint = (value: number | null) =>
-      value !== null && endpoints.some((ep) => ep.id === value);
     const urlValue = parseEndpointId(searchParams.get(ENDPOINT_URL_PARAM));
-    if (hasEndpoint(selectedEndpointId)) {
-      if (urlValue !== selectedEndpointId) {
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.set(ENDPOINT_URL_PARAM, String(selectedEndpointId));
-        setSearchParams(nextParams, { replace: true });
-      }
-      writeClientStorage(ENDPOINT_STORAGE_KEY, String(selectedEndpointId));
-      return;
-    }
-    if (hasEndpoint(urlValue)) {
-      setSelectedEndpointIdState(urlValue);
-      writeClientStorage(ENDPOINT_STORAGE_KEY, String(urlValue));
-      return;
-    }
     const storedValue = parseEndpointId(readClientStorage(ENDPOINT_STORAGE_KEY));
-    if (hasEndpoint(storedValue)) {
-      setSelectedEndpointIdState(storedValue);
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set(ENDPOINT_URL_PARAM, String(storedValue));
-      setSearchParams(nextParams, { replace: true });
-      writeClientStorage(ENDPOINT_STORAGE_KEY, String(storedValue));
-      return;
+    const orderedEndpoints = [
+      ...endpoints.filter((endpoint) => endpoint.is_default),
+      ...endpoints.filter((endpoint) => !endpoint.is_default),
+    ];
+    const resolved = resolveUrlScopedSelection({
+      availableIds: orderedEndpoints.map((endpoint) => String(endpoint.id)),
+      urlValue: urlValue === null ? null : String(urlValue),
+      currentValue: selectedEndpointId === null ? null : String(selectedEndpointId),
+      fallbackValues: [storedValue === null ? null : String(storedValue)],
+    });
+    if (!resolved) return;
+    const nextId = Number(resolved);
+    if (nextId !== selectedEndpointId) {
+      setSelectedEndpointIdState(nextId);
     }
-    const fallback = endpoints.find((ep) => ep.is_default) ?? endpoints[0];
-    setSelectedEndpointIdState(fallback.id);
-    writeClientStorage(ENDPOINT_STORAGE_KEY, String(fallback.id));
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set(ENDPOINT_URL_PARAM, String(fallback.id));
-    setSearchParams(nextParams, { replace: true });
+    writeClientStorage(ENDPOINT_STORAGE_KEY, resolved);
+    if (urlValue !== nextId) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(ENDPOINT_URL_PARAM, resolved);
+      setSearchParams(nextParams, { replace: true });
+    }
   }, [endpoints, searchParams, selectedEndpointId, setSearchParams]);
 
-  const setSelectedEndpointId = (id: number | null) => {
+  const setSelectedEndpointId = useCallback((id: number | null) => {
     setSelectedEndpointIdState(id);
     const nextParams = new URLSearchParams(searchParams);
     if (id === null) {
@@ -128,7 +120,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
       nextParams.set(ENDPOINT_URL_PARAM, String(id));
     }
     setSearchParams(nextParams, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   const selectedEndpoint = useMemo(
     () => (selectedEndpointId ? endpoints.find((ep) => ep.id === selectedEndpointId) ?? null : null),
@@ -197,6 +189,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     [
       endpoints,
       selectedEndpointId,
+      setSelectedEndpointId,
       selectedEndpoint,
       selectedEndpointAccess,
       selectedEndpointAccessLoading,

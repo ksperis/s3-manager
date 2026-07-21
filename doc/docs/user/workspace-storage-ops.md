@@ -41,7 +41,7 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
    - bucket configuration opens on
      `/storage-ops/buckets/<bucket>?ctx=<execution-context>`. Use **Back to
      buckets**, the **Buckets** breadcrumb, or the browser Back button to restore
-     the originating filters, sort, page, selection, scroll position, and
+     the originating filters, sort, page, scroll position, and
      focused bucket. Direct URLs require `ctx`; Storage Ops never chooses a
      different execution context implicitly.
 5. In **Advanced filter**, use the compact **Context** and **Endpoint**
@@ -59,6 +59,10 @@ Use **Storage Ops** for cross-context bucket operations on S3-compatible backend
 7. Use **Context**, **Kind**, and **Endpoint** columns to distinguish identical bucket names across contexts.
 8. Bucket listings are cached for up to 30 minutes per authorized context. Use **Refresh** in the bucket workbench to flush cached listings and reload the current view.
 
+Row selections are intentionally limited to the current mounted list and are
+not restored from another tab or after a reload. The bulk configuration
+clipboard is also scoped to the current tab.
+
 ## Expected result
 
 You can search and operate on large bucket sets across authorized accounts, S3 users, and connections from one operational surface.
@@ -66,7 +70,7 @@ You can search and operate on large bucket sets across authorized accounts, S3 u
 ## Limits / feature flags
 
 !!! note
-    UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin.
+    UI tags are local browser metadata (localStorage), namespaced separately from Ceph Admin and keyed by physical endpoint, tenant, and bucket name. Tabs synchronize changes without sharing tags across endpoints.
     Storage Ops exposes the Notifications feature-state filter globally; each
     bucket status still follows the SNS capability of its underlying context.
     Feature-detail columns are opt-in and loaded only when selected or exported.

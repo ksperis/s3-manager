@@ -8,8 +8,9 @@ import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
+import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";
 
-const EXECUTION_CONTEXT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedExecutionContext;
+const EXECUTION_CONTEXT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedBrowserExecutionContext;
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
 
 type BrowserContextState = {
@@ -103,28 +104,18 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
     }
     if (contexts.length === 0) return;
     const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const stored = readClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
-    if (urlContext && contexts.some((context) => context.id === urlContext)) {
-      if (urlContext !== selectedContextId) {
-        setSelectedContextIdState(urlContext);
-      }
-      writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, urlContext);
-      return;
-    }
-    if (stored && contexts.some((context) => context.id === stored)) {
-      if (stored !== selectedContextId) {
-        setSelectedContextIdState(stored);
-      }
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, stored);
-      setSearchParams(nextParams, { replace: true });
-      return;
-    }
-    const selectedExists = selectedContextId ? contexts.some((context) => context.id === selectedContextId) : false;
-    if (!selectedContextId || !selectedExists) {
-      const nextId = contexts[0].id;
+    const nextId = resolveUrlScopedSelection({
+      availableIds: contexts.map((context) => context.id),
+      urlValue: urlContext,
+      currentValue: selectedContextId,
+      fallbackValues: [readClientStorage(EXECUTION_CONTEXT_STORAGE_KEY)],
+    });
+    if (!nextId) return;
+    if (nextId !== selectedContextId) {
       setSelectedContextIdState(nextId);
-      writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
+    }
+    writeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
+    if (urlContext !== nextId) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
       setSearchParams(nextParams, { replace: true });

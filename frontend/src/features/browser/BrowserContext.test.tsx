@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionContext } from "../../api/executionContexts";
@@ -29,7 +30,15 @@ const CONTEXTS: ExecutionContext[] = [
 
 function Probe() {
   const { selectedContextId } = useBrowserContext();
-  return <div data-testid="selected">{selectedContextId ?? "null"}</div>;
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <div data-testid="selected">{selectedContextId ?? "null"}</div>
+      <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+      <button type="button" onClick={() => navigate("/browser/next")}>Navigate without context</button>
+    </>
+  );
 }
 
 function renderProvider(initialEntry: string) {
@@ -59,15 +68,16 @@ describe("BrowserContextProvider", () => {
   it("ignores legacy localStorage keys and falls back to the first context", async () => {
     localStorage.setItem("selectedS3AccountId", "conn-legacy");
     localStorage.setItem("selectedBrowserContextId", "s3u-legacy");
+    localStorage.setItem("selectedExecutionContextId", "s3u-2");
 
     renderProvider("/browser");
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
-    expect(localStorage.getItem("selectedExecutionContextId")).toBe("conn-1");
+    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
   });
 
-  it("uses selectedExecutionContextId when present", async () => {
-    localStorage.setItem("selectedExecutionContextId", "s3u-2");
+  it("uses the Browser-specific preference when present", async () => {
+    localStorage.setItem("selectedBrowserExecutionContextId", "s3u-2");
     localStorage.setItem("selectedBrowserContextId", "conn-legacy");
 
     renderProvider("/browser");
@@ -75,13 +85,25 @@ describe("BrowserContextProvider", () => {
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-2"));
   });
 
-  it("prefers ctx query param over selectedExecutionContextId", async () => {
-    localStorage.setItem("selectedExecutionContextId", "s3u-2");
+  it("prefers ctx query param over the Browser-specific preference", async () => {
+    localStorage.setItem("selectedBrowserExecutionContextId", "s3u-2");
 
     renderProvider("/browser?ctx=conn-1");
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
-    expect(localStorage.getItem("selectedExecutionContextId")).toBe("conn-1");
+    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
+  });
+
+  it("keeps the mounted tab context when another tab changes the preference", async () => {
+    const user = userEvent.setup();
+    renderProvider("/browser?ctx=conn-1");
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
+
+    localStorage.setItem("selectedBrowserExecutionContextId", "s3u-2");
+    await user.click(screen.getByRole("button", { name: "Navigate without context" }));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/browser/next?ctx=conn-1"));
+    expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
   });
 
   it("reloads execution contexts when refresh event is emitted", async () => {

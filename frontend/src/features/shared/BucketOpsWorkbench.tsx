@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
@@ -129,6 +129,11 @@ import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import CephAdminBucketCompareModal from "../cephAdmin/CephAdminBucketCompareModal";
 import CephAdminBucketIndexCheckPage from "../cephAdmin/CephAdminBucketIndexCheckPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import {
+  readSessionStorageKey,
+  removeSessionStorageKey,
+  writeSessionStorageKey,
+} from "../../utils/clientStorage";
 import BucketIntegrityCheckModal from "./BucketIntegrityCheckModal";
 import type { BucketIntegrityUiTarget } from "./BucketIntegrityCheckModal";
 import BucketPurgeRunModal from "./BucketPurgeRunModal";
@@ -144,11 +149,12 @@ import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import {
-  BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY,
-  resolveBucketOpsSurface,
-  type BucketOpsMode,
-} from "./bucketOpsSurface";
+  createBucketUiTagTarget,
+  useBucketUiTags,
+  type BucketUiTagTarget as BucketTagTarget,
+} from "./bucketUiTags";
 import { calculateActionProgressPercent, type ActionProgressState } from "./actionProgress";
 import {
   buildBucketDetailLocationState,
@@ -1619,7 +1625,7 @@ export const buildAdvancedFilterPayload = (
   }
 
   if (taggedBuckets) {
-    rules.push({ field: "name", op: "in", value: taggedBuckets });
+    rules.push({ field: isStorageOps ? "bucket_identity" : "name", op: "in", value: taggedBuckets });
   }
 
   if (rules.length === 0) {
@@ -1820,7 +1826,7 @@ const persistVisibleColumns = (storageKey: string, value: ColumnId[]) => {
 
 const loadBulkConfigClipboard = (storageKey: string): BulkConfigClipboard | null => {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(storageKey);
+  const raw = readSessionStorageKey(storageKey);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<BulkConfigClipboard> | null;
@@ -1920,41 +1926,24 @@ const loadBulkConfigClipboard = (storageKey: string): BulkConfigClipboard | null
 const persistBulkConfigClipboard = (storageKey: string, value: BulkConfigClipboard | null) => {
   if (typeof window === "undefined") return;
   if (!value) {
-    localStorage.removeItem(storageKey);
+    removeSessionStorageKey(storageKey);
     return;
   }
-  localStorage.setItem(storageKey, JSON.stringify(value));
+  writeSessionStorageKey(storageKey, JSON.stringify(value));
 };
 
-type BucketUiTags = Record<string, string[]>;
-type BucketTagTarget = { key: string; name: string; tenant: string | null };
-type OrphanedTagBucketDetail = { key: string; name: string; tenant: string | null; tags: string[] };
+type OrphanedTagBucketDetail = {
+  key: string;
+  endpointId: number;
+  name: string;
+  tenant: string | null;
+  tags: string[];
+};
 
 const buildBucketUiTagKey = (bucketName: string, tenant?: string | null) => {
   const normalizedName = bucketName.trim();
   const normalizedTenant = (tenant ?? "").trim();
   return `${normalizedTenant}${BUCKET_UI_TAG_KEY_SEPARATOR}${normalizedName}`;
-};
-
-const parseBucketUiTagKey = (value: string): { name: string; tenant: string | null } | null => {
-  if (typeof value !== "string") return null;
-  const separatorIndex = value.indexOf(BUCKET_UI_TAG_KEY_SEPARATOR);
-  if (separatorIndex < 0) return null;
-  const tenantPart = value.slice(0, separatorIndex).trim();
-  const namePart = value.slice(separatorIndex + BUCKET_UI_TAG_KEY_SEPARATOR.length).trim();
-  if (!namePart) return null;
-  return { name: namePart, tenant: tenantPart || null };
-};
-
-const toBucketTagTarget = (bucketName: string, tenant?: string | null): BucketTagTarget => {
-  const name = bucketName.trim();
-  const normalizedTenant = (tenant ?? "").trim();
-  const tenantValue = normalizedTenant || null;
-  return {
-    key: buildBucketUiTagKey(name, tenantValue),
-    name,
-    tenant: tenantValue,
-  };
 };
 
 const formatBucketNamesPreview = (names: string[], max: number = 8) => {
@@ -1977,60 +1966,12 @@ const normalizeUiTagValues = (values: string[]) => {
   return normalized;
 };
 
-const loadUiTags = (
-  endpointId: number | null | undefined,
-  namespace: string
-): BucketUiTags => {
-  if (typeof window === "undefined" || !endpointId) return {};
-  const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
-  if (!raw) return {};
-  try {
-    let tags: BucketUiTags = {};
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, Record<string, BucketUiTags>> | null;
-      if (parsed && typeof parsed === "object") {
-        const namespaceStore = parsed[namespace] ?? {};
-        tags = namespaceStore[String(endpointId)] ?? {};
-      }
-    }
-    const cleaned: BucketUiTags = {};
-    Object.entries(tags).forEach(([key, value]) => {
-      if (!Array.isArray(value)) return;
-      const parsedKey = parseBucketUiTagKey(key);
-      if (!parsedKey) return;
-      const normalizedKey = buildBucketUiTagKey(parsedKey.name, parsedKey.tenant);
-      const items = normalizeUiTagValues(value as string[]);
-      if (items.length > 0) {
-        cleaned[normalizedKey] = normalizeUiTagValues([...(cleaned[normalizedKey] ?? []), ...items]);
-      }
-    });
-    return cleaned;
-  } catch {
-    return {};
-  }
-};
-
-const persistUiTags = (
-  endpointId: number | null | undefined,
-  namespace: string,
-  value: BucketUiTags
-) => {
-  if (typeof window === "undefined" || !endpointId) return;
-  const raw = localStorage.getItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY);
-  const store = raw ? (JSON.parse(raw) as Record<string, Record<string, BucketUiTags>>) : {};
-  const namespaceStore = store[namespace] ?? {};
-  namespaceStore[String(endpointId)] = value;
-  store[namespace] = namespaceStore;
-  localStorage.setItem(BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY, JSON.stringify(store));
-};
-
 type BucketListState = {
   filter: string;
   quickFilterMode: TextMatchMode;
   advancedApplied: AdvancedFilterState | null;
   tagFilters: string[];
   tagFilterMode: "any" | "all";
-  selectedBuckets: string[];
   page: number;
   pageSize: number;
   sort: { field: SortField; direction: "asc" | "desc" };
@@ -2180,7 +2121,6 @@ const loadBucketListState = (storageKey: string, endpointId?: number | null): Bu
       advancedApplied: data.advancedApplied ? sanitizeAdvancedFilter(data.advancedApplied) : null,
       tagFilters: normalizeUiTagValues(sanitizeStringArray(data.tagFilters) as string[]),
       tagFilterMode: data.tagFilterMode === "all" ? "all" : "any",
-      selectedBuckets: sanitizeStringArray(data.selectedBuckets),
       page: sanitizePage(data.page, 1),
       pageSize: sanitizePageSize(data.pageSize, DEFAULT_PAGE_SIZE),
       sort: sanitizeSort(data.sort),
@@ -2368,7 +2308,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const updateBucketQuota = isStorageOps ? updateStorageOpsBucketQuota : updateCephAdminBucketQuota;
 
   const columnsStorageKey = surface.storageKeys.columns;
-  const uiTagsNamespace = surface.uiTagsNamespace;
   const bucketsStateStorageKey = surface.storageKeys.bucketListState;
   const bulkClipboardStorageKey = surface.storageKeys.bulkConfigClipboard;
   const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
@@ -2443,8 +2382,33 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const [storageOpsContextsError, setStorageOpsContextsError] = useState<string | null>(null);
   const [storageOpsContextFilter, setStorageOpsContextFilter] = useState("");
   const [storageOpsEndpointFilter, setStorageOpsEndpointFilter] = useState("");
-  const [uiTags, setUiTags] = useState<BucketUiTags>(() =>
-    loadUiTags(selectedEndpointId, uiTagsNamespace)
+  const {
+    entries: uiTagEntries,
+    tags: uiTags,
+    applyTags: persistUiTagChanges,
+    removeTargets: removeUiTagTargets,
+  } = useBucketUiTags(surface.mode, isStorageOps ? null : selectedEndpointId);
+  const resolveBucketTagTarget = useCallback(
+    (bucket: CephAdminBucket): BucketTagTarget | null => {
+      if (isStorageOps) {
+        const storageBucket = bucket as StorageOpsBucket;
+        return createBucketUiTagTarget(
+          surface.mode,
+          storageBucket.endpoint_id,
+          storageBucket.bucket_identity,
+          getStorageOpsBucketName(bucket),
+          bucket.tenant
+        );
+      }
+      return createBucketUiTagTarget(
+        surface.mode,
+        selectedEndpointId,
+        buildBucketUiTagKey(bucket.name, bucket.tenant),
+        bucket.name,
+        bucket.tenant
+      );
+    },
+    [isStorageOps, selectedEndpointId, surface.mode]
   );
   const [tagFilters, setTagFilters] = useState<string[]>(() =>
     ownerQueryFilter ? [] : initialStoredBucketListState?.tagFilters ?? []
@@ -2453,7 +2417,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     ownerQueryFilter ? "any" : initialStoredBucketListState?.tagFilterMode ?? "any"
   );
   const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(
-    () => new Set(ownerQueryFilter ? [] : initialStoredBucketListState?.selectedBuckets ?? [])
+    () => new Set()
   );
   const [adminOpsAction, setAdminOpsAction] = useState<Extract<CephAdminAdminOpsAction, { bucket: CephAdminBucket }> | null>(null);
   const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
@@ -2565,16 +2529,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     () => initialStoredBucketListState?.sort ?? DEFAULT_SORT
   );
   const taggedBucketTargets = useMemo(() => {
-    const byKey = new Map<string, BucketTagTarget>();
-    Object.entries(uiTags).forEach(([storageKey, tags]) => {
-      if (!Array.isArray(tags) || tags.length === 0) return;
-      const parsed = parseBucketUiTagKey(storageKey);
-      if (!parsed) return;
-      const target = toBucketTagTarget(parsed.name, parsed.tenant);
-      byKey.set(target.key, target);
-    });
-    return Array.from(byKey.values());
-  }, [uiTags]);
+    return Object.values(uiTagEntries)
+      .filter((entry) => entry.tags.length > 0)
+      .map((entry) => entry.target);
+  }, [uiTagEntries]);
   const tagBucketSignature = useMemo(
     () =>
       taggedBucketTargets
@@ -2811,7 +2769,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   }, [showAdvancedFilter]);
 
   useEffect(() => {
-    setUiTags(loadUiTags(selectedEndpointId, uiTagsNamespace));
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
     setSelectionExportLoading(null);
@@ -2855,7 +2812,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setAdvancedDraft(stored.advancedApplied ? stored.advancedApplied : defaultAdvancedFilter);
       setTagFilters(stored.tagFilters);
       setTagFilterMode(stored.tagFilterMode);
-      setSelectedBuckets(new Set(stored.selectedBuckets));
+      setSelectedBuckets(new Set());
       setPage(stored.page);
       setPageSize(stored.pageSize);
       setSort(stored.sort);
@@ -2873,11 +2830,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setPageSize(DEFAULT_PAGE_SIZE);
       setSort(DEFAULT_SORT);
     }
-  }, [bucketsStateStorageKey, ownerQueryFilter, selectedEndpointId, uiTagsNamespace]);
-
-  useEffect(() => {
-    persistUiTags(selectedEndpointId, uiTagsNamespace, uiTags);
-  }, [uiTags, uiTagsNamespace, selectedEndpointId]);
+  }, [bucketsStateStorageKey, ownerQueryFilter, selectedEndpointId]);
 
   useEffect(() => {
     persistBulkConfigClipboard(bulkClipboardStorageKey, bulkConfigClipboard);
@@ -2891,7 +2844,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       advancedApplied,
       tagFilters,
       tagFilterMode,
-      selectedBuckets: Array.from(selectedBuckets),
       page,
       pageSize,
       sort,
@@ -2904,7 +2856,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     advancedApplied,
     tagFilters,
     tagFilterMode,
-    selectedBuckets,
     page,
     pageSize,
     sort,
@@ -2919,13 +2870,15 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     const loadOrphanedTags = async () => {
       try {
         const knownBucketKeys = new Set<string>();
-        const uniqueNames = Array.from(new Set(taggedBucketTargets.map((target) => target.name)));
+        const uniqueIdentities = Array.from(
+          new Set(taggedBucketTargets.map((target) => (isStorageOps ? target.identity : target.name)))
+        );
         const chunkSize = 50;
-        for (let start = 0; start < uniqueNames.length; start += chunkSize) {
-          const chunk = uniqueNames.slice(start, start + chunkSize);
+        for (let start = 0; start < uniqueIdentities.length; start += chunkSize) {
+          const chunk = uniqueIdentities.slice(start, start + chunkSize);
           const advancedFilter = JSON.stringify({
             match: "any",
-            rules: [{ field: "name", op: "in", value: chunk }],
+            rules: [{ field: isStorageOps ? "bucket_identity" : "name", op: "in", value: chunk }],
           });
           let nextPage = 1;
           while (true) {
@@ -2937,8 +2890,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             });
             if (!active) return;
             (response.items ?? []).forEach((bucket) => {
-              const target = toBucketTagTarget(bucket.name, bucket.tenant);
-              knownBucketKeys.add(target.key);
+              const target = resolveBucketTagTarget(bucket);
+              if (target) knownBucketKeys.add(target.key);
             });
             if (!response.has_next) break;
             nextPage += 1;
@@ -2960,7 +2913,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     return () => {
       active = false;
     };
-  }, [listBuckets, selectedEndpointId, tagBucketSignature, taggedBucketTargets]);
+  }, [isStorageOps, listBuckets, resolveBucketTagTarget, selectedEndpointId, tagBucketSignature, taggedBucketTargets]);
 
   useEffect(() => {
     if (!showColumnPicker) return;
@@ -3158,20 +3111,19 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const taggedBuckets = useMemo(() => {
     if (tagFilters.length === 0) return null;
     const normalizedFilters = normalizeUiTagValues(tagFilters).map((tag) => tag.toLowerCase());
-    const matchedNames = Object.entries(uiTags)
-      .filter(([, tags]) => {
+    const matchedIdentities = Object.values(uiTagEntries)
+      .filter(({ tags }) => {
         const lowerTags = normalizeUiTagValues(tags).map((tag) => tag.toLowerCase());
         if (tagFilterMode === "all") {
           return normalizedFilters.every((filterTag) => lowerTags.includes(filterTag));
         }
         return normalizedFilters.some((filterTag) => lowerTags.includes(filterTag));
       })
-      .map(([storageKey]) => parseBucketUiTagKey(storageKey)?.name ?? null)
-      .filter((value): value is string => Boolean(value));
-    const names = Array.from(new Set(matchedNames))
+      .map(({ target }) => (isStorageOps ? target.identity : target.name));
+    const names = Array.from(new Set(matchedIdentities))
       .sort((a, b) => a.localeCompare(b));
     return names;
-  }, [tagFilters, tagFilterMode, uiTags]);
+  }, [isStorageOps, tagFilters, tagFilterMode, uiTagEntries]);
 
   const quickFilterDraftParsed = useMemo(() => parseExactListInput(filter), [filter]);
   const quickFilterAppliedParsed = useMemo(() => parseExactListInput(filterValue), [filterValue]);
@@ -3536,26 +3488,11 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   const addTagsForBucket = (target: BucketTagTarget, raw: string) => {
     const parsed = parseUiTags(raw);
     if (parsed.length === 0) return;
-    setUiTags((prev) => {
-      const existing = prev[target.key] ?? [];
-      const merged = mergeUiTags(existing, parsed);
-      return { ...prev, [target.key]: merged };
-    });
+    persistUiTagChanges([target], parsed, []);
   };
 
   const removeTagForBucket = (bucketTarget: BucketTagTarget, tag: string) => {
-    const normalizedTag = tag.trim().toLowerCase();
-    setUiTags((prev) => {
-      const existing = normalizeUiTagValues(prev[bucketTarget.key] ?? []);
-      const next = existing.filter((item) => item.toLowerCase() !== normalizedTag);
-      const updated = { ...prev };
-      if (next.length === 0) {
-        delete updated[bucketTarget.key];
-      } else {
-        updated[bucketTarget.key] = next;
-      }
-      return updated;
-    });
+    persistUiTagChanges([bucketTarget], [], [tag]);
   };
 
   const selectedCount = selectedBuckets.size;
@@ -3616,7 +3553,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             with_stats: false,
           });
           (response.items ?? []).forEach((bucket) => {
-            resolved.push(toBucketTagTarget(bucket.name, bucket.tenant));
+            const target = resolveBucketTagTarget(bucket);
+            if (target) resolved.push(target);
           });
           if (!response.has_next) break;
           nextPage += 1;
@@ -3697,25 +3635,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     parsedRemove: string[]
   ) => {
     if (targets.length === 0) return;
-    const removeSet = new Set(parsedRemove.map((tag) => tag.toLowerCase()));
-    setUiTags((prev) => {
-      const next = { ...prev };
-      targets.forEach((target) => {
-        let updated = prev[target.key] ?? [];
-        if (parsedAdd.length > 0) {
-          updated = mergeUiTags(updated, parsedAdd);
-        }
-        if (removeSet.size > 0) {
-          updated = updated.filter((tag) => !removeSet.has(tag.toLowerCase()));
-        }
-        if (updated.length === 0) {
-          delete next[target.key];
-        } else {
-          next[target.key] = updated;
-        }
-      });
-      return next;
-    });
+    persistUiTagChanges(targets, parsedAdd, parsedRemove);
   };
 
   const selectedBucketList = useMemo(
@@ -3772,16 +3692,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   );
   const selectedUiTagSuggestions = useMemo(() => {
     if (selectedBucketList.length === 0) return [];
-    const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
+    const selectedTargetKeys = new Set(
+      selectedBucketList
+        .map((selectedName) => selectedBucketItemByName.get(selectedName))
+        .map((bucket) => (bucket ? resolveBucketTagTarget(bucket) : null))
+        .filter((target): target is BucketTagTarget => Boolean(target))
+        .map((target) => target.key)
+    );
     const tags: string[] = [];
-    Object.entries(uiTags).forEach(([storageKey, bucketTags]) => {
-      const parsed = parseBucketUiTagKey(storageKey);
-      if (!parsed) return;
-      if (!selectedNames.has(normalizeBucketName(parsed.name))) return;
-      tags.push(...normalizeUiTagValues(bucketTags));
+    Object.values(uiTagEntries).forEach((entry) => {
+      if (!selectedTargetKeys.has(entry.target.key)) return;
+      tags.push(...normalizeUiTagValues(entry.tags));
     });
     return normalizeUiTagValues(tags).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  }, [selectedBucketList, uiTags]);
+  }, [resolveBucketTagTarget, selectedBucketItemByName, selectedBucketList, uiTagEntries]);
   const parsedSelectionTagAddInput = useMemo(() => parseUiTags(selectionTagAddInput), [selectionTagAddInput]);
 
   const applyUiTagToSelection = async (rawTag: string, action: "add" | "remove") => {
@@ -4266,8 +4190,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           id: col,
           label: "UI tags",
           getValue: (bucket) => {
-            const key = toBucketTagTarget(bucket.name, bucket.tenant).key;
-            const tags = uiTags[key] ?? [];
+            const target = resolveBucketTagTarget(bucket);
+            const tags = target ? uiTags[target.key] ?? [] : [];
             return tags.length > 0 ? tags.join(", ") : "-";
           },
         });
@@ -7057,26 +6981,20 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   ]);
   const clearOrphanedTags = () => {
     if (orphanedTagBuckets.length === 0) return;
-    setUiTags((prev) => {
-      const next = { ...prev };
-      orphanedTagBuckets.forEach((bucketKey) => {
-        delete next[bucketKey];
-      });
-      return next;
-    });
+    removeUiTagTargets(orphanedTagBuckets);
     setOrphanedTagBuckets([]);
   };
   const orphanedTagDetails = useMemo<OrphanedTagBucketDetail[]>(
     () =>
       orphanedTagBuckets
         .map((bucketKey) => {
-          const parsed = parseBucketUiTagKey(bucketKey);
-          const tags = normalizeUiTagValues(uiTags[bucketKey] ?? []);
+          const entry = uiTagEntries[bucketKey];
           return {
             key: bucketKey,
-            name: parsed?.name ?? bucketKey,
-            tenant: parsed?.tenant ?? null,
-            tags,
+            endpointId: entry?.target.endpointId ?? 0,
+            name: entry?.target.name ?? bucketKey,
+            tenant: entry?.target.tenant ?? null,
+            tags: normalizeUiTagValues(entry?.tags ?? []),
           };
         })
         .sort((a, b) => {
@@ -7084,7 +7002,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           if (tenantCompare !== 0) return tenantCompare;
           return a.name.localeCompare(b.name);
         }),
-    [orphanedTagBuckets, uiTags]
+    [orphanedTagBuckets, uiTagEntries]
   );
   const previewStats = useMemo(() => {
     const errors = bulkPreview.filter((item) => item.error).length;
@@ -7383,7 +7301,14 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
   };
 
   const renderUiTags = (bucket: CephAdminBucket) => {
-    const bucketTarget = toBucketTagTarget(bucket.name, bucket.tenant);
+    const bucketTarget = resolveBucketTagTarget(bucket);
+    if (!bucketTarget) {
+      return (
+        <span className="ui-caption text-slate-500 dark:text-slate-400" title="UI tags require a configured storage endpoint.">
+          Endpoint required
+        </span>
+      );
+    }
     const tags = uiTags[bucketTarget.key] ?? [];
     const draft = tagDrafts[bucketTarget.key] ?? "";
     const normalizedDraft = draft.trim().toLowerCase();
@@ -7758,7 +7683,6 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       advancedApplied,
       tagFilters,
       tagFilterMode,
-      selectedBuckets: Array.from(selectedBuckets),
       page,
       pageSize,
       sort,
@@ -8191,8 +8115,8 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                UI tags exist for {orphanedTagDetails.length} bucket{orphanedTagDetails.length > 1 ? "s" : ""} that{" "}
-                {orphanedTagDetails.length > 1 ? "no longer exist" : "no longer exists"}.
+                UI tags exist for {orphanedTagDetails.length} bucket{orphanedTagDetails.length > 1 ? "s" : ""} no longer
+                present on {orphanedTagDetails.length > 1 ? "their recorded endpoints" : "its recorded endpoint"}.
               </span>
               <button
                 type="button"
@@ -8217,6 +8141,9 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
                       {item.tenant ? (
                         <span className="ml-1 font-normal text-amber-800/90 dark:text-amber-200/90">(tenant: {item.tenant})</span>
                       ) : null}
+                      <span className="ml-1 font-normal text-amber-800/90 dark:text-amber-200/90">
+                        (endpoint: {item.endpointId})
+                      </span>
                     </p>
                     {item.tags.length > 0 ? (
                       <div className="mt-1 flex flex-wrap gap-1">

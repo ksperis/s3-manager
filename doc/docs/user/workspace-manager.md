@@ -12,6 +12,8 @@ Use **Manager** for account-scoped administration aligned with S3/IAM semantics.
 ## Steps
 
 1. Open `/manager` and select the correct account/context.
+   - The selected context is recorded in `?ctx=`. When several tabs are open,
+     each tab keeps the context shown in its own URL.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` account and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 2. Use **Usage & Metrics** for tabbed account-level usage composition, storage analytics, usage history, and traffic analytics.
 3. Use **Storage** for buckets and manager browser (if enabled).

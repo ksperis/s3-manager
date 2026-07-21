@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionContext } from "../../api/executionContexts";
@@ -39,7 +40,15 @@ const CONTEXTS: ExecutionContext[] = [
 
 function Probe() {
   const { selectedS3AccountId } = useS3AccountContext();
-  return <div data-testid="selected">{selectedS3AccountId ?? "null"}</div>;
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <div data-testid="selected">{selectedS3AccountId ?? "null"}</div>
+      <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+      <button type="button" onClick={() => navigate("/manager/next")}>Navigate without context</button>
+    </>
+  );
 }
 
 function renderProvider(initialEntry: string) {
@@ -76,15 +85,16 @@ describe("S3AccountProvider", () => {
   it("ignores legacy localStorage keys and falls back to the first context", async () => {
     localStorage.setItem("selectedS3AccountId", "conn-legacy");
     localStorage.setItem("selectedBrowserContextId", "s3u-legacy");
+    localStorage.setItem("selectedExecutionContextId", "s3u-2");
 
     renderProvider("/manager");
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
-    expect(localStorage.getItem("selectedExecutionContextId")).toBe("conn-1");
+    expect(localStorage.getItem("selectedManagerExecutionContextId")).toBe("conn-1");
   });
 
-  it("uses selectedExecutionContextId when present", async () => {
-    localStorage.setItem("selectedExecutionContextId", "s3u-2");
+  it("uses the Manager-specific preference when present", async () => {
+    localStorage.setItem("selectedManagerExecutionContextId", "s3u-2");
     localStorage.setItem("selectedS3AccountId", "conn-legacy");
 
     renderProvider("/manager");
@@ -92,13 +102,25 @@ describe("S3AccountProvider", () => {
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-2"));
   });
 
-  it("prefers ctx query param over selectedExecutionContextId", async () => {
-    localStorage.setItem("selectedExecutionContextId", "s3u-2");
+  it("prefers ctx query param over the Manager-specific preference", async () => {
+    localStorage.setItem("selectedManagerExecutionContextId", "s3u-2");
 
     renderProvider("/manager?ctx=conn-1");
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
-    expect(localStorage.getItem("selectedExecutionContextId")).toBe("conn-1");
+    expect(localStorage.getItem("selectedManagerExecutionContextId")).toBe("conn-1");
+  });
+
+  it("keeps the mounted tab context when another tab changes the preference", async () => {
+    const user = userEvent.setup();
+    renderProvider("/manager?ctx=conn-1");
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
+
+    localStorage.setItem("selectedManagerExecutionContextId", "s3u-2");
+    await user.click(screen.getByRole("button", { name: "Navigate without context" }));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/manager/next?ctx=conn-1"));
+    expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
   });
 
   it("reloads execution contexts when refresh event is emitted", async () => {

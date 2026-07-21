@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 import logging
 from dataclasses import dataclass
 from typing import Callable, Literal
@@ -72,6 +73,7 @@ class _StorageOpsContextRef:
     context_id: str
     context_name: str
     context_kind: StorageOpsContextKind
+    endpoint_id: int | None
     endpoint_name: str | None
 
 
@@ -89,6 +91,15 @@ class _StorageOpsContextOwner:
 
 def _encode_bucket_ref(context_id: str, bucket_name: str) -> str:
     return f"{context_id}{BUCKET_REF_SEPARATOR}{bucket_name}"
+
+
+def _build_bucket_identity(endpoint_id: int | None, tenant: str | None, bucket_name: str) -> str | None:
+    if endpoint_id is None or endpoint_id <= 0:
+        return None
+    name = str(bucket_name or "").strip()
+    if not name:
+        return None
+    return json.dumps([endpoint_id, str(tenant or "").strip(), name], ensure_ascii=False, separators=(",", ":"))
 
 
 def _decode_bucket_ref(bucket_ref: str) -> tuple[str, str]:
@@ -144,6 +155,7 @@ def _collect_context_refs(user: User, db: Session) -> list[_StorageOpsContextRef
                 context_id=context.id,
                 context_name=context.display_name,
                 context_kind=context_kind,
+                endpoint_id=getattr(context, "endpoint_id", None),
                 endpoint_name=context.endpoint_name,
             )
         )
@@ -171,7 +183,9 @@ def _context_probe_bucket(ref: _StorageOpsContextRef) -> StorageOpsBucketSummary
         context_id=ref.context_id,
         context_name=ref.context_name,
         context_kind=ref.context_kind,
+        endpoint_id=ref.endpoint_id,
         endpoint_name=ref.endpoint_name,
+        bucket_identity=None,
     )
 
 
@@ -493,7 +507,9 @@ def _list_context_buckets(
                 context_id=ref.context_id,
                 context_name=ref.context_name,
                 context_kind=ref.context_kind,
+                endpoint_id=ref.endpoint_id,
                 endpoint_name=ref.endpoint_name,
+                bucket_identity=_build_bucket_identity(ref.endpoint_id, owner_identity.tenant, bucket.name),
                 bucket_quota_available=bucket_quota_available,
             )
         )
@@ -548,8 +564,10 @@ def _list_context_buckets(
                     context_id=ref.context_id,
                     context_name=ref.context_name,
                     context_kind=ref.context_kind,
+                    endpoint_id=ref.endpoint_id,
                     endpoint_name=ref.endpoint_name,
                     bucket_name=enriched.name,
+                    bucket_identity=_build_bucket_identity(ref.endpoint_id, enriched.tenant, enriched.name),
                     bucket_quota_available=bucket_quota_available,
                 )
             )

@@ -65,8 +65,10 @@ export type StorageOpsBucket = CephAdminBucket & {
   context_id: string;
   context_name: string;
   context_kind: "account" | "connection" | "s3_user";
+  endpoint_id?: number | null;
   endpoint_name?: string | null;
   bucket_name?: string | null;
+  bucket_identity?: string | null;
   bucket_quota_available?: boolean | null;
 };
 

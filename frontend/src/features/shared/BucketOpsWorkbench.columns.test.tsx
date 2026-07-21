@@ -128,6 +128,7 @@ vi.mock("./BucketOpsRowActionsMenu", () => ({
 
 import BucketOpsWorkbench from "./BucketOpsWorkbench";
 import { saveBucketListReturnContext } from "./bucketListReturnContext";
+import { buildBucketUiTagsStorageKey } from "./bucketUiTags";
 
 const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
 const STORAGE_OPS_LIST_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v1";
@@ -143,6 +144,8 @@ const baseResponse = {
 const baseBucket = {
   name: "bucket-a",
   bucket_name: "bucket-a",
+  endpoint_id: 7,
+  bucket_identity: "physical-7-bucket-a",
   context_id: "account-1",
   context_name: "Account A",
   owner: "owner-a",
@@ -181,6 +184,8 @@ function deferred<T>() {
 
 describe("BucketOpsWorkbench atomic quota columns", () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     mocks.listCephAdminBuckets.mockReset();
     mocks.streamCephAdminBuckets.mockReset();
     mocks.listStorageOpsBuckets.mockReset();
@@ -196,6 +201,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         id: "1",
         display_name: "Account A",
         endpoint_name: "Primary",
+        endpoint_id: 7,
         tags: [{ id: 1, label: "finance", color_key: "amber", scope: "standard" }],
         endpoint_tags: [],
         capabilities: { can_manage_iam: true, sts_capable: false, admin_api_capable: true },
@@ -205,6 +211,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         id: "conn-2",
         display_name: "Connection B",
         endpoint_name: "Archive",
+        endpoint_id: 8,
         tags: [{ id: 2, label: "shared", color_key: "sky", scope: "standard" }],
         endpoint_tags: [{ id: 3, label: "cold", color_key: "slate", scope: "standard" }],
         capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
@@ -214,6 +221,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         id: "s3u-3",
         display_name: "Legacy User C",
         endpoint_name: "Primary",
+        endpoint_id: 7,
         tags: [],
         endpoint_tags: [],
         capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
@@ -316,7 +324,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: "auto" });
   });
 
-  it("restores persisted filters, pagination, sort, and selection after a route return", async () => {
+  it("restores list preferences without restoring the previous tab's selection", async () => {
     window.localStorage.setItem(
       STORAGE_OPS_LIST_STATE_STORAGE_KEY,
       JSON.stringify({
@@ -326,7 +334,6 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
           advancedApplied: null,
           tagFilters: [],
           tagFilterMode: "any",
-          selectedBuckets: ["bucket-a"],
           page: 2,
           pageSize: 50,
           sort: { field: "name", direction: "desc" },
@@ -351,7 +358,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
         expect.any(Object)
       )
     );
-    expect(screen.getByRole("checkbox", { name: "Select bucket bucket-a in Account A" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select bucket bucket-a in Account A" })).not.toBeChecked();
   });
 
   it("shows S3 tag summaries from the shared bucket workbench tag column", async () => {
@@ -376,6 +383,64 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     expect(await screen.findByText("project: archive")).toBeInTheDocument();
     expect(screen.getByText("env: prod")).toBeInTheDocument();
+  });
+
+  it("shares UI tags across contexts for one physical bucket without leaking to another endpoint", async () => {
+    localStorage.setItem("bucket-workbench.ui_tags.v2.initialized", "1");
+    localStorage.setItem(
+      buildBucketUiTagsStorageKey("storage-ops", 7),
+      JSON.stringify({
+        "physical-7-bucket-a": { name: "bucket-a", tenant: null, tags: ["urgent"] },
+      })
+    );
+    localStorage.setItem(
+      buildBucketUiTagsStorageKey("storage-ops", 8),
+      JSON.stringify({
+        "physical-8-bucket-a": { name: "bucket-a", tenant: null, tags: ["archive"] },
+      })
+    );
+    const buckets = [
+      { ...baseBucket, name: "account-1::bucket-a", context_id: "account-1", context_name: "Account A" },
+      { ...baseBucket, name: "conn-2::bucket-a", context_id: "conn-2", context_name: "Connection B" },
+      {
+        ...baseBucket,
+        name: "account-9::bucket-a",
+        context_id: "account-9",
+        context_name: "Account C",
+        endpoint_id: 8,
+        endpoint_name: "Archive",
+        bucket_identity: "physical-8-bucket-a",
+      },
+    ];
+    mocks.listStorageOpsBuckets.mockResolvedValue({ items: buckets, ...baseResponse, total: buckets.length });
+
+    renderStorageOps();
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Remove tag urgent" })).toHaveLength(2),
+    );
+    expect(screen.getAllByRole("button", { name: "Remove tag archive" })).toHaveLength(1);
+    await waitFor(() =>
+      expect(mocks.listStorageOpsBuckets.mock.calls.some((call) => {
+        const raw = call[1]?.advanced_filter;
+        return typeof raw === "string" && raw.includes('"field":"bucket_identity"');
+      })).toBe(true)
+    );
+  });
+
+  it("disables UI tags when a Storage Ops row has no configured endpoint", async () => {
+    mocks.listStorageOpsBuckets.mockResolvedValue({
+      items: [{ ...baseBucket, endpoint_id: null, bucket_identity: null }],
+      ...baseResponse,
+    });
+
+    renderStorageOps();
+
+    expect(await screen.findByText("Endpoint required")).toHaveAttribute(
+      "title",
+      "UI tags require a configured storage endpoint."
+    );
+    expect(screen.queryByRole("textbox", { name: "+" })).not.toBeInTheDocument();
   });
 
   it("selects and deselects filtered storage ops contexts in the compact advanced filter", async () => {

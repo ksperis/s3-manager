@@ -7,7 +7,8 @@ export const CLIENT_STORAGE_KEYS = {
   sessionUser: "user",
   s3SessionEndpoint: "s3SessionEndpoint",
   selectedWorkspace: "selectedWorkspace",
-  selectedExecutionContext: "selectedExecutionContextId",
+  selectedManagerExecutionContext: "selectedManagerExecutionContextId",
+  selectedBrowserExecutionContext: "selectedBrowserExecutionContextId",
   selectedPortalAccount: "selectedPortalAccountId",
   selectedCephAdminEndpoint: "selectedCephAdminEndpointId",
   theme: "theme",
@@ -16,6 +17,7 @@ export const CLIENT_STORAGE_KEYS = {
   selectorTagsPreference: "showSelectorTags",
   portalTransfers: "portal:v3:transfers",
   browserRootUiState: "browser:root-ui-state:v1",
+  browserRootContextSelections: "browser:root-context-selections:v2",
   browserPathHistory: "browser:path-history:v1",
   browserEmbeddedObjectColumns: "browser:embedded-object-columns:v1",
   browserEmbeddedObjectColumnWidths: "browser:embedded-object-column-widths:v1",
@@ -26,6 +28,10 @@ export type ClientStorageRawKey = string;
 
 function resolveLocalStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
+}
+
+function resolveSessionStorage(): Storage | null {
+  return typeof window === "undefined" ? null : window.sessionStorage;
 }
 
 export function readClientStorage(key: ClientStorageKey): string | null {
@@ -94,6 +100,52 @@ export function writeClientStorageKey(key: ClientStorageKey | ClientStorageRawKe
   } catch {
     // Ignore storage failures in private mode, disabled storage, or quota pressure.
   }
+}
+
+export function removeClientStorageKey(key: ClientStorageKey | ClientStorageRawKey): void {
+  try {
+    resolveLocalStorage()?.removeItem(key);
+  } catch {
+    // Ignore storage failures in private mode or disabled storage.
+  }
+}
+
+export function readSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
+  try {
+    return resolveSessionStorage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
+  try {
+    resolveSessionStorage()?.setItem(key, value);
+  } catch {
+    // Ignore storage failures in private mode, disabled storage, or quota pressure.
+  }
+}
+
+export function removeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): void {
+  try {
+    resolveSessionStorage()?.removeItem(key);
+  } catch {
+    // Ignore storage failures in private mode or disabled storage.
+  }
+}
+
+export function readSessionJsonFromKey<T>(key: ClientStorageKey | ClientStorageRawKey): T | null {
+  const raw = readSessionStorageKey(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionJsonToKey(key: ClientStorageKey | ClientStorageRawKey, value: unknown): void {
+  writeSessionStorageKey(key, JSON.stringify(value));
 }
 
 export function clearAuthStorage(): void {

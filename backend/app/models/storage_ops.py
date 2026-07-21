@@ -15,8 +15,10 @@ class StorageOpsBucketSummary(CephAdminBucketSummary):
     context_id: str
     context_name: str
     context_kind: StorageOpsContextKind
+    endpoint_id: Optional[int] = None
     endpoint_name: Optional[str] = None
     bucket_name: Optional[str] = None
+    bucket_identity: Optional[str] = None
     bucket_quota_available: bool = False
 
 

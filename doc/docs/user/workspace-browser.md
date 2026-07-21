@@ -14,6 +14,8 @@ Use **Browser** for direct bucket/object operations.
 
 1. Open `/browser`.
 2. Select the context/account in the top selector.
+   - The selected context is recorded in `?ctx=` and remains independent in
+     each open tab.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` context and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
 3. Navigate buckets and prefixes.
    - Use the workspace sidebar to search and switch buckets directly from the workspace.
@@ -37,6 +39,8 @@ Use **Browser** for direct bucket/object operations.
 - On `/browser`, buckets that cannot be listed are dimmed in the left panel and remain selectable so the backend error can be inspected explicitly.
 - In a Portal account context, the sidebar and current-selection chip use Storage Space names and keep internal bucket names hidden.
 - Some actions depend on the current state. Examples: `Open` is available for a single folder selection, and deleted entries must be restored through versioning flows before direct object operations resume.
+- The last bucket and prefix are remembered only inside the current tab. A
+  second tab using the same context can navigate independently.
 
 ## Expected result
 

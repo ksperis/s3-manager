@@ -4,6 +4,7 @@
  */
 import axios, { AxiosRequestConfig } from "axios";
 import { CLIENT_STORAGE_KEYS, clearAuthStorage, readClientJson, readClientStorage, writeClientStorage } from "../utils/clientStorage";
+import { coordinateAuthRefresh } from "./authRefreshCoordinator";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 export type ApiRequestProfile = "interactive" | "long_running";
@@ -36,6 +37,14 @@ type RefreshResponse = {
   token_type: string;
 };
 
+function readBearerToken(config: RetriableRequestConfig): string | null {
+  const headers = config.headers as Record<string, unknown> & { get?: (name: string) => unknown } | undefined;
+  const authorization = headers?.Authorization ?? headers?.authorization ?? headers?.get?.("Authorization");
+  return typeof authorization === "string" && authorization.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length)
+    : null;
+}
+
 function handleAuthRedirect() {
   if (typeof window === "undefined") return;
   clearAuthStorage();
@@ -57,15 +66,15 @@ function isAuthEndpoint(url: string) {
 
 let refreshPromise: Promise<string> | null = null;
 
-async function refreshAccessToken(): Promise<string> {
+async function refreshAccessToken(observedToken: string | null): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = refreshClient
+    refreshPromise = coordinateAuthRefresh(observedToken, () => refreshClient
       .post<RefreshResponse>("/auth/refresh")
       .then((response) => {
         const token = response.data.access_token;
         writeClientStorage(CLIENT_STORAGE_KEYS.authToken, token);
         return token;
-      })
+      }))
       .finally(() => {
         refreshPromise = null;
       });
@@ -104,7 +113,7 @@ client.interceptors.response.use(
     if (shouldAttemptRefresh) {
       originalRequest._retry = true;
       try {
-        const token = await refreshAccessToken();
+        const token = await refreshAccessToken(readBearerToken(originalRequest));
         originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return client(originalRequest);

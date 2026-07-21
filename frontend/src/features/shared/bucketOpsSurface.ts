@@ -4,8 +4,6 @@
  */
 export type BucketOpsMode = "ceph-admin" | "storage-ops";
 
-export const BUCKET_OPS_SHARED_UI_TAGS_STORAGE_KEY = "bucket-workbench.ui_tags.v1";
-
 export type BucketOpsSurfaceContract = {
   mode: BucketOpsMode;
   breadcrumb: { label: string; to: string };
@@ -14,7 +12,6 @@ export type BucketOpsSurfaceContract = {
     bucketListState: string;
     bulkConfigClipboard: string;
   };
-  uiTagsNamespace: string;
   defaultVisibleColumns: readonly string[];
   useExplicitBucketName: boolean;
   scopeDisplayName: string;
@@ -31,9 +28,8 @@ const BUCKET_OPS_SURFACES: Record<BucketOpsMode, BucketOpsSurfaceContract> = {
     storageKeys: {
       columns: "ceph-admin.bucket_list.columns.v2",
       bucketListState: "ceph-admin.bucket_list.state.v1",
-      bulkConfigClipboard: "ceph-admin.bucket_list.bulk_config_clipboard.v1",
+      bulkConfigClipboard: "ceph-admin.bucket_list.bulk_config_clipboard.v2",
     },
-    uiTagsNamespace: "ceph-admin",
     defaultVisibleColumns: ["ui_tags", "owner", "used_bytes", "object_count"],
     useExplicitBucketName: false,
     scopeDisplayName: "Endpoint",
@@ -48,9 +44,8 @@ const BUCKET_OPS_SURFACES: Record<BucketOpsMode, BucketOpsSurfaceContract> = {
     storageKeys: {
       columns: "storage-ops.bucket_list.columns.v2",
       bucketListState: "storage-ops.bucket_list.state.v1",
-      bulkConfigClipboard: "storage-ops.bucket_list.bulk_config_clipboard.v1",
+      bulkConfigClipboard: "storage-ops.bucket_list.bulk_config_clipboard.v2",
     },
-    uiTagsNamespace: "storage-ops",
     defaultVisibleColumns: ["context_name", "ui_tags", "used_bytes", "object_count"],
     useExplicitBucketName: true,
     scopeDisplayName: "Scope",

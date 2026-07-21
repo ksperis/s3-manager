@@ -425,6 +425,7 @@ BucketFilterField = Literal[
     "context_name",
     "context_kind",
     "endpoint_name",
+    "bucket_identity",
     "tag",
     "used_bytes",
     "object_count",

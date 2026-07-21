@@ -4586,7 +4586,7 @@ export default function BrowserPage({
     if (workspaceAccountActionTarget === "manager") {
       const contextId = selectedContext?.id ?? (typeof accountIdForApi === "string" ? accountIdForApi : null);
       if (!contextId) return;
-      writeClientStorage(CLIENT_STORAGE_KEYS.selectedExecutionContext, contextId);
+      writeClientStorage(CLIENT_STORAGE_KEYS.selectedManagerExecutionContext, contextId);
       writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "manager");
       navigate(`/manager?ctx=${encodeURIComponent(contextId)}`);
       return;
@@ -4594,7 +4594,7 @@ export default function BrowserPage({
     if (accountIdForApi == null) return;
     writeClientStorage(CLIENT_STORAGE_KEYS.selectedPortalAccount, String(accountIdForApi));
     writeClientStorage(CLIENT_STORAGE_KEYS.selectedWorkspace, "portal");
-    navigate("/portal");
+    navigate(`/portal?project=${encodeURIComponent(String(accountIdForApi))}`);
   }, [accountIdForApi, navigate, selectedContext, workspaceAccountActionTarget]);
   const workspaceAccountAction = useMemo(() => {
     if (workspaceAccountActionTarget === "manager") {
