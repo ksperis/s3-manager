@@ -621,7 +621,8 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
-  const canViewBucketMetrics = Boolean(isCephEndpoint && usageFeatureEnabled);
+  const canViewBucketMetrics = hasContext;
+  const canViewLiveBucketMetrics = Boolean(isCephEndpoint && usageFeatureEnabled);
   const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "ACCOUNT00000000000000001";
 
@@ -4713,7 +4714,13 @@ export default function BucketDetailPage({
                     />
                   </div>
                 </MetricsCard>
-                {canViewBucketMetrics &&
+                {!canViewLiveBucketMetrics && (
+                  <PageBanner>
+                    Live endpoint metrics are unavailable. S3-Manager usage stats calculated from bucket listings remain
+                    available in the Usage stats tab.
+                  </PageBanner>
+                )}
+                {canViewLiveBucketMetrics &&
                   (isCephAdmin ? (
                     endpointId && bucketName ? (
                       <TrafficAnalytics scope="ceph-admin" endpointId={endpointId} bucketName={bucketName} enabled={hasCephContext} />

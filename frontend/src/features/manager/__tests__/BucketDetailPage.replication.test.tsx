@@ -774,7 +774,7 @@ describe("BucketDetailPage replication state", () => {
     expect(within(accessLoggingShell).getByRole("button", { name: "Save" })).not.toBeDisabled();
   });
 
-  it("keeps bucket Metrics disabled for non-Ceph manager endpoints", async () => {
+  it("keeps bucket Metrics available for non-Ceph manager endpoints", async () => {
     const user = userEvent.setup();
     useS3AccountContextMock.mockReturnValue({
       accounts: [
@@ -807,13 +807,17 @@ describe("BucketDetailPage replication state", () => {
     });
 
     const metricsTab = screen.getByRole("button", { name: "Metrics" });
-    expect(metricsTab).toBeDisabled();
+    expect(metricsTab).not.toBeDisabled();
 
     await user.click(metricsTab);
 
-    expect(screen.queryByText("Current usage and quota")).not.toBeInTheDocument();
+    expect(screen.getByText("Current usage and quota")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Metrics are unavailable: this connection endpoint is not a Ceph provider.")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Live endpoint metrics are unavailable. S3-Manager usage stats calculated from bucket listings remain available in the Usage stats tab."
+      )
+    ).toBeInTheDocument();
   });
 
   it("keeps bucket Metrics clickable for Ceph endpoints with metrics enabled", async () => {
@@ -835,7 +839,8 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.queryByText("Bucket: demo-bucket")).not.toBeInTheDocument();
   });
 
-  it("disables bucket Metrics for Ceph endpoints when metrics capability is disabled", async () => {
+  it("keeps bucket Metrics available for Ceph endpoints when metrics capability is disabled", async () => {
+    const user = userEvent.setup();
     useCephAdminEndpointMock.mockReturnValue({
       selectedEndpointId: 1,
       selectedEndpoint: {
@@ -858,6 +863,13 @@ describe("BucketDetailPage replication state", () => {
       expect(listCephAdminBucketsMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole("button", { name: "Metrics" })).toBeDisabled();
+    const metricsTab = screen.getByRole("button", { name: "Metrics" });
+    expect(metricsTab).not.toBeDisabled();
+
+    await user.click(metricsTab);
+
+    expect(screen.getByText("Current usage and quota")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Traffic" })).not.toBeInTheDocument();
+    expect(screen.getByText(/S3-Manager usage stats calculated from bucket listings/)).toBeInTheDocument();
   });
 });
