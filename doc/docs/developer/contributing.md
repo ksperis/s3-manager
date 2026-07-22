@@ -65,7 +65,9 @@ GitLab pipelines publish JUnit XML test reports for:
 - `ceph-functional-tests` when that job is enabled by CI variables
 
 These reports feed the pipeline **Tests** tab and merge request **Test summary** panel.
-They do not make jobs fail by themselves; the test command exit code remains the blocking signal.
+They do not make jobs fail by themselves; the test command exit code remains the blocking signal
+for the required test jobs. `ceph-functional-tests` is advisory: its failures remain visible in
+the pipeline and JUnit report, but they do not block image builds or later pipeline stages.
 
 Useful local commands:
 

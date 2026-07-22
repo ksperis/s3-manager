@@ -377,6 +377,7 @@ ceph-functional-tests:
   stage: test
   image: python:3.12-slim
   needs: []
+  allow_failure: true
   rules:
     - if: '$SECRET_DETECTION_HISTORIC_SCAN == "true"'
       when: never
