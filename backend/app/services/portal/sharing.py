@@ -297,7 +297,6 @@ class PortalSharingMixin:
     def _storage_space_owner_person(
         self,
         metadata: PortalStorageSpaceMetadata | None,
-        fallback_user: User,
         account: S3Account,
     ) -> PortalStorageSpaceAccessPerson | None:
         if metadata is None or self._metadata_visibility(metadata) != "private":
@@ -402,7 +401,7 @@ class PortalSharingMixin:
         return PortalStorageSpaceAccessSummary(
             mode=mode,
             default_account_member_role=self._metadata_account_member_role(metadata),
-            owner=self._storage_space_owner_person(metadata, user, access.account),
+            owner=self._storage_space_owner_person(metadata, access.account),
             effective_member_count=len(self._storage_space_effective_access_user_ids(metadata)),
             explicit_shares=sorted(explicit_shares, key=lambda item: item.email.lower()),
             public_link_count=public_link_count,

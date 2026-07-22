@@ -700,9 +700,9 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     await waitFor(() => {
       expect(mocks.deleteStorageSpaceMock).toHaveBeenCalledWith("101", "research-data");
+      expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Spaces")).toBeInTheDocument();
     });
-    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText("Spaces")).toBeInTheDocument();
   });
 
   it("keeps the confirmation open and reports deletion errors", async () => {

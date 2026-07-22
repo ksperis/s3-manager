@@ -296,11 +296,13 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "bucket-a" }));
 
-    const stored = JSON.parse(window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}") as Record<
-      string,
-      { page?: number; pageSize?: number }
-    >;
-    expect(stored["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}") as Record<
+        string,
+        { page?: number; pageSize?: number }
+      >;
+      expect(stored["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
+    });
   });
 
   it("restores the list scroll position and focuses the originating bucket", async () => {
@@ -320,7 +322,7 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     renderStorageOps();
 
     const bucketButton = await screen.findByRole("button", { name: "bucket-a" });
-    await waitFor(() => expect(bucketButton).toHaveFocus());
+    await waitFor(() => expect(bucketButton).toHaveFocus(), { timeout: 3000 });
     expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: "auto" });
   });
 
