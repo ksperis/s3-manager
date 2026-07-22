@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.10 - 2026-07-22
+
+### Added
+
+- Added Portal collaboration workflows for reviewed access requests, external IAM credentials, public links, server access logging, history cleanup, and permanent Storage Space deletion.
+- Added Ceph Admin operations with unified long-running bucket actions, richer endpoint health information, and routed bucket detail navigation.
+- Added multi-backend coordination, identity avatars, quota notifications, and more explicit storage health signals.
+
+### Changed
+
+- Made Portal Storage Space metadata and grants authoritative, with private ownership, Viewer/Editor team grants, and consistent project-manager access.
+- Standardized frontend tables, forms, filters, feedback, profile settings, navigation, and responsive behavior across the application workspaces.
+- Hardened storage endpoint handling and long-running operation behavior while simplifying backend compatibility paths and shared service boundaries.
+
+### Fixed/Security
+
+- Restricted Portal access history to managers and refined external access, member request, and public-link cleanup behavior.
+- Restored Manager bucket metrics access and improved resilience when storage endpoints or asynchronous UI data are temporarily unavailable.
+- Kept Ceph functional test failures visible but advisory so intermittent lab failures no longer block immutable image builds.
+
+### Breaking changes
+
+- Migration `0066_portal_storage_space_access_model` removes legacy Portal Storage Space database and IAM state. Existing spaces must be recreated or re-imported after upgrading.
+
+### Tests
+
+- Expanded backend, frontend, migration, multi-backend, Portal, Storage Ops, and Ceph Admin coverage, including functional Ceph lifecycle scenarios.
+- Stabilized asynchronous frontend and Ceph-dependent validation while retaining JUnit reports and CI artifacts for advisory Ceph failures.
+
 ## 0.1.9 - 2026-06-26
 
 ### Added
