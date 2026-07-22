@@ -833,6 +833,8 @@ class PortalServerAccessLoggingMixin:
         space_id: Optional[str] = None,
         timezone_offset_minutes: int = 0,
     ) -> list[PortalServerAccessLogEntry]:
+        if access.role != AccountRole.PORTAL_MANAGER.value:
+            raise RuntimeError("Only project managers can access Portal server access logs")
         try:
             selected_date = date_cls.fromisoformat(date)
         except ValueError as exc:
@@ -942,6 +944,8 @@ class PortalServerAccessLoggingMixin:
         timezone_offset_minutes: int = 0,
         max_objects: int = 10000,
     ) -> str:
+        if access.role != AccountRole.PORTAL_MANAGER.value:
+            raise RuntimeError("Only project managers can access Portal server access logs")
         try:
             start_date = date_cls.fromisoformat(date_from)
             end_date = date_cls.fromisoformat(date_to)

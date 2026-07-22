@@ -3280,6 +3280,25 @@ def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkey
     assert "reports/tomorrow.csv" not in raw_logs
 
 
+def test_portal_server_access_logs_require_portal_manager(db_session):
+    account = S3Account(name="portal-log-denied", rgw_account_id="rgw-log-denied")
+    user = User(email="portal-log-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value)
+    service = PortalService(db_session)
+
+    with pytest.raises(RuntimeError, match="Only project managers"):
+        service.list_portal_server_access_logs(user, access, date="2026-07-08")
+    with pytest.raises(RuntimeError, match="Only project managers"):
+        service.list_portal_server_access_log_page(user, access, date="2026-07-08")
+    with pytest.raises(RuntimeError, match="Only project managers"):
+        service.get_portal_server_access_logs_raw(
+            user,
+            access,
+            date_from="2026-07-08",
+            date_to="2026-07-08",
+        )
 def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_session):
     account = S3Account(
         name="portal-log-identities",

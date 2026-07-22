@@ -59,6 +59,7 @@ from app.routers.dependencies import (
     get_audit_logger,
     get_current_account_user,
     get_portal_account_access,
+    require_portal_manager,
 )
 from app.routers.sse_worker import wait_for_cancellable_worker
 from app.routers.http_errors import (
@@ -543,7 +544,7 @@ def portal_server_access_logs(
     offset: int = Query(0, ge=0),
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
     advanced_filter: Optional[str] = Query(None),
-    access: AccountAccess = Depends(get_portal_account_access),
+    access: AccountAccess = Depends(require_portal_manager),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[PortalServerAccessLogEntry]:
     actor = access.actor
@@ -577,7 +578,7 @@ def portal_server_access_logs_page(
     offset: int = Query(0, ge=0),
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
     advanced_filter: Optional[str] = Query(None),
-    access: AccountAccess = Depends(get_portal_account_access),
+    access: AccountAccess = Depends(require_portal_manager),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalServerAccessLogPage:
     actor = access.actor
@@ -608,7 +609,7 @@ def portal_server_access_logs_raw(
     date_to: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     space_id: Optional[str] = Query(None),
     timezone_offset_minutes: int = Query(0, ge=-840, le=840),
-    access: AccountAccess = Depends(get_portal_account_access),
+    access: AccountAccess = Depends(require_portal_manager),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> Response:
     actor = access.actor

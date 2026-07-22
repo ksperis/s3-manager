@@ -7,6 +7,7 @@ import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 const mocks = vi.hoisted(() => ({
   transfers: [] as PortalWorkspaceTransfer[],
   serverAccessLoggingEnabled: true,
+  accountRole: "portal_manager",
   fetchPortalServerAccessLogPage: vi.fn(),
   downloadPortalServerAccessRawLogs: vi.fn(),
   createObjectURL: vi.fn(),
@@ -30,7 +31,9 @@ vi.mock("./usePortalWorkspaceData", () => ({
     },
     state: {
       server_access_logging_enabled: mocks.serverAccessLoggingEnabled,
+      account_role: mocks.accountRole,
     },
+    selectedAccount: { account_role: mocks.accountRole },
     loading: false,
     accountLoading: false,
     error: null,
@@ -59,6 +62,7 @@ describe("PortalTransfersPage", () => {
     mocks.revokeObjectURL.mockReset();
     mocks.anchorClick.mockReset();
     mocks.serverAccessLoggingEnabled = true;
+    mocks.accountRole = "portal_manager";
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: mocks.createObjectURL });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: mocks.revokeObjectURL });
     Object.defineProperty(HTMLAnchorElement.prototype, "click", { configurable: true, value: mocks.anchorClick });
@@ -159,6 +163,18 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
     expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
+    expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
+  });
+
+  it("hides access history and does not load sensitive logs for portal users", () => {
+    mocks.accountRole = "portal_user";
+
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
+    expect(screen.getByText("Review recent uploads and downloads for the spaces you can use.")).toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 

@@ -976,7 +976,7 @@ export default function PortalAccessKeysPage() {
               <PageBanner tone="info">
                 {t({
                   en: `Your personal IAM user already has the maximum of ${maxAccessKeys} S3 access keys. You can still create access for an external user because it uses a separate IAM user.`,
-                  fr: `Votre utilisateur IAM personnel possède déjà le maximum de ${maxAccessKeys} clés d'accès S3. Vous pouvez encore créer un accès pour un utilisateur externe, car il utilise un utilisateur IAM distinct.`,
+                  fr: `Votre utilisateur IAM personnel a déjà atteint la limite de ${maxAccessKeys} clés d'accès S3. Vous pouvez toutefois créer un accès pour un utilisateur externe.`,
                   de: `Ihr persönlicher IAM-Benutzer hat bereits das Maximum von ${maxAccessKeys} S3-Zugriffsschlüsseln. Für externe Benutzer können Sie weiterhin Zugriff erstellen, da dafür ein separater IAM-Benutzer verwendet wird.`,
                 })}
               </PageBanner>

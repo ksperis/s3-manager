@@ -273,9 +273,11 @@ export default function PortalTransfersPage() {
   const [rawLogsSpaceId, setRawLogsSpaceId] = useState("");
   const [rawLogsLoading, setRawLogsLoading] = useState(false);
   const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi } = usePortalWorkspaceData({ includeTransfers: true });
+  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, selectedAccount } = usePortalWorkspaceData({ includeTransfers: true });
   const storageSpaces = workspace.spaces ?? [];
   const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
+  const canViewServerAccessLogs =
+    selectedAccount?.account_role === "portal_manager" || state?.account_role === "portal_manager";
   const logsTabs = useMemo(() => {
     const tabs: Array<{ id: LogsTab; label: string }> = [
       {
@@ -283,11 +285,11 @@ export default function PortalTransfersPage() {
         label: t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" }),
       },
     ];
-    if (serverAccessLoggingEnabled) {
+    if (serverAccessLoggingEnabled && canViewServerAccessLogs) {
       tabs.push({ id: "server", label: t({ en: "Access history", fr: "Historique des accès", de: "Zugriffsverlauf" }) });
     }
     return tabs;
-  }, [serverAccessLoggingEnabled, t]);
+  }, [canViewServerAccessLogs, serverAccessLoggingEnabled, t]);
 
   const serverLogAdvancedFilterParam = useMemo(
     () => buildServerLogAdvancedFilterPayload(serverLogAdvancedApplied),
@@ -588,13 +590,13 @@ export default function PortalTransfersPage() {
   const serverLogAdvancedDraftActiveCount = serverLogAdvancedDraftSummaryItems.length;
 
   useEffect(() => {
-    if (!serverAccessLoggingEnabled && activeLogsTab === "server") {
+    if ((!serverAccessLoggingEnabled || !canViewServerAccessLogs) && activeLogsTab === "server") {
       setActiveLogsTab("live");
     }
-  }, [activeLogsTab, serverAccessLoggingEnabled]);
+  }, [activeLogsTab, canViewServerAccessLogs, serverAccessLoggingEnabled]);
 
   useEffect(() => {
-    if (activeLogsTab !== "server" || !serverAccessLoggingEnabled || !accountIdForApi || !serverLogDate) return;
+    if (activeLogsTab !== "server" || !serverAccessLoggingEnabled || !canViewServerAccessLogs || !accountIdForApi || !serverLogDate) return;
     let cancelled = false;
     setServerLogsLoading(true);
     setServerLogsError(null);
@@ -637,7 +639,7 @@ export default function PortalTransfersPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeLogsTab, serverAccessLoggingEnabled, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
+  }, [accountIdForApi, activeLogsTab, canViewServerAccessLogs, serverAccessLoggingEnabled, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
 
   const openRawLogsModal = useCallback(() => {
     setRawLogsDateFrom(serverLogDate);
@@ -923,11 +925,19 @@ export default function PortalTransfersPage() {
     <div className="space-y-4">
       <PageHeader
         title={t({ en: "Transfer history", fr: "Historique des transferts", de: "Transferverlauf" })}
-        description={t({
-          en: "Review recent uploads, downloads, and detailed access history for the spaces you can use.",
-          fr: "Consultez les envois, téléchargements et l'historique d'accès détaillé des espaces que vous pouvez utiliser.",
-          de: "Prüfen Sie aktuelle Uploads, Downloads und den detaillierten Zugriffsverlauf Ihrer Bereiche.",
-        })}
+        description={
+          canViewServerAccessLogs
+            ? t({
+                en: "Review recent uploads, downloads, and detailed access history for the spaces you can use.",
+                fr: "Consultez les envois, téléchargements et l'historique d'accès détaillé des espaces que vous pouvez utiliser.",
+                de: "Prüfen Sie aktuelle Uploads, Downloads und den detaillierten Zugriffsverlauf Ihrer Bereiche.",
+              })
+            : t({
+                en: "Review recent uploads and downloads for the spaces you can use.",
+                fr: "Consultez les envois et téléchargements récents des espaces que vous pouvez utiliser.",
+                de: "Prüfen Sie aktuelle Uploads und Downloads Ihrer Bereiche.",
+              })
+        }
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }) })}
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
       />
@@ -938,7 +948,7 @@ export default function PortalTransfersPage() {
         onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
       />
 
-      {activeLogsTab === "server" && serverAccessLoggingEnabled ? (
+      {activeLogsTab === "server" && serverAccessLoggingEnabled && canViewServerAccessLogs ? (
         <UiCard
           title={t({ en: "Detailed access history", fr: "Historique d'accès détaillé", de: "Detaillierter Zugriffsverlauf" })}
           description={t({
