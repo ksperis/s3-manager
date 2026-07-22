@@ -69,7 +69,7 @@ import setupIllustration from "./assets/admin-dashboard-setup.png";
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
 const ADMIN_INCIDENT_HISTORY_MINUTES = 7 * 24 * 60;
-const MAX_ENDPOINT_ROWS = 6;
+const MAX_ENDPOINT_ROWS = 8;
 
 function parseBackendIsoDate(value?: string | null): Date | null {
   if (!value) return null;
@@ -410,7 +410,7 @@ function EndpointRow({ endpoint }: { endpoint: WorkspaceEndpointHealthEntry }) {
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-[color:var(--ui-border-soft)] px-2 py-2 ui-caption sm:grid sm:grid-cols-[minmax(0,1fr)_64px_60px_minmax(108px,1fr)_72px] sm:border-0 sm:px-0 sm:py-0">
       <span className="flex min-w-0 items-center gap-2 font-semibold text-[var(--ui-text)]">
         <WorkspaceStatusDot status={endpoint.status} className="shrink-0" />
-        <span className="truncate">{endpoint.name}</span>
+        <span className="truncate" title={endpoint.name}>{endpoint.name}</span>
       </span>
       <span className={uiMutedTextClass}>{formatLatency(endpoint.latency_ms)}</span>
       <span className={uiMutedTextClass}>{formatCheckMode(endpoint.check_mode)}</span>

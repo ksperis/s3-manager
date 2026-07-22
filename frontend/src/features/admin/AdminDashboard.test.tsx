@@ -438,6 +438,39 @@ describe("AdminDashboard feature summary", () => {
     expect(mocks.listStorageEndpoints).toHaveBeenCalled();
   });
 
+  it("shows the first eight endpoint names with hover titles", async () => {
+    mocks.generalSettings = buildGeneralSettings({
+      endpoint_status_enabled: true,
+    });
+    mocks.fetchHealthWorkspaceOverview.mockResolvedValue({
+      generated_at: "2026-05-25T00:00:00Z",
+      incident_highlight_minutes: 10080,
+      endpoint_count: 9,
+      up_count: 9,
+      degraded_count: 0,
+      down_count: 0,
+      unknown_count: 0,
+      endpoints: Array.from({ length: 9 }, (_, index) => ({
+        endpoint_id: index + 1,
+        name: `Endpoint ${index + 1}`,
+        endpoint_url: `https://s3-${index + 1}.example.test`,
+        status: "up" as const,
+        checked_at: "2026-06-05T11:15:00Z",
+        latency_ms: 76,
+        check_mode: "http",
+      })),
+      incidents: [],
+    });
+
+    await renderDashboard();
+
+    for (let index = 1; index <= 8; index += 1) {
+      expect(screen.getByText(`Endpoint ${index}`)).toHaveAttribute("title", `Endpoint ${index}`);
+    }
+    expect(screen.queryByText("Endpoint 9")).not.toBeInTheDocument();
+    expect(screen.getByText("+ 1 more endpoint(s)")).toBeInTheDocument();
+  });
+
   it("keeps the admin incident card visible when no incidents are returned", async () => {
     mocks.generalSettings = buildGeneralSettings({
       endpoint_status_enabled: true,
