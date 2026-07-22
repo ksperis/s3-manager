@@ -291,8 +291,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
 
     fireEvent.change(await screen.findByLabelText("Page size"), { target: { value: "10" } });
     await waitFor(() => expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await waitFor(() => expect(screen.getByText(/Page 2 of 3/)).toBeInTheDocument());
+    const nextButton = screen.getByRole("button", { name: "Next" });
+    fireEvent.click(nextButton);
+    await waitFor(() => {
+      expect(screen.getByText(/Page 2 of 3/)).toBeInTheDocument();
+      expect(nextButton).toBeEnabled();
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "bucket-a" }));
 
