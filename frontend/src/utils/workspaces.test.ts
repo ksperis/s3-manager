@@ -34,6 +34,7 @@ const adminUser: SessionUser = {
   role: "ui_admin",
   can_access_ceph_admin: true,
   can_access_storage_ops: true,
+  account_links: [{ account_id: 1, account_admin: true }],
 };
 
 const superAdminUser: SessionUser = {
@@ -42,6 +43,7 @@ const superAdminUser: SessionUser = {
   role: "ui_superadmin",
   can_access_ceph_admin: true,
   can_access_storage_ops: true,
+  account_links: [{ account_id: 2, account_admin: true }],
 };
 
 describe("resolveAvailableWorkspacesWithFlags", () => {
@@ -53,7 +55,7 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     const workspaces = resolveAvailableWorkspacesWithFlags(adminUser, {
       ...baseSettings,
       storage_ops_enabled: true,
-    });
+    }, { manager: true, browser: true });
 
     expect(workspaces.find((workspace) => workspace.id === "admin")?.label).toBe("Admin (platform)");
     expect(workspaces.find((workspace) => workspace.id === "browser")?.label).toBe("Browser (objects)");
@@ -86,6 +88,24 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
   });
 
+  it("hides context workspaces for admin-like users without an authorized context", () => {
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      {
+        ...adminUser,
+        account_links: [],
+        s3_users: [],
+        s3_connections: [],
+      },
+      {
+        ...baseSettings,
+        storage_ops_enabled: true,
+      },
+      { manager: false, browser: false }
+    );
+
+    expect(workspaces.map((workspace) => workspace.id)).toEqual(["admin", "ceph-admin"]);
+  });
+
   it("does not expose Storage Ops to standard users without dedicated permission", () => {
     const user: SessionUser = {
       id: 5,
@@ -101,13 +121,37 @@ describe("resolveAvailableWorkspacesWithFlags", () => {
     expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
   });
 
+  it("does not expose Storage Ops without an authorized Manager context", () => {
+    const user: SessionUser = {
+      id: 16,
+      email: "ops-without-context@example.com",
+      role: "ui_user",
+      can_access_storage_ops: true,
+      account_links: [{ account_id: 24, account_admin: false, account_role: "portal_user" }],
+    };
+
+    const workspaces = resolveAvailableWorkspacesWithFlags(
+      user,
+      {
+        ...baseSettings,
+        portal_enabled: true,
+        storage_ops_enabled: true,
+      },
+      { manager: false, browser: true }
+    );
+
+    expect(workspaces.some((workspace) => workspace.id === "storage-ops")).toBe(false);
+    expect(workspaces.some((workspace) => workspace.id === "portal")).toBe(true);
+    expect(workspaces.some((workspace) => workspace.id === "browser")).toBe(true);
+  });
+
   it("exposes Storage Ops to standard users with dedicated permission when feature is enabled", () => {
     const user: SessionUser = {
       id: 6,
       email: "ops-user@example.com",
       role: "ui_user",
       can_access_storage_ops: true,
-      account_links: [{ account_id: 24, account_admin: false }],
+      account_links: [{ account_id: 24, account_admin: true }],
     };
     const workspaces = resolveAvailableWorkspacesWithFlags(user, {
       ...baseSettings,

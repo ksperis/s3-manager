@@ -21,6 +21,11 @@ export type WorkspaceOption = {
   path: string;
 };
 
+export type WorkspaceContextAvailability = {
+  manager: boolean;
+  browser: boolean;
+};
+
 export type SessionUser = {
   id?: number | null;
   email?: string | null;
@@ -147,20 +152,15 @@ function canAccessStorageOps(user: SessionUser | null): boolean {
   return Boolean(getEffectiveAccess(user)?.can_access_storage_ops ?? user?.can_access_storage_ops);
 }
 
-function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
+function resolveAvailableWorkspaces(
+  user: SessionUser | null,
+  contextAvailability?: WorkspaceContextAvailability
+): WorkspaceOption[] {
   if (!user || !user.role) return [];
   const links = getAccountLinks(user);
   const hasPortalAccess = hasPortalWorkspaceAccess(user);
-  if (isAdminLikeRole(user.role)) {
-    return ALL_WORKSPACES.filter((workspace) => {
-      if (workspace.id === "ceph-admin") return canAccessCephAdmin(user);
-      if (workspace.id === "storage-ops") return canAccessStorageOps(user);
-      if (workspace.id === "portal") return hasPortalAccess;
-      return true;
-    });
-  }
-  if (user.role !== USER_ROLE) return [];
   if (user.authType === "s3_session") {
+    if (user.role !== USER_ROLE) return [];
     const canManager = user.capabilities?.can_manage_iam !== false;
     const canBrowser = user.capabilities?.access_browser !== false;
     return ALL_WORKSPACES.filter((workspace) => {
@@ -187,11 +187,27 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     connectionDetails.length > 0
       ? connectionDetails.some((connection) => canUseManagerConnection(connection))
       : connectionIds.length > 0;
-  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess;
-  const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess || hasPortalAccess;
+  const hasManagerAccess =
+    contextAvailability?.manager ??
+    (hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess);
+  const hasBrowserAccess =
+    contextAvailability?.browser ??
+    (hasBrowserConnectionAccess || hasS3UserAccess || hasPortalAccess);
+
+  if (isAdminLikeRole(user.role)) {
+    return ALL_WORKSPACES.filter((workspace) => {
+      if (workspace.id === "ceph-admin") return canAccessCephAdmin(user);
+      if (workspace.id === "storage-ops") return canAccessStorageOps(user) && hasManagerAccess;
+      if (workspace.id === "manager") return hasManagerAccess;
+      if (workspace.id === "portal") return hasPortalAccess;
+      if (workspace.id === "browser") return hasBrowserAccess;
+      return workspace.id === "admin";
+    });
+  }
+  if (user.role !== USER_ROLE) return [];
 
   return ALL_WORKSPACES.filter((workspace) => {
-    if (workspace.id === "storage-ops") return canAccessStorageOps(user);
+    if (workspace.id === "storage-ops") return canAccessStorageOps(user) && hasManagerAccess;
     if (workspace.id === "manager") return hasManagerAccess;
     if (workspace.id === "portal") return hasPortalAccess;
     if (workspace.id === "browser") return hasBrowserAccess;
@@ -201,26 +217,14 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
 
 export function resolveAvailableWorkspacesWithFlags(
   user: SessionUser | null,
-  generalSettings: GeneralSettings
+  generalSettings: GeneralSettings,
+  contextAvailability?: WorkspaceContextAvailability
 ): WorkspaceOption[] {
-  const filtered = resolveAvailableWorkspaces(user).filter((workspace) => {
+  const filtered = resolveAvailableWorkspaces(user, contextAvailability).filter((workspace) => {
     if (workspace.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
     if (workspace.id === "storage-ops") return generalSettings.storage_ops_enabled;
     if (workspace.id === "portal") return generalSettings.portal_enabled;
-    if (workspace.id === "manager") {
-      if (!generalSettings.manager_enabled) return false;
-      if (user?.role !== USER_ROLE || user?.authType === "s3_session") return true;
-      if (getAccountLinks(user).some((link) => Boolean(link.account_admin))) return true;
-      const connectionDetails = getConnectionDetails(user);
-      const hasIamConnections = connectionDetails.length > 0
-        ? connectionDetails.some((connection) =>
-            connection.access_manager === true
-          )
-        : getConnectionIds(user).length > 0;
-      if (hasIamConnections) return true;
-      if (getS3UserDetails(user).length || getS3UserIds(user).length) return true;
-      return false;
-    }
+    if (workspace.id === "manager") return generalSettings.manager_enabled;
     if (workspace.id === "browser") {
       const portalBrowserEnabled =
         generalSettings.portal_enabled &&

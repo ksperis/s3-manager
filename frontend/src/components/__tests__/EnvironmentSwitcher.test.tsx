@@ -167,13 +167,15 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
     expect(window.localStorage.getItem("selectedPortalAccountId")).toBe("101");
   });
 
-  it("omits Portal from the model for admins without an explicit portal account role", () => {
+  it("omits Portal from the model for admins without an explicit portal account role", async () => {
     storePlainAdminUser();
     renderSwitcherModel("/admin");
 
-    const options = within(screen.getByRole("list", { name: "Workspace options" }));
-    expect(options.queryByText("Portal (self-service)")).not.toBeInTheDocument();
-    expect(options.getByText("Admin (platform)")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.listExecutionContexts).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText("Portal (self-service)")).not.toBeInTheDocument();
+    expect(screen.getByText("No workspace switcher")).toBeInTheDocument();
   });
 
   it("refreshes the stored user before deciding Portal is unavailable", async () => {
@@ -196,5 +198,38 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
     expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].account_role).toBe(
       "portal_manager"
     );
+  });
+
+  it("shows only workspaces backed by an authorized execution context", async () => {
+    mocks.generalSettings = {
+      ...baseSettings,
+      storage_ops_enabled: true,
+    };
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 3,
+        email: "portal-only@example.com",
+        role: "ui_user",
+        authType: "password",
+        can_access_storage_ops: true,
+        account_links: [{ account_id: 101, account_admin: false, account_role: "portal_user" }],
+      })
+    );
+    mocks.listExecutionContexts.mockImplementation(async (workspace: string) =>
+      workspace === "browser" ? [{ id: "101", kind: "portal_account" }] : []
+    );
+
+    renderSwitcherModel("/portal");
+
+    await waitFor(() => {
+      expect(mocks.listExecutionContexts).toHaveBeenCalledWith("manager");
+      expect(mocks.listExecutionContexts).toHaveBeenCalledWith("browser");
+    });
+    const options = within(screen.getByRole("list", { name: "Workspace options" }));
+    expect(options.queryByText("Storage Ops")).not.toBeInTheDocument();
+    expect(options.queryByText("Manager (admin tenant)")).not.toBeInTheDocument();
+    expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
+    expect(options.getByText("Browser (objects)")).toBeInTheDocument();
   });
 });

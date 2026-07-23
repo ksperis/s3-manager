@@ -6,11 +6,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
+import { listExecutionContexts } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson, writeClientStorage } from "../utils/clientStorage";
 import {
   WORKSPACE_STORAGE_KEY,
+  isAdminLikeRole,
   type SessionUser,
+  type WorkspaceContextAvailability,
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
@@ -29,6 +32,13 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<SessionUser | null>(() => readStoredUser());
+  const [resolvedContextAvailability, setResolvedContextAvailability] = useState<{
+    userKey: string | null;
+    availability: WorkspaceContextAvailability;
+  }>({
+    userKey: null,
+    availability: { manager: false, browser: false },
+  });
   const { generalSettings } = useGeneralSettings();
 
   useEffect(() => {
@@ -49,16 +59,50 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     };
   }, []);
 
-  const environments = useMemo(() => {
-    const base = resolveAvailableWorkspacesWithFlags(user, generalSettings);
-    const isUiUser = user?.role === "ui_user";
-    const isSessionUser = user?.authType === "s3_session";
-    if (!isUiUser || isSessionUser) {
-      return base;
-    }
-    return base;
-  }, [generalSettings, user]);
+  const requiresContextResolution =
+    user?.authType !== "s3_session" &&
+    (user?.role === "ui_user" || isAdminLikeRole(user?.role));
+  const contextUserKey = requiresContextResolution
+    ? `${user?.id ?? "unknown"}:${user?.email ?? "unknown"}`
+    : null;
+  const contextAvailability =
+    contextUserKey && resolvedContextAvailability.userKey === contextUserKey
+      ? resolvedContextAvailability.availability
+      : contextUserKey
+        ? { manager: false, browser: false }
+        : undefined;
+  const environments = useMemo(
+    () => resolveAvailableWorkspacesWithFlags(user, generalSettings, contextAvailability),
+    [contextAvailability, generalSettings, user]
+  );
   const current = resolveWorkspaceFromPath(location.pathname, environments);
+
+  useEffect(() => {
+    if (!contextUserKey) {
+      setResolvedContextAvailability({
+        userKey: null,
+        availability: { manager: false, browser: false },
+      });
+      return;
+    }
+    let cancelled = false;
+    Promise.allSettled([
+      listExecutionContexts("manager"),
+      listExecutionContexts("browser"),
+    ]).then(([managerResult, browserResult]) => {
+      if (cancelled) return;
+      setResolvedContextAvailability({
+        userKey: contextUserKey,
+        availability: {
+          manager: managerResult.status === "fulfilled" && managerResult.value.length > 0,
+          browser: browserResult.status === "fulfilled" && browserResult.value.length > 0,
+        },
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contextUserKey]);
 
   const currentWorkspaceId = current?.id ?? null;
 
