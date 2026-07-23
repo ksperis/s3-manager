@@ -114,6 +114,7 @@ export default function PortalUsagePage() {
     accountLoading,
     hasAccountContext,
     accountIdForApi,
+    selectedAccount,
     state,
   } = usePortalWorkspaceData({ includeUsage: true, includeTraffic: true, includeHealth: true, trafficWindow });
 
@@ -293,6 +294,20 @@ export default function PortalUsagePage() {
   const trafficMissing = !traffic && !trafficLoading && !trafficError;
   const backendStatus = backendStatusFromHealth(health);
   const backendIssueCount = (health?.down_count ?? 0) + (health?.degraded_count ?? 0);
+  const bucketRankingLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    workspace.spaces.forEach((space) => {
+      labels[space.id] = space.name;
+      if (space.internalName) {
+        labels[space.internalName] = space.name;
+      }
+    });
+    return labels;
+  }, [workspace.spaces]);
+  const userRankingLabels = useMemo(() => {
+    const rgwAccountId = selectedAccount?.rgw_account_id?.trim();
+    return rgwAccountId ? { [rgwAccountId]: workspace.accountName } : {};
+  }, [selectedAccount?.rgw_account_id, workspace.accountName]);
 
   const billingMonthControl = (
     <label className={cx(uiCardMutedClass, "flex h-9 items-center gap-2 px-3 ui-caption font-semibold", uiMutedTextClass)}>
@@ -514,6 +529,8 @@ export default function PortalUsagePage() {
           description={t({ en: "How files moved in and out of this workspace.", fr: "Comment les fichiers sont entrés et sortis de ce workspace.", de: "Wie Dateien in diesen Workspace hinein- und hinausbewegt wurden." })}
           bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
           userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
+          bucketRankingLabels={bucketRankingLabels}
+          userRankingLabels={userRankingLabels}
           labels={{
             egress: t({ en: "Downloaded", fr: "Téléchargé", de: "Heruntergeladen" }),
             egressHint: t({ en: "Sent out", fr: "Sorti", de: "Ausgehend" }),

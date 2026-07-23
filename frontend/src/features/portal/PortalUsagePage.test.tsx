@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,10 +16,12 @@ const mocks = vi.hoisted(() => ({
   hookArgs: [] as unknown[],
   hookResult: {
     workspace: {
+      accountName: "Research Project",
       spaces: [
         {
           id: "research-data",
           name: "Research Data",
+          internalName: "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91",
           usedBytes: 512,
           objectCount: 12,
           quotaBytes: 1024,
@@ -58,8 +60,8 @@ const mocks = vi.hoisted(() => ({
         { timestamp: "2026-05-21T00:00:00Z", bytes_in: 200, bytes_out: 75, ops: 20, success_ops: 20 },
       ],
       totals: { bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30, success_rate: 1 },
-      bucket_rankings: [{ bucket: "research-data", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
-      user_rankings: [{ user: "manager@example.com", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
+      bucket_rankings: [{ bucket: "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
+      user_rankings: [{ user: "RGW40703637082424546", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
       request_breakdown: [{ group: "GET", bytes_in: 0, bytes_out: 125, ops: 10 }],
       category_breakdown: [],
     },
@@ -93,6 +95,12 @@ const mocks = vi.hoisted(() => ({
     accountError: null,
     hasAccountContext: true,
     accountIdForApi: "101",
+    selectedAccount: {
+      id: "101",
+      name: "Research Project",
+      rgw_account_id: "RGW40703637082424546",
+      tags: [],
+    },
     state: { quota_max_size_bytes: 1024 },
   } as any,
 }));
@@ -243,10 +251,12 @@ describe("PortalUsagePage", () => {
     mocks.generalSettings.bucket_usage_stats_enabled = true;
     mocks.generalSettings.usage_history_enabled = true;
     mocks.hookResult.workspace = {
+      accountName: "Research Project",
       spaces: [
         {
           id: "research-data",
           name: "Research Data",
+          internalName: "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91",
           usedBytes: 512,
           objectCount: 12,
           quotaBytes: 1024,
@@ -285,13 +295,19 @@ describe("PortalUsagePage", () => {
         { timestamp: "2026-05-21T00:00:00Z", bytes_in: 200, bytes_out: 75, ops: 20, success_ops: 20 },
       ],
       totals: { bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30, success_rate: 1 },
-      bucket_rankings: [{ bucket: "research-data", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
-      user_rankings: [{ user: "manager@example.com", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
+      bucket_rankings: [{ bucket: "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
+      user_rankings: [{ user: "RGW40703637082424546", bytes_total: 425, bytes_in: 300, bytes_out: 125, ops: 30, success_ops: 30 }],
       request_breakdown: [{ group: "GET", bytes_in: 0, bytes_out: 125, ops: 10 }],
       category_breakdown: [],
     };
     mocks.hookResult.trafficLoading = false;
     mocks.hookResult.trafficError = null;
+    mocks.hookResult.selectedAccount = {
+      id: "101",
+      name: "Research Project",
+      rgw_account_id: "RGW40703637082424546",
+      tags: [],
+    };
     mocks.hookResult.state = { quota_max_size_bytes: 1024 };
     mockBilling();
     mockUsageComposition();
@@ -345,6 +361,16 @@ describe("PortalUsagePage", () => {
     expect(screen.getByText("Downloaded")).toBeInTheDocument();
     expect(screen.getByText("Uploaded")).toBeInTheDocument();
     expect(screen.getByText("Action types")).toBeInTheDocument();
+    const spaceRanking = screen.getByText("Most active Storage Spaces").parentElement!;
+    expect(within(spaceRanking).getByText("Research Data")).toHaveAttribute(
+      "title",
+      "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91",
+    );
+    const userRanking = screen.getByText("Most active users").parentElement!;
+    expect(within(userRanking).getByText("Research Project")).toHaveAttribute(
+      "title",
+      "RGW40703637082424546",
+    );
     fireEvent.click(screen.getByRole("button", { name: "30d" }));
     await waitFor(() => {
       const lastHookArgs = mocks.hookArgs[mocks.hookArgs.length - 1] as { trafficWindow?: string };

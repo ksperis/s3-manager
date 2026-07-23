@@ -92,6 +92,8 @@ type MetricsTrafficOverviewProps = {
   description?: string;
   bucketRankingTitle?: string;
   userRankingTitle?: string;
+  bucketRankingLabels?: Readonly<Record<string, string>>;
+  userRankingLabels?: Readonly<Record<string, string>>;
   labels?: {
     egress?: string;
     egressHint?: string;
@@ -124,6 +126,8 @@ export default function MetricsTrafficOverview({
   description,
   bucketRankingTitle = "Most active buckets",
   userRankingTitle = "Most active accounts",
+  bucketRankingLabels,
+  userRankingLabels,
   labels,
 }: MetricsTrafficOverviewProps) {
   const timeline = useMemo<TimelinePoint[]>(
@@ -287,6 +291,7 @@ export default function MetricsTrafficOverview({
             title={bucketRankingTitle}
             items={(traffic?.bucket_rankings ?? []).slice(0, 5)}
             loading={loading}
+            rankingLabels={bucketRankingLabels}
             labels={labels}
           />
           <RankingCard
@@ -294,6 +299,7 @@ export default function MetricsTrafficOverview({
             items={(traffic?.user_rankings ?? []).slice(0, 5)}
             loading={loading}
             type="user"
+            rankingLabels={userRankingLabels}
             labels={labels}
           />
           <RequestBreakdown items={traffic?.request_breakdown ?? []} loading={loading} labels={labels} />
@@ -367,10 +373,11 @@ type RankingCardProps = {
   items: TrafficBucketRanking[] | TrafficUserRanking[];
   loading?: boolean;
   type?: "bucket" | "user";
+  rankingLabels?: Readonly<Record<string, string>>;
   labels?: MetricsTrafficOverviewProps["labels"];
 };
 
-function RankingCard({ title, items, loading, type = "bucket", labels }: RankingCardProps) {
+function RankingCard({ title, items, loading, type = "bucket", rankingLabels, labels }: RankingCardProps) {
   if (loading) {
     return <MetricsChartPanel title={title} loading />;
   }
@@ -381,11 +388,14 @@ function RankingCard({ title, items, loading, type = "bucket", labels }: Ranking
     <MetricsChartPanel title={title}>
       <MetricsLegendList
         items={items.map((entry) => {
-          const label = type === "bucket" ? (entry as TrafficBucketRanking).bucket : (entry as TrafficUserRanking).user;
+          const technicalLabel =
+            type === "bucket"
+              ? (entry as TrafficBucketRanking).bucket
+              : (entry as TrafficUserRanking).user;
           return {
-            key: label,
-            label,
-            title: label,
+            key: technicalLabel,
+            label: rankingLabels?.[technicalLabel] ?? technicalLabel,
+            title: technicalLabel,
             detail: (
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span>{formatCompactNumber(entry.ops)} {labels?.rankingActivityUnit ?? "ops"}</span>
