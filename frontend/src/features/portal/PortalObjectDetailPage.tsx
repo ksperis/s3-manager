@@ -30,7 +30,7 @@ import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { formatBytes } from "../../utils/format";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   PortalPageState,
@@ -491,10 +491,16 @@ export default function PortalObjectDetailPage() {
         ]}
         activeTab={activeTab}
         onChange={(tab) => setActiveTab(tab as ObjectTab)}
+        ariaLabel={t({
+          en: "File detail views",
+          fr: "Vues du détail du fichier",
+          de: "Dateidetailansichten",
+        })}
+        idPrefix="portal-object-detail"
       />
 
       {activeTab === "preview" ? (
-        <div className="space-y-4">
+        <PortalTabPanel idPrefix="portal-object-detail" tabId="preview" className="space-y-4">
           <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
             <UiCard title={t({ en: "Quick preview", fr: "Aperçu rapide", de: "Schnellvorschau" })}>
               {object.previewType === "text" && object.previewText ? (
@@ -525,46 +531,49 @@ export default function PortalObjectDetailPage() {
               </div>
             </UiCard>
           </section>
-        </div>
+        </PortalTabPanel>
       ) : null}
 
       {activeTab === "sharing" ? (
-        <UiCard
-          title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
-          description={t({
-            en: "Share this file outside the workspace only when anyone with the link should have access.",
-            fr: "Partagez ce fichier hors de l'espace uniquement lorsque toute personne avec le lien peut y accéder.",
-            de: "Geben Sie diese Datei außerhalb des Workspace nur frei, wenn alle mit dem Link Zugriff haben dürfen.",
-          })}
-          actions={
-            <UiButton size="sm" variant="secondary" onClick={openPublicLinkDialog} disabled={!canCreatePublicLink || linkBusy}>
-              {t({ en: "Create link", fr: "Créer un lien", de: "Link erstellen" })}
-            </UiButton>
-          }
-        >
-          <div id="portal-file-public-links" className="scroll-mt-24" />
-          {publicLinkUnavailableReason ? (
-            <div className={cx(uiCardMutedClass, "mb-3 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
-              {publicLinkUnavailableReason}
-            </div>
-          ) : null}
-          {space.role === "Manager" ? (
-            <DataTableShell
-              columns={publicLinkColumns}
-              rows={publicLinks}
-              rowKey={(link) => link.id}
-              status={publicLinksTableStatus}
-              loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
-              errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
-              emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
-              responsiveCards
-            />
-          ) : null}
-        </UiCard>
+        <PortalTabPanel idPrefix="portal-object-detail" tabId="sharing">
+          <UiCard
+            title={t({ en: "Public links", fr: "Liens publics", de: "Öffentliche Links" })}
+            description={t({
+              en: "Share this file outside the workspace only when anyone with the link should have access.",
+              fr: "Partagez ce fichier hors de l'espace uniquement lorsque toute personne avec le lien peut y accéder.",
+              de: "Geben Sie diese Datei außerhalb des Workspace nur frei, wenn alle mit dem Link Zugriff haben dürfen.",
+            })}
+            actions={
+              <UiButton size="sm" variant="secondary" onClick={openPublicLinkDialog} disabled={!canCreatePublicLink || linkBusy}>
+                {t({ en: "Create link", fr: "Créer un lien", de: "Link erstellen" })}
+              </UiButton>
+            }
+          >
+            <div id="portal-file-public-links" className="scroll-mt-24" />
+            {publicLinkUnavailableReason ? (
+              <div className={cx(uiCardMutedClass, "mb-3 px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
+                {publicLinkUnavailableReason}
+              </div>
+            ) : null}
+            {space.role === "Manager" ? (
+              <DataTableShell
+                columns={publicLinkColumns}
+                rows={publicLinks}
+                rowKey={(link) => link.id}
+                status={publicLinksTableStatus}
+                loadingMessage={t({ en: "Loading public links...", fr: "Chargement des liens publics...", de: "Öffentliche Links werden geladen..." })}
+                errorMessage={t({ en: "Unable to load public links.", fr: "Impossible de charger les liens publics.", de: "Öffentliche Links können nicht geladen werden." })}
+                emptyMessage={t({ en: "No public links for this file.", fr: "Aucun lien public pour ce fichier.", de: "Keine öffentlichen Links für diese Datei." })}
+                responsiveCards
+              />
+            ) : null}
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {activeTab === "details" ? (
-        <UiCard title={t({ en: "General information", fr: "Informations générales", de: "Allgemeine Informationen" })}>
+        <PortalTabPanel idPrefix="portal-object-detail" tabId="details">
+          <UiCard title={t({ en: "General information", fr: "Informations générales", de: "Allgemeine Informationen" })}>
           <dl className="grid gap-4">
             <DetailRow label={t({ en: "Size", fr: "Taille", de: "Größe" })} value={formatBytes(object.sizeBytes)} />
             <DetailRow label={t({ en: "Content type", fr: "Type de contenu", de: "Inhaltstyp" })} value={object.type} />
@@ -579,11 +588,13 @@ export default function PortalObjectDetailPage() {
             </dl>
           </details>
           {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>{t({ en: "Loading metadata...", fr: "Chargement des métadonnées...", de: "Metadaten werden geladen..." })}</div> : null}
-        </UiCard>
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {activeTab === "events" ? (
-        <UiCard title={t({ en: "Recent events", fr: "Événements récents", de: "Letzte Ereignisse" })}>
+        <PortalTabPanel idPrefix="portal-object-detail" tabId="events">
+          <UiCard title={t({ en: "Recent events", fr: "Événements récents", de: "Letzte Ereignisse" })}>
           <div className="grid gap-2">
             {objectEvents.slice(0, 12).map((item) => (
               <div key={item.id} className={cx(uiCardMutedClass, "px-3 py-2 text-xs")}>
@@ -597,7 +608,8 @@ export default function PortalObjectDetailPage() {
               </div>
             ) : null}
           </div>
-        </UiCard>
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {pendingAction?.type === "delete-object" ? (

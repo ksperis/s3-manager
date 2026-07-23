@@ -16,7 +16,7 @@ import {
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
@@ -485,12 +485,12 @@ export default function UsageHistoryPage() {
 
       <StatCards stats={stats} columns={4} />
 
-      <section className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Snapshots"
           description="Usage history rows stored by the quota monitor."
+          showHeading
           countLabel={`${history?.total ?? 0} record${history?.total === 1 ? "" : "s"}`}
-        />
+      >
         <DataTableShell
           columns={historyTableColumns}
           rows={history?.items ?? []}
@@ -509,7 +509,7 @@ export default function UsageHistoryPage() {
           tableClassName="compact-table"
           rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
         />
-      </section>
+      </ListPageSection>
     </div>
   );
 }

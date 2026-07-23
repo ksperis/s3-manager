@@ -14,7 +14,7 @@ import {
 } from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -232,13 +232,11 @@ export default function ManagerUserKeysPage() {
         />
       )}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Keys"
           description="IAM access keys for this user."
-          showHeading={false}
           countLabel={`${keys.length} key${keys.length === 1 ? "" : "s"}`}
-        />
+      >
         <ManagerTable
           responsiveCards
           columns={[
@@ -287,7 +285,7 @@ export default function ManagerUserKeysPage() {
             );
           })}
         </ManagerTable>
-      </div>
+      </ListPageSection>
 
       {showAddConnectionModal && createdKey && createdKey.secret_access_key && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal

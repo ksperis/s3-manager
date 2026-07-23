@@ -24,6 +24,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
@@ -51,7 +52,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import {
   storageSpacePath,
@@ -351,23 +352,24 @@ function CollaboratorsInventory({
   );
 
   return (
-    <UiCard
+    <ListPageSection
       title={t({
         en: "Project members",
         fr: "Membres du projet",
         de: "Projektmitglieder",
       })}
-    >
-      <div className="space-y-3">
-        <p className={cx("ui-caption", uiMutedTextClass)}>
-          {t({
+      description={t({
             en: "Project membership makes someone available for collaboration. Access to files is granted separately in each space.",
             fr: "L'appartenance au projet rend une personne disponible pour collaborer. L'accès aux fichiers est accordé séparément dans chaque espace.",
             de: "Die Projektmitgliedschaft macht eine Person für die Zusammenarbeit verfügbar. Der Dateizugriff wird in jedem Bereich separat vergeben.",
-          })}
-        </p>
-        <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-end">
-          <UiInput
+      })}
+      countLabel={t({
+        en: `${visibleCollaborators.length} of ${collaborators.length} member${collaborators.length === 1 ? "" : "s"}`,
+        fr: `${visibleCollaborators.length} sur ${collaborators.length} membre${collaborators.length > 1 ? "s" : ""}`,
+        de: `${visibleCollaborators.length} von ${collaborators.length} Mitglied${collaborators.length === 1 ? "" : "ern"}`,
+      })}
+      search={
+        <UiInput
             label={t({
               en: "Search members",
               fr: "Rechercher des membres",
@@ -383,20 +385,9 @@ function CollaboratorsInventory({
               de: "Name, E-Mail oder Zugriffsquelle...",
             })}
           />
-          <div
-            className={cx(
-              "self-center text-[11px] font-semibold",
-              uiMutedTextClass,
-            )}
-          >
-            {t({
-              en: `${visibleCollaborators.length} of ${collaborators.length} member${collaborators.length === 1 ? "" : "s"}`,
-              fr: `${visibleCollaborators.length} sur ${collaborators.length} membre${collaborators.length > 1 ? "s" : ""}`,
-              de: `${visibleCollaborators.length} von ${collaborators.length} Mitglied${collaborators.length === 1 ? "" : "ern"}`,
-            })}
-          </div>
-        </div>
-        <DataTableShell
+      }
+    >
+      <DataTableShell
           columns={columns}
           rows={visibleCollaborators}
           rowKey={(collaborator) => collaborator.user_id}
@@ -428,9 +419,8 @@ function CollaboratorsInventory({
                 })
           }
           responsiveCards
-        />
-      </div>
-    </UiCard>
+      />
+    </ListPageSection>
   );
 }
 
@@ -974,86 +964,84 @@ export default function PortalSharesPage() {
       />
 
       {activeViewTab === "members" ? (
-        <CollaboratorsInventory
-          collaborators={collaborators?.collaborators ?? []}
-          loading={collaboratorsLoading}
-          error={collaboratorsError}
-          query={collaboratorQuery}
-          onQueryChange={setCollaboratorQuery}
-          canRequestRemoval={canRequestMemberChanges}
-          requestBusy={memberRequestBusy}
-          onRequestRemoval={(collaborator) =>
-            setPendingAction({ type: "request-member-removal", collaborator })
-          }
-        />
+        <PortalTabPanel
+          idPrefix="portal-collaborators"
+          tabId="members"
+        >
+          <CollaboratorsInventory
+            collaborators={collaborators?.collaborators ?? []}
+            loading={collaboratorsLoading}
+            error={collaboratorsError}
+            query={collaboratorQuery}
+            onQueryChange={setCollaboratorQuery}
+            canRequestRemoval={canRequestMemberChanges}
+            requestBusy={memberRequestBusy}
+            onRequestRemoval={(collaborator) =>
+              setPendingAction({ type: "request-member-removal", collaborator })
+            }
+          />
+        </PortalTabPanel>
       ) : null}
 
       {activeViewTab === "access" ? (
-        <UiCard
-          title={t({
-            en: "Access by space",
-            fr: "Accès par espace",
-            de: "Zugriff nach Bereich",
-          })}
-        >
-          <p className={cx("mb-3 ui-caption", uiMutedTextClass)}>
-            {t({
-              en: "This overview is read-only. Open a space to invite someone, change a role, or remove access.",
-              fr: "Cette vue est en lecture seule. Ouvrez un espace pour inviter une personne, modifier un rôle ou retirer un accès.",
-              de: "Diese Übersicht ist schreibgeschützt. Öffnen Sie einen Bereich, um Personen einzuladen, Rollen zu ändern oder Zugriffe zu entfernen.",
-            })}
-          </p>
-          <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
-            <PageTabs
-              tabs={[
-                {
-                  id: "with",
-                  label: t({
-                    en: "Shared with me",
-                    fr: "Partagés avec moi",
-                    de: "Mit mir geteilt",
-                  }),
-                },
-                {
-                  id: "by",
-                  label: t({
-                    en: "Granted by me",
-                    fr: "Accordés par moi",
-                    de: "Von mir vergeben",
-                  }),
-                },
-              ]}
-              activeTab={activeTab}
-              onChange={(tab) => setActiveTab(tab as ShareTab)}
-              variant="bar"
-              ariaLabel={t({
-                en: "Access direction",
-                fr: "Direction des accès",
-                de: "Zugriffsrichtung",
+        <PortalTabPanel idPrefix="portal-collaborators" tabId="access">
+          <UiCard>
+            <p className={cx("mb-3 ui-caption", uiMutedTextClass)}>
+              {t({
+                en: "This overview is read-only. Open a space to invite someone, change a role, or remove access.",
+                fr: "Cette vue est en lecture seule. Ouvrez un espace pour inviter une personne, modifier un rôle ou retirer un accès.",
+                de: "Diese Übersicht ist schreibgeschützt. Öffnen Sie einen Bereich, um Personen einzuladen, Rollen zu ändern oder Zugriffe zu entfernen.",
               })}
-              idPrefix="portal-space-access"
-            />
-          </div>
-          <SharesTable shares={shares} direction={activeTab} />
-          <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>
-            {t({
-              en: `${shares.length} ${shares.length === 1 ? "entry" : "entries"}`,
-              fr: `${shares.length} entrée${shares.length > 1 ? "s" : ""}`,
-              de: `${shares.length} Eintrag${shares.length === 1 ? "" : "e"}`,
-            })}
-          </div>
-        </UiCard>
+            </p>
+            <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
+              <PageTabs
+                tabs={[
+                  {
+                    id: "with",
+                    label: t({
+                      en: "Shared with me",
+                      fr: "Partagés avec moi",
+                      de: "Mit mir geteilt",
+                    }),
+                  },
+                  {
+                    id: "by",
+                    label: t({
+                      en: "Granted by me",
+                      fr: "Accordés par moi",
+                      de: "Von mir vergeben",
+                    }),
+                  },
+                ]}
+                activeTab={activeTab}
+                onChange={(tab) => setActiveTab(tab as ShareTab)}
+                variant="bar"
+                ariaLabel={t({
+                  en: "Access direction",
+                  fr: "Direction des accès",
+                  de: "Zugriffsrichtung",
+                })}
+                idPrefix="portal-space-access"
+              />
+            </div>
+            <PortalTabPanel idPrefix="portal-space-access" tabId={activeTab}>
+              <SharesTable shares={shares} direction={activeTab} />
+              <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>
+                {t({
+                  en: `${shares.length} ${shares.length === 1 ? "entry" : "entries"}`,
+                  fr: `${shares.length} entrée${shares.length > 1 ? "s" : ""}`,
+                  de: `${shares.length} Eintrag${shares.length === 1 ? "" : "e"}`,
+                })}
+              </div>
+            </PortalTabPanel>
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {activeViewTab === "links" ? (
-        <UiCard
-          title={t({
-            en: "External links",
-            fr: "Liens externes",
-            de: "Externe Links",
-          })}
-        >
-          <div className="space-y-3">
+        <PortalTabPanel idPrefix="portal-collaborators" tabId="links">
+          <UiCard>
+            <div className="space-y-3">
             <section
               className={cx(uiPanelMutedClass, "p-4")}
               aria-labelledby="portal-public-link-guidance-title"
@@ -1146,8 +1134,9 @@ export default function PortalSharesPage() {
               })}
               responsiveCards
             />
-          </div>
-        </UiCard>
+            </div>
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {memberRequestOpen ? (

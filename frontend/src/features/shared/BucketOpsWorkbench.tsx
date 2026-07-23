@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -8172,11 +8172,10 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       )}
 
       {!selectedEndpointId && shell.emptyState ? <PageEmptyState {...shell.emptyState} /> : null}
-      <div className="ui-surface-card space-y-4">
-        <ListToolbar
+      <ListPageSection
+          className="space-y-4"
           title="Buckets"
           description={shell.pageDescription}
-          showHeading={false}
           countLabel={`${total} result(s)`}
           search={
             <div className="relative w-full min-w-[16rem] sm:w-72">
@@ -9826,7 +9825,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
             </>
             ) : null
           }
-        />
+      >
           <BucketSelectionActionsBar
             selectedCount={selectedCount}
             hiddenSelectedCount={hiddenSelectedCount}
@@ -9964,7 +9963,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           }}
           disabled={loading || !selectedEndpointId}
         />
-      </div>
+      </ListPageSection>
       {!isStorageOps && selectedEndpointId && adminOpsAction && (
         <CephAdminAdminOpsModal
           endpointId={selectedEndpointId}

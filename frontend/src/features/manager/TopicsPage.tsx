@@ -14,7 +14,7 @@ import {
   updateTopicPolicy,
   Topic,
 } from "../../api/topics";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -608,11 +608,9 @@ export default function TopicsPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Topics"
             description={`${accountLabel} · Topic inventory, subscriptions, attributes, and policies.`}
-            showHeading={false}
             countLabel={`${filteredTopics.length} result(s)`}
             search={
               <input
@@ -623,7 +621,7 @@ export default function TopicsPage() {
                 className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             }
-          />
+        >
           <DataTableShell
             columns={topicColumns}
             rows={filteredTopics}
@@ -635,7 +633,7 @@ export default function TopicsPage() {
             tableClassName="compact-table"
             responsiveCards
           />
-        </div>
+        </ListPageSection>
       )}
 
       {showCreateModal && (

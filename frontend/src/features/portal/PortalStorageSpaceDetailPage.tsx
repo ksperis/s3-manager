@@ -65,7 +65,7 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
@@ -1202,23 +1202,24 @@ export default function PortalStorageSpaceDetailPage() {
       />
 
       {activeTab === "files" ? (
-        <>
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="files">
           {startSpacePanel}
           {filesSection}
           {spaceMetricsSection}
-        </>
+        </PortalTabPanel>
       ) : null}
 
       {activeTab === "collaborators" ? (
-        <UiCard title={t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" })}>
-        {accessSummaryLoading ? (
-          <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
-            {t({ en: "Loading access...", fr: "Chargement des accès...", de: "Zugriff wird geladen..." })}
-          </div>
-        ) : accessError ? (
-          <PageBanner tone="warning">{accessError}</PageBanner>
-        ) : accessSummary ? (
-          <div className="space-y-4">
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="collaborators">
+          <UiCard>
+          {accessSummaryLoading ? (
+            <div className={cx("text-xs font-semibold", uiMutedTextClass)}>
+              {t({ en: "Loading access...", fr: "Chargement des accès...", de: "Zugriff wird geladen..." })}
+            </div>
+          ) : accessError ? (
+            <PageBanner tone="warning">{accessError}</PageBanner>
+          ) : accessSummary ? (
+            <div className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1398,17 +1399,18 @@ export default function PortalStorageSpaceDetailPage() {
                 ) : null}
               </div>
             ) : null}
-          </div>
-        ) : null}
-        </UiCard>
+            </div>
+          ) : null}
+          </UiCard>
+        </PortalTabPanel>
       ) : null}
 
       {activeTab === "settings" ? (
-        <>
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="settings">
           {storageSpaceSettingsCard}
           {historyCleanupCard}
           {externalToolsCard}
-        </>
+        </PortalTabPanel>
       ) : null}
 
       {publicLinkTarget ? (

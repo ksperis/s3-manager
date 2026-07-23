@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
-import ListToolbar from "../../../components/ListToolbar";
+import ListPageSection from "../../../components/list/ListPageSection";
 import PageBanner from "../../../components/PageBanner";
 import PageEmptyState from "../../../components/PageEmptyState";
 import PageHeader from "../../../components/PageHeader";
@@ -85,13 +85,11 @@ export default function ManagerMigrationsListPage() {
           tone="warning"
         />
       ) : (
-        <section className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Migrations"
             description="Operational list of migration runs for the active source context."
-            showHeading={false}
             countLabel={`${sortedMigrations.length} result(s)`}
-          />
+        >
           <div className="max-h-[720px] space-y-2 overflow-auto p-4">
             {migrationsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading migrations...</p>}
             {!migrationsLoading && sortedMigrations.length === 0 && (
@@ -133,7 +131,7 @@ export default function ManagerMigrationsListPage() {
               );
             })}
           </div>
-        </section>
+        </ListPageSection>
       )}
     </div>
   );

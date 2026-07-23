@@ -6,23 +6,28 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
-import PageTabs from "./PageTabs";
+import PageTabs, { PageTabPanel } from "./PageTabs";
 
 function SemanticTabs() {
   const [activeTab, setActiveTab] = useState("connection");
   return (
-    <PageTabs
-      tabs={[
-        { id: "connection", label: "Connection" },
-        { id: "disabled", label: "Disabled", disabled: true },
-        { id: "credentials", label: "Credentials" },
-      ]}
-      activeTab={activeTab}
-      onChange={setActiveTab}
-      ariaLabel="Endpoint sections"
-      idPrefix="endpoint-editor"
-      variant="bar"
-    />
+    <>
+      <PageTabs
+        tabs={[
+          { id: "connection", label: "Connection" },
+          { id: "disabled", label: "Disabled", disabled: true },
+          { id: "credentials", label: "Credentials" },
+        ]}
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Endpoint sections"
+        idPrefix="endpoint-editor"
+        variant="bar"
+      />
+      <PageTabPanel idPrefix="endpoint-editor" tabId={activeTab}>
+        {activeTab === "connection" ? "Connection panel" : "Credentials panel"}
+      </PageTabPanel>
+    </>
   );
 }
 
@@ -34,12 +39,20 @@ describe("PageTabs", () => {
     expect(connectionTab).toHaveAttribute("id", "endpoint-editor-tab-connection");
     expect(connectionTab).toHaveAttribute("aria-controls", "endpoint-editor-panel-connection");
     expect(connectionTab).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      "endpoint-editor-tab-connection",
+    );
 
     fireEvent.keyDown(connectionTab, { key: "ArrowRight" });
 
     const credentialsTab = screen.getByRole("tab", { name: "Credentials" });
     expect(credentialsTab).toHaveAttribute("aria-selected", "true");
     expect(credentialsTab).toHaveFocus();
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "id",
+      "endpoint-editor-panel-credentials",
+    );
     expect(screen.getByRole("tab", { name: "Disabled" })).toBeDisabled();
   });
 });

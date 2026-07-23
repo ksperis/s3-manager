@@ -24,7 +24,7 @@ import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -1447,13 +1447,11 @@ export default function StorageEndpointsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Storage endpoints"
           description="Configured S3/Ceph endpoints and operational capabilities."
-          showHeading={false}
           countLabel={`${endpoints.length} endpoint${endpoints.length === 1 ? "" : "s"}`}
-        />
+      >
         <DataTableShell
           columns={endpointTableColumns}
           rows={loading ? [] : endpoints}
@@ -1467,7 +1465,7 @@ export default function StorageEndpointsPage() {
           tableClassName="compact-table"
           containerClassName="rounded-t-none border-x-0 border-b-0"
         />
-      </div>
+      </ListPageSection>
         </>
       ) : null}
 

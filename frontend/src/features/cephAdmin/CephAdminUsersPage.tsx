@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -1122,11 +1122,9 @@ export default function CephAdminUsersPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Users"
             description="Complete RGW user inventory with tenant, account, and quota details."
-            showHeading={false}
             countLabel={`${total} result(s)`}
             search={
               <div className="relative w-full sm:w-72">
@@ -1458,7 +1456,7 @@ export default function CephAdminUsersPage() {
               </>
               ) : null
             }
-          />
+        >
 
           {renderAdvancedSearchProgress(advancedProgress)}
 
@@ -1486,7 +1484,7 @@ export default function CephAdminUsersPage() {
               disabled: loading || !selectedEndpointId,
             }}
           />
-        </div>
+        </ListPageSection>
       )}
 
       {selectedEndpointId && editingTarget && (

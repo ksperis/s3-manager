@@ -10,7 +10,7 @@ import {
   listApiTokens,
   revokeApiToken,
 } from "../../api/apiTokens";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import Modal from "../../components/Modal";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
@@ -380,8 +380,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
         />
       )}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="API tokens"
           description="Manage long-lived admin tokens for automation and integrations."
           showHeading={showPageHeader === false}
@@ -411,7 +410,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
                   </button>
                 ))
           }
-        />
+      >
         <DataTableShell
           columns={tokenTableColumns}
           rows={sortedTokens}
@@ -423,7 +422,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
           tableClassName="compact-table"
           responsiveCards
         />
-      </div>
+      </ListPageSection>
 
       {showCreateModal && (
         <Modal title="Create API token" onClose={createCloseGuard.requestClose} maxWidthClass="max-w-xl">

@@ -16,7 +16,7 @@ import {
 import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
@@ -489,11 +489,9 @@ export default function ManagerUsersPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Users"
             description="User inventory with group, key, and policy shortcuts."
-            showHeading={false}
             countLabel={`${filteredUsers.length} result(s)`}
             search={
               <ManagerToolbarSearch
@@ -503,7 +501,7 @@ export default function ManagerUsersPage() {
                 className="w-full sm:w-64 md:w-72"
               />
             }
-          />
+        >
           <ManagerTable
             columns={userTableColumns}
             listState={{
@@ -618,7 +616,7 @@ export default function ManagerUsersPage() {
               );
             })}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {showAdvancedModal && (

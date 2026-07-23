@@ -17,7 +17,7 @@ import {
 } from "../../api/portalRequests";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UserAvatar from "../../components/UserAvatar";
@@ -26,7 +26,6 @@ import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
-  uiCardClass,
   uiDividerClass,
   uiInputClass,
   uiLabelClass,
@@ -278,9 +277,9 @@ export default function AdminPortalRequestsPage() {
       {notice ? <PageBanner tone="success">{notice}</PageBanner> : null}
       {error ? <PageBanner tone="error">{error}</PageBanner> : null}
 
-      <section className={uiCardClass}>
-        <ListToolbar
+      <ListPageSection
           title="Request queue"
+          showHeading
           countLabel={`${requests.length} request(s)`}
           search={
             <UiInput
@@ -339,7 +338,7 @@ export default function AdminPortalRequestsPage() {
               Refresh
             </UiButton>
           }
-        />
+      >
         <DataTableShell
           columns={columns}
           rows={requests}
@@ -361,7 +360,7 @@ export default function AdminPortalRequestsPage() {
             ) : null
           }
         />
-      </section>
+      </ListPageSection>
     </div>
   );
 }

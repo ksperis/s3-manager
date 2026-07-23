@@ -31,7 +31,7 @@ import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
@@ -2294,11 +2294,9 @@ export default function S3AccountsPage() {
         </WorkflowPage>
       )}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Accounts"
           description="Search matches all records."
-          showHeading={false}
           countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
           search={
             <ToolbarSearchInput
@@ -2325,7 +2323,7 @@ export default function S3AccountsPage() {
               />
             ) : null
           }
-        />
+      >
         <DataTableShell
           columns={accountTableColumns}
           rows={accounts}
@@ -2347,7 +2345,7 @@ export default function S3AccountsPage() {
             disabled: loading,
           }}
         />
-      </div>
+      </ListPageSection>
     </div>
   );
 }

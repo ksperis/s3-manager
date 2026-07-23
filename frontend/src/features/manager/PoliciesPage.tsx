@@ -6,7 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -175,11 +175,9 @@ export default function PoliciesPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Policies"
             description="Managed IAM policies available in the selected execution context."
-            showHeading={false}
             countLabel={`${filteredPolicies.length} result(s)`}
             search={
               <ManagerToolbarSearch
@@ -188,7 +186,7 @@ export default function PoliciesPage() {
                 placeholder="Search by name or ARN"
               />
             }
-          />
+        >
           <ManagerTable
             columns={policyTableColumns}
             listState={{
@@ -209,7 +207,7 @@ export default function PoliciesPage() {
               </tr>
             ))}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {showAdvancedModal && (

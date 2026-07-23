@@ -8,7 +8,7 @@ import DataTableShell, { type DataTableColumn } from "../../components/list/Data
 import Modal from "../../components/Modal";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiBadge from "../../components/ui/UiBadge";
@@ -31,7 +31,7 @@ import {
 } from "./portalUi";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
@@ -843,7 +843,7 @@ export default function PortalTransfersPage() {
     <>
       <UiCard
         muted
-        title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" })}
+        title={t({ en: "Transfer summary", fr: "Résumé des transferts", de: "Übertragungsübersicht" })}
         description={t({
           en: "These are the latest uploads and downloads started from the spaces you can access.",
           fr: "Voici les derniers envois et téléchargements lancés depuis les espaces auxquels vous avez accès.",
@@ -902,8 +902,11 @@ export default function PortalTransfersPage() {
             activeTab={activeLiveTab}
             onChange={(tab) => setActiveLiveTab(tab as LiveTransferTab)}
             variant="bar"
+            ariaLabel={t({ en: "Transfer direction", fr: "Sens du transfert", de: "Übertragungsrichtung" })}
+            idPrefix="portal-live-transfers"
           />
         </div>
+        <PageTabPanel idPrefix="portal-live-transfers" tabId={activeLiveTab}>
         <DataTableShell
           columns={transferColumns}
           rows={transfers}
@@ -917,6 +920,7 @@ export default function PortalTransfersPage() {
         <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
           {t({ en: `Visible file size: ${formatBytes(visibleSizeBytes)}`, fr: `Taille visible des fichiers : ${formatBytes(visibleSizeBytes)}`, de: `Sichtbare Dateigröße: ${formatBytes(visibleSizeBytes)}` })}
         </div>
+        </PageTabPanel>
       </UiCard>
     </>
   );
@@ -946,8 +950,11 @@ export default function PortalTransfersPage() {
         tabs={logsTabs}
         activeTab={activeLogsTab}
         onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
+        ariaLabel={t({ en: "Transfer history views", fr: "Vues de l'historique des transferts", de: "Ansichten des Übertragungsverlaufs" })}
+        idPrefix="portal-transfer-history"
       />
 
+      <PortalTabPanel idPrefix="portal-transfer-history" tabId={activeLogsTab}>
       {activeLogsTab === "server" && serverAccessLoggingEnabled && canViewServerAccessLogs ? (
         <UiCard
           title={t({ en: "Detailed access history", fr: "Historique d'accès détaillé", de: "Detaillierter Zugriffsverlauf" })}
@@ -1198,6 +1205,7 @@ export default function PortalTransfersPage() {
           </div>
         </UiCard>
       ) : liveTransfersContent}
+      </PortalTabPanel>
 
       {rawLogsModalOpen ? (
         <Modal

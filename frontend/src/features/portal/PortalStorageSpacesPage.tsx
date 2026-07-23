@@ -24,6 +24,7 @@ import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
+import { WorkspaceDashboardIconBubble } from "../../components/WorkspaceDashboardKit";
 import WorkflowPage, {
   WorkflowActions,
   workflowPageHostClass,
@@ -46,6 +47,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import { BucketIcon } from "../browser/browserIcons";
 import {
   PortalAccessModeFields,
   PortalShareCandidatePicker,
@@ -56,7 +58,7 @@ import {
   type PortalAccessMode,
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
   portalStorageSpaceStatusTone,
@@ -222,20 +224,28 @@ export default function PortalStorageSpacesPage() {
         mobileLabel: t({ en: "Space", fr: "Espace", de: "Bereich" }),
         primary: true,
         render: (space) => (
-          <>
-            <Link
-              to={storageSpacePath(space)}
-              className={cx(
-                "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                uiTitleTextClass,
-              )}
+          <div className="flex min-w-0 items-start gap-2">
+            <WorkspaceDashboardIconBubble
+              tone="emerald"
+              className="mt-0.5 h-7 w-7 rounded-md"
             >
-              {space.name}
-            </Link>
-            <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>
-              {space.description}
+              <BucketIcon className="h-4 w-4" />
+            </WorkspaceDashboardIconBubble>
+            <div className="min-w-0">
+              <Link
+                to={storageSpacePath(space)}
+                className={cx(
+                  "font-bold hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                  uiTitleTextClass,
+                )}
+              >
+                {space.name}
+              </Link>
+              <div className={cx("text-[11px] font-medium", uiMutedTextClass)}>
+                {space.description}
+              </div>
             </div>
-          </>
+          </div>
         ),
       },
       {
@@ -1187,17 +1197,24 @@ export default function PortalStorageSpacesPage() {
         ]}
         activeTab={activeTab}
         onChange={(tabId) => setActiveTab(tabId as SpacesTab)}
+        ariaLabel={t({
+          en: "Storage space views",
+          fr: "Vues des espaces de stockage",
+          de: "Speicherbereichsansichten",
+        })}
+        idPrefix="portal-storage-spaces"
       />
 
-      <UiCard>
-        <div
-          className={cx(
-            "mb-4 grid gap-3",
-            activeTab === "archived"
-              ? "lg:grid-cols-[minmax(220px,1fr)_160px_180px]"
-              : "lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]",
-          )}
-        >
+      <PortalTabPanel idPrefix="portal-storage-spaces" tabId={activeTab}>
+        <UiCard>
+          <div
+            className={cx(
+              "mb-4 grid gap-3",
+              activeTab === "archived"
+                ? "lg:grid-cols-[minmax(220px,1fr)_160px_180px]"
+                : "lg:grid-cols-[minmax(220px,1fr)_160px_160px_180px]",
+            )}
+          >
           <UiInput
             label={t({ en: "Search", fr: "Recherche", de: "Suche" })}
             type="search"
@@ -1268,58 +1285,59 @@ export default function PortalStorageSpacesPage() {
               {t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
             </option>
           </UiSelect>
-        </div>
-        <DataTableShell
-          columns={storageSpaceColumns}
-          rows={filteredSpaces}
-          rowKey={(space) => space.id}
-          status={tableStatus}
-          loadingMessage={t({
-            en: "Loading spaces...",
-            fr: "Chargement des espaces...",
-            de: "Bereiche werden geladen...",
-          })}
-          errorMessage={t({
-            en: "Unable to load spaces.",
-            fr: "Impossible de charger les espaces.",
-            de: "Bereiche können nicht geladen werden.",
-          })}
-          emptyMessage={
-            activeTab === "archived"
-              ? t({
-                  en: "No archived spaces.",
-                  fr: "Aucun espace archivé.",
-                  de: "Keine archivierten Bereiche.",
-                })
-              : canCreate
-              ? t({
-                  en: "No spaces yet. Create one to start storing files.",
-                  fr: "Aucun espace pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
-                  de: "Noch keine Bereiche. Erstellen Sie einen, um Dateien zu speichern.",
-                })
-              : t({
-                  en: "No spaces are available. Ask an administrator to add you to a space or enable creation for your account.",
-                  fr: "Aucun espace n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
-                  de: "Es sind keine Bereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Bereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
-                })
-          }
-          responsiveCards
-        />
-        <div
-          className={cx(
-            "mt-4 flex items-center justify-between text-[11px] font-semibold",
-            uiMutedTextClass,
-          )}
-        >
-          <span>
-            {t({
-              en: `${filteredSpaces.length} of ${visibleSpaces.length}`,
-              fr: `${filteredSpaces.length} sur ${visibleSpaces.length}`,
-              de: `${filteredSpaces.length} von ${visibleSpaces.length}`,
+          </div>
+          <DataTableShell
+            columns={storageSpaceColumns}
+            rows={filteredSpaces}
+            rowKey={(space) => space.id}
+            status={tableStatus}
+            loadingMessage={t({
+              en: "Loading spaces...",
+              fr: "Chargement des espaces...",
+              de: "Bereiche werden geladen...",
             })}
-          </span>
-        </div>
-      </UiCard>
+            errorMessage={t({
+              en: "Unable to load spaces.",
+              fr: "Impossible de charger les espaces.",
+              de: "Bereiche können nicht geladen werden.",
+            })}
+            emptyMessage={
+              activeTab === "archived"
+                ? t({
+                    en: "No archived spaces.",
+                    fr: "Aucun espace archivé.",
+                    de: "Keine archivierten Bereiche.",
+                  })
+                : canCreate
+                ? t({
+                    en: "No spaces yet. Create one to start storing files.",
+                    fr: "Aucun espace pour l'instant. Créez-en un pour commencer à stocker des fichiers.",
+                    de: "Noch keine Bereiche. Erstellen Sie einen, um Dateien zu speichern.",
+                  })
+                : t({
+                    en: "No spaces are available. Ask an administrator to add you to a space or enable creation for your account.",
+                    fr: "Aucun espace n'est disponible. Demandez à un administrateur de vous ajouter à un espace ou d'activer la création pour votre compte.",
+                    de: "Es sind keine Bereiche verfügbar. Bitten Sie einen Administrator, Sie zu einem Bereich hinzuzufügen oder die Erstellung für Ihr Konto zu aktivieren.",
+                  })
+            }
+            responsiveCards
+          />
+          <div
+            className={cx(
+              "mt-4 flex items-center justify-between text-[11px] font-semibold",
+              uiMutedTextClass,
+            )}
+          >
+            <span>
+              {t({
+                en: `${filteredSpaces.length} of ${visibleSpaces.length}`,
+                fr: `${filteredSpaces.length} sur ${visibleSpaces.length}`,
+                de: `${filteredSpaces.length} von ${visibleSpaces.length}`,
+              })}
+            </span>
+          </div>
+        </UiCard>
+      </PortalTabPanel>
     </div>
   );
 }

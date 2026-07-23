@@ -18,7 +18,7 @@ import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
@@ -1999,11 +1999,9 @@ export default function UsersPage() {
         </WorkflowPage>
       )}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Users"
           description="Search matches across the full user record, including role and linked entities."
-          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <ToolbarSearchInput
@@ -2013,7 +2011,7 @@ export default function UsersPage() {
               className="min-w-0 flex-1 sm:w-64 md:w-72"
             />
           }
-        />
+      >
         <DataTableShell
           columns={userTableColumns}
           rows={users}
@@ -2035,7 +2033,7 @@ export default function UsersPage() {
             disabled: loading,
           }}
         />
-      </div>
+      </ListPageSection>
 
       {pendingDeleteUser && (
         <ConfirmActionDialog

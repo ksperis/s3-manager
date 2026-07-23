@@ -8,7 +8,7 @@ import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMGroup, attachGroupPolicy, createIamGroup, deleteIamGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -357,11 +357,9 @@ export default function ManagerGroupsPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Groups"
             description="Group inventory, membership shortcuts, and attached policies."
-            showHeading={false}
             countLabel={`${filteredGroups.length} result(s)`}
             search={
               <ManagerToolbarSearch
@@ -370,7 +368,7 @@ export default function ManagerGroupsPage() {
                 placeholder="Search by name or ARN"
               />
             }
-          />
+        >
           <ManagerTable
             columns={groupTableColumns}
             listState={{
@@ -424,7 +422,7 @@ export default function ManagerGroupsPage() {
               </tr>
             ))}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {showAdvancedModal && (

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
@@ -1127,11 +1127,9 @@ export default function S3ConnectionsPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Shared S3 Connections"
           description="Search matches all records."
-          showHeading={false}
           countLabel={`${total} entr${total === 1 ? "y" : "ies"}`}
           search={
             <ToolbarSearchInput
@@ -1158,7 +1156,7 @@ export default function S3ConnectionsPage() {
               />
             ) : null
           }
-        />
+      >
         {selectedIds.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
@@ -1213,7 +1211,7 @@ export default function S3ConnectionsPage() {
             disabled: loading,
           }}
         />
-      </div>
+      </ListPageSection>
 
       {/* Create modal */}
       {showCreateModal && (

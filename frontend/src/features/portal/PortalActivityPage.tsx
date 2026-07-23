@@ -18,7 +18,7 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import type { PortalWorkspaceActivityItem } from "./portalWorkspaceModel";
 import { resolvePortalWorkspacePageState } from "./portalUi";
@@ -268,21 +268,23 @@ export default function PortalActivityPage() {
           />
 
           {activeTab === "timeline" ? (
-            <UiCard
-              title={t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}
-              description={t({
-                en: "Follow work across your spaces without the audit-only fields.",
-                fr: "Suivez le travail dans vos espaces sans les champs réservés à l'audit.",
-                de: "Verfolgen Sie Arbeit in Ihren Bereichen ohne reine Audit-Felder.",
-              })}
-            >
-              {activityFilters}
-              {activityTable(timelineColumns)}
-            </UiCard>
+            <PortalTabPanel idPrefix="portal-activity" tabId="timeline">
+              <UiCard
+                title={t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}
+                description={t({
+                  en: "Follow work across your spaces without the audit-only fields.",
+                  fr: "Suivez le travail dans vos espaces sans les champs réservés à l'audit.",
+                  de: "Verfolgen Sie Arbeit in Ihren Bereichen ohne reine Audit-Felder.",
+                })}
+              >
+                {activityFilters}
+                {activityTable(timelineColumns)}
+              </UiCard>
+            </PortalTabPanel>
           ) : null}
 
           {activeTab === "audit" ? (
-            <div className="space-y-4">
+            <PortalTabPanel idPrefix="portal-activity" tabId="audit" className="space-y-4">
               <UiCard
                 muted
                 title={t({ en: "Recent workspace history", fr: "Historique récent de l'espace de travail", de: "Letzter Arbeitsbereichsverlauf" })}
@@ -334,7 +336,7 @@ export default function PortalActivityPage() {
                 {activityFilters}
                 {activityTable(activityColumns)}
               </UiCard>
-            </div>
+            </PortalTabPanel>
           ) : null}
         </>
       )}

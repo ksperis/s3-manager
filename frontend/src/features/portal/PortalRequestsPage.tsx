@@ -21,8 +21,8 @@ import {
 import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
+import ListPageSection from "../../components/list/ListPageSection";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
-import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -32,7 +32,6 @@ import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
-  uiCardClass,
   uiDividerClass,
   uiInputClass,
   uiLabelClass,
@@ -42,7 +41,7 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import {
   formatPortalRequestDate,
   PortalRequestStatusBadge,
@@ -607,6 +606,12 @@ export default function PortalRequestsPage() {
         ]}
         activeTab={showRequestHelpTab ? activeTab : "history"}
         onChange={(tabId) => setActiveTab(tabId as RequestsTab)}
+        ariaLabel={t({
+          en: "Help request views",
+          fr: "Vues des demandes d'aide",
+          de: "Ansichten der Hilfeanfragen",
+        })}
+        idPrefix="portal-help-requests"
         headerActions={
           !showRequestHelpTab || activeTab === "history" ? (
             <UiButton
@@ -622,13 +627,10 @@ export default function PortalRequestsPage() {
       />
 
       {showRequestHelpTab && activeTab === "request-help" ? (
-        <section
+        <PortalTabPanel
+          idPrefix="portal-help-requests"
+          tabId="request-help"
           className="grid gap-3 md:grid-cols-2"
-          aria-label={t({
-            en: "Request options",
-            fr: "Options de demande",
-            de: "Anfrageoptionen",
-          })}
         >
           <UiCard
             title={t({
@@ -705,50 +707,52 @@ export default function PortalRequestsPage() {
             </p>
           </UiCard>
 
-        </section>
+        </PortalTabPanel>
       ) : null}
 
       {!showRequestHelpTab || activeTab === "history" ? (
-        <section className={uiCardClass}>
-          <ListToolbar
+        <PortalTabPanel idPrefix="portal-help-requests" tabId="history">
+          <ListPageSection
             title={t({
               en: "My help requests",
               fr: "Mes demandes d'aide",
               de: "Meine Hilfeanfragen",
             })}
+            showHeading
             countLabel={t({
               en: `${requests.length} request(s)`,
               fr: `${requests.length} demande(s)`,
               de: `${requests.length} Anfrage(n)`,
             })}
-          />
-          <DataTableShell
-            columns={columns}
-            rows={requests}
-            rowKey={(request) => request.id}
-            status={tableStatus}
-            loadingMessage={t({
-              en: "Loading requests...",
-              fr: "Chargement des demandes...",
-              de: "Anfragen werden geladen...",
-            })}
-            errorMessage={
-              error ??
-              t({
-                en: "Unable to load requests.",
-                fr: "Impossible de charger les demandes.",
-                de: "Anfragen können nicht geladen werden.",
-              })
-            }
-            emptyMessage={t({
-              en: "No help requests yet.",
-              fr: "Aucune demande d'aide pour le moment.",
-              de: "Noch keine Hilfeanfragen.",
-            })}
-            responsiveCards
-            expandedRow={(request) => <PortalRequestDetails request={request} />}
-          />
-        </section>
+          >
+            <DataTableShell
+              columns={columns}
+              rows={requests}
+              rowKey={(request) => request.id}
+              status={tableStatus}
+              loadingMessage={t({
+                en: "Loading requests...",
+                fr: "Chargement des demandes...",
+                de: "Anfragen werden geladen...",
+              })}
+              errorMessage={
+                error ??
+                t({
+                  en: "Unable to load requests.",
+                  fr: "Impossible de charger les demandes.",
+                  de: "Anfragen können nicht geladen werden.",
+                })
+              }
+              emptyMessage={t({
+                en: "No help requests yet.",
+                fr: "Aucune demande d'aide pour le moment.",
+                de: "Noch keine Hilfeanfragen.",
+              })}
+              responsiveCards
+              expandedRow={(request) => <PortalRequestDetails request={request} />}
+            />
+          </ListPageSection>
+        </PortalTabPanel>
       ) : null}
 
       {requestDialog === "collaborator" ? (

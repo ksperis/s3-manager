@@ -19,7 +19,7 @@ import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
@@ -873,11 +873,9 @@ export default function S3UsersPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Users"
           description="Search matches all records."
-          showHeading={false}
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
             <ToolbarSearchInput
@@ -904,7 +902,7 @@ export default function S3UsersPage() {
               />
             ) : null
           }
-        />
+      >
         <DataTableShell
           columns={userTableColumns}
           rows={users}
@@ -926,7 +924,7 @@ export default function S3UsersPage() {
             disabled: loading,
           }}
         />
-      </div>
+      </ListPageSection>
 
       {showCreateModal && (
         <Modal title="Create user" onClose={createCloseGuard.requestClose}>

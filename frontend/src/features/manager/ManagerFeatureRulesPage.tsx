@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -180,9 +180,9 @@ export default function ManagerFeatureRulesPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Feature rules"
+            showHeading
             countLabel={`${filteredItems.length} bucket(s) · ${ruleCount} ${selectedItemLabel} · ${configuredCount} configured`}
             search={
               <UiInput
@@ -217,7 +217,7 @@ export default function ManagerFeatureRulesPage() {
                 />
               </>
             }
-          />
+        >
 
           <ManagerTable
             columns={[
@@ -325,7 +325,7 @@ export default function ManagerFeatureRulesPage() {
                 ];
               })}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {selectedRule && (

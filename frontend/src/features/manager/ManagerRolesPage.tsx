@@ -17,7 +17,7 @@ import {
   updateIamRole,
 } from "../../api/managerIamRoles";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -518,11 +518,9 @@ export default function ManagerRolesPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Roles"
             description="Role inventory, trust policy editing, and attached policy shortcuts."
-            showHeading={false}
             countLabel={`${filteredRoles.length} result(s)`}
             search={
               <ManagerToolbarSearch
@@ -531,7 +529,7 @@ export default function ManagerRolesPage() {
                 placeholder="Search by name, path, or ARN"
               />
             }
-          />
+        >
           <ManagerTable
             columns={roleTableColumns}
             listState={{
@@ -590,7 +588,7 @@ export default function ManagerRolesPage() {
               </tr>
             ))}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {showAdvancedModal && (

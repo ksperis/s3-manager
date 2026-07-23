@@ -12,7 +12,7 @@ import {
   ManagerCephGeneratedAccessKey,
   updateManagerCephAccessKeyStatus,
 } from "../../api/managerCephKeys";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -213,11 +213,9 @@ export default function ManagerCephKeysPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Keys"
             description="The portal key is locked and cannot be disabled or deleted from this page."
-            showHeading={false}
             countLabel={`${filteredKeys.length} result(s)`}
             search={
               <input
@@ -228,7 +226,7 @@ export default function ManagerCephKeysPage() {
                 className="w-full rounded-md border border-slate-200 px-3 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-72 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             }
-          />
+        >
           <ManagerTable
             responsiveCards
             columns={[
@@ -292,7 +290,7 @@ export default function ManagerCephKeysPage() {
               );
             })}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
     </div>
   );

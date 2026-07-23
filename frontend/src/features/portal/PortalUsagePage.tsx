@@ -25,7 +25,7 @@ import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { formatPortalCurrency } from "./portalI18n";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
@@ -341,8 +341,11 @@ export default function PortalUsagePage() {
         tabs={tabs}
         activeTab={activeTab}
         onChange={(tab) => setActiveTab(tab as PortalUsageTab)}
+        ariaLabel={t({ en: "Storage health views", fr: "Vues de l'état du stockage", de: "Ansichten des Speicherstatus" })}
+        idPrefix="portal-storage-health"
       />
 
+      <PortalTabPanel idPrefix="portal-storage-health" tabId={activeTab} className="space-y-4">
       {activeTab === "storage" ? (
         <div className="space-y-4">
           <MetricsSummaryCard
@@ -501,7 +504,7 @@ export default function PortalUsagePage() {
 
       {activeTab === "traffic" ? (
         <MetricsTrafficOverview
-          title={t({ en: "Uploads & downloads", fr: "Envois et téléchargements", de: "Uploads & Downloads" })}
+          title={t({ en: "Transfer activity", fr: "Activité de transfert", de: "Übertragungsaktivität" })}
           traffic={traffic}
           window={trafficWindow}
           onWindowChange={setTrafficWindow}
@@ -590,6 +593,7 @@ export default function PortalUsagePage() {
           )}
         </MetricsCard>
       ) : null}
+      </PortalTabPanel>
     </div>
   );
 }

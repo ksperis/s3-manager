@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
@@ -374,13 +374,12 @@ export default function AuditLogsPage() {
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="ui-surface-card bg-white/95 dark:bg-slate-900/60">
-        <ListToolbar
+      <ListPageSection
+          className="bg-white/95 dark:bg-slate-900/60"
           title="Audit trail"
           description="Administrative actions performed through the UI."
-          showHeading={false}
           countLabel={`${filteredLogs.length} entr${filteredLogs.length === 1 ? "y" : "ies"}${isFiltered ? ` of ${logs.length}` : ""}`}
-        />
+      >
 
         <DataTableShell
           columns={auditTableColumns}
@@ -422,7 +421,7 @@ export default function AuditLogsPage() {
             </button>
           </div>
         </div>
-      </div>
+      </ListPageSection>
     </div>
   );
 }

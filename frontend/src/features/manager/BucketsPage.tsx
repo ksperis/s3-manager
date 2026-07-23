@@ -7,7 +7,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageEmptyState from "../../components/PageEmptyState";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCheckboxClass } from "../../components/ui/styles";
@@ -1003,11 +1003,9 @@ export default function BucketsPage() {
           tone="warning"
         />
       ) : (
-        <div className="ui-surface-card">
-          <ListToolbar
+        <ListPageSection
             title="Buckets"
             description="Paginated list of buckets for the active context."
-            showHeading={false}
             countLabel={
               buckets.length === 0 && (loading || baseLoadFailed)
                 ? "— buckets"
@@ -1086,7 +1084,7 @@ export default function BucketsPage() {
                 </div>
               </>
             }
-          />
+        >
           <ManagerTable
             columns={managerBucketTableColumns}
             responsiveCards
@@ -1122,7 +1120,7 @@ export default function BucketsPage() {
               </tr>
             ))}
           </ManagerTable>
-        </div>
+        </ListPageSection>
       )}
 
       {pendingDeleteBucketName && (

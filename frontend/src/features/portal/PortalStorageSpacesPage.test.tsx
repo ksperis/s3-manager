@@ -183,10 +183,10 @@ describe("PortalStorageSpacesPage", () => {
 
     expect(screen.getByRole("heading", { name: "Spaces" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Active spaces (1)" }),
+      screen.getByRole("tab", { name: "Active spaces (1)" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Archived (0)" }),
+      screen.getByRole("tab", { name: "Archived (0)" }),
     ).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({
       includeArchived: true,
@@ -227,6 +227,11 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
+    const storageSpaceIcon = researchRow!.querySelector(
+      'svg[aria-hidden="true"]',
+    );
+    expect(storageSpaceIcon).not.toBeNull();
+    expect(storageSpaceIcon).toHaveClass("h-4", "w-4");
     expect(screen.getByText("Research Data").closest("table")).toHaveClass(
       "responsive-data-table",
     );
@@ -407,7 +412,7 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByText("Archived Data")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Archived (1)" }));
+    await user.click(screen.getByRole("tab", { name: "Archived (1)" }));
 
     expect(screen.queryByText("Active Data")).not.toBeInTheDocument();
     const archivedRow = screen.getByText("Archived Data").closest("tr");

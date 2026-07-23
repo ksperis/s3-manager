@@ -22,6 +22,37 @@ type PageTabsProps = {
   idPrefix?: string;
 };
 
+export function pageTabId(idPrefix: string, tabId: string): string {
+  return `${idPrefix}-tab-${tabId}`;
+}
+
+export function pageTabPanelId(idPrefix: string, tabId: string): string {
+  return `${idPrefix}-panel-${tabId}`;
+}
+
+export function PageTabPanel({
+  idPrefix,
+  tabId,
+  children,
+  className,
+}: {
+  idPrefix: string;
+  tabId: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      id={pageTabPanelId(idPrefix, tabId)}
+      role="tabpanel"
+      aria-labelledby={pageTabId(idPrefix, tabId)}
+      className={className}
+    >
+      {children}
+    </section>
+  );
+}
+
 export default function PageTabs({
   tabs,
   activeTab,
@@ -62,8 +93,8 @@ export default function PageTabs({
             type="button"
             role={ariaLabel ? "tab" : undefined}
             aria-selected={ariaLabel ? isActive : undefined}
-            aria-controls={ariaLabel && idPrefix ? `${idPrefix}-panel-${tab.id}` : undefined}
-            id={ariaLabel && idPrefix ? `${idPrefix}-tab-${tab.id}` : undefined}
+            aria-controls={ariaLabel && idPrefix ? pageTabPanelId(idPrefix, tab.id) : undefined}
+            id={ariaLabel && idPrefix ? pageTabId(idPrefix, tab.id) : undefined}
             tabIndex={ariaLabel ? (isActive ? 0 : -1) : undefined}
             disabled={tab.disabled}
             onClick={() => onChange(tab.id)}
@@ -98,9 +129,14 @@ export default function PageTabs({
         {tabList}
         {headerActions ? <div className="flex items-center gap-2">{headerActions}</div> : null}
       </div>
-      {tabs.find((t) => t.id === activeTab)?.content && (
-        <div className="p-3">{tabs.find((t) => t.id === activeTab)?.content}</div>
-      )}
+      {tabs.find((t) => t.id === activeTab)?.content &&
+        (ariaLabel && idPrefix ? (
+          <PageTabPanel idPrefix={idPrefix} tabId={activeTab} className="p-3">
+            {tabs.find((t) => t.id === activeTab)?.content}
+          </PageTabPanel>
+        ) : (
+          <div className="p-3">{tabs.find((t) => t.id === activeTab)?.content}</div>
+        ))}
     </div>
   );
 }

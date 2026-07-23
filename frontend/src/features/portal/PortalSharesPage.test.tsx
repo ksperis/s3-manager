@@ -165,8 +165,11 @@ describe("PortalSharesPage", () => {
     ]);
     expect(screen.queryByText(/A project member does not automatically have access to every file/i)).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Project members" }),
+      screen.getByRole("tabpanel", { name: "Project members" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Project members" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getByText("Project role")).toBeInTheDocument();
     expect(screen.queryByText("Workspace role")).not.toBeInTheDocument();
@@ -242,8 +245,11 @@ describe("PortalSharesPage", () => {
     renderPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Access by space" }),
+      await screen.findByRole("tabpanel", { name: "Access by space" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Access by space" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Granted by me" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -254,15 +260,12 @@ describe("PortalSharesPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    const membersCard = (
-      await screen.findByRole("heading", { name: "Project members" })
-    ).closest("section");
-    if (!membersCard) throw new Error("Project members card not found");
-    await user.type(within(membersCard).getByLabelText("Search members"), "manager");
+    const membersPanel = await screen.findByRole("tabpanel", { name: "Project members" });
+    await user.type(within(membersPanel).getByLabelText("Search members"), "manager");
 
-    expect(within(membersCard).getByText("Manager User")).toBeInTheDocument();
-    expect(within(membersCard).queryByText("Editor User")).not.toBeInTheDocument();
-    expect(within(membersCard).getByText("1 of 2 members")).toBeInTheDocument();
+    expect(within(membersPanel).getByText("Manager User")).toBeInTheDocument();
+    expect(within(membersPanel).queryByText("Editor User")).not.toBeInTheDocument();
+    expect(within(membersPanel).getByText("1 of 2 members")).toBeInTheDocument();
   });
 
   it("loads access for every active space but excludes archived spaces", async () => {

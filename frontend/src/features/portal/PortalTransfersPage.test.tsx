@@ -113,8 +113,8 @@ describe("PortalTransfersPage", () => {
 
     expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
-    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Access history" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Access history" })).toBeInTheDocument();
     expect(screen.getAllByText("Recent transfers").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Latest transfer history")).toBeInTheDocument();
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
@@ -131,7 +131,7 @@ describe("PortalTransfersPage", () => {
     expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
 
     expect(screen.getByText("Detailed access history")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retrieve logs" })).not.toBeInTheDocument();
@@ -160,7 +160,7 @@ describe("PortalTransfersPage", () => {
 
     renderPage();
 
-    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
     expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
@@ -171,7 +171,7 @@ describe("PortalTransfersPage", () => {
 
     renderPage();
 
-    expect(screen.getByRole("button", { name: "Recent transfers" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
     expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
     expect(screen.getByText("Review recent uploads and downloads for the spaces you can use.")).toBeInTheDocument();
@@ -241,7 +241,7 @@ describe("PortalTransfersPage", () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
     fireEvent.change(screen.getByLabelText("Go to date"), { target: { value: "2026-07-08" } });
 
     await waitFor(() => {
@@ -278,7 +278,7 @@ describe("PortalTransfersPage", () => {
 
   it("sends advanced access history filters to the backend", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
 
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalled();
@@ -313,7 +313,7 @@ describe("PortalTransfersPage", () => {
 
   it("exports raw access logs for a selected date range and storage space", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
     fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
     const dialog = screen.getByRole("dialog", { name: "Export raw access logs" });

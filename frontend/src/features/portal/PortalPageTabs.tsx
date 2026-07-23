@@ -4,12 +4,16 @@
  */
 import type { ComponentProps } from "react";
 
-import PageTabs from "../../components/PageTabs";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import { cx, uiDividerClass } from "../../components/ui/styles";
 
 type PortalPageTabsProps = Omit<ComponentProps<typeof PageTabs>, "variant"> & {
   className?: string;
 };
+
+export function PortalTabPanel(props: ComponentProps<typeof PageTabPanel>) {
+  return <PageTabPanel {...props} />;
+}
 
 /** Top-level Portal navigation with one consistent baseline and spacing. */
 export default function PortalPageTabs({ className, ...props }: PortalPageTabsProps) {

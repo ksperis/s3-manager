@@ -11,7 +11,7 @@ import {
   uiToolbarSecondaryClass,
 } from "./ui/styles";
 
-type ListToolbarProps = {
+export type ListToolbarProps = {
   title: ReactNode;
   description?: ReactNode;
   showHeading?: boolean;

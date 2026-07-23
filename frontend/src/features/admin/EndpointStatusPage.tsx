@@ -14,7 +14,7 @@ import {
   runHealthchecks,
   type HealthCheckStatus,
 } from "../../api/healthchecks";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageHeader from "../../components/PageHeader";
@@ -467,10 +467,10 @@ export default function EndpointStatusPage() {
         </div>
       </div>
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Incidents"
           description="All incidents across endpoints. Default view is 6 months."
+          showHeading
           countLabel={incidentsCountLabel}
           filters={
             <UiSegmentedControl
@@ -480,7 +480,7 @@ export default function EndpointStatusPage() {
               onChange={setIncidentWindow}
             />
           }
-        />
+      >
         <DataTableShell
           columns={incidentTableColumns}
           rows={incidentRows}
@@ -494,7 +494,7 @@ export default function EndpointStatusPage() {
           tableClassName="compact-table"
           rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
         />
-      </div>
+      </ListPageSection>
     </div>
   );
 }

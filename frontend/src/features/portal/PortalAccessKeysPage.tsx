@@ -17,7 +17,6 @@ import {
   type PortalStorageSpaceSummary,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
-import ListToolbar from "../../components/ListToolbar";
 import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
@@ -25,6 +24,7 @@ import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
+import ListPageSection from "../../components/list/ListPageSection";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiButton from "../../components/ui/UiButton";
@@ -45,7 +45,7 @@ import {
 } from "./portalExternalToolAccess";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalAccessKeyStatusLabel, portalDateTimeLabel } from "./portalI18n";
-import PortalPageTabs from "./PortalPageTabs";
+import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 
 type PendingAccessKeyAction =
   | { type: "disable"; key: PortalAccessKey }
@@ -598,10 +598,18 @@ export default function PortalAccessKeysPage() {
         ]}
         activeTab={activeTab}
         onChange={(tabId) => setActiveTab(tabId as AccessKeysTab)}
+        ariaLabel={t({
+          en: "External tool access views",
+          fr: "Vues des accès aux outils externes",
+          de: "Ansichten für externen Werkzeugzugriff",
+        })}
+        idPrefix="portal-tool-access"
       />
 
-      {activeTab === "connect" && showStarterGuide ? (
-        <section className="ui-surface-muted p-4" aria-labelledby="portal-external-tool-guide">
+      {activeTab === "connect" ? (
+        <PortalTabPanel idPrefix="portal-tool-access" tabId="connect" className="space-y-4">
+          {showStarterGuide ? (
+            <section className="ui-surface-muted p-4" aria-labelledby="portal-external-tool-guide">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <h2 id="portal-external-tool-guide" className={cx("text-sm font-bold", uiTitleTextClass)}>
@@ -656,11 +664,11 @@ export default function PortalAccessKeysPage() {
               </p>
             </div>
           </div>
-        </section>
-      ) : null}
+            </section>
+          ) : null}
 
-      {createdKey?.secret_access_key && (
-        <OneTimeSecretPanel
+          {createdKey?.secret_access_key && (
+            <OneTimeSecretPanel
           title={
             createdKey.target_type === "external"
               ? t({ en: "External tool access created", fr: "Accès outil externe créé", de: "Externer Werkzeugzugriff erstellt" })
@@ -696,11 +704,11 @@ export default function PortalAccessKeysPage() {
               copyLabel: t({ en: "Copy", fr: "Copier", de: "Kopieren" }),
             },
           ]}
-        />
-      )}
+            />
+          )}
 
-      {activeTab === "connect" && state && hasAccountContext ? (
-        <section className="ui-surface-card space-y-4 p-4" aria-labelledby="portal-external-tool-access">
+          {state && hasAccountContext ? (
+            <section className="ui-surface-card space-y-4 p-4" aria-labelledby="portal-external-tool-access">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
               <h2 id="portal-external-tool-access" className={cx("text-sm font-bold", uiTitleTextClass)}>
@@ -766,7 +774,9 @@ export default function PortalAccessKeysPage() {
               {t({ en: "Download setup", fr: "Télécharger la configuration", de: "Einrichtung herunterladen" })}
             </UiButton>
           </div>
-        </section>
+            </section>
+          ) : null}
+        </PortalTabPanel>
       ) : null}
 
       {connectionDialogOpen && activeTab === "connect" && state && hasAccountContext ? (
@@ -911,45 +921,45 @@ export default function PortalAccessKeysPage() {
         </Modal>
       ) : null}
 
-      {activeTab === "access-list" && accountLoading ? (
-        <PageBanner tone="info">{t({ en: "Loading project...", fr: "Chargement du projet...", de: "Projekt wird geladen..." })}</PageBanner>
-      ) : activeTab === "access-list" && !hasAccountContext ? (
-        <PageEmptyState
-          title={t({ en: "Select a project before connecting external tools", fr: "Sélectionnez un projet avant de connecter des outils externes", de: "Wählen Sie ein Projekt aus, bevor Sie externe Werkzeuge verbinden" })}
-          description={t({ en: "External-tool access is scoped to the selected project.", fr: "L'accès aux outils externes est limité au projet sélectionné.", de: "Werkzeugzugriff ist auf das ausgewählte Projekt beschränkt." })}
-          tone="warning"
-        />
-      ) : activeTab === "access-list" ? (
-        <div className="ui-surface-card">
-          <ListToolbar
-            title={t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}
-            description={
-              t({
+      {activeTab === "access-list" ? (
+        <PortalTabPanel idPrefix="portal-tool-access" tabId="access-list">
+          {accountLoading ? (
+            <PageBanner tone="info">{t({ en: "Loading project...", fr: "Chargement du projet...", de: "Projekt wird geladen..." })}</PageBanner>
+          ) : !hasAccountContext ? (
+            <PageEmptyState
+              title={t({ en: "Select a project before connecting external tools", fr: "Sélectionnez un projet avant de connecter des outils externes", de: "Wählen Sie ein Projekt aus, bevor Sie externe Werkzeuge verbinden" })}
+              description={t({ en: "External-tool access is scoped to the selected project.", fr: "L'accès aux outils externes est limité au projet sélectionné.", de: "Werkzeugzugriff ist auf das ausgewählte Projekt beschränkt." })}
+              tone="warning"
+            />
+          ) : (
+            <ListPageSection
+              title={t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" })}
+              description={t({
                 en: "Store secrets when they are created; they cannot be shown again. Portal's own runtime access is hidden from this list.",
                 fr: "Enregistrez les secrets à la création; ils ne pourront plus être affichés. L'accès runtime propre à Portal est masqué dans cette liste.",
                 de: "Speichern Sie Secrets beim Erstellen; sie können nicht erneut angezeigt werden. Portals eigener Laufzeitzugriff ist in dieser Liste ausgeblendet.",
-              })
-            }
-            showHeading={false}
-            countLabel={t({ en: `${visibleKeys.length} access`, fr: `${visibleKeys.length} accès`, de: `${visibleKeys.length} Zugriffe` })}
-          />
-          <DataTableShell
-            columns={accessKeyColumns}
-            rows={visibleKeys}
-            rowKey={(key) => key.access_key_id}
-            status={tableStatus}
-            loadingMessage={t({ en: "Loading tool access...", fr: "Chargement des accès outil...", de: "Werkzeugzugriff wird geladen..." })}
-            errorMessage={t({ en: "Unable to load tool access.", fr: "Impossible de charger les accès outil.", de: "Werkzeugzugriff kann nicht geladen werden." })}
-            emptyMessage={t({ en: "No external tool access yet.", fr: "Aucun accès outil externe pour l'instant.", de: "Noch kein externer Werkzeugzugriff." })}
-            rowClassName={(key) =>
-              cx(
-                "hover:bg-slate-50 dark:hover:bg-slate-800/40",
-                !isKeyActive(key) && "bg-slate-50/70 dark:bg-slate-900/40"
-              )
-            }
-            responsiveCards
-          />
-        </div>
+              })}
+              countLabel={t({ en: `${visibleKeys.length} access`, fr: `${visibleKeys.length} accès`, de: `${visibleKeys.length} Zugriffe` })}
+            >
+              <DataTableShell
+                columns={accessKeyColumns}
+                rows={visibleKeys}
+                rowKey={(key) => key.access_key_id}
+                status={tableStatus}
+                loadingMessage={t({ en: "Loading tool access...", fr: "Chargement des accès outil...", de: "Werkzeugzugriff wird geladen..." })}
+                errorMessage={t({ en: "Unable to load tool access.", fr: "Impossible de charger les accès outil.", de: "Werkzeugzugriff kann nicht geladen werden." })}
+                emptyMessage={t({ en: "No external tool access yet.", fr: "Aucun accès outil externe pour l'instant.", de: "Noch kein externer Werkzeugzugriff." })}
+                rowClassName={(key) =>
+                  cx(
+                    "hover:bg-slate-50 dark:hover:bg-slate-800/40",
+                    !isKeyActive(key) && "bg-slate-50/70 dark:bg-slate-900/40"
+                  )
+                }
+                responsiveCards
+              />
+            </ListPageSection>
+          )}
+        </PortalTabPanel>
       ) : null}
 
       {createWizardOpen ? (

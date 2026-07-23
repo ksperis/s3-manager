@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import { adminBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
@@ -650,12 +650,12 @@ export default function BillingPage() {
           ) : null}
           {summaryLoading ? <PageBanner tone="info">Loading summary...</PageBanner> : <StatCards stats={stats} columns={3} />}
 
-          <section className="ui-surface-card">
-            <ListToolbar
+          <ListPageSection
               title="Subjects"
               description={selectedEndpoint ? `Monthly totals for ${selectedEndpoint.name}.` : "Monthly subject totals."}
+              showHeading
               countLabel={`${subjectsTotal} subject${subjectsTotal === 1 ? "" : "s"}`}
-            />
+          >
             {subjectsError ? <PageBanner tone="error" className="mx-4 mb-4">{subjectsError}</PageBanner> : null}
             <DataTableShell
               columns={subjectTableColumns}
@@ -693,7 +693,7 @@ export default function BillingPage() {
                 "aria-current": detail?.subject_type === subject.subject_type && detail.subject_id === subject.subject_id ? "true" : undefined,
               })}
             />
-          </section>
+          </ListPageSection>
 
           <section className="ui-surface-card p-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">

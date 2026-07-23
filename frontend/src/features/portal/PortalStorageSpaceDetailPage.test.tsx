@@ -273,7 +273,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
-    expect(screen.getByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.getByRole("tabpanel", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
@@ -460,7 +461,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
-    expect(await screen.findByRole("heading", { name: "Collaborators" })).toBeInTheDocument();
+    expect(await screen.findByRole("tabpanel", { name: "Collaborators" })).toBeInTheDocument();
     expect(screen.getAllByText("Selected people").length).toBeGreaterThan(0);
     expect(screen.getByText("Manager User")).toBeInTheDocument();
     expect(screen.getAllByText("viewer@example.com").length).toBeGreaterThan(0);
@@ -502,7 +503,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       await screen.findByRole("tab", { name: "Collaborators" }),
     ).toHaveAttribute("aria-selected", "true");
     expect(
-      screen.getByRole("heading", { name: "Collaborators" }),
+      screen.getByRole("tabpanel", { name: "Collaborators" }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Invite people" }));

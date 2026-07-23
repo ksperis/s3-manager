@@ -20,7 +20,7 @@ import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import GroupAvatar from "../../components/GroupAvatar";
-import ListToolbar from "../../components/ListToolbar";
+import ListPageSection from "../../components/list/ListPageSection";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -813,11 +813,9 @@ export default function GroupsPage() {
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="ui-surface-card">
-        <ListToolbar
+      <ListPageSection
           title="Groups"
           description="Search across group names, members, and linked resources."
-          showHeading={false}
           countLabel={`${totalGroups} entr${totalGroups === 1 ? "y" : "ies"}`}
           search={
             <ToolbarSearchInput
@@ -830,7 +828,7 @@ export default function GroupsPage() {
               className="w-full sm:w-64 md:w-80"
             />
           }
-        />
+      >
         <DataTableShell
           columns={groupTableColumns}
           rows={groups}
@@ -855,7 +853,7 @@ export default function GroupsPage() {
           responsiveCards
           tableClassName="compact-table"
         />
-      </div>
+      </ListPageSection>
 
       {showModal && (
         <WorkflowPage

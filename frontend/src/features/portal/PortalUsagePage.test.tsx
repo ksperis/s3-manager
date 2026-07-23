@@ -313,7 +313,7 @@ describe("PortalUsagePage", () => {
     expect(screen.getByText("Current issues")).toBeInTheDocument();
     expect(mocks.hookArgs[0]).toMatchObject({ includeTraffic: true, includeHealth: true, trafficWindow: "week" });
 
-    fireEvent.click(screen.getByRole("button", { name: "By space" }));
+    fireEvent.click(screen.getByRole("tab", { name: "By space" }));
 
     expect(screen.getByText("Space breakdown")).toBeInTheDocument();
     expect(screen.getByText("Spaces by stored data")).toBeInTheDocument();
@@ -322,13 +322,13 @@ describe("PortalUsagePage", () => {
     expect(screen.getAllByText("12 files").length).toBeGreaterThan(0);
     expect(screen.queryByText(/objects/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "File types" }));
+    fireEvent.click(screen.getByRole("tab", { name: "File types" }));
 
     expect(await screen.findByText("Logical bytes")).toBeInTheDocument();
     expect(screen.getByText("1 / 1 spaces covered")).toBeInTheDocument();
     expect(mocks.usageStatsMock).toHaveBeenCalledWith("101");
 
-    fireEvent.click(screen.getByRole("button", { name: "Trends" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Trends" }));
 
     expect(await screen.findByText("Storage growth")).toBeInTheDocument();
     expect(screen.getByText("Latest storage")).toBeInTheDocument();
@@ -339,9 +339,9 @@ describe("PortalUsagePage", () => {
       expect(mocks.usageHistoryMock).toHaveBeenLastCalledWith("101", "week");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Uploads & downloads" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Uploads & downloads" }));
 
-    expect(screen.getByRole("heading", { name: "Uploads & downloads" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Transfer activity" })).toBeInTheDocument();
     expect(screen.getByText("Downloaded")).toBeInTheDocument();
     expect(screen.getByText("Uploaded")).toBeInTheDocument();
     expect(screen.getByText("Action types")).toBeInTheDocument();
@@ -351,7 +351,7 @@ describe("PortalUsagePage", () => {
       expect(lastHookArgs.trafficWindow).toBe("month");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Costs" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Costs" }));
 
     expect(screen.getByText("Monthly cost")).toBeInTheDocument();
     expect(await screen.findByText("€1.25")).toBeInTheDocument();
@@ -399,21 +399,21 @@ describe("PortalUsagePage", () => {
 
     expect(screen.getAllByText("Quota unavailable").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "By space" }));
+    fireEvent.click(screen.getByRole("tab", { name: "By space" }));
     expect(screen.getByText("No per-space storage data yet.")).toBeInTheDocument();
     expect(screen.getByText("No per-space file counts yet.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "File types" }));
+    fireEvent.click(screen.getByRole("tab", { name: "File types" }));
     expect(await screen.findByText("usage stats disabled")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Trends" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Trends" }));
     expect(await screen.findByText("Usage history is disabled.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Uploads & downloads" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Uploads & downloads" }));
     expect(screen.getByText("Traffic data is unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("Egress")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Costs" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Costs" }));
     await waitFor(() => {
       expect(screen.getByText("billing disabled")).toBeInTheDocument();
     });
@@ -455,7 +455,7 @@ describe("PortalUsagePage", () => {
     });
     expect(screen.getByText("50% of quota")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "By space" }));
+    fireEvent.click(screen.getByRole("tab", { name: "By space" }));
 
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
     expect(screen.queryByText("Other")).not.toBeInTheDocument();

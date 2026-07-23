@@ -112,15 +112,15 @@ describe("PortalRequestsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Help requests" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Request help" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Request help" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Add or remove a collaborator" })).toBeInTheDocument();
     expect(screen.queryByText("Raise to 20 GiB")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "History (1)" }));
+    await user.click(screen.getByRole("tab", { name: "History (1)" }));
     expect(await screen.findByText("Raise to 20 GiB")).toBeInTheDocument();
     expect(screen.getByText("New project")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Request help" }));
+    await user.click(screen.getByRole("tab", { name: "Request help" }));
     expect(
       screen.queryByRole("heading", { name: "Update project membership" }),
     ).not.toBeInTheDocument();
@@ -291,7 +291,7 @@ describe("PortalRequestsPage", () => {
     renderPage();
 
     expect(
-      await screen.findByRole("button", { name: "Request help" }),
+      await screen.findByRole("tab", { name: "Request help" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Manage membership" }),
