@@ -354,7 +354,7 @@ describe("PortalDashboard storage workspace UX", () => {
       "/portal/storage-spaces/research-data"
     );
     expect(screen.getByRole("link", { name: /Shares/ })).toHaveAttribute("href", "/portal/shares");
-    expect(screen.getByRole("link", { name: /Transfers/ })).toHaveAttribute("href", "/portal/transfers");
+    expect(screen.getByRole("link", { name: /Transfers/ })).toHaveAttribute("href", "/portal/history?view=transfers");
     expect(screen.queryByRole("link", { name: /Create user|Create policy|SNS|Lifecycle/i })).not.toBeInTheDocument();
   });
 

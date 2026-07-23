@@ -77,8 +77,9 @@ placeholder.
 
 ## Portal Rules
 
-- Keep Portal labels user-oriented: `Storage Spaces`, `Shares`, `Activity`,
-  `Transfers`, `Storage health`, `Help requests`, and `Settings`.
+- Keep Portal labels user-oriented: `Storage Spaces`, `Shares`, `History`,
+  `Storage health`, `Help requests`, and `Settings`. `History` separates
+  activity, transfers, and manager-only access logs into explicit tabs.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   `portal-basic` action profile and `X-S3-Workspace: portal`. Portal users may
@@ -146,11 +147,14 @@ Portal canonical routes are:
 - `/portal/storage-spaces/:spaceId/objects/*`
 - `/portal/access-keys`
 - `/portal/shares`
-- `/portal/activity`
-- `/portal/transfers`
+- `/portal/history`
 - `/portal/usage`
 - `/portal/requests`
 - `/portal/settings`
+
+`/portal/activity` and `/portal/transfers` remain compatibility redirects to
+the corresponding `/portal/history` tab. They are not canonical navigation
+destinations.
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 and `/portal/policies` are intentionally not routed in the production Portal
@@ -320,8 +324,8 @@ viewports:
 - `/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F`
 - `/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz`
 - `/portal/shares`
-- `/portal/activity`
-- `/portal/transfers`
+- `/portal/history`
+- `/portal/history?view=transfers`
 - `/portal/usage`
 - `/portal/requests`
 - `/portal/access-keys`

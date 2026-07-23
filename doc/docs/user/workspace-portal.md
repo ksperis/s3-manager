@@ -31,8 +31,9 @@ simple preferences.
    Portal runtime key is not shown in this list.
 6. Use **Collaborators** to review workspace members, spaces shared with you,
    people you invited, and public links when enabled.
-7. Use **Activity**, **Transfers**, and **Storage health** for collaboration
-   history, storage health, file movement, and cost checks.
+7. Use **History** and **Storage health** for collaboration history, file
+   movement, technical access logs when allowed, storage health, and cost
+   checks.
 8. Use **Help requests** to follow requests for missing collaborators, user
    removal, or storage-limit changes.
 9. Use **Settings** to review the selected project's access, storage service,

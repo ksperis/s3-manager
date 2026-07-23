@@ -386,7 +386,7 @@ function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
   return (
     <WorkspaceDashboardCard
       title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Übertragungen" })}
-      action={<Link to="/portal/transfers" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
+      action={<Link to="/portal/history?view=transfers" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
     >
       {rows.length === 0 ? (
         <WorkspaceDashboardEmptyState>{t({ en: "No recent transfers.", fr: "Aucun transfert récent.", de: "Keine letzten Übertragungen." })}</WorkspaceDashboardEmptyState>
@@ -419,7 +419,7 @@ function RecentActivityCard({ rows }: { rows: ActivityRow[] }) {
   return (
     <WorkspaceDashboardCard
       title={t({ en: "Recent activity", fr: "Activité récente", de: "Letzte Aktivität" })}
-      action={<Link to="/portal/activity" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
+      action={<Link to="/portal/history" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
     >
       {rows.length === 0 ? (
         <WorkspaceDashboardEmptyState>{t({ en: "No recent activity.", fr: "Aucune activité récente.", de: "Keine letzte Aktivität." })}</WorkspaceDashboardEmptyState>
@@ -699,7 +699,7 @@ export default function PortalDashboard() {
     {
       label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }),
       detail: t({ en: "Track uploads and downloads", fr: "Suivre les envois et téléchargements", de: "Hochladen und Herunterladen verfolgen" }),
-      to: "/portal/transfers",
+      to: "/portal/history?view=transfers",
       tone: "amber",
       icon: <TransferIcon className="h-4 w-4" />,
     },

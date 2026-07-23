@@ -73,18 +73,9 @@ function usePortalNavSections(): SidebarSection[] {
             icon: <KeyIcon />,
           },
           {
-            to: "/portal/activity",
-            label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }),
+            to: "/portal/history",
+            label: t({ en: "History", fr: "Historique", de: "Verlauf" }),
             icon: <ActivityIcon />,
-          },
-          {
-            to: "/portal/transfers",
-            label: t({
-              en: "Transfers",
-              fr: "Transferts",
-              de: "Übertragungen",
-            }),
-            icon: <TransferIcon />,
           },
           {
             to: "/portal/usage",
@@ -359,19 +350,6 @@ function ActivityIcon() {
         strokeLinejoin="round"
         strokeWidth={1.7}
         d="M3 10h3l2-4 3.5 8L14 10h3"
-      />
-    </IconBase>
-  );
-}
-
-function TransferIcon() {
-  return (
-    <IconBase>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.7}
-        d="M4 6h10m0 0-2.5-2.5M14 6 11.5 8.5M16 14H6m0 0 2.5-2.5M6 14l2.5 2.5"
       />
     </IconBase>
   );

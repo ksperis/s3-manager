@@ -99,6 +99,7 @@ describe("route snapshot", () => {
       "/portal/access-keys",
       "/portal/shares",
       "/portal/requests",
+      "/portal/history",
       "/portal/activity",
       "/portal/transfers",
       "/portal/usage",

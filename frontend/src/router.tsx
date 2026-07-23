@@ -89,9 +89,8 @@ const PortalStorageSpacesPage = lazy(() => import("./features/portal/PortalStora
 const PortalStorageSpaceDetailPage = lazy(() => import("./features/portal/PortalStorageSpaceDetailPage"));
 const PortalObjectDetailPage = lazy(() => import("./features/portal/PortalObjectDetailPage"));
 const PortalSharesPage = lazy(() => import("./features/portal/PortalSharesPage"));
-const PortalActivityPage = lazy(() => import("./features/portal/PortalActivityPage"));
 const PortalRequestsPage = lazy(() => import("./features/portal/PortalRequestsPage"));
-const PortalTransfersPage = lazy(() => import("./features/portal/PortalTransfersPage"));
+const PortalHistoryPage = lazy(() => import("./features/portal/PortalHistoryPage"));
 const PortalUsagePage = lazy(() => import("./features/portal/PortalUsagePage"));
 const PortalSettingsPage = lazy(() => import("./features/portal/PortalSettingsPage"));
 const BrowserLayout = lazy(() => import("./features/browser/BrowserLayout"));
@@ -390,8 +389,9 @@ export function createAppRoutes() {
               <Route path="access-keys" element={<PortalAccessKeysPage />} />
               <Route path="shares" element={<PortalSharesPage />} />
               <Route path="requests" element={<PortalRequestsPage />} />
-              <Route path="activity" element={<PortalActivityPage />} />
-              <Route path="transfers" element={<PortalTransfersPage />} />
+              <Route path="history" element={<PortalHistoryPage />} />
+              <Route path="activity" element={<Navigate to="/portal/history" replace />} />
+              <Route path="transfers" element={<Navigate to="/portal/history?view=transfers" replace />} />
               <Route path="usage" element={<PortalUsagePage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
             </Route>

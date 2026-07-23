@@ -1,10 +1,10 @@
-# Portal: Activity
+# Portal: History — Activity
 
 Use this page to understand what recently changed in the spaces you can access.
 
 ## When to use
 
-Use **Portal > Activity** when you want to answer simple collaboration questions:
+Use **Portal > History > Activity** when you want to answer simple collaboration questions:
 who changed something, which space was affected, and which file or sharing item
 was involved.
 
@@ -16,13 +16,14 @@ was involved.
 
 ## Steps
 
-1. Open **Portal > Activity**.
+1. Open **Portal > History** and keep the **Activity** tab selected.
 2. Use the summary to see how many recent changes, people, and spaces are involved.
 3. Filter the timeline by action or space when you need a narrower view.
 4. Scan the **Change** column to understand who acted and what changed.
 5. Use **Open space** on a row when you need to inspect the related files or
    collaborators.
-6. Open details only when you need the technical IP address for support.
+6. Open a row's details only when you need its exact item, action, or technical
+   IP address for support.
 
 ## Expected result
 

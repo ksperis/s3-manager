@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import PortalTransfersPage from "./PortalTransfersPage";
+import PortalHistoryPage from "./PortalHistoryPage";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 
 const mocks = vi.hoisted(() => ({
   transfers: [] as PortalWorkspaceTransfer[],
   serverAccessLoggingEnabled: true,
   accountRole: "portal_manager",
+  workspaceLoading: false,
   fetchPortalServerAccessLogPage: vi.fn(),
   downloadPortalServerAccessRawLogs: vi.fn(),
   createObjectURL: vi.fn(),
@@ -18,6 +19,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/portal", () => ({
   fetchPortalServerAccessLogPage: (...args: unknown[]) => mocks.fetchPortalServerAccessLogPage(...args),
   downloadPortalServerAccessRawLogs: (...args: unknown[]) => mocks.downloadPortalServerAccessRawLogs(...args),
+}));
+
+vi.mock("./PortalActivityPanel", () => ({
+  default: () => <div>Activity panel content</div>,
 }));
 
 vi.mock("./usePortalWorkspaceData", () => ({
@@ -34,8 +39,10 @@ vi.mock("./usePortalWorkspaceData", () => ({
       account_role: mocks.accountRole,
     },
     selectedAccount: { account_role: mocks.accountRole },
-    loading: false,
+    loading: mocks.workspaceLoading,
     accountLoading: false,
+    activityLoading: false,
+    transfersLoading: false,
     error: null,
     accountError: null,
     hasAccountContext: true,
@@ -43,15 +50,15 @@ vi.mock("./usePortalWorkspaceData", () => ({
   }),
 }));
 
-function renderPage() {
-  render(
-    <MemoryRouter>
-      <PortalTransfersPage />
+function renderPage(initialEntry = "/portal/history?view=transfers") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <PortalHistoryPage />
     </MemoryRouter>
   );
 }
 
-describe("PortalTransfersPage", () => {
+describe("PortalHistoryPage", () => {
   beforeEach(() => {
     mocks.fetchPortalServerAccessLogPage.mockReset();
     mocks.fetchPortalServerAccessLogPage.mockResolvedValue({ entries: [], total: 0, limit: 25, offset: 0 });
@@ -63,6 +70,7 @@ describe("PortalTransfersPage", () => {
     mocks.anchorClick.mockReset();
     mocks.serverAccessLoggingEnabled = true;
     mocks.accountRole = "portal_manager";
+    mocks.workspaceLoading = false;
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: mocks.createObjectURL });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: mocks.revokeObjectURL });
     Object.defineProperty(HTMLAnchorElement.prototype, "click", { configurable: true, value: mocks.anchorClick });
@@ -108,14 +116,24 @@ describe("PortalTransfersPage", () => {
     ];
   });
 
-  it("shows recent transfers first and keeps detailed access history in a separate enabled tab", async () => {
+  it("opens activity by default without loading transfer or access-log content", () => {
+    renderPage("/portal/history");
+
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Activity panel content")).toBeInTheDocument();
+    expect(screen.queryByText("Latest transfer history")).not.toBeInTheDocument();
+    expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
+  });
+
+  it("shows unified history navigation and keeps technical access logs in a manager-only tab", async () => {
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
-    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Access history" })).toBeInTheDocument();
-    expect(screen.getAllByText("Recent transfers").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("tab", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Transfers" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Access logs" })).toBeInTheDocument();
     expect(screen.getByText("Latest transfer history")).toBeInTheDocument();
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
     expect(screen.getByText("Retry from the related space")).toBeInTheDocument();
@@ -128,12 +146,14 @@ describe("PortalTransfersPage", () => {
     expect(screen.getByText("Quota reached.")).toBeInTheDocument();
     expect(screen.getAllByRole("table")[0]).toHaveClass("responsive-data-table");
     expect(screen.getByText("report.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
-    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Transfer direction" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access logs" }));
 
-    expect(screen.getByText("Detailed access history")).toBeInTheDocument();
+    expect(screen.getByText("Technical access logs")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retrieve logs" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export logs" })).toBeInTheDocument();
     await waitFor(() => {
@@ -144,37 +164,59 @@ describe("PortalTransfersPage", () => {
     });
   });
 
+  it("preserves a manager access-log deep link while permissions are loading", async () => {
+    mocks.workspaceLoading = true;
+    mocks.accountRole = "portal_user";
+    const view = renderPage("/portal/history?view=access");
+
+    expect(screen.getByText("Loading history...")).toBeInTheDocument();
+    expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
+
+    mocks.workspaceLoading = false;
+    mocks.accountRole = "portal_manager";
+    view.rerender(
+      <MemoryRouter initialEntries={["/portal/history?view=access"]}>
+        <PortalHistoryPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("tab", { name: "Access logs" })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => {
+      expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalled();
+    });
+  });
+
   it("points an empty recent transfer history back to spaces", () => {
     mocks.transfers = [];
 
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByText("No recent transfer yet")).toBeInTheDocument();
     expect(screen.getByText("The latest uploads and downloads started from your spaces appear here automatically.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Start from spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
   });
 
-  it("hides access history when detailed logging is disabled for the active account", () => {
+  it("hides access logs when detailed logging is disabled for the active account", () => {
     mocks.serverAccessLoggingEnabled = false;
 
     renderPage();
 
-    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Access logs" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
-  it("hides access history and does not load sensitive logs for portal users", () => {
+  it("hides access logs and does not load sensitive logs for portal users", () => {
     mocks.accountRole = "portal_user";
 
     renderPage();
 
-    expect(screen.getByRole("tab", { name: "Recent transfers" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Access history" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Detailed access history")).not.toBeInTheDocument();
-    expect(screen.getByText("Review recent uploads and downloads for the spaces you can use.")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Access logs" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
+    expect(screen.getByText("Review workspace activity and recent file transfers for the spaces you can use.")).toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
@@ -241,7 +283,7 @@ describe("PortalTransfersPage", () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access logs" }));
     fireEvent.change(screen.getByLabelText("Go to date"), { target: { value: "2026-07-08" } });
 
     await waitFor(() => {
@@ -278,7 +320,7 @@ describe("PortalTransfersPage", () => {
 
   it("sends advanced access history filters to the backend", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access logs" }));
 
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalled();
@@ -313,7 +355,7 @@ describe("PortalTransfersPage", () => {
 
   it("exports raw access logs for a selected date range and storage space", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Access history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Access logs" }));
     fireEvent.click(screen.getByRole("button", { name: "Export logs" }));
 
     const dialog = screen.getByRole("dialog", { name: "Export raw access logs" });

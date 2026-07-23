@@ -6,36 +6,35 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiCard from "../../components/ui/UiCard";
 import UiSelect from "../../components/ui/UiSelect";
 import {
   cx,
   uiCardMutedClass,
-  uiDividerClass,
   uiLabelClass,
   uiMutedTextClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
-import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
-import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import type { PortalWorkspaceActivityItem } from "./portalWorkspaceModel";
-import { resolvePortalWorkspacePageState } from "./portalUi";
-import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import type {
+  PortalWorkspaceActivityItem,
+  PortalWorkspaceModel,
+} from "./portalWorkspaceModel";
 
 function activitySpacePath(item: PortalWorkspaceActivityItem): string | null {
   return item.spaceId ? `/portal/storage-spaces/${encodeURIComponent(item.spaceId)}` : null;
 }
 
-export default function PortalActivityPage() {
+type PortalActivityPanelProps = {
+  workspace: Pick<PortalWorkspaceModel, "activity" | "spaces">;
+};
+
+export default function PortalActivityPanel({ workspace }: PortalActivityPanelProps) {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState("timeline");
   const [actionFilter, setActionFilter] = useState("all");
   const [spaceFilter, setSpaceFilter] = useState("all");
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
-  const { workspace, loading, error, hasAccountContext, accountError, accountLoading } = usePortalWorkspaceData({ includeActivity: true });
   const actionOptions = useMemo(
     () => Array.from(new Set(workspace.activity.map((item) => item.action))).sort(),
     [workspace.activity]
@@ -101,17 +100,6 @@ export default function PortalActivityPage() {
         render: (item) => item.spaceName,
       },
       {
-        id: "target",
-        label: t({ en: "File or item", fr: "Fichier ou élément", de: "Datei oder Element" }),
-        cellClassName: "break-words",
-        render: (item) => item.target,
-      },
-      {
-        id: "action",
-        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-        render: (item) => item.action,
-      },
-      {
         id: "details",
         label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }),
         align: "right",
@@ -142,10 +130,6 @@ export default function PortalActivityPage() {
       },
     ],
     [expandedActivityId, t]
-  );
-  const timelineColumns = useMemo<DataTableColumn<PortalWorkspaceActivityItem>[]>(
-    () => activityColumns.filter((column) => ["event", "time", "space", "details"].includes(column.id)),
-    [activityColumns]
   );
   const activityFilters = (
     <div className="mb-4 flex flex-wrap gap-3">
@@ -190,6 +174,10 @@ export default function PortalActivityPage() {
         expandedRow={(item) =>
           expandedActivityId === item.id ? (
             <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
+              <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File or item", fr: "Fichier ou élément", de: "Datei oder Element" })}</dt>
+              <dd className={cx(uiTitleTextClass, "break-all")}>{item.target}</dd>
+              <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Action", fr: "Action", de: "Aktion" })}</dt>
+              <dd className={uiTitleTextClass}>{item.action}</dd>
               <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "IP address", fr: "Adresse IP", de: "IP-Adresse" })}</dt>
               <dd className={uiTitleTextClass}>{item.ipAddress || "-"}</dd>
             </dl>
@@ -209,31 +197,8 @@ export default function PortalActivityPage() {
     </>
   );
 
-  const pageState = resolvePortalWorkspacePageState({
-    accountLoading,
-    loading,
-    accountError,
-    error,
-    hasAccountContext,
-    loadingMessage: t({ en: "Loading activity...", fr: "Chargement de l'activité...", de: "Aktivität wird geladen..." }),
-    noAccountMessage: t({ en: "Select a project to view activity.", fr: "Sélectionnez un projet pour voir l'activité.", de: "Wählen Sie ein Projekt aus, um Aktivität anzuzeigen." }),
-  });
-  if (pageState) return pageState;
-
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={t({ en: "Activity", fr: "Activité", de: "Aktivität" })}
-        description={t({
-          en: "See who changed files, spaces, and sharing settings you can access.",
-          fr: "Voyez qui a modifié les fichiers, les espaces et les partages auxquels vous avez accès.",
-          de: "Sehen Sie, wer Dateien, Bereiche und Freigaben geändert hat, auf die Sie zugreifen können.",
-        })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }) })}
-        actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
-        rightContent={<div className={cx(uiCardMutedClass, "px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>{t({ en: "Visible spaces only", fr: "Espaces visibles uniquement", de: "Nur sichtbare Bereiche" })}</div>}
-      />
-
       {workspace.activity.length === 0 ? (
         <PageEmptyState
           eyebrow={t({ en: "No history yet", fr: "Aucun historique", de: "Noch kein Verlauf" })}
@@ -247,98 +212,50 @@ export default function PortalActivityPage() {
         />
       ) : (
         <>
-          <PortalPageTabs
-            activeTab={activeTab}
-            onChange={setActiveTab}
-            tabs={[
-              {
-                id: "timeline",
-                label: t({ en: "Timeline", fr: "Fil d'activité", de: "Verlauf" }),
-              },
-              {
-                id: "audit",
-                label: t({ en: "Audit details", fr: "Détails d'audit", de: "Auditdetails" }),
-              },
-            ]}
-            ariaLabel={t({
-              en: "Activity views",
-              fr: "Vues de l'activité",
-              de: "Aktivitätsansichten",
+          <UiCard
+            muted
+            title={t({ en: "Activity overview", fr: "Vue d'ensemble de l'activité", de: "Aktivitätsübersicht" })}
+            description={t({
+              en: "A quick view of recent work across the spaces you can access.",
+              fr: "Une vue rapide du travail récent dans les espaces auxquels vous avez accès.",
+              de: "Ein schneller Überblick über die letzten Arbeiten in Ihren zugänglichen Bereichen.",
             })}
-            idPrefix="portal-activity"
-          />
-
-          {activeTab === "timeline" ? (
-            <PortalTabPanel idPrefix="portal-activity" tabId="timeline">
-              <UiCard
-                title={t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}
-                description={t({
-                  en: "Follow work across your spaces without the audit-only fields.",
-                  fr: "Suivez le travail dans vos espaces sans les champs réservés à l'audit.",
-                  de: "Verfolgen Sie Arbeit in Ihren Bereichen ohne reine Audit-Felder.",
-                })}
-              >
-                {activityFilters}
-                {activityTable(timelineColumns)}
-              </UiCard>
-            </PortalTabPanel>
-          ) : null}
-
-          {activeTab === "audit" ? (
-            <PortalTabPanel idPrefix="portal-activity" tabId="audit" className="space-y-4">
-              <UiCard
-                muted
-                title={t({ en: "Recent workspace history", fr: "Historique récent de l'espace de travail", de: "Letzter Arbeitsbereichsverlauf" })}
-                description={t({
-                  en: "Use this view when you need a fuller trace of collaboration across visible spaces.",
-                  fr: "Utilisez cette vue quand vous avez besoin d'une trace plus complète de la collaboration dans les espaces visibles.",
-                  de: "Nutzen Sie diese Ansicht, wenn Sie eine vollständigere Spur der Zusammenarbeit in sichtbaren Bereichen benötigen.",
-                })}
-              >
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="min-w-0">
-                    <div className={uiLabelClass}>{t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}</div>
-                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.events}</div>
-                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                      {t({ en: "Visible file and sharing events", fr: "Événements visibles de fichiers et partages", de: "Sichtbare Datei- und Freigabeereignisse" })}
-                    </p>
-                  </div>
-                  <div className="min-w-0">
-                    <div className={uiLabelClass}>{t({ en: "People active", fr: "Personnes actives", de: "Aktive Personen" })}</div>
-                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.people}</div>
-                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                      {t({ en: "Collaborators who changed something", fr: "Collaborateurs ayant changé quelque chose", de: "Mitwirkende, die etwas geändert haben" })}
-                    </p>
-                  </div>
-                  <div className="min-w-0">
-                    <div className={uiLabelClass}>{t({ en: "Spaces touched", fr: "Espaces concernés", de: "Betroffene Bereiche" })}</div>
-                    <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.spaces}</div>
-                    <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                      {t({ en: "Spaces with recent changes", fr: "Espaces avec des changements récents", de: "Bereiche mit letzten Änderungen" })}
-                    </p>
-                  </div>
-                </div>
-                <div className={cx("mt-4 border-t pt-3 text-xs", uiDividerClass, uiMutedTextClass)}>
-                  {t({
-                    en: "IP addresses and detailed fields stay here, away from the everyday timeline.",
-                    fr: "Les adresses IP et les champs détaillés restent ici, à l'écart du fil quotidien.",
-                    de: "IP-Adressen und Detailfelder bleiben hier, getrennt vom täglichen Verlauf.",
-                  })}
-                </div>
-              </UiCard>
-              <UiCard
-                title={t({ en: "Detailed activity", fr: "Activité détaillée", de: "Detaillierte Aktivität" })}
-                description={t({
-                  en: "Filter changes by action or space when you need to investigate a specific event.",
-                  fr: "Filtrez les changements par action ou par espace quand vous devez examiner un événement précis.",
-                  de: "Filtern Sie Änderungen nach Aktion oder Bereich, wenn Sie ein bestimmtes Ereignis prüfen müssen.",
-                })}
-              >
-                {activityFilters}
-                {activityTable(activityColumns)}
-              </UiCard>
-            </PortalTabPanel>
-          ) : null}
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="min-w-0">
+                <div className={uiLabelClass}>{t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}</div>
+                <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.events}</div>
+                <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                  {t({ en: "Visible file and sharing events", fr: "Événements visibles de fichiers et partages", de: "Sichtbare Datei- und Freigabeereignisse" })}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <div className={uiLabelClass}>{t({ en: "People active", fr: "Personnes actives", de: "Aktive Personen" })}</div>
+                <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.people}</div>
+                <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                  {t({ en: "Collaborators who changed something", fr: "Collaborateurs ayant effectué un changement", de: "Mitwirkende, die etwas geändert haben" })}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <div className={uiLabelClass}>{t({ en: "Spaces touched", fr: "Espaces concernés", de: "Betroffene Bereiche" })}</div>
+                <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.spaces}</div>
+                <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
+                  {t({ en: "Spaces with recent changes", fr: "Espaces avec des changements récents", de: "Bereiche mit letzten Änderungen" })}
+                </p>
+              </div>
+            </div>
+          </UiCard>
+          <UiCard
+            title={t({ en: "Recent activity", fr: "Activité récente", de: "Letzte Aktivität" })}
+            description={t({
+              en: "Filter changes by action or space, then open a row for its technical details.",
+              fr: "Filtrez les changements par action ou par espace, puis ouvrez une ligne pour ses détails techniques.",
+              de: "Filtern Sie Änderungen nach Aktion oder Bereich und öffnen Sie eine Zeile für technische Details.",
+            })}
+          >
+            {activityFilters}
+            {activityTable(activityColumns)}
+          </UiCard>
         </>
       )}
     </div>

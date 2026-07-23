@@ -52,11 +52,11 @@ const portalRoutes = [
     expected: { en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" },
   },
   {
-    path: "/portal/activity",
-    expected: { en: "Activity", fr: "Activité", de: "Aktivität" },
+    path: "/portal/history",
+    expected: { en: "History", fr: "Historique", de: "Verlauf" },
   },
   {
-    path: "/portal/transfers",
+    path: "/portal/history?view=transfers",
     expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" },
   },
   {

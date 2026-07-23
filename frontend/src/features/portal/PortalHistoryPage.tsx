@@ -3,12 +3,12 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiBadge from "../../components/ui/UiBadge";
@@ -32,6 +32,7 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalActivityPanel from "./PortalActivityPanel";
 import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
@@ -56,7 +57,7 @@ import {
   type TextMatchMode,
 } from "../cephAdmin/filtering/advancedFilterShared";
 
-type LogsTab = "server" | "live";
+type HistoryTab = "activity" | "transfers" | "access";
 type LiveTransferTab = "all" | "uploads" | "downloads";
 type ServerLogActionFilter = "" | "upload" | "download" | "delete" | "list" | "metadata" | "other";
 type ServerLogAdvancedFilterState = {
@@ -251,9 +252,15 @@ function serverLogStatusLabel(entry: PortalServerAccessLogEntry, t: ReturnType<t
   return t({ en: `Succeeded (${entry.status_code})`, fr: `Réussi (${entry.status_code})`, de: `Erfolgreich (${entry.status_code})` });
 }
 
-export default function PortalTransfersPage() {
+function historyTabFromSearch(value: string | null): HistoryTab {
+  if (value === "transfers" || value === "access") return value;
+  return "activity";
+}
+
+export default function PortalHistoryPage() {
   const { t, locale } = useI18n();
-  const [activeLogsTab, setActiveLogsTab] = useState<LogsTab>("live");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedHistoryTab = historyTabFromSearch(searchParams.get("view"));
   const [activeLiveTab, setActiveLiveTab] = useState<LiveTransferTab>("all");
   const [serverLogDate, setServerLogDate] = useState(todayDateInputValue);
   const [serverLogSpaceId, setServerLogSpaceId] = useState("");
@@ -273,23 +280,55 @@ export default function PortalTransfersPage() {
   const [rawLogsSpaceId, setRawLogsSpaceId] = useState("");
   const [rawLogsLoading, setRawLogsLoading] = useState(false);
   const [rawLogsError, setRawLogsError] = useState<string | null>(null);
-  const { workspace, state, loading, error, hasAccountContext, accountError, accountLoading, accountIdForApi, selectedAccount } = usePortalWorkspaceData({ includeTransfers: true });
+  const {
+    workspace,
+    state,
+    loading,
+    error,
+    hasAccountContext,
+    accountError,
+    accountLoading,
+    activityLoading,
+    transfersLoading,
+    accountIdForApi,
+    selectedAccount,
+  } = usePortalWorkspaceData({
+    includeActivity: requestedHistoryTab === "activity",
+    includeTransfers: requestedHistoryTab === "transfers",
+  });
   const storageSpaces = workspace.spaces ?? [];
   const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
   const canViewServerAccessLogs =
     selectedAccount?.account_role === "portal_manager" || state?.account_role === "portal_manager";
-  const logsTabs = useMemo(() => {
-    const tabs: Array<{ id: LogsTab; label: string }> = [
+  const activeHistoryTab: HistoryTab =
+    requestedHistoryTab === "access" && (!serverAccessLoggingEnabled || !canViewServerAccessLogs)
+      ? "activity"
+      : requestedHistoryTab;
+  const historyTabs = useMemo(() => {
+    const tabs: Array<{ id: HistoryTab; label: string }> = [
       {
-        id: "live",
-        label: t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Transfers" }),
+        id: "activity",
+        label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }),
+      },
+      {
+        id: "transfers",
+        label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }),
       },
     ];
     if (serverAccessLoggingEnabled && canViewServerAccessLogs) {
-      tabs.push({ id: "server", label: t({ en: "Access history", fr: "Historique des accès", de: "Zugriffsverlauf" }) });
+      tabs.push({ id: "access", label: t({ en: "Access logs", fr: "Journaux d'accès", de: "Zugriffsprotokolle" }) });
     }
     return tabs;
   }, [canViewServerAccessLogs, serverAccessLoggingEnabled, t]);
+  const selectHistoryTab = useCallback(
+    (tab: HistoryTab, replace = false) => {
+      const next = new URLSearchParams(searchParams);
+      if (tab === "activity") next.delete("view");
+      else next.set("view", tab);
+      setSearchParams(next, { replace });
+    },
+    [searchParams, setSearchParams]
+  );
 
   const serverLogAdvancedFilterParam = useMemo(
     () => buildServerLogAdvancedFilterPayload(serverLogAdvancedApplied),
@@ -590,13 +629,26 @@ export default function PortalTransfersPage() {
   const serverLogAdvancedDraftActiveCount = serverLogAdvancedDraftSummaryItems.length;
 
   useEffect(() => {
-    if ((!serverAccessLoggingEnabled || !canViewServerAccessLogs) && activeLogsTab === "server") {
-      setActiveLogsTab("live");
+    if (loading || accountLoading) return;
+    const rawView = searchParams.get("view");
+    const invalidView = rawView !== null && !["activity", "transfers", "access"].includes(rawView);
+    const inaccessibleAccessView =
+      requestedHistoryTab === "access" && (!serverAccessLoggingEnabled || !canViewServerAccessLogs);
+    if (invalidView || inaccessibleAccessView || rawView === "activity") {
+      selectHistoryTab("activity", true);
     }
-  }, [activeLogsTab, canViewServerAccessLogs, serverAccessLoggingEnabled]);
+  }, [
+    accountLoading,
+    canViewServerAccessLogs,
+    loading,
+    requestedHistoryTab,
+    searchParams,
+    selectHistoryTab,
+    serverAccessLoggingEnabled,
+  ]);
 
   useEffect(() => {
-    if (activeLogsTab !== "server" || !serverAccessLoggingEnabled || !canViewServerAccessLogs || !accountIdForApi || !serverLogDate) return;
+    if (activeHistoryTab !== "access" || !serverAccessLoggingEnabled || !canViewServerAccessLogs || !accountIdForApi || !serverLogDate) return;
     let cancelled = false;
     setServerLogsLoading(true);
     setServerLogsError(null);
@@ -639,7 +691,7 @@ export default function PortalTransfersPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, activeLogsTab, canViewServerAccessLogs, serverAccessLoggingEnabled, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
+  }, [accountIdForApi, activeHistoryTab, canViewServerAccessLogs, serverAccessLoggingEnabled, serverLogAdvancedFilterParam, serverLogDate, serverLogPage, serverLogPageSize, serverLogSpaceId, t]);
 
   const openRawLogsModal = useCallback(() => {
     setRawLogsDateFrom(serverLogDate);
@@ -819,12 +871,15 @@ export default function PortalTransfersPage() {
 
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
-    loading,
+    loading:
+      loading ||
+      (activeHistoryTab === "activity" && activityLoading) ||
+      (activeHistoryTab === "transfers" && transfersLoading),
     accountError,
     error,
     hasAccountContext,
-    loadingMessage: t({ en: "Loading transfer history...", fr: "Chargement de l'historique des transferts...", de: "Transferverlauf wird geladen..." }),
-    noAccountMessage: t({ en: "Select a project to view transfer history.", fr: "Sélectionnez un projet pour voir l'historique des transferts.", de: "Wählen Sie ein Projekt aus, um den Transferverlauf anzuzeigen." }),
+    loadingMessage: t({ en: "Loading history...", fr: "Chargement de l'historique...", de: "Verlauf wird geladen..." }),
+    noAccountMessage: t({ en: "Select a project to view history.", fr: "Sélectionnez un projet pour voir l'historique.", de: "Wählen Sie ein Projekt aus, um den Verlauf anzuzeigen." }),
   });
   if (pageState) return pageState;
 
@@ -893,20 +948,32 @@ export default function PortalTransfersPage() {
         })}
       >
         <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
-          <PageTabs
-            tabs={[
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label={t({ en: "Transfer direction", fr: "Sens du transfert", de: "Übertragungsrichtung" })}
+          >
+            {([
               { id: "all", label: t({ en: "All", fr: "Tous", de: "Alle" }) },
               { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Hochladen" }) },
               { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Herunterladen" }) },
-            ]}
-            activeTab={activeLiveTab}
-            onChange={(tab) => setActiveLiveTab(tab as LiveTransferTab)}
-            variant="bar"
-            ariaLabel={t({ en: "Transfer direction", fr: "Sens du transfert", de: "Übertragungsrichtung" })}
-            idPrefix="portal-live-transfers"
-          />
+            ] as Array<{ id: LiveTransferTab; label: string }>).map((option) => {
+              const selected = option.id === activeLiveTab;
+              return (
+                <UiButton
+                  key={option.id}
+                  size="xs"
+                  variant={selected ? "secondary" : "ghost"}
+                  aria-pressed={selected}
+                  onClick={() => setActiveLiveTab(option.id)}
+                  className={selected ? "bg-[var(--ui-selected-bg)] text-primary dark:text-[var(--ui-text)]" : undefined}
+                >
+                  {option.label}
+                </UiButton>
+              );
+            })}
+          </div>
         </div>
-        <PageTabPanel idPrefix="portal-live-transfers" tabId={activeLiveTab}>
         <DataTableShell
           columns={transferColumns}
           rows={transfers}
@@ -920,7 +987,6 @@ export default function PortalTransfersPage() {
         <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
           {t({ en: `Visible file size: ${formatBytes(visibleSizeBytes)}`, fr: `Taille visible des fichiers : ${formatBytes(visibleSizeBytes)}`, de: `Sichtbare Dateigröße: ${formatBytes(visibleSizeBytes)}` })}
         </div>
-        </PageTabPanel>
       </UiCard>
     </>
   );
@@ -928,40 +994,47 @@ export default function PortalTransfersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Transfer history", fr: "Historique des transferts", de: "Transferverlauf" })}
+        title={t({ en: "History", fr: "Historique", de: "Verlauf" })}
         description={
           canViewServerAccessLogs
             ? t({
-                en: "Review recent uploads, downloads, and detailed access history for the spaces you can use.",
-                fr: "Consultez les envois, téléchargements et l'historique d'accès détaillé des espaces que vous pouvez utiliser.",
-                de: "Prüfen Sie aktuelle Uploads, Downloads und den detaillierten Zugriffsverlauf Ihrer Bereiche.",
+                en: "Review workspace activity, file transfers, and technical access logs for the spaces you can use.",
+                fr: "Consultez l'activité, les transferts de fichiers et les journaux d'accès techniques des espaces que vous pouvez utiliser.",
+                de: "Prüfen Sie Aktivität, Dateiübertragungen und technische Zugriffsprotokolle Ihrer Bereiche.",
               })
             : t({
-                en: "Review recent uploads and downloads for the spaces you can use.",
-                fr: "Consultez les envois et téléchargements récents des espaces que vous pouvez utiliser.",
-                de: "Prüfen Sie aktuelle Uploads und Downloads Ihrer Bereiche.",
+                en: "Review workspace activity and recent file transfers for the spaces you can use.",
+                fr: "Consultez l'activité et les transferts de fichiers récents des espaces que vous pouvez utiliser.",
+                de: "Prüfen Sie Aktivität und aktuelle Dateiübertragungen Ihrer Bereiche.",
               })
         }
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Transfers", fr: "Transferts", de: "Transfers" }) })}
+        breadcrumbs={portalBreadcrumbs({ label: t({ en: "History", fr: "Historique", de: "Verlauf" }) })}
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
+        rightContent={
+          <div className={cx("rounded-md border border-[var(--ui-border-soft)] px-3 py-2 text-xs font-semibold", uiMutedTextClass)}>
+            {t({ en: "Visible spaces only", fr: "Espaces visibles uniquement", de: "Nur sichtbare Bereiche" })}
+          </div>
+        }
       />
 
       <PortalPageTabs
-        tabs={logsTabs}
-        activeTab={activeLogsTab}
-        onChange={(tab) => setActiveLogsTab(tab as LogsTab)}
-        ariaLabel={t({ en: "Transfer history views", fr: "Vues de l'historique des transferts", de: "Ansichten des Übertragungsverlaufs" })}
-        idPrefix="portal-transfer-history"
+        tabs={historyTabs}
+        activeTab={activeHistoryTab}
+        onChange={(tab) => selectHistoryTab(tab as HistoryTab)}
+        ariaLabel={t({ en: "History views", fr: "Vues de l'historique", de: "Verlaufsansichten" })}
+        idPrefix="portal-history"
       />
 
-      <PortalTabPanel idPrefix="portal-transfer-history" tabId={activeLogsTab}>
-      {activeLogsTab === "server" && serverAccessLoggingEnabled && canViewServerAccessLogs ? (
+      <PortalTabPanel idPrefix="portal-history" tabId={activeHistoryTab}>
+      {activeHistoryTab === "activity" ? (
+        <PortalActivityPanel workspace={workspace} />
+      ) : activeHistoryTab === "access" && serverAccessLoggingEnabled && canViewServerAccessLogs ? (
         <UiCard
-          title={t({ en: "Detailed access history", fr: "Historique d'accès détaillé", de: "Detaillierter Zugriffsverlauf" })}
+          title={t({ en: "Technical access logs", fr: "Journaux d'accès techniques", de: "Technische Zugriffsprotokolle" })}
           description={t({
-            en: "Access entries load automatically for the selected date and space.",
-            fr: "Les entrées d'accès se chargent automatiquement pour la date et l'espace sélectionnés.",
-            de: "Zugriffseinträge werden automatisch für das ausgewählte Datum und den Bereich geladen.",
+            en: "Use these manager-only logs to investigate S3 requests for a selected date and space.",
+            fr: "Utilisez ces journaux réservés aux managers pour examiner les requêtes S3 d'une date et d'un espace donnés.",
+            de: "Verwenden Sie diese nur für Manager sichtbaren Protokolle, um S3-Anfragen für ein Datum und einen Bereich zu untersuchen.",
           })}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">

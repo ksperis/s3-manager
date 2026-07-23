@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
-import PortalActivityPage from "./PortalActivityPage";
+import PortalActivityPanel from "./PortalActivityPanel";
 import type { PortalWorkspaceActivityItem, PortalWorkspaceSpace } from "./portalWorkspaceModel";
 
 const mocks = vi.hoisted(() => ({
@@ -11,29 +11,15 @@ const mocks = vi.hoisted(() => ({
   activity: [] as PortalWorkspaceActivityItem[],
 }));
 
-vi.mock("./usePortalWorkspaceData", () => ({
-  usePortalWorkspaceData: () => ({
-    workspace: {
-      spaces: mocks.spaces,
-      activity: mocks.activity,
-    },
-    loading: false,
-    accountLoading: false,
-    error: null,
-    accountError: null,
-    hasAccountContext: true,
-  }),
-}));
-
 function renderPage() {
   render(
     <MemoryRouter>
-      <PortalActivityPage />
+      <PortalActivityPanel workspace={{ spaces: mocks.spaces, activity: mocks.activity }} />
     </MemoryRouter>
   );
 }
 
-describe("PortalActivityPage", () => {
+describe("PortalActivityPanel", () => {
   beforeEach(() => {
     mocks.spaces = [
       { id: "research-data", name: "Research Data" },
@@ -67,19 +53,15 @@ describe("PortalActivityPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
-    const activityTabs = screen.getByRole("tablist", { name: "Activity views" });
-    expect(activityTabs.closest(".border-b")).toHaveClass("pb-3");
-    expect(activityTabs.closest(".ui-surface-card")).toBeNull();
-    expect(screen.getByRole("tab", { name: "Timeline" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Audit details" })).toBeInTheDocument();
+    expect(screen.getByText("Activity overview")).toBeInTheDocument();
+    expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.getByText("Recent changes")).toBeInTheDocument();
-    expect(screen.queryByText("Recent workspace history")).not.toBeInTheDocument();
-    expect(screen.queryByText("People active")).not.toBeInTheDocument();
+    expect(screen.getByText("People active")).toBeInTheDocument();
+    expect(screen.getByText("Spaces touched")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Activity views" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Audit details" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "File or item" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Action" })).not.toBeInTheDocument();
-    expect(screen.getByText("Visible spaces only")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.getByLabelText("Action")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Space")).toHaveClass("ui-control");
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
@@ -108,20 +90,14 @@ describe("PortalActivityPage", () => {
     expect(screen.queryByText("192.0.2.10")).not.toBeInTheDocument();
 
     await user.click(showDetailsButtons[0]);
+    expect(screen.getByText("File or item")).toBeInTheDocument();
+    expect(screen.getAllByText("Action").length).toBeGreaterThan(1);
     expect(screen.getByText("IP address")).toBeInTheDocument();
     expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hide details" })).toHaveAttribute(
       "class",
       tableActionButtonClasses,
     );
-
-    await user.click(screen.getByRole("tab", { name: "Audit details" }));
-    expect(screen.getByText("Recent workspace history")).toBeInTheDocument();
-    expect(screen.getByText("People active")).toBeInTheDocument();
-    expect(screen.getByText("Spaces touched")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "File or item" })).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader", { name: "Action" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
   });
 
   it("points empty activity back to spaces", () => {

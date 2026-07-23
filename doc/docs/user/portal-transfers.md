@@ -1,13 +1,14 @@
-# Portal: Transfers
+# Portal: History — Transfers
 
 Use this page to check whether files you added to a space or downloaded from a space are still moving, finished, or need another try.
 
 ## When to use
 
-Use **Portal > Transfers** after adding files, downloading files, or starting a large file operation from a Storage Space.
+Use **Portal > History > Transfers** after adding files, downloading files, or
+starting a large file operation from a Storage Space.
 
 The page is a progress view. Start the work from **Portal > Spaces**, then use
-**Transfers** to confirm what happened.
+the **Transfers** tab to confirm what happened.
 
 ## Prerequisites
 
@@ -19,10 +20,15 @@ The page is a progress view. Start the work from **Portal > Spaces**, then use
 
 1. Start from **Portal > Spaces** and open the space that contains your files.
 2. Add files to the space or download files from it.
-3. Open **Portal > Transfers**.
+3. Open **Portal > History**, then select **Transfers**.
 4. Use the summary to see what is still in progress, completed, or needs attention.
 5. Use the table to find the file, the related space, the action, and the note.
 6. For a failed transfer, reopen the related space and retry when the cause is clear.
+
+Portal Managers can also open **Access logs** from the same History page to
+investigate technical S3 requests by date, Storage Space, identity, result, and
+source. This manager-only tab is separate from transfer progress and supports
+advanced filtering and raw-log export.
 
 ## Expected result
 
