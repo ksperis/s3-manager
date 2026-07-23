@@ -137,6 +137,7 @@ class UserUpdate(BaseModel):
     can_access_storage_ops: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None
     browser_advanced_features_enabled: Optional[bool] = None
+    account_links: Optional[list[AccountMembership]] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
     group_ids: Optional[list[int]] = None

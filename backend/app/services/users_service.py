@@ -24,6 +24,7 @@ from app.db import (
     S3User,
     TagDefinition,
     UiGroup,
+    UiGroupS3Account,
     User,
     UserRole,
     UserS3Account,
@@ -184,6 +185,12 @@ class UsersService:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("User not found")
+        affected_portal_account_ids = self._affected_portal_account_ids(user, payload)
+        portal_roles_before = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=affected_portal_account_ids,
+        )
         if payload.email and payload.email != user.email:
             existing = self.get_by_email(payload.email)
             if existing and existing.id != user.id:
@@ -243,6 +250,8 @@ class UsersService:
             user.browser_advanced_features_enabled = bool(payload.browser_advanced_features_enabled)
         if not is_admin_ui_role(next_role):
             user.quota_alerts_global_watch = False
+        if payload.account_links is not None:
+            self._set_account_links(user, payload.account_links)
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
@@ -250,7 +259,15 @@ class UsersService:
         if payload.group_ids is not None:
             self._set_group_links(user, payload.group_ids)
         self.db.add(user)
+        self.db.flush()
+        portal_roles_after = capture_effective_portal_roles(
+            self.db,
+            user_ids=[user.id],
+            account_ids=affected_portal_account_ids,
+        )
+        sync_portal_role_downgrades(self.db, before=portal_roles_before, after=portal_roles_after)
         self.db.commit()
+        sync_portal_role_promotions(self.db, before=portal_roles_before, after=portal_roles_after)
         self.db.refresh(user)
         logger.debug("Updated user id=%s email=%s", user.id, user.email)
         return user
@@ -817,6 +834,98 @@ class UsersService:
                 raise ValueError(f"S3 users not found: {missing_str}")
             for s3_user in s3_users:
                 self.db.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+
+    def _affected_portal_account_ids(self, user: User, payload: UserUpdate) -> list[int]:
+        if payload.account_links is None and payload.group_ids is None:
+            return []
+        account_ids = {
+            int(account_id)
+            for (account_id,) in (
+                self.db.query(UserS3Account.account_id)
+                .filter(UserS3Account.user_id == user.id)
+                .all()
+            )
+        }
+        account_ids.update(
+            int(link.account_id)
+            for link in (payload.account_links or [])
+        )
+        if payload.group_ids is not None:
+            existing_group_ids = {
+                int(group_id)
+                for (group_id,) in (
+                    self.db.query(UserUiGroup.group_id)
+                    .filter(UserUiGroup.user_id == user.id)
+                    .all()
+                )
+            }
+            affected_group_ids = existing_group_ids | {
+                int(group_id) for group_id in payload.group_ids
+            }
+            if affected_group_ids:
+                account_ids.update(
+                    int(account_id)
+                    for (account_id,) in (
+                        self.db.query(UiGroupS3Account.account_id)
+                        .filter(UiGroupS3Account.group_id.in_(affected_group_ids))
+                        .all()
+                    )
+                )
+        return sorted(account_ids)
+
+    def _set_account_links(self, user: User, links: list[AccountMembership]) -> None:
+        cleaned: dict[int, AccountMembership] = {}
+        for link in links:
+            account_id = int(link.account_id)
+            if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
+                raise ValueError("Invalid account role")
+            cleaned[account_id] = AccountMembership(
+                account_id=account_id,
+                account_admin=bool(link.account_admin),
+                account_role=link.account_role or AccountRole.PORTAL_NONE.value,
+            )
+        if cleaned:
+            found_ids = {
+                int(account_id)
+                for (account_id,) in (
+                    self.db.query(S3Account.id)
+                    .filter(S3Account.id.in_(cleaned))
+                    .all()
+                )
+            }
+            missing = set(cleaned) - found_ids
+            if missing:
+                missing_str = ", ".join(str(account_id) for account_id in sorted(missing))
+                raise ValueError(f"S3 accounts not found: {missing_str}")
+        existing = (
+            self.db.query(UserS3Account)
+            .filter(UserS3Account.user_id == user.id)
+            .all()
+        )
+        existing_by_account = {int(link.account_id): link for link in existing}
+        protected_root_ids = {
+            int(link.account_id) for link in existing if bool(link.is_root)
+        }
+        desired_ids = set(cleaned)
+        for account_id, row in existing_by_account.items():
+            if account_id not in desired_ids and account_id not in protected_root_ids:
+                self.db.delete(row)
+        for account_id, link in cleaned.items():
+            if account_id in protected_root_ids:
+                continue
+            row = existing_by_account.get(account_id)
+            if row is None:
+                row = UserS3Account(
+                    user_id=user.id,
+                    account_id=account_id,
+                    is_root=False,
+                )
+            row.account_admin = bool(link.account_admin)
+            row.account_role = link.account_role or AccountRole.PORTAL_NONE.value
+            row.updated_at = utcnow()
+            self.db.add(row)
+        if desired_ids and user.role == UserRole.UI_NONE.value:
+            user.role = UserRole.UI_USER.value
 
     def _set_s3_connection_links(self, user: User, target_ids: list[int]) -> None:
         cleaned_ids = sorted({int(conn_id) for conn_id in target_ids if conn_id is not None})

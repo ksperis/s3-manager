@@ -14,7 +14,7 @@ import {
   updateUser,
 } from "../../api/users";
 import { UiGroupSummary, listMinimalGroups } from "../../api/groups";
-import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../api/accounts";
+import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -51,6 +51,7 @@ import {
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
+import UiSelect from "../../components/ui/UiSelect";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -68,13 +69,11 @@ import {
 } from "./adminPrincipalEditLink";
 import {
   AdminAssociationPickerPanel,
+  AdminAssociationLinkedTable,
   AdminAssociationSectionHeader,
   AdminAssociationAdminCheckbox,
   adminAssociationAccountOptionRowClass,
-  adminAssociationAddPanelClass,
   adminAssociationCheckboxClass,
-  adminAssociationCompactInputClass,
-  adminAssociationCompactSelectClass,
   adminAssociationOptionLabelClass,
   adminAssociationOptionRowClass,
   adminAssociationTableClass as associationTableClass,
@@ -106,9 +105,6 @@ type Option = {
 
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
 const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
-const associationAddPanelClass = adminAssociationAddPanelClass;
-const associationCompactInputClass = adminAssociationCompactInputClass;
-const associationCompactSelectClass = adminAssociationCompactSelectClass;
 const associationOptionRowClass = adminAssociationOptionRowClass;
 const associationAccountOptionRowClass = adminAssociationAccountOptionRowClass;
 const roleAccessHelpItems = [
@@ -194,6 +190,8 @@ type AssociationsTabsProps = {
     setSelections: Dispatch<SetStateAction<number[]>>;
     adminChoice: Record<number, boolean>;
     setAdminChoice: Dispatch<SetStateAction<Record<number, boolean>>>;
+    portalRoleChoice: Record<number, PortalAccountRole>;
+    setPortalRoleChoice: Dispatch<SetStateAction<Record<number, PortalAccountRole>>>;
     toggleSelection: (id: number) => void;
   };
   s3Users: {
@@ -309,7 +307,10 @@ const AssociationsTabs = ({
                               </td>
                               {showPortalRole && (
                                 <td className={adminAssociationTableControlCellClass}>
-                                  <select
+                                  <UiSelect
+                                    aria-label={`Portal role for ${label}`}
+                                    size="compact"
+                                    fieldClassName="w-44"
                                     value={normalizePortalRole(entry.account_role)}
                                     onChange={(e) =>
                                       accounts.setSelected((prev) =>
@@ -320,14 +321,13 @@ const AssociationsTabs = ({
                                         )
                                       )
                                     }
-                                    className={associationCompactSelectClass}
                                   >
                                     {PORTAL_ROLE_OPTIONS.map((option) => (
                                       <option key={option.value} value={option.value}>
                                         {option.label}
                                       </option>
                                     ))}
-                                  </select>
+                                  </UiSelect>
                                 </td>
                               )}
                               <td className={adminAssociationTableActionCellClass}>
@@ -369,7 +369,8 @@ const AssociationsTabs = ({
                       if (accounts.selections.length === 0) return;
                       const next = accounts.selections.map((accountId) => {
                         const account_admin = accounts.adminChoice[accountId] ?? false;
-                        return { id: accountId, account_admin, account_role: "portal_none" as PortalAccountRole };
+                        const account_role = accounts.portalRoleChoice[accountId] ?? "portal_none";
+                        return { id: accountId, account_admin, account_role };
                       });
                       accounts.setSelected((prev) => [...prev, ...next]);
                       accounts.setSelections([]);
@@ -381,6 +382,7 @@ const AssociationsTabs = ({
                         const accountId = Number(opt.id);
                         const isSelected = accounts.selections.includes(accountId);
                         const adminChecked = accounts.adminChoice[accountId] ?? false;
+                        const portalRole = accounts.portalRoleChoice[accountId] ?? "portal_none";
                         return (
                           <div
                             key={opt.id}
@@ -395,7 +397,7 @@ const AssociationsTabs = ({
                               />
                               <span>{opt.label}</span>
                             </label>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <AdminAssociationAdminCheckbox
                                 checked={Boolean(adminChecked)}
                                 onCheckedChange={(checked) =>
@@ -405,6 +407,26 @@ const AssociationsTabs = ({
                                   }))
                                 }
                               />
+                              {showPortalRole ? (
+                                <UiSelect
+                                  aria-label={`Portal role for ${opt.label}`}
+                                  size="compact"
+                                  fieldClassName="w-44"
+                                  value={portalRole}
+                                  onChange={(event) =>
+                                    accounts.setPortalRoleChoice((prev) => ({
+                                      ...prev,
+                                      [accountId]: normalizePortalRole(event.target.value),
+                                    }))
+                                  }
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </UiSelect>
+                              ) : null}
                             </div>
                           </div>
                         );
@@ -682,7 +704,9 @@ export default function UsersPage() {
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
+      pendingGroupSelections: [],
       accountAdminChoice: {},
+      accountPortalRoleChoice: {},
     })
   );
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<AccountSelection[]>([]);
@@ -690,6 +714,9 @@ export default function UsersPage() {
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
+  const [createAccountPortalRoleChoice, setCreateAccountPortalRoleChoice] = useState<
+    Record<number, PortalAccountRole>
+  >({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
   const [createConnectionSearch, setCreateConnectionSearch] = useState("");
@@ -702,6 +729,8 @@ export default function UsersPage() {
   const [createS3UserSelections, setCreateS3UserSelections] = useState<number[]>([]);
   const [showCreateConnectionPanel, setShowCreateConnectionPanel] = useState(false);
   const [createConnectionSelections, setCreateConnectionSelections] = useState<number[]>([]);
+  const [showCreateGroupPanel, setShowCreateGroupPanel] = useState(false);
+  const [createGroupSelections, setCreateGroupSelections] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
   const [editInitialSignature, setEditInitialSignature] = useState(() =>
@@ -714,7 +743,9 @@ export default function UsersPage() {
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
+      pendingGroupSelections: [],
       accountAdminChoice: {},
+      accountPortalRoleChoice: {},
     })
   );
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<AccountSelection[]>([]);
@@ -722,6 +753,9 @@ export default function UsersPage() {
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
+  const [editAccountPortalRoleChoice, setEditAccountPortalRoleChoice] = useState<
+    Record<number, PortalAccountRole>
+  >({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
   const [editConnectionSearch, setEditConnectionSearch] = useState("");
@@ -734,6 +768,8 @@ export default function UsersPage() {
   const [editS3UserSelections, setEditS3UserSelections] = useState<number[]>([]);
   const [showEditConnectionPanel, setShowEditConnectionPanel] = useState(false);
   const [editConnectionSelections, setEditConnectionSelections] = useState<number[]>([]);
+  const [showEditGroupPanel, setShowEditGroupPanel] = useState(false);
+  const [editGroupSelections, setEditGroupSelections] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -829,12 +865,16 @@ export default function UsersPage() {
   }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch]);
   const visibleCreateGroups = useMemo(() => {
     const query = createGroupSearch.trim().toLowerCase();
-    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
-  }, [createGroupSearch, groups]);
+    return groups.filter(
+      (group) => !createSelectedGroups.includes(group.id) && (!query || group.name.toLowerCase().includes(query))
+    );
+  }, [createGroupSearch, createSelectedGroups, groups]);
   const visibleEditGroups = useMemo(() => {
     const query = editGroupSearch.trim().toLowerCase();
-    return groups.filter((group) => !query || group.name.toLowerCase().includes(query));
-  }, [editGroupSearch, groups]);
+    return groups.filter(
+      (group) => !editSelectedGroups.includes(group.id) && (!query || group.name.toLowerCase().includes(query))
+    );
+  }, [editGroupSearch, editSelectedGroups, groups]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
@@ -944,74 +984,110 @@ export default function UsersPage() {
 
   const renderGroupsSelector = ({
     selectedIds,
-    onToggle,
+    setSelectedIds,
     search,
     setSearch,
     visibleGroups,
+    showPanel,
+    setShowPanel,
+    selections,
+    setSelections,
   }: {
     selectedIds: number[];
-    onToggle: (groupId: number) => void;
+    setSelectedIds: Dispatch<SetStateAction<number[]>>;
     search: string;
     setSearch: Dispatch<SetStateAction<string>>;
     visibleGroups: UiGroupSummary[];
+    showPanel: boolean;
+    setShowPanel: Dispatch<SetStateAction<boolean>>;
+    selections: number[];
+    setSelections: Dispatch<SetStateAction<number[]>>;
   }) => {
     const limitedGroups = limitedOptions(visibleGroups);
+    const groupById = new Map(groups.map((group) => [group.id, group]));
     return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <label className={userModalLabelClass}>Groups</label>
-            <span className="ui-caption text-slate-500 dark:text-slate-400">{selectedIds.length} selected</span>
-          </div>
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search groups..."
-            className={`${associationCompactInputClass} w-full sm:w-56`}
-          />
-        </div>
-        <div className={associationAddPanelClass}>
-          <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-            {groupsLoading ? (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">Loading groups...</p>
-            ) : groupsLoaded && groups.length === 0 ? (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">No UI groups available.</p>
-            ) : visibleGroups.length === 0 ? (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-            ) : null}
-            {limitedGroups.map((group) => {
-              const checked = selectedIds.includes(group.id);
-              return (
-                <label
-                  key={group.id}
-                  className={associationOptionRowClass(checked)}
-                >
-                  <span className={adminAssociationOptionLabelClass}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => onToggle(group.id)}
-                      className={adminAssociationCheckboxClass}
-                    />
-                    <span>{group.name}</span>
-                  </span>
-                  {group.description && (
-                    <span className="max-w-md truncate ui-caption text-slate-500 dark:text-slate-400">
-                      {group.description}
+      <AdminAssociationLinkedTable
+        title="Linked UI groups"
+        countLabel={`${selectedIds.length} linked`}
+        actionLabel={showPanel ? "Close" : "Add UI groups"}
+        onAction={() => setShowPanel((current) => !current)}
+        headers={[{ label: "Group" }, { label: "Actions", align: "right" }]}
+        hasItems={selectedIds.length > 0}
+        emptyLabel="No linked groups yet."
+        rows={selectedIds.map((groupId) => (
+          <tr key={groupId}>
+            <td className={adminAssociationTableLabelCellClass}>
+              {groupById.get(groupId)?.name ?? `Group #${groupId}`}
+            </td>
+            <td className={adminAssociationTableActionCellClass}>
+              <button
+                type="button"
+                className={tableDeleteActionClasses}
+                onClick={() => setSelectedIds((current) => current.filter((id) => id !== groupId))}
+              >
+                Remove
+              </button>
+            </td>
+          </tr>
+        ))}
+        picker={
+          showPanel ? (
+            <AdminAssociationPickerPanel
+              title="Add UI groups"
+              hint="(search by name)"
+              search={search}
+              onSearchChange={setSearch}
+              searchAriaLabel="Search UI groups"
+              loading={groupsLoading}
+              availableCount={visibleGroups.length}
+              maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+              selectedCount={selections.length}
+              loadingLabel="Loading groups..."
+              emptyLabel={groupsLoaded ? "No UI groups available." : "No results."}
+              addDisabled={selections.length === 0}
+              onCancel={() => {
+                setShowPanel(false);
+                setSelections([]);
+                setSearch("");
+              }}
+              onAdd={() => {
+                setSelectedIds((current) => [...new Set([...current, ...selections])].sort((a, b) => a - b));
+                setShowPanel(false);
+                setSelections([]);
+                setSearch("");
+              }}
+            >
+              {limitedGroups.map((group) => {
+                const checked = selections.includes(group.id);
+                return (
+                  <label key={group.id} className={associationOptionRowClass(checked)}>
+                    <span className={adminAssociationOptionLabelClass}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelections((current) =>
+                            current.includes(group.id)
+                              ? current.filter((id) => id !== group.id)
+                              : [...current, group.id]
+                          )
+                        }
+                        className={adminAssociationCheckboxClass}
+                      />
+                      <span>{group.name}</span>
                     </span>
-                  )}
-                </label>
-              );
-            })}
-            {visibleGroups.length > MAX_VISIBLE_OPTIONS && (
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+                    {group.description ? (
+                      <span className="max-w-md truncate ui-caption text-slate-500 dark:text-slate-400">
+                        {group.description}
+                      </span>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </AdminAssociationPickerPanel>
+          ) : undefined
+        }
+      />
     );
   };
 
@@ -1209,12 +1285,6 @@ export default function UsersPage() {
     );
   };
 
-  const toggleCreateGroupSelection = (groupId: number) => {
-    setCreateSelectedGroups((prev) =>
-      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
-    );
-  };
-
   const toggleEditAccountSelection = (accountId: number) => {
     setEditAccountSelections((prev) =>
       prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
@@ -1233,12 +1303,6 @@ export default function UsersPage() {
     );
   };
 
-  const toggleEditGroupSelection = (groupId: number) => {
-    setEditSelectedGroups((prev) =>
-      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
-    );
-  };
-
   const emptyCreateSignature = () =>
     stableSignature({
       form: createFormTemplate(),
@@ -1249,7 +1313,9 @@ export default function UsersPage() {
       pendingAccountSelections: [],
       pendingS3UserSelections: [],
       pendingConnectionSelections: [],
+      pendingGroupSelections: [],
       accountAdminChoice: {},
+      accountPortalRoleChoice: {},
     });
 
   const createCurrentSignature = useMemo(
@@ -1263,12 +1329,16 @@ export default function UsersPage() {
         pendingAccountSelections: createAccountSelections,
         pendingS3UserSelections: createS3UserSelections,
         pendingConnectionSelections: createConnectionSelections,
+        pendingGroupSelections: createGroupSelections,
         accountAdminChoice: createAccountAdminChoice,
+        accountPortalRoleChoice: createAccountPortalRoleChoice,
       }),
     [
       createAccountAdminChoice,
+      createAccountPortalRoleChoice,
       createAccountSelections,
       createConnectionSelections,
+      createGroupSelections,
       createS3UserSelections,
       createSelectedS3Accounts,
       createSelectedS3Connections,
@@ -1285,6 +1355,7 @@ export default function UsersPage() {
     setCreateSelectedS3Connections([]);
     setCreateSelectedGroups([]);
     setCreateAccountAdminChoice({});
+    setCreateAccountPortalRoleChoice({});
     setCreateS3AccountSearch("");
     setCreateS3Search("");
     setCreateConnectionSearch("");
@@ -1294,9 +1365,11 @@ export default function UsersPage() {
     setShowCreateAccountPanel(false);
     setShowCreateS3UserPanel(false);
     setShowCreateConnectionPanel(false);
+    setShowCreateGroupPanel(false);
     setCreateAccountSelections([]);
     setCreateS3UserSelections([]);
     setCreateConnectionSelections([]);
+    setCreateGroupSelections([]);
     setCreateRoleHelpOpen(false);
     setCreateInitialSignature(emptyCreateSignature());
   };
@@ -1317,12 +1390,16 @@ export default function UsersPage() {
         pendingAccountSelections: editAccountSelections,
         pendingS3UserSelections: editS3UserSelections,
         pendingConnectionSelections: editConnectionSelections,
+        pendingGroupSelections: editGroupSelections,
         accountAdminChoice: editAccountAdminChoice,
+        accountPortalRoleChoice: editAccountPortalRoleChoice,
       }),
     [
       editAccountAdminChoice,
+      editAccountPortalRoleChoice,
       editAccountSelections,
       editConnectionSelections,
+      editGroupSelections,
       editForm,
       editS3UserSelections,
       editSelectedS3Accounts,
@@ -1348,10 +1425,13 @@ export default function UsersPage() {
     setShowEditAccountPanel(false);
     setShowEditS3UserPanel(false);
     setShowEditConnectionPanel(false);
+    setShowEditGroupPanel(false);
     setEditAccountSelections([]);
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
+    setEditGroupSelections([]);
     setEditAccountAdminChoice({});
+    setEditAccountPortalRoleChoice({});
     setEditForm({});
     setEditRoleHelpOpen(false);
     setEditInitialSignature(
@@ -1364,7 +1444,9 @@ export default function UsersPage() {
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
+        pendingGroupSelections: [],
         accountAdminChoice: {},
+        accountPortalRoleChoice: {},
       })
     );
     clearAdminPrincipalEditRequest();
@@ -1503,10 +1585,13 @@ export default function UsersPage() {
     setShowEditAccountPanel(false);
     setShowEditS3UserPanel(false);
     setShowEditConnectionPanel(false);
+    setShowEditGroupPanel(false);
     setEditAccountSelections([]);
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
+    setEditGroupSelections([]);
     setEditAccountAdminChoice({});
+    setEditAccountPortalRoleChoice({});
     setEditInitialSignature(
       stableSignature({
         form: nextEditForm,
@@ -1517,7 +1602,9 @@ export default function UsersPage() {
         pendingAccountSelections: [],
         pendingS3UserSelections: [],
         pendingConnectionSelections: [],
+        pendingGroupSelections: [],
         accountAdminChoice: {},
+        accountPortalRoleChoice: {},
       })
     );
     setEditModalTab("general");
@@ -1570,6 +1657,11 @@ export default function UsersPage() {
       payload.browser_advanced_features_enabled = Boolean(
         editForm.browser_advanced_features_enabled ?? editingUser.browser_advanced_features_enabled
       );
+      payload.account_links = editSelectedS3Accounts.map((entry) => ({
+        account_id: Number(entry.id),
+        account_admin: Boolean(entry.account_admin),
+        account_role: normalizePortalRole(entry.account_role),
+      }));
       payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
@@ -1578,58 +1670,6 @@ export default function UsersPage() {
         const stored = readClientJson<Record<string, unknown>>(CLIENT_STORAGE_KEYS.sessionUser);
         writeClientJson(CLIENT_STORAGE_KEYS.sessionUser, { ...(stored ?? {}), ...updatedUser });
       }
-      const existing = editingUser.accounts ? editingUser.accounts.map((id) => Number(id)) : [];
-      const existingAdminById = new Map<number, boolean>(
-        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
-      );
-      const existingRoleById = new Map<number, PortalAccountRole>(
-        (editingUser.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
-      );
-      const selectedIds = editSelectedS3Accounts.map((entry) => Number(entry.id));
-      const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
-      const toRemove = existing.filter((id) => !selectedIds.includes(id));
-      const toUpdateLinks = editSelectedS3Accounts.filter((entry) => {
-        const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
-        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
-        return (
-          existing.includes(Number(entry.id)) &&
-          (currentAdmin !== Boolean(entry.account_admin) || currentRole !== normalizePortalRole(entry.account_role))
-        );
-      });
-
-      if (toAdd.length > 0) {
-        await Promise.all(
-          toAdd.map((entry) =>
-            assignUserToS3Account(
-              editingUser.id,
-              Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
-            )
-          )
-        );
-      }
-      if (toUpdateLinks.length > 0) {
-        await Promise.all(
-          toUpdateLinks.map((entry) =>
-            assignUserToS3Account(
-              editingUser.id,
-              Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
-            )
-          )
-        );
-      }
-      for (const accountId of toRemove) {
-        const account = accountOptionsById.get(Number(accountId));
-        if (!account) continue;
-        const remainingLinks =
-          (account.user_links ?? account.user_ids?.map((id) => ({ user_id: id, account_admin: false, account_role: "portal_none" })) ?? [])
-            .filter((link) => link.user_id !== editingUser.id);
-        await updateS3Account(Number(accountId), { user_links: remainingLinks });
-      }
-
       setActionMessage("User updated");
       closeEditModal();
       await fetchUsers();
@@ -1942,6 +1982,8 @@ export default function UsersPage() {
                   setSelections: setCreateAccountSelections,
                   adminChoice: createAccountAdminChoice,
                   setAdminChoice: setCreateAccountAdminChoice,
+                  portalRoleChoice: createAccountPortalRoleChoice,
+                  setPortalRoleChoice: setCreateAccountPortalRoleChoice,
                   toggleSelection: toggleCreateAccountSelection,
                 }}
                 s3Users={{
@@ -1980,10 +2022,14 @@ export default function UsersPage() {
             {createModalTab === "groups" &&
               renderGroupsSelector({
                 selectedIds: createSelectedGroups,
-                onToggle: toggleCreateGroupSelection,
+                setSelectedIds: setCreateSelectedGroups,
                 search: createGroupSearch,
                 setSearch: setCreateGroupSearch,
                 visibleGroups: visibleCreateGroups,
+                showPanel: showCreateGroupPanel,
+                setShowPanel: setShowCreateGroupPanel,
+                selections: createGroupSelections,
+                setSelections: setCreateGroupSelections,
               })}
             </WorkflowTabs>
 
@@ -2264,6 +2310,8 @@ export default function UsersPage() {
                   setSelections: setEditAccountSelections,
                   adminChoice: editAccountAdminChoice,
                   setAdminChoice: setEditAccountAdminChoice,
+                  portalRoleChoice: editAccountPortalRoleChoice,
+                  setPortalRoleChoice: setEditAccountPortalRoleChoice,
                   toggleSelection: toggleEditAccountSelection,
                 }}
                 s3Users={{
@@ -2302,10 +2350,14 @@ export default function UsersPage() {
             {editModalTab === "groups" &&
               renderGroupsSelector({
                 selectedIds: editSelectedGroups,
-                onToggle: toggleEditGroupSelection,
+                setSelectedIds: setEditSelectedGroups,
                 search: editGroupSearch,
                 setSearch: setEditGroupSearch,
                 visibleGroups: visibleEditGroups,
+                showPanel: showEditGroupPanel,
+                setShowPanel: setShowEditGroupPanel,
+                selections: editGroupSelections,
+                setSelections: setEditGroupSelections,
               })}
             </WorkflowTabs>
 

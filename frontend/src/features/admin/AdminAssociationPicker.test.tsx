@@ -1,13 +1,40 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
+  AdminAssociationLinkedTable,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
   AdminAssociationSelectionPanel,
 } from "./AdminAssociationPicker";
 
 describe("AdminAssociationPicker", () => {
+  it("renders the shared linked table and its picker action", () => {
+    const onAction = vi.fn();
+    render(
+      <AdminAssociationLinkedTable
+        title="Linked UI groups"
+        countLabel="1 linked"
+        actionLabel="Add UI groups"
+        onAction={onAction}
+        headers={[{ label: "Group" }, { label: "Actions", align: "right" }]}
+        hasItems
+        emptyLabel="No linked groups yet."
+        rows={
+          <tr>
+            <td>Operators</td>
+            <td>Remove</td>
+          </tr>
+        }
+      />
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText("Operators")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
   it("renders a reusable section header action", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();

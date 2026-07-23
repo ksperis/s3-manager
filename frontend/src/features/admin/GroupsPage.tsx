@@ -2,7 +2,16 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   UiGroup,
   UiGroupPayload,
@@ -43,15 +52,16 @@ import {
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
 import {
-  AdminAssociationSelectionPanel,
+  AdminAssociationAdminCheckbox,
+  AdminAssociationLinkedTable,
+  AdminAssociationPickerPanel,
   adminAssociationAccountOptionRowClass,
   adminAssociationAccountOptionLabelClass,
-  adminAssociationAdminLabelClass,
   adminAssociationCheckboxClass,
-  adminAssociationCompactSelectClass,
   adminAssociationOptionRowClass,
-  adminAssociationTableClass as tableClass,
-  adminAssociationTableContainerClass as tableContainerClass,
+  adminAssociationTableActionCellClass,
+  adminAssociationTableControlCellClass,
+  adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
@@ -63,6 +73,7 @@ import {
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
 import UiButton from "../../components/ui/UiButton";
+import UiSelect from "../../components/ui/UiSelect";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -80,6 +91,7 @@ const fieldClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 ui-body text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
 const secondaryButtonClass =
   "rounded-md border border-[color:var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 ui-caption font-semibold text-[var(--ui-text)] hover:bg-[var(--ui-hover)]";
+const MAX_VISIBLE_OPTIONS = 10;
 const groupAvatarIcons: Array<{ value: UiGroupAvatarIcon; label: string }> = [
   { value: "users", label: "Team" },
   { value: "building", label: "Organization" },
@@ -146,6 +158,16 @@ export default function GroupsPage() {
   const [accountSearch, setAccountSearch] = useState("");
   const [s3UserSearch, setS3UserSearch] = useState("");
   const [connectionSearch, setConnectionSearch] = useState("");
+  const [showMemberPicker, setShowMemberPicker] = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showS3UserPicker, setShowS3UserPicker] = useState(false);
+  const [showConnectionPicker, setShowConnectionPicker] = useState(false);
+  const [memberSelections, setMemberSelections] = useState<number[]>([]);
+  const [accountSelections, setAccountSelections] = useState<number[]>([]);
+  const [s3UserSelections, setS3UserSelections] = useState<number[]>([]);
+  const [connectionSelections, setConnectionSelections] = useState<number[]>([]);
+  const [accountAdminChoice, setAccountAdminChoice] = useState<Record<number, boolean>>({});
+  const [accountPortalRoleChoice, setAccountPortalRoleChoice] = useState<Record<number, string>>({});
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [removeAvatarImage, setRemoveAvatarImage] = useState(false);
   const avatarFileUrl = useMemo(
@@ -287,6 +309,16 @@ export default function GroupsPage() {
     setAccountSearch("");
     setS3UserSearch("");
     setConnectionSearch("");
+    setShowMemberPicker(false);
+    setShowAccountPicker(false);
+    setShowS3UserPicker(false);
+    setShowConnectionPicker(false);
+    setMemberSelections([]);
+    setAccountSelections([]);
+    setS3UserSelections([]);
+    setConnectionSelections([]);
+    setAccountAdminChoice({});
+    setAccountPortalRoleChoice({});
     setAvatarFile(null);
     setRemoveAvatarImage(false);
   };
@@ -343,47 +375,6 @@ export default function GroupsPage() {
     setEditingGroup(null);
     resetForm();
     clearAdminPrincipalEditRequest();
-  };
-
-  const setSelectedMembers = (userId: number, selected: boolean) => {
-    setForm((current) => {
-      const ids = new Set(current.user_ids ?? []);
-      if (selected) ids.add(userId);
-      else ids.delete(userId);
-      return { ...current, user_ids: [...ids].sort((a, b) => a - b) };
-    });
-  };
-
-  const setSelectedS3User = (s3UserId: number, selected: boolean) => {
-    setForm((current) => {
-      const ids = new Set(current.s3_user_ids ?? []);
-      if (selected) ids.add(s3UserId);
-      else ids.delete(s3UserId);
-      return { ...current, s3_user_ids: [...ids].sort((a, b) => a - b) };
-    });
-  };
-
-  const setSelectedConnection = (connectionId: number, selected: boolean) => {
-    setForm((current) => {
-      const ids = new Set(current.s3_connection_ids ?? []);
-      if (selected) ids.add(connectionId);
-      else ids.delete(connectionId);
-      return { ...current, s3_connection_ids: [...ids].sort((a, b) => a - b) };
-    });
-  };
-
-  const setSelectedAccount = (accountId: number, selected: boolean) => {
-    setForm((current) => {
-      const links = [...(current.account_links ?? [])];
-      const existing = links.find((link) => Number(link.account_id) === accountId);
-      if (selected && !existing) {
-        links.push({ account_id: accountId, account_admin: false, account_role: "portal_none" });
-      }
-      return {
-        ...current,
-        account_links: selected ? links.sort((a, b) => Number(a.account_id) - Number(b.account_id)) : links.filter((link) => Number(link.account_id) !== accountId),
-      };
-    });
   };
 
   const updateAccountSelection = (accountId: number, patch: Partial<AccountMembership>) => {
@@ -467,39 +458,111 @@ export default function GroupsPage() {
   const selectedS3UserIds = new Set(form.s3_user_ids ?? []);
   const selectedConnectionIds = new Set(form.s3_connection_ids ?? []);
   const selectedAccountIds = new Set((form.account_links ?? []).map((link) => Number(link.account_id)));
-  const selectedAccountById = new Map((form.account_links ?? []).map((link) => [Number(link.account_id), link]));
-  const visibleUsers = users.filter((user) => includesQuery(user.email, memberSearch));
-  const visibleAccounts = accounts.filter((account) => includesQuery(account.name, accountSearch));
-  const visibleS3Users = s3Users.filter((user) => includesQuery(user.name, s3UserSearch));
-  const visibleConnections = connections.filter((connection) => includesQuery(connection.name, connectionSearch));
+  const userLabelById = new Map(users.map((user) => [user.id, user.email]));
+  const availableUsers = users.filter(
+    (user) => !selectedUserIds.has(user.id) && includesQuery(user.email, memberSearch)
+  );
+  const availableAccounts = accounts.filter(
+    (account) => !selectedAccountIds.has(accountDbId(account)) && includesQuery(account.name, accountSearch)
+  );
+  const availableS3Users = s3Users.filter(
+    (user) => !selectedS3UserIds.has(user.id) && includesQuery(user.name, s3UserSearch)
+  );
+  const availableConnections = connections.filter(
+    (connection) => !selectedConnectionIds.has(connection.id) && includesQuery(connection.name, connectionSearch)
+  );
+  const visibleUsers = availableUsers.slice(0, MAX_VISIBLE_OPTIONS);
+  const visibleAccounts = availableAccounts.slice(0, MAX_VISIBLE_OPTIONS);
+  const visibleS3Users = availableS3Users.slice(0, MAX_VISIBLE_OPTIONS);
+  const visibleConnections = availableConnections.slice(0, MAX_VISIBLE_OPTIONS);
+
+  const togglePendingSelection = (
+    setSelections: Dispatch<SetStateAction<number[]>>,
+    id: number,
+  ) => {
+    setSelections((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]
+    );
+  };
 
   const renderMembersTab = () => (
-    <AdminAssociationSelectionPanel
+    <AdminAssociationLinkedTable
       title="Members"
-      countLabel={`${selectedUserIds.size} selected`}
-      search={memberSearch}
-      onSearchChange={setMemberSearch}
-      loading={auxLoading}
-      loadingLabel="Loading users..."
-      availableCount={visibleUsers.length}
-      emptyLabel="No users."
-      searchAriaLabel="Search group members"
-    >
-      {visibleUsers.map((user) => (
-        <label
-          key={user.id}
-          className={adminAssociationOptionRowClass(selectedUserIds.has(user.id))}
-        >
-          <span className="ui-body text-slate-700 dark:text-slate-200">{user.email}</span>
-          <input
-            type="checkbox"
-            checked={selectedUserIds.has(user.id)}
-            onChange={(event) => setSelectedMembers(user.id, event.target.checked)}
-            className={adminAssociationCheckboxClass}
-          />
-        </label>
+      countLabel={`${selectedUserIds.size} linked`}
+      actionLabel={showMemberPicker ? "Close" : "Add UI users"}
+      onAction={() => setShowMemberPicker((current) => !current)}
+      headers={[{ label: "User" }, { label: "Actions", align: "right" }]}
+      hasItems={selectedUserIds.size > 0}
+      emptyLabel="No linked users yet."
+      rows={(form.user_ids ?? []).map((userId) => (
+        <tr key={userId}>
+          <td className={adminAssociationTableLabelCellClass}>
+            {userLabelById.get(userId) ?? `User #${userId}`}
+          </td>
+          <td className={adminAssociationTableActionCellClass}>
+            <button
+              type="button"
+              className={tableDeleteActionClasses}
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  user_ids: (current.user_ids ?? []).filter((id) => id !== userId),
+                }))
+              }
+            >
+              Remove
+            </button>
+          </td>
+        </tr>
       ))}
-    </AdminAssociationSelectionPanel>
+      picker={
+        showMemberPicker ? (
+          <AdminAssociationPickerPanel
+            title="Add UI users"
+            hint="(filter by email)"
+            search={memberSearch}
+            onSearchChange={setMemberSearch}
+            searchAriaLabel="Search group members"
+            loading={auxLoading}
+            availableCount={availableUsers.length}
+            maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+            selectedCount={memberSelections.length}
+            loadingLabel="Loading users..."
+            emptyLabel="No users available."
+            addDisabled={memberSelections.length === 0}
+            onCancel={() => {
+              setShowMemberPicker(false);
+              setMemberSelections([]);
+              setMemberSearch("");
+            }}
+            onAdd={() => {
+              setForm((current) => ({
+                ...current,
+                user_ids: [...new Set([...(current.user_ids ?? []), ...memberSelections])].sort((a, b) => a - b),
+              }));
+              setShowMemberPicker(false);
+              setMemberSelections([]);
+              setMemberSearch("");
+            }}
+          >
+            {visibleUsers.map((user) => (
+              <label
+                key={user.id}
+                className={adminAssociationOptionRowClass(memberSelections.includes(user.id))}
+              >
+                <span className="ui-body text-slate-700 dark:text-slate-200">{user.email}</span>
+                <input
+                  type="checkbox"
+                  checked={memberSelections.includes(user.id)}
+                  onChange={() => togglePendingSelection(setMemberSelections, user.id)}
+                  className={adminAssociationCheckboxClass}
+                />
+              </label>
+            ))}
+          </AdminAssociationPickerPanel>
+        ) : undefined
+      }
+    />
   );
 
   const renderAssociationsTab = () => (
@@ -509,134 +572,336 @@ export default function GroupsPage() {
           id: "accounts",
           label: `Accounts (${selectedAccountIds.size})`,
           content: (
-            <AdminAssociationSelectionPanel
-              title="Accounts"
-              countLabel={`${selectedAccountIds.size} selected`}
-              search={accountSearch}
-              onSearchChange={setAccountSearch}
-              loading={auxLoading}
-              loadingLabel="Loading accounts..."
-              availableCount={visibleAccounts.length}
-              emptyLabel="No accounts."
-              searchAriaLabel="Search group accounts"
-            >
-              {visibleAccounts.map((account) => {
-                const accountId = accountDbId(account);
-                const selected = selectedAccountIds.has(accountId);
-                const link = selectedAccountById.get(accountId);
+            <AdminAssociationLinkedTable
+              title="Linked accounts"
+              countLabel={`${selectedAccountIds.size} linked`}
+              actionLabel={showAccountPicker ? "Close" : "Add accounts"}
+              onAction={() => setShowAccountPicker((current) => !current)}
+              headers={[
+                { label: "Account" },
+                { label: "Admin" },
+                ...(showPortalRole ? [{ label: "Portal role" }] : []),
+                { label: "Actions", align: "right" as const },
+              ]}
+              hasItems={selectedAccountIds.size > 0}
+              emptyLabel="No linked accounts yet."
+              rows={(form.account_links ?? []).map((link) => {
+                const accountId = Number(link.account_id);
                 return (
-                  <div
-                    key={accountId}
-                    className={adminAssociationAccountOptionRowClass(selected)}
-                  >
-                    <label className={adminAssociationAccountOptionLabelClass}>
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={(event) => setSelectedAccount(accountId, event.target.checked)}
-                        className={adminAssociationCheckboxClass}
+                  <tr key={accountId}>
+                    <td className={adminAssociationTableLabelCellClass}>
+                      {accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}
+                    </td>
+                    <td className={adminAssociationTableControlCellClass}>
+                      <AdminAssociationAdminCheckbox
+                        checked={Boolean(link.account_admin)}
+                        onCheckedChange={(checked) => updateAccountSelection(accountId, { account_admin: checked })}
                       />
-                      <span>{account.name}</span>
-                    </label>
-                    {selected && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className={adminAssociationAdminLabelClass}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(link?.account_admin)}
-                            onChange={(event) => updateAccountSelection(accountId, { account_admin: event.target.checked })}
-                            className={adminAssociationCheckboxClass}
-                          />
-                          Admin
-                        </label>
-                        {showPortalRole && (
-                          <select
-                            value={normalizePortalRole(link?.account_role)}
-                            onChange={(event) => updateAccountSelection(accountId, { account_role: normalizePortalRole(event.target.value) })}
-                            className={adminAssociationCompactSelectClass}
-                          >
-                            {PORTAL_ROLE_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                    </td>
+                    {showPortalRole ? (
+                      <td className={adminAssociationTableControlCellClass}>
+                        <UiSelect
+                          aria-label={`Portal role for ${accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}`}
+                          size="compact"
+                          fieldClassName="w-44"
+                          value={normalizePortalRole(link.account_role)}
+                          onChange={(event) =>
+                            updateAccountSelection(accountId, { account_role: normalizePortalRole(event.target.value) })
+                          }
+                        >
+                          {PORTAL_ROLE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </UiSelect>
+                      </td>
+                    ) : null}
+                    <td className={adminAssociationTableActionCellClass}>
+                      <button
+                        type="button"
+                        className={tableDeleteActionClasses}
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            account_links: (current.account_links ?? []).filter(
+                              (currentLink) => Number(currentLink.account_id) !== accountId
+                            ),
+                          }))
+                        }
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
                 );
               })}
-            </AdminAssociationSelectionPanel>
+              picker={
+                showAccountPicker ? (
+                  <AdminAssociationPickerPanel
+                    title="Add accounts"
+                    hint="(search by name)"
+                    search={accountSearch}
+                    onSearchChange={setAccountSearch}
+                    searchAriaLabel="Search group accounts"
+                    loading={auxLoading}
+                    availableCount={availableAccounts.length}
+                    maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                    selectedCount={accountSelections.length}
+                    loadingLabel="Loading accounts..."
+                    emptyLabel="No accounts available."
+                    addDisabled={accountSelections.length === 0}
+                    onCancel={() => {
+                      setShowAccountPicker(false);
+                      setAccountSelections([]);
+                      setAccountSearch("");
+                    }}
+                    onAdd={() => {
+                      setForm((current) => ({
+                        ...current,
+                        account_links: [
+                          ...(current.account_links ?? []),
+                          ...accountSelections.map((accountId) => ({
+                            account_id: accountId,
+                            account_admin: accountAdminChoice[accountId] ?? false,
+                            account_role: normalizePortalRole(accountPortalRoleChoice[accountId]),
+                          })),
+                        ].sort((left, right) => Number(left.account_id) - Number(right.account_id)),
+                      }));
+                      setShowAccountPicker(false);
+                      setAccountSelections([]);
+                      setAccountSearch("");
+                    }}
+                  >
+                    {visibleAccounts.map((account) => {
+                      const accountId = accountDbId(account);
+                      const selected = accountSelections.includes(accountId);
+                      return (
+                        <div key={accountId} className={adminAssociationAccountOptionRowClass(selected)}>
+                          <label className={adminAssociationAccountOptionLabelClass}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => togglePendingSelection(setAccountSelections, accountId)}
+                              className={adminAssociationCheckboxClass}
+                            />
+                            <span>{account.name}</span>
+                          </label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <AdminAssociationAdminCheckbox
+                              checked={accountAdminChoice[accountId] ?? false}
+                              onCheckedChange={(checked) =>
+                                setAccountAdminChoice((current) => ({ ...current, [accountId]: checked }))
+                              }
+                            />
+                            {showPortalRole ? (
+                              <UiSelect
+                                aria-label={`Portal role for ${account.name}`}
+                                size="compact"
+                                fieldClassName="w-44"
+                                value={normalizePortalRole(accountPortalRoleChoice[accountId])}
+                                onChange={(event) =>
+                                  setAccountPortalRoleChoice((current) => ({
+                                    ...current,
+                                    [accountId]: normalizePortalRole(event.target.value),
+                                  }))
+                                }
+                              >
+                                {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </UiSelect>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </AdminAssociationPickerPanel>
+                ) : undefined
+              }
+            />
           ),
         },
         {
           id: "s3_users",
           label: `S3 Users (${selectedS3UserIds.size})`,
           content: (
-            <AdminAssociationSelectionPanel
-              title="S3 Users"
-              countLabel={`${selectedS3UserIds.size} selected`}
-              search={s3UserSearch}
-              onSearchChange={setS3UserSearch}
-              loading={auxLoading}
-              loadingLabel="Loading S3 users..."
-              availableCount={visibleS3Users.length}
-              emptyLabel="No S3 users."
-              searchAriaLabel="Search group S3 users"
-            >
-              {visibleS3Users.map((s3User) => (
-                <label
-                  key={s3User.id}
-                  className={adminAssociationOptionRowClass(selectedS3UserIds.has(s3User.id))}
-                >
-                  <span className="ui-body text-slate-700 dark:text-slate-200">{s3User.name}</span>
-                  <input
-                    type="checkbox"
-                    checked={selectedS3UserIds.has(s3User.id)}
-                    onChange={(event) => setSelectedS3User(s3User.id, event.target.checked)}
-                    className={adminAssociationCheckboxClass}
-                  />
-                </label>
+            <AdminAssociationLinkedTable
+              title="Linked RGW users"
+              countLabel={`${selectedS3UserIds.size} linked`}
+              actionLabel={showS3UserPicker ? "Close" : "Add RGW users"}
+              onAction={() => setShowS3UserPicker((current) => !current)}
+              headers={[{ label: "RGW user" }, { label: "Actions", align: "right" }]}
+              hasItems={selectedS3UserIds.size > 0}
+              emptyLabel="No linked RGW users yet."
+              rows={(form.s3_user_ids ?? []).map((s3UserId) => (
+                <tr key={s3UserId}>
+                  <td className={adminAssociationTableLabelCellClass}>
+                    {s3UserLabelById.get(s3UserId) ?? `RGW User #${s3UserId}`}
+                  </td>
+                  <td className={adminAssociationTableActionCellClass}>
+                    <button
+                      type="button"
+                      className={tableDeleteActionClasses}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          s3_user_ids: (current.s3_user_ids ?? []).filter((id) => id !== s3UserId),
+                        }))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
               ))}
-            </AdminAssociationSelectionPanel>
+              picker={
+                showS3UserPicker ? (
+                  <AdminAssociationPickerPanel
+                    title="Add RGW users"
+                    hint="(search by name)"
+                    search={s3UserSearch}
+                    onSearchChange={setS3UserSearch}
+                    searchAriaLabel="Search group S3 users"
+                    loading={auxLoading}
+                    availableCount={availableS3Users.length}
+                    maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                    selectedCount={s3UserSelections.length}
+                    loadingLabel="Loading RGW users..."
+                    emptyLabel="No RGW users available."
+                    addDisabled={s3UserSelections.length === 0}
+                    onCancel={() => {
+                      setShowS3UserPicker(false);
+                      setS3UserSelections([]);
+                      setS3UserSearch("");
+                    }}
+                    onAdd={() => {
+                      setForm((current) => ({
+                        ...current,
+                        s3_user_ids: [...new Set([...(current.s3_user_ids ?? []), ...s3UserSelections])].sort(
+                          (a, b) => a - b
+                        ),
+                      }));
+                      setShowS3UserPicker(false);
+                      setS3UserSelections([]);
+                      setS3UserSearch("");
+                    }}
+                  >
+                    {visibleS3Users.map((s3User) => (
+                      <label
+                        key={s3User.id}
+                        className={adminAssociationOptionRowClass(s3UserSelections.includes(s3User.id))}
+                      >
+                        <span className="ui-body text-slate-700 dark:text-slate-200">{s3User.name}</span>
+                        <input
+                          type="checkbox"
+                          checked={s3UserSelections.includes(s3User.id)}
+                          onChange={() => togglePendingSelection(setS3UserSelections, s3User.id)}
+                          className={adminAssociationCheckboxClass}
+                        />
+                      </label>
+                    ))}
+                  </AdminAssociationPickerPanel>
+                ) : undefined
+              }
+            />
           ),
         },
         {
           id: "connections",
           label: `Connections (${selectedConnectionIds.size})`,
           content: (
-            <AdminAssociationSelectionPanel
-              title="Shared S3 connections"
-              countLabel={`${selectedConnectionIds.size} selected`}
-              search={connectionSearch}
-              onSearchChange={setConnectionSearch}
-              loading={auxLoading}
-              loadingLabel="Loading shared S3 connections..."
-              availableCount={visibleConnections.length}
-              emptyLabel="No shared S3 connections."
-              searchAriaLabel="Search group shared S3 connections"
-            >
-              {visibleConnections.map((connection) => (
-                <label
-                  key={connection.id}
-                  className={adminAssociationOptionRowClass(selectedConnectionIds.has(connection.id))}
-                >
-                  <span className="ui-body text-slate-700 dark:text-slate-200">{connection.name}</span>
-                  <input
-                    type="checkbox"
-                    checked={selectedConnectionIds.has(connection.id)}
-                    onChange={(event) => setSelectedConnection(connection.id, event.target.checked)}
-                    className={adminAssociationCheckboxClass}
-                  />
-                </label>
+            <AdminAssociationLinkedTable
+              title="Linked shared S3 connections"
+              countLabel={`${selectedConnectionIds.size} linked`}
+              actionLabel={showConnectionPicker ? "Close" : "Add S3 connections"}
+              onAction={() => setShowConnectionPicker((current) => !current)}
+              headers={[{ label: "S3 connection" }, { label: "Actions", align: "right" }]}
+              hasItems={selectedConnectionIds.size > 0}
+              emptyLabel="No linked S3 connections yet."
+              rows={(form.s3_connection_ids ?? []).map((connectionId) => (
+                <tr key={connectionId}>
+                  <td className={adminAssociationTableLabelCellClass}>
+                    {connectionLabelById.get(connectionId) ?? `Connection #${connectionId}`}
+                  </td>
+                  <td className={adminAssociationTableActionCellClass}>
+                    <button
+                      type="button"
+                      className={tableDeleteActionClasses}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          s3_connection_ids: (current.s3_connection_ids ?? []).filter((id) => id !== connectionId),
+                        }))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
               ))}
-            </AdminAssociationSelectionPanel>
+              picker={
+                showConnectionPicker ? (
+                  <AdminAssociationPickerPanel
+                    title="Add S3 connections"
+                    hint="(shared only)"
+                    search={connectionSearch}
+                    onSearchChange={setConnectionSearch}
+                    searchAriaLabel="Search group shared S3 connections"
+                    loading={auxLoading}
+                    availableCount={availableConnections.length}
+                    maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                    selectedCount={connectionSelections.length}
+                    loadingLabel="Loading shared S3 connections..."
+                    emptyLabel="No shared S3 connections available."
+                    addDisabled={connectionSelections.length === 0}
+                    onCancel={() => {
+                      setShowConnectionPicker(false);
+                      setConnectionSelections([]);
+                      setConnectionSearch("");
+                    }}
+                    onAdd={() => {
+                      setForm((current) => ({
+                        ...current,
+                        s3_connection_ids: [
+                          ...new Set([...(current.s3_connection_ids ?? []), ...connectionSelections]),
+                        ].sort((a, b) => a - b),
+                      }));
+                      setShowConnectionPicker(false);
+                      setConnectionSelections([]);
+                      setConnectionSearch("");
+                    }}
+                  >
+                    {visibleConnections.map((connection) => (
+                      <label
+                        key={connection.id}
+                        className={adminAssociationOptionRowClass(connectionSelections.includes(connection.id))}
+                      >
+                        <span className="ui-body text-slate-700 dark:text-slate-200">{connection.name}</span>
+                        <input
+                          type="checkbox"
+                          checked={connectionSelections.includes(connection.id)}
+                          onChange={() => togglePendingSelection(setConnectionSelections, connection.id)}
+                          className={adminAssociationCheckboxClass}
+                        />
+                      </label>
+                    ))}
+                  </AdminAssociationPickerPanel>
+                ) : undefined
+              }
+            />
           ),
         },
       ]}
       activeTab={associationTab}
-      onChange={(id) => setAssociationTab(id === "s3_users" ? "s3_users" : id === "connections" ? "connections" : "accounts")}
+      onChange={(id) => {
+        setAssociationTab(id === "s3_users" ? "s3_users" : id === "connections" ? "connections" : "accounts");
+        setShowAccountPicker(false);
+        setShowS3UserPicker(false);
+        setShowConnectionPicker(false);
+      }}
     />
   );
 
@@ -988,9 +1253,7 @@ export default function GroupsPage() {
             {modalTab === "members" && renderMembersTab()}
 
             {modalTab === "associations" && (
-              <div className={tableContainerClass}>
-                <div className={tableClass}>{renderAssociationsTab()}</div>
-              </div>
+              renderAssociationsTab()
             )}
 
             {modalTab === "workspaces" && (

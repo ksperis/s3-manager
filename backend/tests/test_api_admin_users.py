@@ -36,6 +36,38 @@ def test_assign_user_to_account_api(client: TestClient, db_session, seed_user_ac
     assert acc.id in data.get("accounts", [])
 
 
+def test_update_user_replaces_account_links_atomically(client: TestClient, db_session, seed_user_account):
+    usr, first_account = seed_user_account
+    second_account = S3Account(name="api-acc-2", rgw_account_id="RGW00000000000000003")
+    db_session.add(second_account)
+    db_session.commit()
+
+    response = client.put(
+        f"/api/admin/users/{usr.id}",
+        json={
+            "account_links": [
+                {
+                    "account_id": second_account.id,
+                    "account_admin": True,
+                    "account_role": "portal_none",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["accounts"] == [second_account.id]
+    assert payload["account_links"] == [
+        {
+            "account_id": second_account.id,
+            "account_admin": True,
+            "account_role": "portal_none",
+        }
+    ]
+    assert first_account.id not in payload["accounts"]
+
+
 def test_admin_cannot_create_superadmin_or_grant_ceph_admin(client: TestClient):
     admin_user = User(
         id=1001,

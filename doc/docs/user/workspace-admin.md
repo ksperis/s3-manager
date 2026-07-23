@@ -43,6 +43,13 @@ hover/focus panel exposes the complete bounded list and its roles. **UI Groups**
 also shows up to five member avatars before a `+N` indicator; the same panel
 still exposes up to 20 members.
 
+In the UI user and UI group editors, association tabs first list the currently
+linked resources. Use **Add…** to open a searchable picker, confirm the pending
+selection with **Add selected**, and use **Remove** on an existing row to
+unlink it before saving. RGW account links expose their Account admin and
+Portal role controls directly in both the linked table and the add picker when
+Portal is enabled.
+
 The **Portal requests** requester badge uses the same avatar and role panel and
 opens the requester's UI user edit page when that user still exists.
 

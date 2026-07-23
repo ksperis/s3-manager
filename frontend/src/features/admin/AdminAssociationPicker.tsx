@@ -100,6 +100,73 @@ export function AdminAssociationSectionHeader({
   );
 }
 
+type AdminAssociationLinkedTableProps = {
+  title: ReactNode;
+  countLabel: ReactNode;
+  actionLabel: ReactNode;
+  onAction: () => void;
+  headers: Array<{ label: ReactNode; align?: "left" | "right" }>;
+  hasItems: boolean;
+  emptyLabel: ReactNode;
+  rows: ReactNode;
+  picker?: ReactNode;
+};
+
+export function AdminAssociationLinkedTable({
+  title,
+  countLabel,
+  actionLabel,
+  onAction,
+  headers,
+  hasItems,
+  emptyLabel,
+  rows,
+  picker,
+}: AdminAssociationLinkedTableProps) {
+  return (
+    <div className="space-y-3">
+      <AdminAssociationSectionHeader
+        title={title}
+        countLabel={countLabel}
+        actionLabel={actionLabel}
+        onAction={onAction}
+      />
+      <div className={adminAssociationTableContainerClass}>
+        <table className={adminAssociationTableClass}>
+          <thead className={adminAssociationTableHeadClass}>
+            <tr>
+              {headers.map((header, index) => (
+                <th
+                  key={index}
+                  className={
+                    header.align === "right"
+                      ? adminAssociationTableHeaderRightClass
+                      : adminAssociationTableHeaderClass
+                  }
+                >
+                  {header.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className={adminAssociationTableBodyClass}>
+            {hasItems ? (
+              rows
+            ) : (
+              <tr>
+                <td colSpan={headers.length} className={adminAssociationTableEmptyCellClass}>
+                  {emptyLabel}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {picker}
+    </div>
+  );
+}
+
 type AdminAssociationPickerPanelProps = {
   title: ReactNode;
   hint?: ReactNode;

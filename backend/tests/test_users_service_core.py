@@ -196,6 +196,65 @@ def test_update_user_and_link_validations(db_session):
     assert updated.is_root is True
 
 
+def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_session):
+    service = UsersService(db_session)
+    user = _seed_user(db_session, "account-links@example.com", role=UserRole.UI_NONE.value)
+    removed_account = _seed_account(db_session, "removed-account", "RGW-REMOVED")
+    root_account = _seed_account(db_session, "root-account", "RGW-ROOT")
+    added_account = _seed_account(db_session, "added-account", "RGW-ADDED")
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=user.id,
+                account_id=removed_account.id,
+                is_root=False,
+                account_admin=False,
+                account_role="portal_none",
+            ),
+            UserS3Account(
+                user_id=user.id,
+                account_id=root_account.id,
+                is_root=True,
+                account_admin=True,
+                account_role="portal_none",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    updated = service.update_user(
+        user.id,
+        UserUpdate(
+            account_links=[
+                {
+                    "account_id": added_account.id,
+                    "account_admin": True,
+                    "account_role": "portal_none",
+                }
+            ]
+        ),
+    )
+
+    links = (
+        db_session.query(UserS3Account)
+        .filter(UserS3Account.user_id == user.id)
+        .order_by(UserS3Account.account_id)
+        .all()
+    )
+    assert updated.role == UserRole.UI_USER.value
+    assert {link.account_id for link in links} == {root_account.id, added_account.id}
+    assert next(link for link in links if link.account_id == root_account.id).is_root is True
+    added_link = next(link for link in links if link.account_id == added_account.id)
+    assert added_link.is_root is False
+    assert added_link.account_admin is True
+
+    with pytest.raises(ValueError, match="S3 accounts not found: 99999"):
+        service.update_user(
+            user.id,
+            UserUpdate(account_links=[{"account_id": 99999}]),
+        )
+
+
 def test_update_user_clears_manager_tools_for_no_access_role(db_session):
     service = UsersService(db_session)
     user = _seed_user(db_session, "manager-tools-clear@example.com", role=UserRole.UI_ADMIN.value)

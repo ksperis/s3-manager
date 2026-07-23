@@ -9,8 +9,6 @@ const assignUserToS3AccountMock = vi.fn();
 const deleteUserMock = vi.fn();
 
 const listMinimalS3AccountsMock = vi.fn();
-const updateS3AccountMock = vi.fn();
-
 const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
 const listMinimalGroupsMock = vi.fn();
@@ -59,7 +57,6 @@ vi.mock("../../api/users", () => ({
 
 vi.mock("../../api/accounts", () => ({
   listMinimalS3Accounts: () => listMinimalS3AccountsMock(),
-  updateS3Account: (accountId: number, payload: unknown) => updateS3AccountMock(accountId, payload),
 }));
 
 vi.mock("../../api/s3Users", () => ({
@@ -133,7 +130,6 @@ describe("UsersPage modal tabs", () => {
     updateUserMock.mockResolvedValue({ id: 100 });
     assignUserToS3AccountMock.mockResolvedValue(undefined);
     deleteUserMock.mockResolvedValue(undefined);
-    updateS3AccountMock.mockResolvedValue(undefined);
   });
 
   it("opens the requested UI user directly in the edit page", async () => {
@@ -284,8 +280,20 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(assignUserToS3AccountMock).toHaveBeenCalledWith(12, 1, false, "portal_user");
+      expect(updateUserMock).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({
+          account_links: [
+            {
+              account_id: 1,
+              account_admin: false,
+              account_role: "portal_user",
+            },
+          ],
+        })
+      );
     });
+    expect(assignUserToS3AccountMock).not.toHaveBeenCalled();
   });
 
   it("keeps associations when switching General/Associations and submits linked payload", async () => {
@@ -423,7 +431,9 @@ describe("UsersPage modal tabs", () => {
     fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
 
     fireEvent.click(screen.getByRole("tab", { name: "Groups" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: /storage-operators/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -461,9 +471,10 @@ describe("UsersPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("tab", { name: "Groups" }));
 
-    const selectedGroup = await screen.findByRole("checkbox", { name: /storage-operators/i });
-    expect(selectedGroup).toBeChecked();
+    expect(await screen.findByText("storage-operators")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /portal-readers/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -682,7 +693,8 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
-  it("allows enabling account admin when linking an account", async () => {
+  it("allows choosing account admin and Portal role while linking an account", async () => {
+    generalSettingsState.portal_enabled = true;
     render(<UsersPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
@@ -698,6 +710,9 @@ describe("UsersPage modal tabs", () => {
       throw new Error("Account row not found");
     }
     fireEvent.click(within(accountRow).getByRole("checkbox", { name: "Admin" }));
+    fireEvent.change(within(accountRow).getByRole("combobox", { name: "Portal role for acc-1" }), {
+      target: { value: "portal_manager" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -705,6 +720,6 @@ describe("UsersPage modal tabs", () => {
     await waitFor(() => {
       expect(assignUserToS3AccountMock).toHaveBeenCalled();
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true, "portal_none");
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true, "portal_manager");
   });
 });

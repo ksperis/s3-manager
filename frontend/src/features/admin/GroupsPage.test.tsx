@@ -323,16 +323,24 @@ describe("GroupsPage", () => {
     fireEvent.click(browserAdvancedToggle);
 
     fireEvent.click(screen.getByRole("tab", { name: "Members" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "alice@example.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "acc-1" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: /S3 Users \(0\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add RGW users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "s3-user-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: /Connections \(0\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add S3 connections" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "shared-conn" }));
     expect(screen.queryByRole("checkbox", { name: "private-conn" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("tab", { name: "Manager tools" }));
     expect(screen.getByRole("checkbox", { name: "Bucket compare" })).not.toBeChecked();
@@ -370,6 +378,44 @@ describe("GroupsPage", () => {
       account_links: [{ account_id: 1, account_admin: true, account_role: "portal_none" }],
       s3_user_ids: [11],
       s3_connection_ids: [21],
+    });
+  });
+
+  it("uses linked rows with explicit removal for group associations", async () => {
+    listGroupsMock.mockResolvedValue({
+      items: [
+        {
+          id: 50,
+          name: "ops-group",
+          description: null,
+          user_ids: [],
+          account_links: [{ account_id: 1, account_admin: false, account_role: "portal_none" }],
+          account_details: [{ id: 1, name: "acc-1" }],
+          s3_users: [],
+          s3_connections: [],
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<GroupsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
+
+    expect(await screen.findByText("acc-1")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "acc-1" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByText("No linked accounts yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateGroupMock).toHaveBeenCalledWith(
+        50,
+        expect.objectContaining({ account_links: [] })
+      );
     });
   });
 
@@ -432,7 +478,9 @@ describe("GroupsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByPlaceholderText("Storage operators"), { target: { value: "ops-group-updated" } });
     fireEvent.click(screen.getByRole("tab", { name: "Members" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "bob@example.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

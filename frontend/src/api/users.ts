@@ -120,6 +120,7 @@ export type UpdateUserPayload = {
   manager_tool_access?: ManagerToolAccess | null;
   browser_advanced_features_enabled?: boolean;
   is_active?: boolean;
+  account_links?: AccountMembership[] | null;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
   group_ids?: number[] | null;
