@@ -2817,7 +2817,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       setPageSize(stored.pageSize);
       setSort(stored.sort);
     } else {
-      restoreFilterRef.current = null;
+      restoreFilterRef.current = "";
       setFilter("");
       setFilterValue("");
       setQuickFilterMode("contains");
