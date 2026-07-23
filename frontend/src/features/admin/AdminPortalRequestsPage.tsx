@@ -19,7 +19,7 @@ import DataTableShell, { type DataTableColumn } from "../../components/list/Data
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import UserAvatar from "../../components/UserAvatar";
 import UiButton from "../../components/ui/UiButton";
 import UiInput from "../../components/ui/UiInput";
@@ -40,7 +40,7 @@ import {
   portalRequestReason,
   portalRequestTypeLabel,
 } from "../shared/portalRequestsPresentation";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import { AssociationRoleTooltip, uiPrincipalRoleLabel } from "./AssociationSummary";
 import { buildAdminPrincipalEditHref } from "./adminPrincipalEditLink";
 
@@ -268,12 +268,11 @@ export default function AdminPortalRequestsPage() {
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: requests.length });
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Portal requests"
-        description="Review Portal user and quota requests submitted by storage workspace users."
-        breadcrumbs={adminBreadcrumbs({ label: "Portal requests" })}
-      />
+    <PageShell
+      title="Portal requests"
+      description="Review Portal user and quota requests submitted by storage workspace users."
+      breadcrumbs={adminPageBreadcrumbs("portal-requests")}
+    >
       {notice ? <PageBanner tone="success">{notice}</PageBanner> : null}
       {error ? <PageBanner tone="error">{error}</PageBanner> : null}
 
@@ -361,7 +360,7 @@ export default function AdminPortalRequestsPage() {
           }
         />
       </ListPageSection>
-    </div>
+    </PageShell>
   );
 }
 

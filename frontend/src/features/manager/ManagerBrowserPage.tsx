@@ -7,6 +7,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 export default function ManagerBrowserPage() {
   const {
@@ -20,8 +21,8 @@ export default function ManagerBrowserPage() {
   const selected = accounts.find((account) => account.id === selectedS3AccountId) ?? null;
   const browserBlockedForContext = managerBrowserEnabled === false;
   const breadcrumbs = selectedBrowserBucketName
-    ? [{ label: "Manager" }, { label: "Browser" }, { label: selectedBrowserBucketName }]
-    : [{ label: "Manager" }, { label: "Browser" }];
+    ? managerPageBreadcrumbs("browser", { label: selectedBrowserBucketName })
+    : managerPageBreadcrumbs("browser");
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">

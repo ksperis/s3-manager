@@ -13,8 +13,8 @@ import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoint
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListToolbar from "../../components/ListToolbar";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import UiButton from "../../components/ui/UiButton";
 import { SettingsCard, SettingsChoiceRow } from "../../components/settings/SettingsLayout";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -254,19 +254,18 @@ export default function KeyRotationPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="S3 key rotation"
-        description="Rotate endpoint and managed RGW keys across selected storage endpoints."
-        breadcrumbs={adminBreadcrumbs({ label: "Settings" }, { label: "Key rotation" })}
-        actions={[
-          {
-            label: running ? "Rotating..." : "Run rotation",
-            onClick: runRotation,
-            disabled: runDisabled,
-          },
-        ]}
-      />
+    <PageShell
+      title="S3 key rotation"
+      description="Rotate endpoint and managed RGW keys across selected storage endpoints."
+      breadcrumbs={adminPageBreadcrumbs("key-rotation")}
+      actions={[
+        {
+          label: running ? "Rotating..." : "Run rotation",
+          onClick: runRotation,
+          disabled: runDisabled,
+        },
+      ]}
+    >
 
       {loading && <PageBanner tone="info">Loading endpoints...</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
@@ -433,6 +432,6 @@ export default function KeyRotationPage() {
           </div>
         </SettingsCard>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -226,7 +226,7 @@ describe("ManagerMetricsPage", () => {
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.getByText("Bucket breakdown (objects)")).toBeInTheDocument();
     expect(screen.queryByTestId("traffic-analytics")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
     expect(
       screen.queryByText("Connection context: platform metrics are disabled. Use a platform account with supervision enabled to access usage and traffic analytics.")
@@ -273,7 +273,7 @@ describe("ManagerMetricsPage", () => {
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
     expect(within(storageCard as HTMLElement).queryByText("Bucket breakdown")).not.toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
   });
 
@@ -290,7 +290,7 @@ describe("ManagerMetricsPage", () => {
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
     expect(screen.queryByText("Traffic analytics are disabled for this endpoint.")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
 
     const message = screen.getByText("Traffic analytics are disabled for this endpoint.");
     const trafficCard = message.closest("section");
@@ -337,7 +337,7 @@ describe("ManagerMetricsPage", () => {
     expect(storageCard).not.toBeNull();
     expect(within(storageCard as HTMLElement).getByText("Storage analytics")).toBeInTheDocument();
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
     expect(screen.getByTestId("traffic-analytics")).toBeInTheDocument();
   });
 
@@ -352,7 +352,7 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Usage history" }));
     expect(await screen.findByText("Latest storage")).toBeInTheDocument();
     expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
     expect(screen.getByText("Storage evolution").parentElement).not.toHaveClass("ui-surface-muted");
@@ -380,7 +380,7 @@ describe("ManagerMetricsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Usage history" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Usage history" }));
     expect(await screen.findByText(/private connection contexts/)).toBeInTheDocument();
     expect(fetchManagerUsageHistoryTrendsMock).toHaveBeenCalledWith("conn-1", "month");
   });
@@ -414,8 +414,8 @@ describe("ManagerMetricsPage", () => {
     );
 
     expect(screen.getByText("Bucket breakdown (storage)")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
-    const usageComposition = await screen.findByText("Account usage composition");
+    fireEvent.click(screen.getByRole("tab", { name: "Usage composition" }));
+    await screen.findByText("Account usage composition");
     expect(screen.queryByText("Bucket breakdown (storage)")).not.toBeInTheDocument();
     expect(screen.getByText("1 / 2 buckets covered")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();

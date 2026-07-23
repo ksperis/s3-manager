@@ -17,6 +17,7 @@ import { extractApiError } from "../../utils/apiError";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 function extractError(error: unknown): string {
   return extractApiError(error, "Request failed");
@@ -151,7 +152,7 @@ export default function ManagerBucketComparePage() {
       <PageHeader
         title="Bucket compare"
         description="Compare selected buckets across manager contexts."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Compare" }]}
+        breadcrumbs={managerPageBreadcrumbs("compare")}
       />
 
       {contextsError && <PageBanner tone="error">{contextsError}</PageBanner>}

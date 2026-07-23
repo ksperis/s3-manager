@@ -3,9 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { PageBreadcrumb } from "../../components/PageHeader";
-
-const PORTAL_BREADCRUMB: PageBreadcrumb = { label: "Portal" };
+import { buildWorkspaceBreadcrumbs } from "../../navigation/workspacePages";
 
 export function portalBreadcrumbs(...breadcrumbs: PageBreadcrumb[]): PageBreadcrumb[] {
-  return [PORTAL_BREADCRUMB, ...breadcrumbs];
+  return buildWorkspaceBreadcrumbs("portal", ...breadcrumbs);
 }

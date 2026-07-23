@@ -270,8 +270,8 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
-    const generalTab = await screen.findByRole("button", { name: "General" });
-    const usersTab = screen.getByRole("button", { name: "Linked UI users" });
+    const generalTab = await screen.findByRole("tab", { name: "General" });
+    const usersTab = screen.getByRole("tab", { name: "Linked UI users" });
 
     const tabLabels = Array.from(generalTab.parentElement?.querySelectorAll("button") ?? []).map((button) =>
       button.textContent?.trim()
@@ -318,7 +318,7 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI groups" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI groups" }));
 
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
@@ -356,7 +356,7 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for ui7@example.com" }), {
       target: { value: "portal_manager" },
@@ -364,7 +364,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Linked UI groups" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Linked UI groups" }));
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for Research Group" }), {
       target: { value: "portal_user" },
@@ -448,7 +448,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
 
     expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
@@ -478,7 +478,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     expect(quotaCheckbox).not.toBeChecked();
@@ -504,7 +504,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     expect(quotaCheckbox).not.toBeChecked();
@@ -532,7 +532,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
 
     expect(fetchAccountPortalSettingsMock).toHaveBeenCalledWith(1);
     expect(await screen.findByText("Private Storage Space creation")).toBeInTheDocument();
@@ -564,7 +564,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
     await screen.findByText("Private Storage Space creation");
 
     const storageSpaceCreation = screen
@@ -598,7 +598,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Portal overrides" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
     await screen.findByText("Private Storage Space creation");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset overrides" }));
@@ -637,7 +637,7 @@ describe("AccountsPage modal tabs", () => {
 
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     const userCheckbox = await screen.findByRole("checkbox", { name: "ui7@example.com" });

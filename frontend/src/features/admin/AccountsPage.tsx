@@ -30,7 +30,12 @@ import { listMinimalUsers, UserSummary } from "../../api/users";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import Modal from "../../components/Modal";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, {
+  WorkflowActions,
+  WorkflowMetadata,
+  workflowPageHostClass,
+} from "../../components/WorkflowPage";
+import WorkflowTabs from "../../components/WorkflowTabs";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
@@ -49,7 +54,6 @@ import {
   AssociationPrincipalStack,
   type AssociationPrincipalItem,
 } from "./AssociationSummary";
-import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationAdminCheckbox,
   AdminAssociationPickerPanel,
@@ -1184,7 +1188,7 @@ export default function S3AccountsPage() {
   return (
     <div className={workflowPageHostClass(showImportModal || Boolean(editingS3Account))}>
       <PageHeader
-        title="Accounts"
+        title="RGW Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
         breadcrumbs={adminPageBreadcrumbs("accounts")}
         actions={
@@ -1430,10 +1434,10 @@ export default function S3AccountsPage() {
         <WorkflowPage
           title="Import RGW accounts"
           description="Validate and import multiple RGW tenant identifiers while keeping endpoint permissions and results visible."
-          breadcrumbs={[...adminPageBreadcrumbs("accounts"), { label: "Import" }]}
+          breadcrumbs={adminPageBreadcrumbs("accounts", { label: "Import" })}
           backLabel="Back to accounts"
           onBack={importCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-4xl"
+          width="standard"
         >
           <p className="mb-3 ui-body text-slate-500">
             Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys.
@@ -1548,24 +1552,30 @@ export default function S3AccountsPage() {
         <WorkflowPage
           title={`Edit ${editingS3Account.name}`}
           description="Review usage, associations, privileged access and Portal overrides on a dedicated account page."
-          breadcrumbs={[...adminPageBreadcrumbs("accounts"), { label: "Edit" }]}
+          breadcrumbs={adminPageBreadcrumbs("accounts", { label: "Edit" })}
           backLabel="Back to accounts"
           onBack={editCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
+          metaContent={
+            <WorkflowMetadata
+              items={[
+                {
+                  label: "Endpoint",
+                  value: editingS3Account.storage_endpoint_name ?? "—",
+                  title: editingS3Account.storage_endpoint_url || undefined,
+                },
+              ]}
+            />
+          }
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
             </PageBanner>
           )}
-          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
-            Storage endpoint:{" "}
-            <span title={editingS3Account.storage_endpoint_url || undefined}>
-              {editingS3Account.storage_endpoint_name ?? "—"}
-            </span>
-          </div>
           <div className="space-y-4">
-            <AdminModalTabs<EditTab>
+            <WorkflowTabs<EditTab>
               activeTab={editTab}
               onTabChange={(tab) => {
                 if (tab === "users") {
@@ -1576,6 +1586,8 @@ export default function S3AccountsPage() {
                 }
                 setEditTab(tab);
               }}
+              ariaLabel="RGW account configuration sections"
+              idPrefix="admin-rgw-account-edit"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "users", label: "Linked UI users" },
@@ -1583,7 +1595,7 @@ export default function S3AccountsPage() {
                 { id: "privileged", label: "Privileged access", visible: canManagePrivilegedTargets },
                 { id: "portal", label: "Portal overrides", visible: portalEnabled },
               ]}
-            />
+            >
             {showGeneralTab && (
               <StorageUsageCard
                 accountName={editingS3Account.name}
@@ -2280,22 +2292,23 @@ export default function S3AccountsPage() {
                   </div>
                 </div>
               )}
-              <div className="flex items-center justify-end gap-3">
+              <WorkflowActions>
                 <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
                   Cancel
                 </UiButton>
                 <UiButton type="submit">
                   Save
                 </UiButton>
-              </div>
+              </WorkflowActions>
               {editCloseGuard.confirmationDialog}
             </form>
+            </WorkflowTabs>
           </div>
         </WorkflowPage>
       )}
 
       <ListPageSection
-          title="Accounts"
+          title="RGW Accounts"
           description="Search matches all records."
           countLabel={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"}`}
           search={

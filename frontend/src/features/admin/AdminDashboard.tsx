@@ -28,7 +28,7 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import {
   type WorkspaceDashboardFeature,
   type WorkspaceDashboardFeatureGroup,
@@ -961,7 +961,7 @@ export default function AdminDashboard() {
       <PageHeader
         title="Admin overview"
         description="Monitor the health and status of your S3 infrastructure."
-        breadcrumbs={adminBreadcrumbs({ label: "Dashboard" })}
+        breadcrumbs={adminPageBreadcrumbs("dashboard")}
         rightContent={
           <div className="flex items-center gap-3">
             <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>

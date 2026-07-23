@@ -13,11 +13,12 @@ import {
   updateIamAccessKeyStatus,
 } from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -161,14 +162,13 @@ export default function ManagerUserKeysPage() {
 
   if (isS3User) {
     return (
-      <div className="space-y-4">
-        <PageHeader
+      <PageShell
           title="User access keys"
           description="Rotate IAM access keys for a specific user."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }, { label: "Access keys" }]}
-        />
+          breadcrumbs={managerPageBreadcrumbs("users", { label: "Access keys" })}
+      >
         <PageBanner tone="info">IAM users are not available for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
+      </PageShell>
     );
   }
 
@@ -181,30 +181,28 @@ export default function ManagerUserKeysPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="IAM access keys"
-        description={
-          <>
-            Manage access keys for <span className="font-semibold text-slate-700 dark:text-slate-100">{pageTitle}</span>.
-          </>
-        }
-        breadcrumbs={[
-          { label: "Manager" },
-          { label: "IAM", to: "/manager/users" },
-          { label: pageTitle },
-          { label: "Access keys" },
-        ]}
-        actions={[
-          { label: "← Back to users", to: "/manager/users", variant: "ghost" },
-          { label: "Attached policies", to: `/manager/users/${encodeURIComponent(pageTitle)}/policies`, variant: "ghost" },
-          {
-            label: busy === "create" ? "Creating..." : "New key",
-            onClick: handleCreateKey,
-            variant: "primary",
-          },
-        ]}
-      />
+    <PageShell
+      title="IAM access keys"
+      description={
+        <>
+          Manage access keys for <span className="font-semibold text-slate-700 dark:text-slate-100">{pageTitle}</span>.
+        </>
+      }
+      breadcrumbs={managerPageBreadcrumbs(
+        "users",
+        { label: pageTitle },
+        { label: "Access keys" },
+      )}
+      actions={[
+        { label: "← Back to users", to: "/manager/users", variant: "ghost" },
+        { label: "Attached policies", to: `/manager/users/${encodeURIComponent(pageTitle)}/policies`, variant: "ghost" },
+        {
+          label: busy === "create" ? "Creating..." : "New key",
+          onClick: handleCreateKey,
+          variant: "primary",
+        },
+      ]}
+    >
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -307,6 +305,6 @@ export default function ManagerUserKeysPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -29,6 +29,10 @@ import {
   isSuperAdminRole,
   readStoredUser,
 } from "./utils/workspaces";
+import {
+  ADMIN_PAGE_CONTRACTS,
+  workspacePageLink,
+} from "./navigation/workspacePages";
 
 export { RequireManagerFeatureRulesTool, RequirePortalAccess } from "./routerGuards";
 
@@ -134,64 +138,62 @@ export const buildAdminNav = (
   settingsExpanded = false
 ) => {
   const settingsLinks = [
-    { to: "/admin/general-settings", label: "General" },
-    { to: "/admin/authentication-settings", label: "Authentication" },
-    { to: "/admin/manager-settings", label: "Manager" },
+    workspacePageLink(ADMIN_PAGE_CONTRACTS["general-settings"]),
+    workspacePageLink(ADMIN_PAGE_CONTRACTS["authentication-settings"]),
+    workspacePageLink(ADMIN_PAGE_CONTRACTS["manager-settings"]),
     {
-      to: "/admin/browser-settings",
-      label: "Browser",
+      ...workspacePageLink(ADMIN_PAGE_CONTRACTS["browser-settings"]),
       disabled: !browserEnabled,
       disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
     },
     {
-      to: "/admin/portal-settings",
-      label: "Portal",
+      ...workspacePageLink(ADMIN_PAGE_CONTRACTS["portal-settings"]),
       disabled: !portalEnabled,
       disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
     },
-    { to: "/admin/key-rotation", label: "Key Rotation" },
+    workspacePageLink(ADMIN_PAGE_CONTRACTS["key-rotation"]),
   ];
 
   return [
     {
       label: "Overview",
       links: [
-        { to: "/admin", label: "Dashboard", end: true },
-        { to: "/admin/metrics", label: "Usage & Metrics" },
+        { ...workspacePageLink(ADMIN_PAGE_CONTRACTS.dashboard), end: true },
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.metrics),
       ],
     },
     {
       label: "Platform",
       links: [
-        { to: "/admin/users", label: "UI Users" },
-        { to: "/admin/groups", label: "UI Groups" },
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.users),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.groups),
       ],
     },
     {
       label: "Managed Tenants",
       links: [
-        { to: "/admin/s3-accounts", label: "RGW Accounts" },
-        { to: "/admin/s3-users", label: "RGW Users" },
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.accounts),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS["rgw-users"]),
       ],
     },
     {
       label: "Connections",
-      links: [{ to: "/admin/s3-connections", label: "Shared S3 Connections" }],
+      links: [workspacePageLink(ADMIN_PAGE_CONTRACTS["shared-connections"])],
     },
     {
       label: "Storage Backends",
       links: [
-        { to: "/admin/storage-endpoints", label: "S3 Endpoints" },
-        ...(endpointStatusEnabled ? [{ to: "/admin/endpoint-status", label: "Endpoint Status" }] : []),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS["storage-endpoints"]),
+        ...(endpointStatusEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS["endpoint-status"])] : []),
       ],
     },
     {
       label: "Audit & Reporting",
       links: [
-        ...(portalEnabled ? [{ to: "/admin/portal-requests", label: "Portal Requests" }] : []),
-        ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
-        ...(usageHistoryEnabled ? [{ to: "/admin/usage-history", label: "Usage History" }] : []),
-        { to: "/admin/audit", label: "Audit trail" },
+        ...(portalEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS["portal-requests"])] : []),
+        ...(billingEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS.billing)] : []),
+        ...(usageHistoryEnabled ? [workspacePageLink(ADMIN_PAGE_CONTRACTS["usage-history"])] : []),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.audit),
       ],
     },
     ...(isSuperAdmin

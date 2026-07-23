@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import { fetchStorageOpsSummary, type StorageOpsSummary } from "../../api/storageOps";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
+import { storageOpsPageBreadcrumbs } from "./storageOpsBreadcrumbs";
 import WorkspaceNavCards from "../../components/WorkspaceNavCards";
 import { uiCardClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
@@ -41,12 +42,11 @@ export default function StorageOpsDashboard() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Storage Ops"
-        description="Operations workspace for advanced S3 bucket administration across your authorized contexts."
-        breadcrumbs={[{ label: "Storage Ops" }]}
-      />
+    <PageShell
+      title="Storage Ops"
+      description="Operations workspace for advanced S3 bucket administration across your authorized contexts."
+      breadcrumbs={storageOpsPageBreadcrumbs("dashboard")}
+    >
       {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
       <section className={`${uiCardClass} px-4 py-4`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -66,6 +66,6 @@ export default function StorageOpsDashboard() {
         </div>
       </section>
       <WorkspaceNavCards items={cards} />
-    </div>
+    </PageShell>
   );
 }

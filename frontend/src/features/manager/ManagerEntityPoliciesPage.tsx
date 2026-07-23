@@ -6,7 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -14,6 +14,7 @@ import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import InlinePolicyEditor from "./InlinePolicyEditor";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 export type ManagerPolicyEntityType = "user" | "group" | "role";
 
@@ -85,6 +86,11 @@ export default function ManagerEntityPoliciesPage({
   extraActions,
 }: ManagerEntityPoliciesPageProps) {
   const config = ENTITY_CONFIG[entityType];
+  const parentPageId = {
+    user: "users",
+    group: "groups",
+    role: "roles",
+  } as const;
   const params = useParams();
   const rawEntityName = params[routeParam];
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
@@ -205,21 +211,15 @@ export default function ManagerEntityPoliciesPage({
 
   if (isS3User) {
     return (
-      <div className="space-y-4">
-        <PageHeader
+      <PageShell
           title={config.title}
           description={`Attach/detach IAM policies for a specific ${config.singularLabel}.`}
-          breadcrumbs={[
-            { label: "Manager" },
-            { label: "IAM" },
-            { label: `${config.pluralLabel[0].toUpperCase()}${config.pluralLabel.slice(1)}` },
-            { label: "Policies" },
-          ]}
-        />
+          breadcrumbs={managerPageBreadcrumbs(parentPageId[entityType], { label: "Policies" })}
+      >
         <PageBanner tone="info">
           IAM {config.pluralLabel} are not available for standalone S3 users. Select an S3 Account to continue.
         </PageBanner>
-      </div>
+      </PageShell>
     );
   }
 
@@ -278,22 +278,20 @@ export default function ManagerEntityPoliciesPage({
       );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={config.title}
-        description={detailLine}
-        breadcrumbs={[
-          { label: "Manager" },
-          { label: "IAM", to: config.managerRoute },
-          { label: decodedEntity },
-          { label: "Policies" },
-        ]}
-        actions={[
-          { label: `← Back to ${config.pluralLabel}`, to: config.managerRoute, variant: "ghost" },
-          ...(extraActions?.(decodedEntity) ?? []),
-          { label: "Refresh", onClick: handleRefresh, variant: "ghost" },
-        ]}
-      />
+    <PageShell
+      title={config.title}
+      description={detailLine}
+      breadcrumbs={managerPageBreadcrumbs(
+        parentPageId[entityType],
+        { label: decodedEntity },
+        { label: "Policies" },
+      )}
+      actions={[
+        { label: `← Back to ${config.pluralLabel}`, to: config.managerRoute, variant: "ghost" },
+        ...(extraActions?.(decodedEntity) ?? []),
+        { label: "Refresh", onClick: handleRefresh, variant: "ghost" },
+      ]}
+    >
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -355,6 +353,6 @@ export default function ManagerEntityPoliciesPage({
           />
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

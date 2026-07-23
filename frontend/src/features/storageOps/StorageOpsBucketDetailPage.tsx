@@ -12,6 +12,7 @@ import WorkflowPage from "../../components/WorkflowPage";
 import { extractApiError } from "../../utils/apiError";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { useBucketListBackNavigation } from "../shared/bucketListReturnContext";
+import { storageOpsPageBreadcrumbs } from "./storageOpsBreadcrumbs";
 
 type BucketDetailLocationState = {
   bucketQuotaAvailable?: boolean;
@@ -90,11 +91,12 @@ export default function StorageOpsBucketDetailPage() {
     return () => controller.abort();
   }, [bucketName, contextId, exactFilter]);
 
-  const breadcrumbs = [
-    { label: "Storage Ops", to: "/storage-ops" },
-    { label: "Buckets", to: listUrl },
+  const breadcrumbs = storageOpsPageBreadcrumbs(
+    "buckets",
     { label: bucketName || "Bucket" },
-  ];
+  ).map((breadcrumb) =>
+    breadcrumb.to === "/storage-ops/buckets" ? { ...breadcrumb, to: listUrl } : breadcrumb,
+  );
 
   return (
     <WorkflowPage

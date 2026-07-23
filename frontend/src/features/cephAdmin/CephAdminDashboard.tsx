@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 import { fetchHealthWorkspaceOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import WorkspaceNavCards from "../../components/WorkspaceNavCards";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import { extractApiError } from "../../utils/apiError";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type CardLink = {
   title: string;
@@ -63,12 +64,11 @@ export default function CephAdminDashboard() {
   }, [generalSettings.endpoint_status_enabled, selectedEndpoint?.id]);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Ceph Admin"
-        description={`Cluster-level RGW administration. Active endpoint: ${selectedEndpoint?.name ?? "—"}.`}
-        breadcrumbs={[{ label: "Ceph Admin" }]}
-      />
+    <PageShell
+      title="Ceph Admin"
+      description={`Cluster-level RGW administration. Active endpoint: ${selectedEndpoint?.name ?? "—"}.`}
+      breadcrumbs={cephAdminPageBreadcrumbs("dashboard")}
+    >
       {!selectedEndpoint?.id ? (
         <PageEmptyState
           title="Select a Ceph endpoint before using Ceph Admin"
@@ -93,6 +93,6 @@ export default function CephAdminDashboard() {
         />
       )}
       {selectedEndpoint?.id ? <WorkspaceNavCards items={cards} /> : null}
-    </div>
+    </PageShell>
   );
 }

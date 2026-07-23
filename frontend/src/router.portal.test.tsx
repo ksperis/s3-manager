@@ -83,6 +83,7 @@ describe("portal routes", () => {
       "access-keys",
       "shares",
       "requests",
+      "history",
       "activity",
       "transfers",
       "usage",

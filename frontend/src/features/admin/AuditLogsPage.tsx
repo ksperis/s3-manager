@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageControlStrip from "../../components/PageControlStrip";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -346,19 +346,18 @@ export default function AuditLogsPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Audit trail"
-        description="Last administrative actions performed through the UI."
-        breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Audit trail" })}
-        actions={[
-          {
-            label: loading ? "Refreshing…" : "Refresh",
-            variant: "ghost",
-            onClick: handleRefresh,
-          },
-        ]}
-      />
+    <PageShell
+      title="Audit trail"
+      description="Last administrative actions performed through the UI."
+      breadcrumbs={adminPageBreadcrumbs("audit")}
+      actions={[
+        {
+          label: loading ? "Refreshing…" : "Refresh",
+          variant: "ghost",
+          onClick: handleRefresh,
+        },
+      ]}
+    >
       <PageControlStrip
         label="Audit scope"
         title={hasActiveFilters ? "Filtered audit trail" : "Full audit trail"}
@@ -422,6 +421,6 @@ export default function AuditLogsPage() {
           </div>
         </div>
       </ListPageSection>
-    </div>
+    </PageShell>
   );
 }

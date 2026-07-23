@@ -15,7 +15,7 @@ import Modal from "../../components/Modal";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -330,7 +330,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
         <PageHeader
           title="API tokens"
           description="Manage long-lived admin tokens for automation and integrations."
-          breadcrumbs={adminBreadcrumbs({ label: "API tokens" })}
+          breadcrumbs={adminPageBreadcrumbs("api-tokens")}
           actions={headerActions}
         />
       ) : null}

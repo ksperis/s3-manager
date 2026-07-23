@@ -555,7 +555,9 @@ export default function PortalAccessKeysPage() {
           fr: "Créez des identifiants S3 pour une application de bureau, un script ou un partenaire externe. Limitez chaque accès au bon espace.",
           de: "Erstellen Sie S3-Zugangsdaten für Desktop-Apps, Skripte oder externe Partner. Begrenzen Sie jeden Zugriff auf den passenden Bereich.",
         })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "External S3 tools", fr: "Outils S3 externes", de: "Externe S3-Werkzeuge" }) })}
+        breadcrumbs={portalBreadcrumbs({
+          label: t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" }),
+        })}
         actions={[
           {
             label: busy === "create" ? t({ en: "Creating...", fr: "Création...", de: "Wird erstellt..." }) : t({ en: "New tool access", fr: "Nouvel accès outil", de: "Neuer Werkzeugzugriff" }),
@@ -970,14 +972,16 @@ export default function PortalAccessKeysPage() {
             fr: "Choisissez l'utilisateur IAM, le périmètre S3 et les droits, puis conservez le secret à usage unique jusqu'à la fin.",
             de: "Wählen Sie IAM-Benutzer, S3-Umfang und Rechte und behalten Sie das einmalige Geheimnis bis zum Abschluss sichtbar.",
           })}
-          breadcrumbs={[
-            { label: "Portal" },
-            { label: t({ en: "Tool access", fr: "Accès outil", de: "Werkzeugzugriff" }), to: "/portal/access-keys" },
+          breadcrumbs={portalBreadcrumbs(
+            {
+              label: t({ en: "External tools", fr: "Outils externes", de: "Externe Werkzeuge" }),
+              to: "/portal/access-keys",
+            },
             { label: t({ en: "Create", fr: "Créer", de: "Erstellen" }) },
-          ]}
+          )}
           backLabel={t({ en: "Back to tool access", fr: "Retour aux accès outil", de: "Zurück zum Werkzeugzugriff" })}
           onBack={busy === "create" ? undefined : closeCreateWizard}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           <div className="space-y-4">
             {error ? <PageBanner tone="error">{error}</PageBanner> : null}

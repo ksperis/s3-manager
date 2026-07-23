@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useState } from "react";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   SettingsCard,
@@ -253,25 +253,24 @@ export default function GeneralSettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="General settings"
-        description="Global options for the platform."
-        breadcrumbs={adminBreadcrumbs({ label: "General" }, { label: "Settings" })}
-        actions={[
-          {
-            label: resetting ? "Resetting..." : "Reset to defaults",
-            onClick: handleResetDefaults,
-            variant: "ghost",
-            disabled: !settings || saving || resetting,
-          },
-          {
-            label: saving ? "Saving..." : "Save changes",
-            onClick: handleSave,
-            disabled: !settings || saving || resetting || !isLogoUrlValid || !isQuotaThresholdValid,
-          },
-        ]}
-      />
+    <PageShell
+      title="General settings"
+      description="Global options for the platform."
+      breadcrumbs={adminPageBreadcrumbs("general-settings")}
+      actions={[
+        {
+          label: resetting ? "Resetting..." : "Reset to defaults",
+          onClick: handleResetDefaults,
+          variant: "ghost",
+          disabled: !settings || saving || resetting,
+        },
+        {
+          label: saving ? "Saving..." : "Save changes",
+          onClick: handleSave,
+          disabled: !settings || saving || resetting || !isLogoUrlValid || !isQuotaThresholdValid,
+        },
+      ]}
+    >
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {testEmailError && <PageBanner tone="error">{testEmailError}</PageBanner>}
@@ -694,6 +693,6 @@ export default function GeneralSettingsPage() {
           </div>
         )}
       </form>
-    </div>
+    </PageShell>
   );
 }

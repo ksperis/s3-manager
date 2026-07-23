@@ -228,7 +228,7 @@ describe("AdminMetricsPage", () => {
     expect(within(storageCard as HTMLElement).getByText("Storage snapshot")).toBeInTheDocument();
     expect(within(storageCard as HTMLElement).queryByText("Stored volume & objects")).not.toBeInTheDocument();
     expect(screen.queryByText("Accounts & users")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
     expect(screen.getByText("RGW traffic")).toBeInTheDocument();
   });
 
@@ -260,7 +260,7 @@ describe("AdminMetricsPage", () => {
     );
 
     expect(await screen.findByText("Storage breakdown")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Usage composition" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Usage composition" }));
     expect(await screen.findByText("Managed accounts usage composition")).toBeInTheDocument();
     expect(screen.queryByText("Storage breakdown")).not.toBeInTheDocument();
     expect(screen.getByText("2 / 3 buckets covered")).toBeInTheDocument();
@@ -284,7 +284,7 @@ describe("AdminMetricsPage", () => {
     );
 
     await screen.findByText("Storage breakdown");
-    fireEvent.click(screen.getByRole("button", { name: "Traffic" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Traffic" }));
     const message = await screen.findByText("Usage logs are disabled for this endpoint");
     const trafficCard = message.closest("section");
 
@@ -305,7 +305,7 @@ describe("AdminMetricsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Usage history" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Usage history" }));
     expect(await screen.findByText("Latest storage")).toBeInTheDocument();
     expect(screen.queryByText("Usage history trends")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("3.0 KB").length).toBeGreaterThan(0));

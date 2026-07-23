@@ -22,9 +22,10 @@ import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -45,7 +46,6 @@ import { stableSignature } from "../../utils/stableSignature";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
 import { isAdminLikeRole, readStoredUser } from "../../utils/workspaces";
-import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -846,9 +846,9 @@ export default function S3UsersPage() {
   return (
     <div className={workflowPageHostClass(showImportModal || Boolean(editingUser))}>
       <PageHeader
-        title="Users"
+        title="RGW Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
-        breadcrumbs={adminBreadcrumbs({ label: "Users" })}
+        breadcrumbs={adminPageBreadcrumbs("rgw-users")}
         actions={[
           {
             label: "Import",
@@ -874,7 +874,7 @@ export default function S3UsersPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       <ListPageSection
-          title="Users"
+          title="RGW Users"
           description="Search matches all records."
           countLabel={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"}`}
           search={
@@ -1055,10 +1055,10 @@ export default function S3UsersPage() {
         <WorkflowPage
           title="Import RGW users"
           description="Import multiple RGW identities and keep endpoint validation and generated-key results visible."
-          breadcrumbs={adminBreadcrumbs({ label: "RGW Users", to: "/admin/s3-users" }, { label: "Import" })}
+          breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: "Import" })}
           backLabel="Back to RGW users"
           onBack={importCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-4xl"
+          width="standard"
         >
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {importError && (
@@ -1135,10 +1135,11 @@ export default function S3UsersPage() {
         <WorkflowPage
           title={`Edit ${editingUser.name}`}
           description="Review quotas, UI associations and privileged access without an overlay or nested scrolling."
-          breadcrumbs={adminBreadcrumbs({ label: "RGW Users", to: "/admin/s3-users" }, { label: "Edit" })}
+          breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: "Edit" })}
           backLabel="Back to RGW users"
           onBack={editCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
         >
           {editError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1146,7 +1147,7 @@ export default function S3UsersPage() {
             </UiInlineMessage>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
-            <AdminModalTabs<EditTab>
+            <WorkflowTabs<EditTab>
               activeTab={editTab}
               onTabChange={(tab) => {
                 if (tab === "users") {
@@ -1157,13 +1158,15 @@ export default function S3UsersPage() {
                 }
                 setEditTab(tab);
               }}
+              ariaLabel="RGW user configuration sections"
+              idPrefix="admin-rgw-user-edit"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "users", label: "Linked UI users" },
                 { id: "groups", label: "Linked UI groups" },
                 { id: "privileged", label: "Privileged access", visible: canManagePrivilegedTargets },
               ]}
-            />
+            >
 
             {showEditGeneralTab && (
               <>
@@ -1519,8 +1522,9 @@ export default function S3UsersPage() {
                 </UiCheckboxField>
               </div>
             )}
+            </WorkflowTabs>
 
-            <div className="flex items-center justify-end gap-3">
+            <WorkflowActions>
               <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
                 Cancel
               </UiButton>
@@ -1530,7 +1534,7 @@ export default function S3UsersPage() {
               >
                 {editBusy ? "Saving..." : "Save changes"}
               </UiButton>
-            </div>
+            </WorkflowActions>
             {editCloseGuard.confirmationDialog}
           </form>
         </WorkflowPage>

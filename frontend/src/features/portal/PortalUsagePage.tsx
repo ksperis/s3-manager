@@ -14,7 +14,7 @@ import { MetricsCard, MetricsEmptyState } from "../../components/MetricsCard";
 import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from "../../components/MetricsTrafficOverview";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import { WorkspaceStatusDot } from "../../components/WorkspaceDashboardKit";
@@ -342,15 +342,14 @@ export default function PortalUsagePage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <PageShell
         title={t({ en: "Storage health", fr: "État du stockage", de: "Speicherstatus" })}
         description={t({ en: "See how much room is left, which spaces are growing, and how files move in this workspace.", fr: "Voyez l'espace restant, les espaces qui grandissent et la façon dont les fichiers circulent dans ce workspace.", de: "Sehen Sie, wie viel Platz bleibt, welche Bereiche wachsen und wie Dateien in diesem Workspace bewegt werden." })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "Storage health", fr: "État du stockage", de: "Speicherstatus" }) })}
         actions={[
           { label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" },
         ]}
-      />
+    >
 
       <PortalPageTabs
         tabs={tabs}
@@ -611,6 +610,6 @@ export default function PortalUsagePage() {
         </MetricsCard>
       ) : null}
       </PortalTabPanel>
-    </div>
+    </PageShell>
   );
 }

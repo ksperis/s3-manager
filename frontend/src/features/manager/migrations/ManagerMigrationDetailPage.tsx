@@ -5,8 +5,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import PageHeader from "../../../components/PageHeader";
+import PageShell from "../../../components/PageShell";
 import UiButton from "../../../components/ui/UiButton";
+import { cx, uiPanelClass, uiPanelMutedClass } from "../../../components/ui/styles";
 import {
   continueManagerMigration,
   deleteManagerMigration,
@@ -24,6 +25,7 @@ import {
   type BucketMigrationPrecheckReport,
 } from "../../../api/managerMigrations";
 import { useManagerContexts, useManagerMigrationDetail } from "./hooks";
+import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
 import {
   canOfferFullRollback,
   computeItemCopyProgressPercent,
@@ -298,30 +300,27 @@ export default function ManagerMigrationDetailPage() {
 
   if (!migrationIdValue) {
     return (
-      <div className="space-y-4">
-        <PageHeader
-          title="Bucket Migration"
-          description="Invalid migration identifier."
-          breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Migration" }]}
-          actions={[{ label: "Back to list", onClick: () => navigate("/manager/migrations") }]}
-        />
-      </div>
+      <PageShell
+        title="Bucket Migration"
+        description="Invalid migration identifier."
+        breadcrumbs={managerPageBreadcrumbs("migration", { label: "Details" })}
+        actions={[{ label: "Back to list", onClick: () => navigate("/manager/migrations") }]}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={migrationDetail ? `Migration #${migrationDetail.id}` : `Migration #${migrationIdValue}`}
-        description="Operational view with focused bucket replication progress and required actions."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Migration" }]}
-        actions={[
-          { label: "Back to list", onClick: () => navigate("/manager/migrations") },
-          ...(migrationDetail?.status === "draft"
-            ? [{ label: "Edit draft", onClick: () => navigate(`/manager/migrations/new?from=${migrationDetail.id}`) }]
-            : []),
-        ]}
-      />
+    <PageShell
+      title={migrationDetail ? `Migration #${migrationDetail.id}` : `Migration #${migrationIdValue}`}
+      description="Operational view with focused bucket replication progress and required actions."
+      breadcrumbs={managerPageBreadcrumbs("migration", { label: "Details" })}
+      actions={[
+        { label: "Back to list", onClick: () => navigate("/manager/migrations") },
+        ...(migrationDetail?.status === "draft"
+          ? [{ label: "Edit draft", onClick: () => navigate(`/manager/migrations/new?from=${migrationDetail.id}`) }]
+          : []),
+      ]}
+    >
 
       {detailLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Refreshing...</p>}
       {detailError && <p className="ui-caption text-rose-600 dark:text-rose-300">{detailError}</p>}
@@ -331,7 +330,7 @@ export default function ManagerMigrationDetailPage() {
 
       {migrationDetail && (
         <>
-          <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className={cx(uiPanelClass, "space-y-3 p-4")}>
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusChipClasses(migrationDetail.status)}`}>
                 {migrationDetail.status}
@@ -348,7 +347,7 @@ export default function ManagerMigrationDetailPage() {
             </div>
 
             {nextAction && (
-              <div className={`rounded-xl border px-3 py-3 ${operatorCardClasses(nextAction.tone)}`}>
+              <div className={`rounded-lg border px-3 py-3 ${operatorCardClasses(nextAction.tone)}`}>
                 <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{nextAction.title}</p>
                 <p className="ui-caption text-slate-600 dark:text-slate-300">{nextAction.description}</p>
                 {nextAction.action && (
@@ -375,7 +374,7 @@ export default function ManagerMigrationDetailPage() {
             )}
 
             {selectedMigrationSummary && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <div className={cx(uiPanelMutedClass, "p-3")}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Global progress</p>
                   <p className="ui-caption text-slate-600 dark:text-slate-300">
@@ -396,7 +395,7 @@ export default function ManagerMigrationDetailPage() {
             )}
 
             {precheckReport && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <div className={cx(uiPanelMutedClass, "p-3")}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                     Precheck report
@@ -574,7 +573,7 @@ export default function ManagerMigrationDetailPage() {
             </div>
           </section>
 
-          <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className={cx(uiPanelClass, "space-y-2 p-4")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="ui-body text-base font-semibold text-slate-900 dark:text-slate-100">Bucket replication progress</h3>
               <div className="flex flex-wrap gap-1">
@@ -760,7 +759,7 @@ export default function ManagerMigrationDetailPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className={cx(uiPanelClass, "p-4")}>
             <UiButton
               type="button"
               onClick={() => setShowEvents((current) => !current)}
@@ -786,7 +785,7 @@ export default function ManagerMigrationDetailPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <section className={cx(uiPanelClass, "p-4")}>
             <UiButton
               type="button"
               onClick={() => setShowTechnical((current) => !current)}
@@ -821,6 +820,6 @@ export default function ManagerMigrationDetailPage() {
           </section>
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

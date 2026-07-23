@@ -27,6 +27,7 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import CephAdminAdminOpsModal from "./CephAdminAdminOpsModal";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
@@ -993,7 +994,7 @@ export default function CephAdminAccountsPage() {
       <PageHeader
         title="RGW Accounts"
         description="Complete list of RGW accounts (admin ops)."
-        breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Accounts" }]}
+        breadcrumbs={cephAdminPageBreadcrumbs("accounts")}
         actions={
           selectedEndpointId
             ? [

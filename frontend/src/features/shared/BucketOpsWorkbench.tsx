@@ -10050,7 +10050,7 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
           onCreate={createConfigBackup}
         />
       )}
-      <BucketOpsBulkUpdatePage open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>
+      <BucketOpsBulkUpdatePage mode={mode} open={showBulkUpdateModal} onClose={closeBulkUpdateModal}>
         <div className="space-y-4">
             <p className="ui-body text-slate-700 dark:text-slate-200">
               Apply configuration to{" "}

@@ -18,6 +18,7 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import { cx, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatNumber } from "../../utils/format";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type Props = {
   endpointId: number;
@@ -86,7 +87,7 @@ export default function CephAdminBucketIndexCheckPage({ endpointId, endpointName
     <WorkflowPage
       title="Check bucket indexes"
       description="Run read-only RGW Admin Ops diagnostics across the selected buckets and review each result."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Buckets", to: "/ceph-admin/buckets" }, { label: "Index checks" }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("buckets", { label: "Index checks" })}
       onBack={closePage}
       backLabel={running ? "Stop and return" : "Back to bucket selection"}
       contentClassName="min-w-0"

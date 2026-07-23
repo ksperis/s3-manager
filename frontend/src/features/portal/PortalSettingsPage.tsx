@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCurrentUser, type User } from "../../api/users";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
 import { cx, uiTitleTextClass } from "../../components/ui/styles";
@@ -76,16 +76,15 @@ export default function PortalSettingsPage() {
   }, [selectedAccountId, t]);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" })}
-        description={t({
-          en: "Review information for the project currently selected in the Portal.",
-          fr: "Consultez les informations du projet actuellement sélectionné dans le Portal.",
-          de: "Prüfen Sie die Informationen für das aktuell im Portal ausgewählte Projekt.",
-        })}
-        breadcrumbs={portalBreadcrumbs({ label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }) })}
-      />
+    <PageShell
+      title={t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" })}
+      description={t({
+        en: "Review information for the project currently selected in the Portal.",
+        fr: "Consultez les informations du projet actuellement sélectionné dans le Portal.",
+        de: "Prüfen Sie die Informationen für das aktuell im Portal ausgewählte Projekt.",
+      })}
+      breadcrumbs={portalBreadcrumbs({ label: t({ en: "Settings", fr: "Paramètres", de: "Einstellungen" }) })}
+    >
 
       {accessLoading || accountsLoading ? (
         <PageBanner tone="info">
@@ -139,6 +138,6 @@ export default function PortalSettingsPage() {
           </div>
         </dl>
       </UiCard>
-    </div>
+    </PageShell>
   );
 }

@@ -292,14 +292,14 @@ describe("S3UsersPage modal tabs", () => {
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Add a tag for this RGW user" })).toBeInTheDocument();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add UI users" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui33@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
-    fireEvent.click(screen.getByRole("button", { name: "Linked UI users" }));
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Linked UI users" }));
 
     expect(screen.getByText("ui33@example.com")).toBeInTheDocument();
 
@@ -329,15 +329,15 @@ describe("S3UsersPage modal tabs", () => {
     await screen.findByText("rgw-user-1");
     fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Linked UI groups" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Linked UI groups" }));
     expect(screen.getByText("No linked groups yet.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Storage Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
-    fireEvent.click(screen.getByRole("button", { name: "Linked UI groups" }));
+    fireEvent.click(screen.getByRole("tab", { name: "General" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Linked UI groups" }));
     expect(screen.getByText("Storage Group")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -364,7 +364,7 @@ describe("S3UsersPage modal tabs", () => {
 
     await screen.findByText("rgw-user-1");
     fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
@@ -398,7 +398,7 @@ describe("S3UsersPage modal tabs", () => {
 
     await screen.findByText("rgw-user-1");
     fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Privileged access" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });

@@ -29,6 +29,7 @@ import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 const defaultPolicyTemplate = `{
   "Version": "2012-10-17",
@@ -565,7 +566,7 @@ export default function TopicsPage() {
       <PageHeader
         title="SNS Topics"
         description="List, create, and secure account-owned SNS topics."
-        breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
+        breadcrumbs={managerPageBreadcrumbs("topics")}
         actions={
           !needsS3AccountSelection && snsFeatureEnabled
             ? [
@@ -677,10 +678,10 @@ export default function TopicsPage() {
         <WorkflowPage
           title={`Topic attributes · ${attributesTopicName ?? ""}`}
           description="Configure the push endpoint, TLS verification and provider-specific attributes on a dedicated page."
-          breadcrumbs={[{ label: "Manager" }, { label: "SNS Topics" }, { label: "Attributes" }]}
+          breadcrumbs={managerPageBreadcrumbs("topics", { label: "Attributes" })}
           backLabel="Back to topics"
           onBack={attributesCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           <div className="space-y-4">
             {attributesError && (
@@ -806,10 +807,10 @@ export default function TopicsPage() {
         <WorkflowPage
           title={`Topic policy · ${policyTopicName ?? ""}`}
           description="Edit and validate the complete SNS topic policy without a constrained dialog viewport."
-          breadcrumbs={[{ label: "Manager" }, { label: "SNS Topics" }, { label: "Policy" }]}
+          breadcrumbs={managerPageBreadcrumbs("topics", { label: "Policy" })}
           backLabel="Back to topics"
           onBack={policyCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           <div className="space-y-3">
             {policyError && (

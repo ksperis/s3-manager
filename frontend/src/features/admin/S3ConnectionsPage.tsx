@@ -7,7 +7,8 @@ import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -48,7 +49,6 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { matchesExactTextCandidate, type TextMatchMode } from "../../utils/textMatch";
 import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinition } from "../../utils/uiTags";
-import AdminModalTabs from "./AdminModalTabs";
 import {
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
@@ -1218,10 +1218,10 @@ export default function S3ConnectionsPage() {
         <WorkflowPage
           title="Add S3 connection"
           description="Configure the endpoint, credentials, validation and workspace access in one page-level form."
-          breadcrumbs={[...adminPageBreadcrumbs("shared-connections"), { label: "Create" }]}
+          breadcrumbs={adminPageBreadcrumbs("shared-connections", { label: "Create" })}
           backLabel="Back to connections"
           onBack={createCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-6xl"
+          width="wide"
         >
           {createError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1320,10 +1320,11 @@ export default function S3ConnectionsPage() {
         <WorkflowPage
           title={`Edit connection · ${editing.name}`}
           description="Review endpoint identity, credentials and associations with enough room for validation feedback."
-          breadcrumbs={[...adminPageBreadcrumbs("shared-connections"), { label: "Edit" }]}
+          breadcrumbs={adminPageBreadcrumbs("shared-connections", { label: "Edit" })}
           backLabel="Back to connections"
           onBack={editCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
         >
           {editError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1331,15 +1332,17 @@ export default function S3ConnectionsPage() {
             </UiInlineMessage>
           )}
           <form className="space-y-4" onSubmit={submitEdit}>
-            <AdminModalTabs<EditTab>
+            <WorkflowTabs<EditTab>
               activeTab={editTab}
               onTabChange={setEditTab}
+              ariaLabel="Shared connection configuration sections"
+              idPrefix="admin-shared-connection-edit"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "users", label: "Linked UI users" },
                 { id: "groups", label: "Linked UI groups" },
               ]}
-            />
+            >
 
             {showEditGeneralTab && (
               <>
@@ -1636,15 +1639,16 @@ export default function S3ConnectionsPage() {
                 )}
               </div>
             )}
+            </WorkflowTabs>
 
-            <div className="flex items-center justify-end gap-3">
+            <WorkflowActions>
               <UiButton variant="secondary" onClick={editCloseGuard.requestClose} disabled={editBusy}>
                 Close
               </UiButton>
               <UiButton type="submit" disabled={editBusy}>
                 {editBusy ? "Saving..." : "Save"}
               </UiButton>
-            </div>
+            </WorkflowActions>
           </form>
           {editCloseGuard.confirmationDialog}
 

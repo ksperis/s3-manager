@@ -16,8 +16,8 @@ import {
   updateS3UserKeyStatus,
 } from "../../api/s3Users";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import ManagerTable, {
@@ -176,36 +176,34 @@ export default function S3UserKeysPage() {
 
   if (!userId || Number.isNaN(numericUserId)) {
     return (
-      <div className="space-y-4">
-        <PageHeader
-          title="User access keys"
-          description="Manage RGW keys for the selected user."
-          breadcrumbs={adminBreadcrumbs({ label: "Users", to: "/admin/s3-users" }, { label: "Access keys" })}
-        />
+      <PageShell
+        title="User access keys"
+        description="Manage RGW keys for the selected user."
+        breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: "Access keys" })}
+      >
         <PageBanner tone="error">Invalid user id provided.</PageBanner>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="User access keys"
-        description={
-          <>
-            Manage keys for <span className="font-semibold text-slate-700 dark:text-slate-100">{pageTitle}</span>.
-          </>
-        }
-        breadcrumbs={adminBreadcrumbs({ label: "Users", to: "/admin/s3-users" }, { label: pageTitle }, { label: "Access keys" })}
-        actions={[
-          { label: "← Back to users", to: "/admin/s3-users", variant: "ghost" },
-          {
-            label: busy === "create" ? "Creating..." : "New key",
-            onClick: handleCreateKey,
-            variant: "primary",
-          },
-        ]}
-      />
+    <PageShell
+      title="User access keys"
+      description={
+        <>
+          Manage keys for <span className="font-semibold text-slate-700 dark:text-slate-100">{pageTitle}</span>.
+        </>
+      }
+      breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: pageTitle }, { label: "Access keys" })}
+      actions={[
+        { label: "← Back to users", to: "/admin/s3-users", variant: "ghost" },
+        {
+          label: busy === "create" ? "Creating..." : "New key",
+          onClick: handleCreateKey,
+          variant: "primary",
+        },
+      ]}
+    >
 
       {interfaceKey && (
         <PageBanner tone="info">
@@ -302,6 +300,6 @@ export default function S3UserKeysPage() {
           })}
         </ManagerTable>
       </ListSectionCard>
-    </div>
+    </PageShell>
   );
 }

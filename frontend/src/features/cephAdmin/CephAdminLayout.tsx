@@ -21,6 +21,10 @@ import {
 } from "../../components/topbarControlWidths";
 import { useSelectorTagsPreference } from "../../utils/selectorTagsPreference";
 import { buildUiTagItems, filterSelectorVisibleUiTags } from "../../utils/uiTags";
+import {
+  CEPH_ADMIN_PAGE_CONTRACTS,
+  workspacePageLink,
+} from "../../navigation/workspacePages";
 
 function CephAdminShell() {
   const location = useLocation();
@@ -117,10 +121,9 @@ function CephAdminShell() {
     {
       label: "Overview",
       links: [
-        { to: "/ceph-admin", label: "Dashboard", end: true },
+        { ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.dashboard), end: true },
         {
-          to: "/ceph-admin/metrics",
-          label: "Usage & Metrics",
+          ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.metrics),
           disabled: !canMetrics,
           disabledHint: !canMetrics ? metricsDisabledHint : undefined,
         },
@@ -130,20 +133,17 @@ function CephAdminShell() {
       label: "CEPH S3",
       links: [
         {
-          to: "/ceph-admin/accounts",
-          label: "RGW Accounts",
+          ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.accounts),
           disabled: !canAccounts,
           disabledHint: !canAccounts ? accountsDisabledHint : undefined,
         },
         {
-          to: "/ceph-admin/users",
-          label: "RGW Users",
+          ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.users),
           disabled: !canAdmin,
           disabledHint: !canAdmin ? endpointAdminDisabledHint : undefined,
         },
         {
-          to: "/ceph-admin/buckets",
-          label: "Buckets",
+          ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.buckets),
           disabled: !canAdmin,
           disabledHint: !canAdmin ? endpointAdminDisabledHint : undefined,
         },
@@ -153,8 +153,7 @@ function CephAdminShell() {
       label: "Data",
       links: [
         {
-          to: "/ceph-admin/browser",
-          label: "Browser",
+          ...workspacePageLink(CEPH_ADMIN_PAGE_CONTRACTS.browser),
           disabled: browserLinkDisabled,
           disabledHint: browserDisabledHint,
         },

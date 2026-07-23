@@ -289,7 +289,7 @@ describe("GroupsPage", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
 
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
@@ -312,20 +312,20 @@ describe("GroupsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Create group" }));
     fireEvent.change(screen.getByPlaceholderText("Storage operators"), { target: { value: "ops-group" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Workspaces" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Workspaces" }));
     expect(screen.getByRole("checkbox", { name: "Allow group access to /ceph-admin" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Allow group access to /storage-ops" })).not.toBeChecked();
 
-    fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Browser" }));
     expect(screen.getByText("Browser options inherited by group members.")).toBeInTheDocument();
     const browserAdvancedToggle = screen.getByRole("checkbox", { name: "Enable advanced Browser features" });
     expect(browserAdvancedToggle).not.toBeChecked();
     fireEvent.click(browserAdvancedToggle);
 
-    fireEvent.click(screen.getByRole("button", { name: "Members" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Members" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "alice@example.com" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "acc-1" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
     fireEvent.click(screen.getByRole("button", { name: /S3 Users \(0\)/ }));
@@ -334,7 +334,7 @@ describe("GroupsPage", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "shared-conn" }));
     expect(screen.queryByRole("checkbox", { name: "private-conn" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Manager tools" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Manager tools" }));
     expect(screen.getByRole("checkbox", { name: "Bucket compare" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket integrity check" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Bucket migration" })).not.toBeChecked();
@@ -431,7 +431,7 @@ describe("GroupsPage", () => {
     render(<GroupsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByPlaceholderText("Storage operators"), { target: { value: "ops-group-updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Members" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Members" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "bob@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 

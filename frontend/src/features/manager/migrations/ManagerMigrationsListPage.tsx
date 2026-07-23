@@ -8,9 +8,10 @@ import { useNavigate } from "react-router-dom";
 import ListPageSection from "../../../components/list/ListPageSection";
 import PageBanner from "../../../components/PageBanner";
 import PageEmptyState from "../../../components/PageEmptyState";
-import PageHeader from "../../../components/PageHeader";
+import PageShell from "../../../components/PageShell";
 import { type BucketMigrationStatus } from "../../../api/managerMigrations";
 import { useS3AccountContext } from "../S3AccountContext";
+import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
 import { useManagerContexts, useManagerMigrationsList } from "./hooks";
 import {
   computeProgress,
@@ -53,19 +54,17 @@ export default function ManagerMigrationsListPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Bucket Migration"
-        description="Track migrations and open an operational view for each run."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Migration" }]}
-        actions={[
-          {
-            label: "New migration",
-            onClick: () => navigate("/manager/migrations/new"),
-          },
-        ]}
-      />
-
+    <PageShell
+      title="Bucket Migration"
+      description="Track migrations and open an operational view for each run."
+      breadcrumbs={managerPageBreadcrumbs("migration")}
+      actions={[
+        {
+          label: "New migration",
+          onClick: () => navigate("/manager/migrations/new"),
+        },
+      ]}
+    >
       {contextsLoading && <PageBanner tone="info">Loading contexts…</PageBanner>}
       {contextsError && <PageBanner tone="error">{contextsError}</PageBanner>}
       {migrationsError && <PageBanner tone="error">{migrationsError}</PageBanner>}
@@ -133,6 +132,6 @@ export default function ManagerMigrationsListPage() {
           </div>
         </ListPageSection>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { cx, uiDataTableClass, uiTableContainerClass } from "../../components/ui/styles";
+import { cx, uiDataTableClass, uiPanelMutedClass, uiTableContainerClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccessKey,
@@ -38,6 +38,7 @@ import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type Props = {
   endpointId: number;
@@ -448,12 +449,7 @@ export default function CephAdminUserEditModal({
   }, [tenant, uid]);
 
   const overviewTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">User {identityLabel}</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">Identity, status, and quotas at a glance.</p>
-      </header>
+    <section className="space-y-4">
       {detailLoading && <PageBanner tone="info">Loading user details...</PageBanner>}
       {detailError && <PageBanner tone="error">{detailError}</PageBanner>}
       {detail && (
@@ -477,7 +473,7 @@ export default function CephAdminUserEditModal({
               emptyHint="No storage quota defined."
             />
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className={cx(uiPanelMutedClass, "px-4 py-3")}>
             <dl className="grid gap-2 sm:grid-cols-2">
               <div>
                 <dt className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</dt>
@@ -511,11 +507,7 @@ export default function CephAdminUserEditModal({
   );
 
   const cephTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Ceph Admin</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Admin Ops configuration</h3>
-      </header>
+    <section className="space-y-4">
       {saveError && <PageBanner tone="error">{saveError}</PageBanner>}
       {saveStatus && <PageBanner tone="success">{saveStatus}</PageBanner>}
 
@@ -569,7 +561,7 @@ export default function CephAdminUserEditModal({
         />
       </div>
 
-      <div className="grid gap-2 rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
+      <div className={cx(uiPanelMutedClass, "grid gap-2 px-4 py-3 sm:grid-cols-2")}>
         <UiCheckboxField
           checked={suspended}
           onChange={(event) => setSuspended(event.target.checked)}
@@ -645,12 +637,7 @@ export default function CephAdminUserEditModal({
   );
 
   const s3Tab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Key Management</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Access keys</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">Manage S3 credentials for this user.</p>
-      </header>
+    <section className="space-y-4">
 
       {keysError && <PageBanner tone="error">{keysError}</PageBanner>}
       {keysStatus && <PageBanner tone="success">{keysStatus}</PageBanner>}
@@ -761,12 +748,7 @@ export default function CephAdminUserEditModal({
   );
 
   const metricsTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Metrics</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">RGW usage</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">Live usage and top buckets for this user.</p>
-      </header>
+    <section className="space-y-4">
 
       {metricsLoading && <PageBanner tone="info">Loading metrics...</PageBanner>}
       {metricsError && <PageBanner tone="error">{metricsError}</PageBanner>}
@@ -791,7 +773,7 @@ export default function CephAdminUserEditModal({
               emptyHint="No object quota defined."
             />
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className={cx(uiPanelMutedClass, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Top buckets by usage</p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">{metrics.bucket_count} bucket(s)</p>
@@ -857,12 +839,20 @@ export default function CephAdminUserEditModal({
     <WorkflowPage
       title={`Configure user · ${identityLabel}`}
       description="Review configuration, key management, capabilities and metrics on a full workspace page."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Users", to: "/ceph-admin/users" }, { label: identityLabel }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("users", { label: identityLabel })}
       backLabel="Back to users"
       onBack={closeGuard.requestClose}
       contentClassName="min-w-0"
+      contentVariant="plain"
     >
-      <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
+      <PageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onChange={(tab) => setActiveTab(tab as TabId)}
+        variant="line"
+        ariaLabel="User configuration sections"
+        idPrefix="ceph-admin-user-editor"
+      />
       {showAddConnectionModal && createdKey && addConnectionDefaults && (
         <AddS3ConnectionFromKeyModal
           isOpen={showAddConnectionModal}

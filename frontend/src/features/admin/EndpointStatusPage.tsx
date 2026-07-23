@@ -17,9 +17,9 @@ import {
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { extractApiError } from "../../utils/apiError";
@@ -297,16 +297,15 @@ export default function EndpointStatusPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Endpoint Status"
-        description="Global operational view across all storage endpoints."
-        breadcrumbs={adminBreadcrumbs({ label: "Connectivity" }, { label: "Endpoint Status" })}
-        actions={[
-          { label: runLoading ? "Running..." : "Check now", onClick: handleRunNow },
-          { label: "Refresh", onClick: loadAll, variant: "ghost" },
-        ]}
-      />
+    <PageShell
+      title="Endpoint Status"
+      description="Global operational view across all storage endpoints."
+      breadcrumbs={adminPageBreadcrumbs("endpoint-status")}
+      actions={[
+        { label: runLoading ? "Running..." : "Check now", onClick: handleRunNow },
+        { label: "Refresh", onClick: loadAll, variant: "ghost" },
+      ]}
+    >
       <PageControlStrip
         label="Global filter"
         title={statusFilterTitle}
@@ -327,7 +326,7 @@ export default function EndpointStatusPage() {
                   key={item.key}
                   type="button"
                   onClick={() => setStatusFilter((current) => (current === item.key ? "all" : item.key))}
-                  className={`rounded-xl border px-3 py-3 text-left shadow-sm transition ${
+                  className={`rounded-lg border px-3 py-3 text-left shadow-[var(--ui-shadow-soft)] transition ${
                     isActive ? "ring-2 ring-primary/40" : ""
                   } ${isDimmed ? "opacity-65" : ""} ${statusStatCardClasses(item.key, item.value)}`}
                 >
@@ -495,6 +494,6 @@ export default function EndpointStatusPage() {
           rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
         />
       </ListPageSection>
-    </div>
+    </PageShell>
   );
 }

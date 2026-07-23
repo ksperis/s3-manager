@@ -55,7 +55,7 @@ export default function InlinePolicyDraftEditor({
   const showEditor = mode !== "idle" || !hasDrafts;
 
   return (
-    <div className="space-y-3 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
+    <div className="space-y-3 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Inline policies (optional)</div>
@@ -101,7 +101,7 @@ export default function InlinePolicyDraftEditor({
       </div>
 
       {expanded && hasDrafts ? (
-        <div className="space-y-2 rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/30">
+        <div className="space-y-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3 shadow-[var(--ui-shadow-soft)]">
           <div className="flex items-center justify-between gap-2">
             <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Saved inline policies
@@ -117,7 +117,7 @@ export default function InlinePolicyDraftEditor({
               return (
                 <div
                   key={draft.name}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition ${
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition ${
                     isSelected
                       ? "border-primary/50 bg-primary/10 dark:border-primary-400/50 dark:bg-primary-500/10"
                       : "border-slate-200/80 bg-white/80 dark:border-slate-700 dark:bg-slate-950/20"
@@ -160,7 +160,7 @@ export default function InlinePolicyDraftEditor({
       ) : null}
 
       {expanded && showIdleState ? (
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+        <div className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3">
           <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
             Select a saved inline policy to edit, or create a new one.
           </p>
@@ -171,7 +171,7 @@ export default function InlinePolicyDraftEditor({
       ) : null}
 
       {expanded && showEditor ? (
-        <div className="space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="space-y-4 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3">
           <div className="space-y-1">
             <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
               {mode === "edit" ? `Editing "${selectedDraftName}"` : "Create a new inline policy"}

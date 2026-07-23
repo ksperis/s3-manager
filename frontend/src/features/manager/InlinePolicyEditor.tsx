@@ -268,7 +268,7 @@ export default function InlinePolicyEditor({
           <UiInlineMessage tone="success">{message}</UiInlineMessage>
         ) : null}
 
-        <div className="space-y-2 rounded-xl border border-slate-200/80 bg-white/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/30">
+        <div className="space-y-2 rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface)] p-3 shadow-[var(--ui-shadow-soft)]">
           <div className="flex items-center justify-between gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Existing inline policies
@@ -288,7 +288,7 @@ export default function InlinePolicyEditor({
                   type="button"
                   onClick={() => handleSelectExisting(policy.name)}
                   disabled={disabled}
-                  className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                  className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2 text-left transition ${
                     isSelected
                       ? "border-primary/50 bg-primary/10 dark:border-primary-400/50 dark:bg-primary-500/10"
                       : "border-slate-200/80 bg-white/80 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-950/20 dark:hover:border-primary-500/40"
@@ -316,7 +316,7 @@ export default function InlinePolicyEditor({
         </div>
 
         {showPromptState ? (
-          <div className="rounded-xl border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
@@ -340,7 +340,7 @@ export default function InlinePolicyEditor({
           </div>
         ) : (
           <form className="space-y-4" onSubmit={handleSave}>
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3">
               <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
                 {selectedPolicy ? `Edit "${selectedPolicy.name}"` : "Create a new inline policy"}
               </p>

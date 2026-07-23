@@ -26,6 +26,12 @@ import UiSelect from "../../components/ui/UiSelect";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
+import {
+  CEPH_ADMIN_PAGE_CONTRACTS,
+  MANAGER_PAGE_CONTRACTS,
+  STORAGE_OPS_PAGE_CONTRACTS,
+  buildWorkspacePageBreadcrumbs,
+} from "../../navigation/workspacePages";
 
 export type BucketIntegrityUiTarget = {
   bucketName: string;
@@ -239,14 +245,18 @@ export default function BucketIntegrityCheckModal(props: BucketIntegrityCheckMod
     props.onClose();
   };
 
-  const workspaceLabel = props.mode === "manager" ? "Manager" : props.mode === "ceph-admin" ? "Ceph Admin" : "Storage Ops";
-  const bucketsPath = props.mode === "manager" ? "/manager/bucket-integrity" : props.mode === "ceph-admin" ? "/ceph-admin/buckets" : "/storage-ops/buckets";
+  const breadcrumbs =
+    props.mode === "manager"
+      ? buildWorkspacePageBreadcrumbs("manager", MANAGER_PAGE_CONTRACTS.integrity, { label: "Run" })
+      : props.mode === "ceph-admin"
+        ? buildWorkspacePageBreadcrumbs("ceph-admin", CEPH_ADMIN_PAGE_CONTRACTS.buckets, { label: "Integrity check" })
+        : buildWorkspacePageBreadcrumbs("storage-ops", STORAGE_OPS_PAGE_CONTRACTS.buckets, { label: "Integrity check" });
 
   return (
     <WorkflowPage
       title="Check bucket integrity"
       description="Configure the read strategy, follow progress and review every affected bucket without blocking the bucket list."
-      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: "Integrity check" }]}
+      breadcrumbs={breadcrumbs}
       onBack={closeModal}
       backLabel={running ? "Stop and return" : "Back to bucket selection"}
       contentClassName="min-w-0"

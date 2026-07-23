@@ -3,10 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useInRouterContext } from "react-router-dom";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
-export type PageBreadcrumb = { label: string; to?: string };
+export type PageBreadcrumb = { label: string; to?: string; onClick?: () => void };
 type Action = {
   label: string;
   onClick?: () => void;
@@ -15,12 +15,13 @@ type Action = {
   disabled?: boolean;
 };
 
-type PageHeaderProps = {
+export type PageHeaderProps = {
   title: string;
   description?: ReactNode;
   breadcrumbs?: PageBreadcrumb[];
   actions?: Action[];
   inlineContent?: ReactNode;
+  metaContent?: ReactNode;
   rightContent?: ReactNode;
 };
 
@@ -30,8 +31,10 @@ export default function PageHeader({
   breadcrumbs = [],
   actions = [],
   inlineContent,
+  metaContent,
   rightContent,
 }: PageHeaderProps) {
+  const inRouterContext = useInRouterContext();
   const renderActions = () =>
     actions.map((action) => {
       const classes =
@@ -75,15 +78,30 @@ export default function PageHeader({
     <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {breadcrumbs.length > 0 && (
-          <nav className={cx("mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-4", uiMutedTextClass)}>
+          <nav
+            aria-label="Breadcrumb"
+            className={cx("mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-4", uiMutedTextClass)}
+          >
             {breadcrumbs.map((bc, idx) => (
-              <span key={bc.label} className="flex items-center gap-1.5">
-                {bc.to ? (
-                  <Link to={bc.to} className="transition hover:text-primary-700 dark:hover:text-primary-200">
+              <span key={`${bc.label}-${idx}`} className="flex items-center gap-1.5">
+                {bc.to && inRouterContext ? (
+                  <Link
+                    to={bc.to}
+                    onClick={bc.onClick}
+                    className="transition hover:text-primary-700 dark:hover:text-primary-200"
+                  >
                     {bc.label}
                   </Link>
+                ) : bc.to ? (
+                  <a
+                    href={bc.to}
+                    onClick={bc.onClick}
+                    className="transition hover:text-primary-700 dark:hover:text-primary-200"
+                  >
+                    {bc.label}
+                  </a>
                 ) : (
-                  <span>{bc.label}</span>
+                  <span aria-current={idx === breadcrumbs.length - 1 ? "page" : undefined}>{bc.label}</span>
                 )}
                 {idx < breadcrumbs.length - 1 && <span className="opacity-55">/</span>}
               </span>
@@ -95,6 +113,7 @@ export default function PageHeader({
           {inlineContent ? <div className="flex flex-wrap items-center gap-2">{inlineContent}</div> : null}
         </div>
         {description ? <p className={cx("mt-1 max-w-3xl text-xs leading-5", uiMutedTextClass)}>{description}</p> : null}
+        {metaContent ? <div className="mt-2 min-w-0">{metaContent}</div> : null}
       </div>
       {rightContent || actions.length > 0 ? (
         <div

@@ -15,6 +15,7 @@ import { extractApiError } from "../../utils/apiError";
 import BucketIntegrityCheckModal from "../shared/BucketIntegrityCheckModal";
 import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 export default function ManagerBucketIntegrityPage() {
   const { accounts, selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
@@ -118,7 +119,7 @@ export default function ManagerBucketIntegrityPage() {
       <PageHeader
         title="Bucket integrity"
         description="Read selected bucket objects and report retrieval failures."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Integrity" }]}
+        breadcrumbs={managerPageBreadcrumbs("integrity")}
       />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}

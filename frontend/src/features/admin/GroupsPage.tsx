@@ -21,7 +21,8 @@ import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3Conne
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import GroupAvatar from "../../components/GroupAvatar";
 import ListPageSection from "../../components/list/ListPageSection";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
@@ -52,7 +53,6 @@ import {
   adminAssociationTableClass as tableClass,
   adminAssociationTableContainerClass as tableContainerClass,
 } from "./AdminAssociationPicker";
-import AdminModalTabs from "./AdminModalTabs";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   PORTAL_ROLE_OPTIONS,
@@ -62,6 +62,7 @@ import {
   type ManagerToolKey,
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
+import UiButton from "../../components/ui/UiButton";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -859,10 +860,11 @@ export default function GroupsPage() {
         <WorkflowPage
           title={editingGroup ? "Edit UI group" : "Create UI group"}
           description="Manage members, associations and inherited workspace permissions in one dedicated page."
-          breadcrumbs={[...adminPageBreadcrumbs("groups"), { label: editingGroup ? "Edit" : "Create" }]}
+          breadcrumbs={adminPageBreadcrumbs("groups", { label: editingGroup ? "Edit" : "Create" })}
           backLabel="Back to groups"
           onBack={closeModal}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -870,9 +872,11 @@ export default function GroupsPage() {
             </PageBanner>
           )}
           <form onSubmit={submitGroup} className="space-y-4">
-            <AdminModalTabs<GroupModalTab>
+            <WorkflowTabs<GroupModalTab>
               activeTab={modalTab}
               onTabChange={setModalTab}
+              ariaLabel="UI group configuration sections"
+              idPrefix="admin-ui-group-editor"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "members", label: "Members" },
@@ -881,7 +885,7 @@ export default function GroupsPage() {
                 { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },
               ]}
-            />
+            >
 
             {modalTab === "general" && (
               <div className="grid grid-cols-1 gap-3">
@@ -1056,19 +1060,19 @@ export default function GroupsPage() {
                 />
               </div>
             )}
+            </WorkflowTabs>
 
-            <div className="flex items-center justify-end gap-3">
-              <button type="button" onClick={closeModal} className={secondaryButtonClass}>
+            <WorkflowActions>
+              <UiButton variant="secondary" onClick={closeModal}>
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
                 disabled={busyId === editingGroup?.id}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {busyId === editingGroup?.id ? "Saving..." : "Save"}
-              </button>
-            </div>
+              </UiButton>
+            </WorkflowActions>
           </form>
         </WorkflowPage>
       )}

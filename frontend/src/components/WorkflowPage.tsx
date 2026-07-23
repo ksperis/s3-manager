@@ -13,6 +13,9 @@ type WorkflowPageProps = {
   title: string;
   description?: ReactNode;
   breadcrumbs?: PageBreadcrumb[];
+  inlineContent?: ReactNode;
+  metaContent?: ReactNode;
+  rightContent?: ReactNode;
   backLabel?: string;
   backTo?: string;
   onBack?: () => void;
@@ -20,6 +23,14 @@ type WorkflowPageProps = {
   className?: string;
   contentClassName?: string;
   contentVariant?: "panel" | "plain";
+  width?: "full" | "narrow" | "standard" | "wide";
+};
+
+const workflowWidthClasses: Record<NonNullable<WorkflowPageProps["width"]>, string> = {
+  full: "w-full",
+  narrow: "w-full max-w-3xl",
+  standard: "w-full max-w-5xl",
+  wide: "w-full max-w-7xl",
 };
 
 /**
@@ -31,6 +42,9 @@ export default function WorkflowPage({
   title,
   description,
   breadcrumbs = [],
+  inlineContent,
+  metaContent,
+  rightContent,
   backLabel = "Back",
   backTo,
   onBack,
@@ -38,18 +52,49 @@ export default function WorkflowPage({
   className,
   contentClassName,
   contentVariant = "panel",
+  width = "full",
 }: WorkflowPageProps) {
   const inRouterContext = useInRouterContext();
+  let backBreadcrumbIndex = -1;
+  if (onBack) {
+    for (let index = breadcrumbs.length - 1; index >= 0; index -= 1) {
+      if (breadcrumbs[index].to) {
+        backBreadcrumbIndex = index;
+        break;
+      }
+    }
+  }
   const safeBreadcrumbs = inRouterContext
-    ? breadcrumbs
+    ? breadcrumbs.map((breadcrumb, index) =>
+        index === backBreadcrumbIndex
+          ? {
+              ...breadcrumb,
+              onClick: () => {
+                breadcrumb.onClick?.();
+                onBack?.();
+              },
+            }
+          : breadcrumb
+      )
     : breadcrumbs.map((breadcrumb) => ({ label: breadcrumb.label }));
   const actions = backTo || onBack
     ? [{ label: backLabel, to: inRouterContext ? backTo : undefined, onClick: onBack, variant: "secondary" as const }]
     : [];
 
   return (
-    <div className={cx("workflow-page space-y-4", className)}>
-      <PageHeader title={title} description={description} breadcrumbs={safeBreadcrumbs} actions={actions} />
+    <div
+      className={cx("workflow-page space-y-4", workflowWidthClasses[width], className)}
+      data-workflow-width={width}
+    >
+      <PageHeader
+        title={title}
+        description={description}
+        breadcrumbs={safeBreadcrumbs}
+        inlineContent={inlineContent}
+        metaContent={metaContent}
+        rightContent={rightContent}
+        actions={actions}
+      />
       <div
         className={cx(
           contentVariant === "panel" && uiPanelClass,
@@ -64,7 +109,7 @@ export default function WorkflowPage({
 }
 
 export function workflowPageHostClass(active: boolean, baseClass = "space-y-4"): string {
-  return cx(baseClass, active && "workflow-page-host--active");
+  return cx(baseClass, active && "workflow-page-host--active [&>.workflow-page]:!mt-0");
 }
 
 type WorkflowSurfaceProps = Omit<WorkflowPageProps, "onBack" | "backTo"> & {
@@ -130,5 +175,32 @@ export function WorkflowActions({ children, className }: WorkflowActionsProps) {
     <div className={cx("flex flex-wrap items-center justify-end gap-2 border-t pt-4", uiDividerClass, className)}>
       {children}
     </div>
+  );
+}
+
+type WorkflowMetadataItem = {
+  label: string;
+  value: ReactNode;
+  title?: string;
+};
+
+export function WorkflowMetadata({
+  items,
+  className,
+}: {
+  items: WorkflowMetadataItem[];
+  className?: string;
+}) {
+  return (
+    <dl className={cx("flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1", uiMutedTextClass, className)}>
+      {items.map((item) => (
+        <div key={item.label} className="flex min-w-0 items-baseline gap-1.5">
+          <dt className="shrink-0 text-[10px] font-semibold uppercase tracking-wide">{item.label}</dt>
+          <dd className="min-w-0 break-all text-xs font-semibold text-[var(--ui-text)]" title={item.title}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

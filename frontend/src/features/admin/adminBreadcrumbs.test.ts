@@ -13,13 +13,17 @@ describe("adminBreadcrumbs", () => {
 
   it("builds page breadcrumbs from one Admin root", () => {
     expect(adminPageBreadcrumbs("users")).toEqual([
-      { label: "Admin" },
-      { label: "Interface" },
+      { label: "Admin", to: "/admin" },
       { label: "UI Users" },
     ]);
     expect(adminPageBreadcrumbs("storage-endpoints")).toEqual([
-      { label: "Admin" },
-      { label: "Endpoints" },
+      { label: "Admin", to: "/admin" },
+      { label: "S3 Endpoints" },
+    ]);
+    expect(adminPageBreadcrumbs("users", { label: "Edit" })).toEqual([
+      { label: "Admin", to: "/admin" },
+      { label: "UI Users", to: "/admin/users" },
+      { label: "Edit" },
     ]);
   });
 });

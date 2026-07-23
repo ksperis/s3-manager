@@ -25,7 +25,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
 import UiInput from "../../components/ui/UiInput";
@@ -541,8 +541,7 @@ export default function PortalRequestsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <PageShell
         title={t({
           en: "Help requests",
           fr: "Demandes d'aide",
@@ -560,7 +559,7 @@ export default function PortalRequestsPage() {
             de: "Hilfeanfragen",
           }),
         })}
-      />
+    >
 
       {accountError ? (
         <PageBanner tone="error">{accountError}</PageBanner>
@@ -1037,7 +1036,7 @@ export default function PortalRequestsPage() {
           </form>
         </Modal>
       ) : null}
-    </div>
+    </PageShell>
   );
 }
 

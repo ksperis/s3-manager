@@ -22,6 +22,10 @@ import {
   getManagerToolAccess,
   readStoredUser,
 } from "../../utils/workspaces";
+import {
+  MANAGER_PAGE_CONTRACTS,
+  workspacePageLink,
+} from "../../navigation/workspacePages";
 
 type SessionCapabilities = {
   can_manage_iam?: boolean;
@@ -191,10 +195,9 @@ function ManagerShell() {
     {
       label: "Overview",
       links: [
-        { to: "/manager", label: "Dashboard", end: true },
+        { ...workspacePageLink(MANAGER_PAGE_CONTRACTS.dashboard), end: true },
         {
-          to: "/manager/metrics",
-          label: "Usage & Metrics",
+          ...workspacePageLink(MANAGER_PAGE_CONTRACTS.metrics),
           disabled: !canViewMetricsMenu,
           disabledHint: !canViewMetricsMenu ? managerMetricsDisabledHint : undefined,
         },
@@ -206,16 +209,16 @@ function ManagerShell() {
     navSections.push({
       label: "Storage",
       links: [
-        { to: "/manager/buckets", label: "Buckets" },
+        workspacePageLink(MANAGER_PAGE_CONTRACTS.buckets),
         ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserAvailable
-          ? [{ to: "/manager/browser", label: "Browser" }]
+          ? [workspacePageLink(MANAGER_PAGE_CONTRACTS.browser)]
           : []),
       ],
     });
     if (snsFeatureEnabled) {
       navSections.push({
         label: "Events",
-        links: [{ to: "/manager/topics", label: "SNS Topics" }],
+        links: [workspacePageLink(MANAGER_PAGE_CONTRACTS.topics)],
       });
     }
   }
@@ -224,10 +227,10 @@ function ManagerShell() {
     navSections.push({
       label: "IAM",
       links: [
-        { to: "/manager/users", label: "Users" },
-        { to: "/manager/groups", label: "Groups" },
-        { to: "/manager/roles", label: "Roles" },
-        { to: "/manager/iam/policies", label: "Policies" },
+        workspacePageLink(MANAGER_PAGE_CONTRACTS.users),
+        workspacePageLink(MANAGER_PAGE_CONTRACTS.groups),
+        workspacePageLink(MANAGER_PAGE_CONTRACTS.roles),
+        workspacePageLink(MANAGER_PAGE_CONTRACTS.policies),
       ],
     });
   }
@@ -235,26 +238,26 @@ function ManagerShell() {
   if (managerCephKeysEnabled) {
     navSections.push({
       label: "Ceph",
-      links: [{ to: "/manager/ceph/keys", label: "Access keys" }],
+      links: [workspacePageLink(MANAGER_PAGE_CONTRACTS["ceph-keys"])],
     });
   }
 
   if (canManageBuckets) {
     const toolsLinks: SidebarSection["links"] = [];
     if (canAccessFeatureRulesForUser) {
-      toolsLinks.push({ to: "/manager/feature-rules", label: "Feature rules", iconName: "rules" });
+      toolsLinks.push({ ...workspacePageLink(MANAGER_PAGE_CONTRACTS["feature-rules"]), iconName: "rules" });
     }
     if (canShowBucketCompare) {
-      toolsLinks.push({ to: "/manager/bucket-compare", label: "Compare", iconName: "compare" });
+      toolsLinks.push({ ...workspacePageLink(MANAGER_PAGE_CONTRACTS.compare), iconName: "compare" });
     }
     if (canShowBucketIntegrity) {
-      toolsLinks.push({ to: "/manager/bucket-integrity", label: "Integrity", iconName: "integrity" });
+      toolsLinks.push({ ...workspacePageLink(MANAGER_PAGE_CONTRACTS.integrity), iconName: "integrity" });
     }
     if (canShowBucketPurge) {
-      toolsLinks.push({ to: "/manager/bucket-purge", label: "Purge", iconName: "purge" });
+      toolsLinks.push({ ...workspacePageLink(MANAGER_PAGE_CONTRACTS.purge), iconName: "purge" });
     }
     if (canAccessMigration) {
-      toolsLinks.push({ to: "/manager/migrations", label: "Migration", iconName: "migration" });
+      toolsLinks.push({ ...workspacePageLink(MANAGER_PAGE_CONTRACTS.migration), iconName: "migration" });
     }
     if (toolsLinks.length > 0) {
       navSections.push({

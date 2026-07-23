@@ -28,6 +28,7 @@ import {
 import type { BucketProperties } from "../../api/buckets";
 import { S3AccountSelector } from "../../api/accountParams";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
@@ -963,7 +964,7 @@ export default function BucketsPage() {
       <PageHeader
         title="Buckets"
         description="Bucket inventory and configuration for the active manager context."
-        breadcrumbs={[{ label: "Manager" }, { label: "Buckets" }]}
+        breadcrumbs={managerPageBreadcrumbs("buckets")}
         actions={[
           {
             label: "Create bucket",
@@ -1157,14 +1158,10 @@ export default function BucketsPage() {
         <WorkflowPage
           title="Create bucket"
           description="Define the bucket identity and initial protection settings for the active manager context."
-          breadcrumbs={[
-            { label: "Manager" },
-            { label: "Buckets" },
-            { label: "Create" },
-          ]}
+          breadcrumbs={managerPageBreadcrumbs("buckets", { label: "Create" })}
           backLabel="Back to buckets"
           onBack={wizardCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-3xl"
+          width="narrow"
         >
           {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
           <form className="space-y-4" onSubmit={handleCreate}>

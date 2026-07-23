@@ -3,54 +3,72 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { PageBreadcrumb } from "../../components/PageHeader";
-
-const ADMIN_BREADCRUMB: PageBreadcrumb = { label: "Admin" };
+import {
+  ADMIN_PAGE_CONTRACTS as ADMIN_NAVIGATION_CONTRACTS,
+  buildWorkspaceBreadcrumbs,
+  buildWorkspacePageBreadcrumbs,
+  type WorkspacePageContract,
+} from "../../navigation/workspacePages";
 
 export function adminBreadcrumbs(...breadcrumbs: PageBreadcrumb[]): PageBreadcrumb[] {
-  return [ADMIN_BREADCRUMB, ...breadcrumbs];
+  return buildWorkspaceBreadcrumbs("admin", ...breadcrumbs);
 }
 
-export type AdminPageId =
+export type AdminPageId = keyof typeof ADMIN_NAVIGATION_CONTRACTS;
+type GovernedAdminPageId =
   | "accounts"
   | "groups"
+  | "rgw-users"
   | "shared-connections"
   | "storage-endpoints"
   | "users";
 
 export type AdminPageContract = {
   title: string;
-  breadcrumbs: PageBreadcrumb[];
+  navigation: WorkspacePageContract;
   governanceArea: "accounts" | "connections" | "endpoints" | "identity";
 };
 
-export const ADMIN_PAGE_CONTRACTS: Record<AdminPageId, AdminPageContract> = {
+export const ADMIN_PAGE_CONTRACTS: Record<GovernedAdminPageId, AdminPageContract> = {
   accounts: {
-    title: "Accounts",
-    breadcrumbs: [{ label: "Accounts" }],
+    title: ADMIN_NAVIGATION_CONTRACTS.accounts.label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS.accounts,
     governanceArea: "accounts",
   },
   groups: {
-    title: "UI Groups",
-    breadcrumbs: [{ label: "Platform" }, { label: "UI Groups" }],
+    title: ADMIN_NAVIGATION_CONTRACTS.groups.label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS.groups,
     governanceArea: "identity",
   },
+  "rgw-users": {
+    title: ADMIN_NAVIGATION_CONTRACTS["rgw-users"].label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS["rgw-users"],
+    governanceArea: "accounts",
+  },
   "shared-connections": {
-    title: "Shared S3 Connections",
-    breadcrumbs: [{ label: "Shared S3 Connections" }],
+    title: ADMIN_NAVIGATION_CONTRACTS["shared-connections"].label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS["shared-connections"],
     governanceArea: "connections",
   },
   "storage-endpoints": {
-    title: "Storage endpoints",
-    breadcrumbs: [{ label: "Endpoints" }],
+    title: ADMIN_NAVIGATION_CONTRACTS["storage-endpoints"].label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS["storage-endpoints"],
     governanceArea: "endpoints",
   },
   users: {
-    title: "UI Users",
-    breadcrumbs: [{ label: "Interface" }, { label: "UI Users" }],
+    title: ADMIN_NAVIGATION_CONTRACTS.users.label,
+    navigation: ADMIN_NAVIGATION_CONTRACTS.users,
     governanceArea: "identity",
   },
 };
 
-export function adminPageBreadcrumbs(pageId: AdminPageId): PageBreadcrumb[] {
-  return adminBreadcrumbs(...ADMIN_PAGE_CONTRACTS[pageId].breadcrumbs);
+export function adminPageBreadcrumbs(
+  pageId: AdminPageId,
+  ...trailingBreadcrumbs: PageBreadcrumb[]
+): PageBreadcrumb[] {
+  return buildWorkspacePageBreadcrumbs(
+    "admin",
+    ADMIN_NAVIGATION_CONTRACTS[pageId],
+    ...trailingBreadcrumbs,
+  );
 }

@@ -19,8 +19,8 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import StatCards from "../../components/StatCards";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import UiButton from "../../components/ui/UiButton";
@@ -365,23 +365,22 @@ export default function UsageHistoryPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Usage history"
-        description="Stored quota usage snapshots collected for RGW accounts and users."
-        breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Usage history" })}
-        rightContent={
-          <UiButton
-            onClick={() => void handleCollect()}
-            disabled={collectLoading}
-            loading={collectLoading}
-            size="sm"
-            leftIcon={<RefreshIcon className={cx("h-3.5 w-3.5", collectLoading && "animate-spin")} />}
-          >
-            {collectLoading ? "Collecting..." : "Collect usage"}
-          </UiButton>
-        }
-      />
+    <PageShell
+      title="Usage history"
+      description="Stored quota usage snapshots collected for RGW accounts and users."
+      breadcrumbs={adminPageBreadcrumbs("usage-history")}
+      rightContent={
+        <UiButton
+          onClick={() => void handleCollect()}
+          disabled={collectLoading}
+          loading={collectLoading}
+          size="sm"
+          leftIcon={<RefreshIcon className={cx("h-3.5 w-3.5", collectLoading && "animate-spin")} />}
+        >
+          {collectLoading ? "Collecting..." : "Collect usage"}
+        </UiButton>
+      }
+    >
 
       <PageControlStrip
         label="History scope"
@@ -510,6 +509,6 @@ export default function UsageHistoryPage() {
           rowClassName="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50"
         />
       </ListPageSection>
-    </div>
+    </PageShell>
   );
 }

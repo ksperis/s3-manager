@@ -16,7 +16,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import ManagerTable, {
   managerTableActionCellClass,
   managerTableCellClass,
@@ -29,6 +29,7 @@ import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 function parseError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -156,24 +157,22 @@ export default function ManagerCephKeysPage() {
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: filteredKeys.length });
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Ceph access keys"
-        description="Manage Ceph RGW access keys for this S3 User context."
-        breadcrumbs={[{ label: "Manager" }, { label: "Ceph" }, { label: "Access keys" }]}
-        actions={
-          canManageCephKeys
-            ? [
-                {
-                  label: busy === "create" ? "Creating..." : "New key",
-                  onClick: handleCreateKey,
-                  variant: "primary",
-                },
-              ]
-            : []
-        }
-      />
-
+    <PageShell
+      title="Ceph access keys"
+      description="Manage Ceph RGW access keys for this S3 User context."
+      breadcrumbs={managerPageBreadcrumbs("ceph-keys")}
+      actions={
+        canManageCephKeys
+          ? [
+              {
+                label: busy === "create" ? "Creating..." : "New key",
+                onClick: handleCreateKey,
+                variant: "primary",
+              },
+            ]
+          : []
+      }
+    >
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
@@ -292,6 +291,6 @@ export default function ManagerCephKeysPage() {
           </ManagerTable>
         </ListPageSection>
       )}
-    </div>
+    </PageShell>
   );
 }

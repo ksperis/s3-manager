@@ -1601,7 +1601,7 @@ export default function ProfilePage({
             <>
               {connectionsError && <PageBanner tone="error">{connectionsError}</PageBanner>}
               {connectionsMessage && <PageBanner tone="success">{connectionsMessage}</PageBanner>}
-              <div className="rounded-xl border border-slate-200/80 dark:border-slate-800">
+              <div className="rounded-lg border border-[color:var(--ui-border)]">
                 <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     {filteredConnections.length} connections shown
@@ -1844,7 +1844,7 @@ export default function ProfilePage({
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Create" }]}
           backLabel="Back to connections"
           onBack={createConnectionCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           {connectionsError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1948,7 +1948,7 @@ export default function ProfilePage({
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Edit" }]}
           backLabel="Back to connections"
           onBack={editConnectionCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           {connectionsError && (
             <UiInlineMessage tone="error" className="mb-3">

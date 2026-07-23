@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { cx, uiDataTableClass } from "../../components/ui/styles";
+import { cx, uiDataTableClass, uiPanelMutedClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccountDetail,
@@ -24,6 +24,7 @@ import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
 import { buildCephAdminQuotaPatch } from "./quotaPatch";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type Props = {
   endpointId: number;
@@ -360,12 +361,7 @@ export default function CephAdminAccountEditModal({
   const overviewQuota = detail?.quota ?? null;
 
   const overviewTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Account {accountId}</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">Core identifiers and current limits.</p>
-      </header>
+    <section className="space-y-4">
       {detailLoading && <PageBanner tone="info">Loading account details...</PageBanner>}
       {detailError && <PageBanner tone="error">{detailError}</PageBanner>}
       {detail && (
@@ -390,7 +386,7 @@ export default function CephAdminAccountEditModal({
               emptyHint="No user limit defined."
             />
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className={cx(uiPanelMutedClass, "px-4 py-3")}>
             <dl className="grid gap-2 sm:grid-cols-2">
               <div>
                 <dt className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</dt>
@@ -424,11 +420,7 @@ export default function CephAdminAccountEditModal({
   );
 
   const configTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Configuration</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Ceph Admin API settings</h3>
-      </header>
+    <section className="space-y-4">
       {saveError && <PageBanner tone="error">{saveError}</PageBanner>}
       {saveStatus && <PageBanner tone="success">{saveStatus}</PageBanner>}
       <div className="grid gap-3 md:grid-cols-2">
@@ -493,7 +485,7 @@ export default function CephAdminAccountEditModal({
         />
       </div>
 
-        <CephAdminQuotaFields
+      <CephAdminQuotaFields
         title="Account quota"
         enabledLabel="Enable account quota"
         enabled={quotaEnabled}
@@ -508,7 +500,7 @@ export default function CephAdminAccountEditModal({
         objectPlaceholder="Leave empty to clear"
       />
 
-        <CephAdminQuotaFields
+      <CephAdminQuotaFields
         title="Bucket quota"
         enabledLabel="Enable bucket quota"
         enabled={bucketQuotaEnabled}
@@ -532,12 +524,7 @@ export default function CephAdminAccountEditModal({
   );
 
   const metricsTab = (
-    <section className="space-y-4 ui-surface-card p-5">
-      <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Metrics</p>
-        <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">RGW usage</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">Live usage and top buckets for this account.</p>
-      </header>
+    <section className="space-y-4">
       {metricsLoading && <PageBanner tone="info">Loading metrics...</PageBanner>}
       {metricsError && <PageBanner tone="error">{metricsError}</PageBanner>}
       {metrics && (
@@ -561,7 +548,7 @@ export default function CephAdminAccountEditModal({
               emptyHint="No object quota defined."
             />
           </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className={cx(uiPanelMutedClass, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Top buckets by usage</p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">{metrics.bucket_count} bucket(s)</p>
@@ -619,12 +606,20 @@ export default function CephAdminAccountEditModal({
     <WorkflowPage
       title={`Configure account · ${accountId}`}
       description="Review configuration, quotas and metrics without nested dialog scrolling."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Accounts", to: "/ceph-admin/accounts" }, { label: accountId }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("accounts", { label: accountId })}
       backLabel="Back to accounts"
       onBack={closeGuard.requestClose}
       contentClassName="min-w-0"
+      contentVariant="plain"
     >
-      <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
+      <PageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onChange={(tab) => setActiveTab(tab as TabId)}
+        variant="line"
+        ariaLabel="Account configuration sections"
+        idPrefix="ceph-admin-account-editor"
+      />
       {closeGuard.confirmationDialog}
     </WorkflowPage>
   );

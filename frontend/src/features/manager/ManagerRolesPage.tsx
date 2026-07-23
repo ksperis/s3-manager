@@ -5,6 +5,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import { S3AccountSelector } from "../../api/accountParams";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -487,7 +488,7 @@ export default function ManagerRolesPage() {
       <PageHeader
         title="IAM Roles"
         description="Manage roles using the account root keys."
-        breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }]}
+        breadcrumbs={managerPageBreadcrumbs("roles")}
         actions={
           !needsS3AccountSelection && !isS3User
             ? [
@@ -595,10 +596,10 @@ export default function ManagerRolesPage() {
         <WorkflowPage
           title="Create IAM role"
           description="Configure the trust policy, path and attached policies without compressing the workflow into an overlay."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }, { label: "Create" }]}
+          breadcrumbs={managerPageBreadcrumbs("roles", { label: "Create" })}
           backLabel="Back to roles"
           onBack={advancedCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
@@ -636,7 +637,7 @@ export default function ManagerRolesPage() {
                 IAM trust policy document used by STS AssumeRole. Provide valid JSON.
               </p>
             </div>
-            <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
+            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Attach policies</div>
@@ -753,10 +754,10 @@ export default function ManagerRolesPage() {
         <WorkflowPage
           title={editingRole ? `Edit IAM role: ${editingRole.name}` : "Edit IAM role"}
           description="Review the immutable identity and update the role trust policy in a dedicated page."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Roles" }, { label: "Edit" }]}
+          breadcrumbs={managerPageBreadcrumbs("roles", { label: "Edit" })}
           backLabel="Back to roles"
           onBack={editCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-4xl"
+          width="standard"
         >
           {error && <PageBanner tone="error">{error}</PageBanner>}
           {loadingRoleDetails ? (

@@ -8,7 +8,8 @@ import { S3AccountSelector } from "../../api/accountParams";
 import { IAMUser, listIamUsers } from "../../api/managerIamUsers";
 import { addIamGroupUser, listIamGroupUsers, removeIamGroupUser } from "../../api/managerIamGroups";
 import { useS3AccountContext } from "./S3AccountContext";
-import PageHeader from "../../components/PageHeader";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
+import PageShell from "../../components/PageShell";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
@@ -120,14 +121,13 @@ export default function ManagerGroupUsersPage() {
 
   if (isS3User) {
     return (
-      <div className="space-y-4">
-        <PageHeader
+      <PageShell
           title="Group members"
           description="Manage IAM group membership."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }, { label: "Users" }]}
-        />
+          breadcrumbs={managerPageBreadcrumbs("groups", { label: "Users" })}
+      >
         <PageBanner tone="info">IAM features are disabled for standalone S3 users. Select an S3 Account to continue.</PageBanner>
-      </div>
+      </PageShell>
     );
   }
 
@@ -183,26 +183,24 @@ export default function ManagerGroupUsersPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Group members"
-        description={
-          <>
-            Manage users for <span className="font-semibold text-slate-700 dark:text-slate-100">{decodedGroup}</span>.
-          </>
-        }
-        breadcrumbs={[
-          { label: "Manager" },
-          { label: "IAM", to: "/manager/groups" },
-          { label: decodedGroup },
-          { label: "Users" },
-        ]}
-        actions={[
-          { label: "← Back to groups", to: "/manager/groups", variant: "ghost" },
-          { label: "Attached policies", to: `/manager/groups/${encodeURIComponent(decodedGroup)}/policies`, variant: "ghost" },
-          { label: "Refresh", onClick: handleRefresh, variant: "ghost" },
-        ]}
-      />
+    <PageShell
+      title="Group members"
+      description={
+        <>
+          Manage users for <span className="font-semibold text-slate-700 dark:text-slate-100">{decodedGroup}</span>.
+        </>
+      }
+      breadcrumbs={managerPageBreadcrumbs(
+        "groups",
+        { label: decodedGroup },
+        { label: "Users" },
+      )}
+      actions={[
+        { label: "← Back to groups", to: "/manager/groups", variant: "ghost" },
+        { label: "Attached policies", to: `/manager/groups/${encodeURIComponent(decodedGroup)}/policies`, variant: "ghost" },
+        { label: "Refresh", onClick: handleRefresh, variant: "ghost" },
+      ]}
+    >
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
@@ -257,6 +255,6 @@ export default function ManagerGroupUsersPage() {
           responsiveCards
         />
       </div>
-    </div>
+    </PageShell>
   );
 }

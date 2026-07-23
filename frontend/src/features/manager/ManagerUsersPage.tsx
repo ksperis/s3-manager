@@ -5,6 +5,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import { S3AccountSelector } from "../../api/accountParams";
 import {
   AccessKey,
@@ -424,7 +425,7 @@ export default function ManagerUsersPage() {
       <PageHeader
         title="Users"
         description="Create/delete via the account root credentials. Optionally generate an access key on creation."
-        breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }]}
+        breadcrumbs={managerPageBreadcrumbs("users")}
         actions={
           !needsS3AccountSelection && !isS3User
             ? [
@@ -623,15 +624,10 @@ export default function ManagerUsersPage() {
         <WorkflowPage
           title="Create IAM user"
           description="Create the identity, attach managed or inline policies, and optionally generate its first access key."
-          breadcrumbs={[
-            { label: "Manager" },
-            { label: "IAM" },
-            { label: "Users" },
-            { label: "Create" },
-          ]}
+          breadcrumbs={managerPageBreadcrumbs("users", { label: "Create" })}
           backLabel="Back to users"
           onBack={advancedCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
@@ -653,7 +649,7 @@ export default function ManagerUsersPage() {
             >
               Auto-generate an access key (shown only once)
             </UiCheckboxField>
-            <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
+            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Add to groups (optional)</div>
@@ -699,7 +695,7 @@ export default function ManagerUsersPage() {
                 </div>
               )}
             </div>
-            <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
+            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Attach policies (optional)</div>

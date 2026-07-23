@@ -23,6 +23,7 @@ import { extractApiError } from "../../utils/apiError";
 import { stableSignature } from "../../utils/stableSignature";
 import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type Props = {
   endpointId: number;
@@ -273,10 +274,10 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
     <WorkflowPage
       title="Create user"
       description="Configure identity, quotas, capabilities and the initial access key on a dedicated page."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Users", to: "/ceph-admin/users" }, { label: "Create" }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("users", { label: "Create" })}
       backLabel="Back to users"
       onBack={closeGuard.requestClose}
-      contentClassName="mx-auto max-w-6xl"
+      width="wide"
     >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}

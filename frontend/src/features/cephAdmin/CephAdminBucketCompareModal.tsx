@@ -20,6 +20,7 @@ import {
   listCephAdminBuckets,
   type CephAdminBucketCompareConfigFeature,
 } from "../../api/cephAdmin";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import {
   BUCKET_COMPARE_CONFIG_FEATURE_OPTIONS,
   CompareVisibleKeysCopyFeedback,
@@ -682,7 +683,7 @@ export default function CephAdminBucketCompareModal({
     <WorkflowPage
       title="Compare buckets"
       description="Map source and target buckets, run the comparison and review or export the resulting differences."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Buckets", to: "/ceph-admin/buckets" }, { label: "Compare" }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("buckets", { label: "Compare" })}
       onBack={handleClose}
       backLabel={running ? "Stop and return" : "Back to buckets"}
       contentClassName="min-w-0"

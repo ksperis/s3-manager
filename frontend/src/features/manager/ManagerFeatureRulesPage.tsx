@@ -8,7 +8,7 @@ import ListPageSection from "../../components/list/ListPageSection";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import UiSegmentedControl from "../../components/ui/UiSegmentedControl";
 import ManagerTable, {
@@ -34,6 +34,7 @@ import {
 import { S3AccountSelector } from "../../api/accountParams";
 import { extractApiError } from "../../utils/apiError";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 type StatusFilter = "all" | FeatureRuleInventoryStatus;
 
@@ -162,13 +163,11 @@ export default function ManagerFeatureRulesPage() {
   const readErrorFallback = feature === "tags" ? "Unable to read tags" : "Unable to read rules";
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Feature rule inventory"
-        description="Read-only inventory of bucket feature rules and tags in the active manager context."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Feature rules" }]}
-      />
-
+    <PageShell
+      title="Feature rule inventory"
+      description="Read-only inventory of bucket feature rules and tags in the active manager context."
+      breadcrumbs={managerPageBreadcrumbs("feature-rules")}
+    >
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {needsS3AccountSelection ? (
@@ -340,6 +339,6 @@ export default function ManagerFeatureRulesPage() {
           </pre>
         </Modal>
       )}
-    </div>
+    </PageShell>
   );
 }

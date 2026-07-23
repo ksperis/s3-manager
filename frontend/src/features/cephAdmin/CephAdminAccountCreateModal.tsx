@@ -16,6 +16,7 @@ import { extractApiError } from "../../utils/apiError";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { stableSignature } from "../../utils/stableSignature";
 import CephAdminQuotaFields, { type CephAdminQuotaUnit } from "./CephAdminQuotaFields";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type Props = {
   endpointId: number;
@@ -204,10 +205,10 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
     <WorkflowPage
       title="Create account"
       description="Define the RGW account identity and quotas in a dedicated Ceph Admin workflow."
-      breadcrumbs={[{ label: "Ceph Admin" }, { label: "Accounts", to: "/ceph-admin/accounts" }, { label: "Create" }]}
+      breadcrumbs={cephAdminPageBreadcrumbs("accounts", { label: "Create" })}
       backLabel="Back to accounts"
       onBack={closeGuard.requestClose}
-      contentClassName="mx-auto max-w-5xl"
+      width="standard"
     >
       <div className="space-y-4">
         {error && <PageBanner tone="error">{error}</PageBanner>}

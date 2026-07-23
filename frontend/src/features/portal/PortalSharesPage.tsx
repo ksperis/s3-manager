@@ -26,7 +26,7 @@ import DataTableShell, {
 } from "../../components/list/DataTableShell";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import PageTabs from "../../components/PageTabs";
 import Modal from "../../components/Modal";
 import {
@@ -43,7 +43,6 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
-  uiDividerClass,
   uiInputClass,
   uiLabelClass,
   uiMutedTextClass,
@@ -872,8 +871,7 @@ export default function PortalSharesPage() {
   if (pageState) return pageState;
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <PageShell
         title={t({
           en: "Collaborators",
           fr: "Collaborateurs",
@@ -918,7 +916,7 @@ export default function PortalSharesPage() {
             to: "/portal/storage-spaces",
           },
         ]}
-      />
+    >
       {sharesError ? (
         <PageBanner tone="warning">{sharesError}</PageBanner>
       ) : null}
@@ -993,7 +991,7 @@ export default function PortalSharesPage() {
                 de: "Diese Übersicht ist schreibgeschützt. Öffnen Sie einen Bereich, um Personen einzuladen, Rollen zu ändern oder Zugriffe zu entfernen.",
               })}
             </p>
-            <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
+            <div className="mb-3">
               <PageTabs
                 tabs={[
                   {
@@ -1015,7 +1013,7 @@ export default function PortalSharesPage() {
                 ]}
                 activeTab={activeTab}
                 onChange={(tab) => setActiveTab(tab as ShareTab)}
-                variant="bar"
+                variant="line"
                 ariaLabel={t({
                   en: "Access direction",
                   fr: "Direction des accès",
@@ -1297,6 +1295,6 @@ export default function PortalSharesPage() {
           onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
         />
       ) : null}
-    </div>
+    </PageShell>
   );
 }

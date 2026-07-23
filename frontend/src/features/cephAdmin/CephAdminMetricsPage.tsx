@@ -21,13 +21,13 @@ import MetricsTrafficOverview, { MetricsSnapshotCard, MetricsSummaryCard } from 
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import UsageBreakdown from "../../components/UsageBreakdown";
-import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 type CephAdminMetricsTab = "storage" | "usage-composition" | "traffic";
 
@@ -261,7 +261,7 @@ export default function CephAdminMetricsPage() {
       <PageHeader
         title="Usage & Metrics"
         description="Latest calculated logical usage composition plus cluster-wide Ceph RGW storage and traffic metrics."
-        breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Usage & Metrics" }]}
+        breadcrumbs={cephAdminPageBreadcrumbs("metrics")}
       />
 
       {endpointRequired ? (
@@ -314,15 +314,16 @@ export default function CephAdminMetricsPage() {
             />
           )}
 
-          <div className={cx("border-b pb-3", uiDividerClass)}>
-            <PageTabs
-              tabs={metricsTabs}
-              activeTab={activeTab}
-              onChange={(tab) => setActiveTab(tab as CephAdminMetricsTab)}
-              variant="bar"
-            />
-          </div>
+          <PageTabs
+            tabs={metricsTabs}
+            activeTab={activeTab}
+            onChange={(tab) => setActiveTab(tab as CephAdminMetricsTab)}
+            variant="line"
+            ariaLabel="Ceph Admin metrics sections"
+            idPrefix="ceph-admin-metrics"
+          />
 
+          <PageTabPanel idPrefix="ceph-admin-metrics" tabId={activeTab} className="space-y-4 pt-4">
           {activeTab === "storage" ? (
             metricsUnavailableError ? (
               <MetricsUnavailableCard
@@ -467,6 +468,7 @@ export default function CephAdminMetricsPage() {
               userRankingTitle="Most active owners"
             />
           ) : null}
+          </PageTabPanel>
         </>
       )}
     </div>

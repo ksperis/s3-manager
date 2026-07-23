@@ -5,13 +5,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import PageHeader from "../../../components/PageHeader";
+import PageShell from "../../../components/PageShell";
 import { resolveListTableStatus } from "../../../components/list/listTableStatus";
 import UiButton from "../../../components/ui/UiButton";
 import UiCheckboxField from "../../../components/ui/UiCheckboxField";
 import UiInput from "../../../components/ui/UiInput";
 import UiSelect from "../../../components/ui/UiSelect";
-import { uiRadioClass } from "../../../components/ui/styles";
+import { cx, uiPanelClass, uiPanelMutedClass, uiRadioClass } from "../../../components/ui/styles";
 import {
   createManagerMigration,
   getManagerMigration,
@@ -21,6 +21,7 @@ import {
 } from "../../../api/managerMigrations";
 import ManagerBucketSelectionPanel from "../ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "../S3AccountContext";
+import { managerPageBreadcrumbs } from "../managerBreadcrumbs";
 import { useCrossEndpointSelection, useManagerContexts, useManagerSourceBuckets } from "./hooks";
 import { buildPlannedSteps, extractError, isMigrationPrecheckPassed } from "./shared";
 
@@ -359,20 +360,19 @@ export default function ManagerMigrationWizardPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={editMigrationId == null ? "New migration" : `Edit draft #${editMigrationId}`}
-        description="Guided setup to create or update a migration draft."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Migration" }]}
-        actions={[{ label: "Back to list", onClick: () => navigate("/manager/migrations") }]}
-      />
+    <PageShell
+      title={editMigrationId == null ? "New migration" : `Edit draft #${editMigrationId}`}
+      description="Guided setup to create or update a migration draft."
+      breadcrumbs={managerPageBreadcrumbs("migration", { label: "Create" })}
+      actions={[{ label: "Back to list", onClick: () => navigate("/manager/migrations") }]}
+    >
 
       {(contextsLoading || editLoading) && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading...</p>}
       {contextsError && <p className="ui-caption text-rose-600 dark:text-rose-300">{contextsError}</p>}
       {bucketsError && <p className="ui-caption text-rose-600 dark:text-rose-300">{bucketsError}</p>}
       {formError && <p className="ui-caption text-rose-600 dark:text-rose-300">{formError}</p>}
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <section className={cx(uiPanelClass, "space-y-4 p-4")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             {stepLabel(0, "1. Context & buckets")}
@@ -422,7 +422,7 @@ export default function ManagerMigrationWizardPage() {
 
         {step === 0 && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+            <div className={cx(uiPanelMutedClass, "p-3")}>
               <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Endpoints</p>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
@@ -752,6 +752,6 @@ export default function ManagerMigrationWizardPage() {
         )}
 
       </section>
-    </div>
+    </PageShell>
   );
 }

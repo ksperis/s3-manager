@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useRef, useState } from "react";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   SettingsCard,
@@ -14,7 +14,6 @@ import {
   settingsCompactInputClassName,
   settingsTextareaClassName,
 } from "../../components/settings/SettingsLayout";
-import UiButton from "../../components/ui/UiButton";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -202,31 +201,24 @@ export default function PortalSettingsPage() {
   const bucketCorsEnabled = Boolean(settings?.portal.bucket_defaults.enable_cors);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Portal settings"
-        description="Configure Portal self-service behavior and storage projections."
-        breadcrumbs={adminBreadcrumbs({ label: "Portal" }, { label: "Settings" })}
-        rightContent={
-          <div className="flex flex-wrap gap-2">
-            <UiButton
-              variant="ghost"
-              onClick={handleResetDefaults}
-              disabled={!settings || saving || resetting}
-              className="py-1.5 disabled:pointer-events-none"
-            >
-              {resetting ? "Resetting..." : "Reset to defaults"}
-            </UiButton>
-            <UiButton
-              onClick={handleSave}
-              disabled={!settings || saving || resetting}
-              className="py-1.5 disabled:pointer-events-none"
-            >
-              {saving ? "Saving..." : "Save changes"}
-            </UiButton>
-          </div>
-        }
-      />
+    <PageShell
+      title="Portal settings"
+      description="Configure Portal self-service behavior and storage projections."
+      breadcrumbs={adminPageBreadcrumbs("portal-settings")}
+      actions={[
+        {
+          label: resetting ? "Resetting..." : "Reset to defaults",
+          onClick: handleResetDefaults,
+          variant: "ghost",
+          disabled: !settings || saving || resetting,
+        },
+        {
+          label: saving ? "Saving..." : "Save changes",
+          onClick: handleSave,
+          disabled: !settings || saving || resetting,
+        },
+      ]}
+    >
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
@@ -385,6 +377,6 @@ export default function PortalSettingsPage() {
           </SettingsSection>
         </SettingsCard>
       </form>
-    </div>
+    </PageShell>
   );
 }

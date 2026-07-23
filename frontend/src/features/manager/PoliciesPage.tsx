@@ -4,6 +4,7 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IamPolicy, createIamPolicy, listIamPolicies } from "../../api/managerIamPolicies";
 import ListPageSection from "../../components/list/ListPageSection";
@@ -144,7 +145,7 @@ export default function PoliciesPage() {
       <PageHeader
         title="IAM Policies"
         description="List and create Ceph IAM policies for the selected account."
-        breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Policies" }]}
+        breadcrumbs={managerPageBreadcrumbs("policies")}
         actions={
           !needsS3AccountSelection && !isS3User
             ? [
@@ -214,10 +215,10 @@ export default function PoliciesPage() {
         <WorkflowPage
           title="Create IAM policy"
           description="Name the policy and edit its complete JSON document with page-level space."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Policies" }, { label: "Create" }]}
+          breadcrumbs={managerPageBreadcrumbs("policies", { label: "Create" })}
           backLabel="Back to policies"
           onBack={advancedCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-4xl"
+          width="standard"
         >
           {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>

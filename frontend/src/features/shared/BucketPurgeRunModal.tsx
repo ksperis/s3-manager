@@ -25,6 +25,12 @@ import UiProgressBar from "../../components/ui/UiProgressBar";
 import { extractApiError } from "../../utils/apiError";
 import { formatCompactNumber, formatNumber } from "../../utils/format";
 import { BucketOperationSummaryStat } from "./bucketOperationRunUi";
+import {
+  CEPH_ADMIN_PAGE_CONTRACTS,
+  MANAGER_PAGE_CONTRACTS,
+  STORAGE_OPS_PAGE_CONTRACTS,
+  buildWorkspacePageBreadcrumbs,
+} from "../../navigation/workspacePages";
 
 export type BucketPurgeUiTarget = {
   bucketName: string;
@@ -244,13 +250,13 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
     props.onClose();
   };
 
-  const workspaceLabel = surfaceLabel(props);
-  const bucketsPath =
+  const workflowLabel = isDeleteMode ? "Purge and delete" : "Purge";
+  const breadcrumbs =
     props.mode === "manager" || props.mode === "manager-delete"
-      ? "/manager/buckets"
+      ? buildWorkspacePageBreadcrumbs("manager", MANAGER_PAGE_CONTRACTS.buckets, { label: workflowLabel })
       : props.mode === "ceph-admin"
-        ? "/ceph-admin/buckets"
-        : "/storage-ops/buckets";
+        ? buildWorkspacePageBreadcrumbs("ceph-admin", CEPH_ADMIN_PAGE_CONTRACTS.buckets, { label: workflowLabel })
+        : buildWorkspacePageBreadcrumbs("storage-ops", STORAGE_OPS_PAGE_CONTRACTS.buckets, { label: workflowLabel });
 
   return (
     <WorkflowPage
@@ -260,7 +266,7 @@ export default function BucketPurgeRunModal(props: BucketPurgeRunModalProps) {
           ? "Review the target, confirm the destructive operation and follow deletion through completion."
           : "Review the selected buckets, confirm the destructive operation and keep progress visible through completion."
       }
-      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: isDeleteMode ? "Purge and delete" : "Purge" }]}
+      breadcrumbs={breadcrumbs}
       onBack={closeModal}
       backLabel={running ? "Stop and return" : "Back to buckets"}
       contentClassName="min-w-0"

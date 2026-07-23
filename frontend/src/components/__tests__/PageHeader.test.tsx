@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { MemoryRouter } from "react-router-dom";
 import PageHeader from "../PageHeader";
@@ -18,7 +18,10 @@ describe("PageHeader", () => {
 
     expect(screen.getByRole("heading", { name: "Billing" })).toBeInTheDocument();
     expect(screen.getByText("Monthly usage and cost overview.")).toBeInTheDocument();
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(breadcrumb).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin");
+    expect(within(breadcrumb).getByText("Billing")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" }).parentElement).toHaveClass("sm:pt-6");
     expect(container.querySelector("header")).not.toHaveClass("ui-surface-card");
@@ -46,7 +49,7 @@ describe("PageHeader", () => {
         <PageHeader
           title="Storage Spaces"
           description="Manage end-user storage spaces."
-          breadcrumbs={[{ label: "Portal" }, { label: "Storage Spaces", to: "/portal/storage-spaces" }]}
+          breadcrumbs={[{ label: "Portal", to: "/portal" }, { label: "Storage Spaces" }]}
           actions={[{ label: "Create", onClick: () => undefined, variant: "primary" }]}
         />
       </MemoryRouter>

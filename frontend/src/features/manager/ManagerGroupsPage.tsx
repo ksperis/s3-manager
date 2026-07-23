@@ -5,6 +5,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import { S3AccountSelector } from "../../api/accountParams";
 import { IAMGroup, attachGroupPolicy, createIamGroup, deleteIamGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
@@ -326,7 +327,7 @@ export default function ManagerGroupsPage() {
       <PageHeader
         title="IAM Groups"
         description="Manage groups using the account root keys."
-        breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }]}
+        breadcrumbs={managerPageBreadcrumbs("groups")}
         actions={
           !needsS3AccountSelection && !isS3User
             ? [
@@ -429,10 +430,10 @@ export default function ManagerGroupsPage() {
         <WorkflowPage
           title="Create IAM group"
           description="Define the group and attach its managed and inline policies in one focused workflow."
-          breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Groups" }, { label: "Create" }]}
+          breadcrumbs={managerPageBreadcrumbs("groups", { label: "Create" })}
           backLabel="Back to groups"
           onBack={advancedCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           {error && <PageBanner tone="error">{error}</PageBanner>}
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
@@ -447,7 +448,7 @@ export default function ManagerGroupsPage() {
                 required
               />
             </div>
-            <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
+            <div className="space-y-2 rounded-lg border border-dashed border-[color:var(--ui-border)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="ui-body font-semibold text-slate-800 dark:text-slate-100">Attach policies</div>

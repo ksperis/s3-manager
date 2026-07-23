@@ -16,8 +16,8 @@ import {
 } from "recharts";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import ListPageSection from "../../components/list/ListPageSection";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -485,24 +485,23 @@ export default function BillingPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Billing"
-        description="Monthly usage and cost overview."
-        breadcrumbs={adminBreadcrumbs({ label: "Audit & Reporting" }, { label: "Billing" })}
-        rightContent={
-          <UiButton
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleExport()}
-            disabled={!canExport}
-            title={canExport ? "Export the selected month as CSV" : "Select a Ceph endpoint with billing data before exporting"}
-            leftIcon={<DownloadIcon className="h-3.5 w-3.5" />}
-          >
-            Export CSV
-          </UiButton>
-        }
-      />
+    <PageShell
+      title="Billing"
+      description="Monthly usage and cost overview."
+      breadcrumbs={adminPageBreadcrumbs("billing")}
+      rightContent={
+        <UiButton
+          variant="secondary"
+          size="sm"
+          onClick={() => void handleExport()}
+          disabled={!canExport}
+          title={canExport ? "Export the selected month as CSV" : "Select a Ceph endpoint with billing data before exporting"}
+          leftIcon={<DownloadIcon className="h-3.5 w-3.5" />}
+        >
+          Export CSV
+        </UiButton>
+      }
+    >
       <PageControlStrip
         label="Billing scope"
         title={selectedEndpoint?.name ?? "No Ceph endpoint selected"}
@@ -808,6 +807,6 @@ export default function BillingPage() {
           </section>
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

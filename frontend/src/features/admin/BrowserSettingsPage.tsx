@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useState } from "react";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   SettingsCard,
@@ -154,25 +154,24 @@ export default function BrowserSettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Browser settings"
-        description="Configure upload concurrency for the browser."
-        breadcrumbs={adminBreadcrumbs({ label: "Browser" }, { label: "Settings" })}
-        actions={[
-          {
-            label: resetting ? "Resetting..." : "Reset to defaults",
-            onClick: handleResetDefaults,
-            variant: "ghost",
-            disabled: !settings || saving || resetting,
-          },
-          {
-            label: saving ? "Saving..." : "Save changes",
-            onClick: handleSave,
-            disabled: !settings || saving || resetting,
-          },
-        ]}
-      />
+    <PageShell
+      title="Browser settings"
+      description="Configure upload concurrency for the browser."
+      breadcrumbs={adminPageBreadcrumbs("browser-settings")}
+      actions={[
+        {
+          label: resetting ? "Resetting..." : "Reset to defaults",
+          onClick: handleResetDefaults,
+          variant: "ghost",
+          disabled: !settings || saving || resetting,
+        },
+        {
+          label: saving ? "Saving..." : "Save changes",
+          onClick: handleSave,
+          disabled: !settings || saving || resetting,
+        },
+      ]}
+    >
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
@@ -386,6 +385,6 @@ export default function BrowserSettingsPage() {
           </div>
         )}
       </form>
-    </div>
+    </PageShell>
   );
 }

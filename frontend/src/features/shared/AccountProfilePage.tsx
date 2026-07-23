@@ -3,19 +3,24 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 
-import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
+import PageShell from "../../components/PageShell";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 import ApiTokensPage from "../admin/ApiTokensPage";
 import ProfilePage from "./ProfilePage";
+import {
+  buildWorkspaceBreadcrumbs,
+  type WorkspaceId,
+} from "../../navigation/workspacePages";
 
 type AccountTab = "profile" | "connections" | "api-tokens";
 
 export default function AccountProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const { generalSettings } = useGeneralSettings();
   const storedUser = useMemo(() => readStoredUser(), []);
   const isS3Session = storedUser?.authType === "s3_session";
@@ -35,6 +40,15 @@ export default function AccountProfilePage() {
   const requestedTab = searchParams.get("tab") as AccountTab | null;
   const activeTab: AccountTab = requestedTab && availableTabs.includes(requestedTab) ? requestedTab : "profile";
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const workspace: WorkspaceId = location.pathname.startsWith("/ceph-admin")
+    ? "ceph-admin"
+    : location.pathname.startsWith("/storage-ops")
+      ? "storage-ops"
+      : location.pathname.startsWith("/manager")
+        ? "manager"
+        : location.pathname.startsWith("/portal")
+          ? "portal"
+          : "admin";
 
   useEffect(() => {
     if (!requestedTab || requestedTab === activeTab) return;
@@ -66,22 +80,30 @@ export default function AccountProfilePage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="User profile"
-        description="Manage your identity, preferences, private storage connections, and automation tokens."
-        breadcrumbs={[{ label: "Profile" }]}
+    <PageShell
+      title="User profile"
+      description="Manage your identity, preferences, private storage connections, and automation tokens."
+      breadcrumbs={buildWorkspaceBreadcrumbs(workspace, { label: "Profile" })}
+    >
+      <PageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onChange={changeTab}
+        variant="line"
+        ariaLabel="Profile sections"
+        idPrefix="account-profile"
       />
-      <PageTabs tabs={tabs} activeTab={activeTab} onChange={changeTab} variant="bar" />
-      {activeTab === "profile" ? (
-        <ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} onUnsavedChangesChange={setHasUnsavedChanges} />
-      ) : null}
-      {activeTab === "connections" ? (
-        <ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection onUnsavedChangesChange={setHasUnsavedChanges} />
-      ) : null}
-      {activeTab === "api-tokens" ? (
-        <ApiTokensPage showPageHeader={false} onUnsavedChangesChange={setHasUnsavedChanges} />
-      ) : null}
-    </div>
+      <PageTabPanel idPrefix="account-profile" tabId={activeTab}>
+        {activeTab === "profile" ? (
+          <ProfilePage showPageHeader={false} showSettingsCards showConnectionsSection={false} onUnsavedChangesChange={setHasUnsavedChanges} />
+        ) : null}
+        {activeTab === "connections" ? (
+          <ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection onUnsavedChangesChange={setHasUnsavedChanges} />
+        ) : null}
+        {activeTab === "api-tokens" ? (
+          <ApiTokensPage showPageHeader={false} onUnsavedChangesChange={setHasUnsavedChanges} />
+        ) : null}
+      </PageTabPanel>
+    </PageShell>
   );
 }

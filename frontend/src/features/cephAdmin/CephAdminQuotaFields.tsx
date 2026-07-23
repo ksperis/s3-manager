@@ -4,7 +4,7 @@
  */
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
-import { cx, uiCheckboxClass } from "../../components/ui/styles";
+import { cx, uiCheckboxClass, uiPanelMutedClass } from "../../components/ui/styles";
 
 export type CephAdminQuotaUnit = "MiB" | "GiB" | "TiB";
 
@@ -44,7 +44,8 @@ export default function CephAdminQuotaFields({
   return (
     <section
       className={cx(
-        "space-y-3 rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40",
+        uiPanelMutedClass,
+        "space-y-3 px-4 py-3",
         className
       )}
     >

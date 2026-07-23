@@ -18,7 +18,7 @@ import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
@@ -432,8 +432,7 @@ export default function PortalObjectDetailPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <PageShell
         title={object.name || objectName(object.path)}
         description={pageDescription}
         breadcrumbs={portalBreadcrumbs(
@@ -445,7 +444,7 @@ export default function PortalObjectDetailPage() {
           { label: downloading ? t({ en: "Downloading...", fr: "Téléchargement...", de: "Wird heruntergeladen..." }) : t({ en: "Download", fr: "Télécharger", de: "Herunterladen" }), onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
           { label: t({ en: "Share", fr: "Partager", de: "Freigeben" }), onClick: openPublicLinkDialog, variant: "secondary", disabled: Boolean(publicLinkUnavailableReason) || linkBusy },
         ]}
-      />
+    >
 
       <UiCard>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)] lg:items-start">
@@ -697,6 +696,6 @@ export default function PortalObjectDetailPage() {
           onConfirm={() => confirmRevokePublicLink(pendingAction.link)}
         />
       ) : null}
-    </div>
+    </PageShell>
   );
 }

@@ -52,10 +52,10 @@ describe("AccountProfilePage", () => {
     renderPage();
 
     expect(screen.getByText("Profile content")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Private S3 connections" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "API tokens" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Private S3 connections" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "API tokens" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Private S3 connections" }));
+    await user.click(screen.getByRole("tab", { name: "Private S3 connections" }));
     expect(screen.getByText("Connections content")).toBeInTheDocument();
     expect(screen.getByText("/profile?tab=connections")).toBeInTheDocument();
   });
@@ -75,7 +75,7 @@ describe("AccountProfilePage", () => {
     renderPage();
 
     await user.click(screen.getByRole("button", { name: "Make dirty" }));
-    await user.click(screen.getByRole("button", { name: "API tokens" }));
+    await user.click(screen.getByRole("tab", { name: "API tokens" }));
 
     expect(window.confirm).toHaveBeenCalledWith("Discard unsaved changes?");
     expect(screen.getByText("Profile content")).toBeInTheDocument();

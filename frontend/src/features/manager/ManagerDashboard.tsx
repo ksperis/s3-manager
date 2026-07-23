@@ -78,6 +78,7 @@ import { BucketUsageStatsDataTypesCard } from "../shared/BucketUsageStatsVisuals
 import { useIamOverview } from "./useIamOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 type BucketRankingRow = {
   name: string;
@@ -1253,7 +1254,7 @@ export default function ManagerDashboard() {
       <PageHeader
         title="Manager dashboard"
         description={`Overview of ${accountLabel} storage account and resources.`}
-        breadcrumbs={[{ label: "Manager" }, { label: "Dashboard" }]}
+        breadcrumbs={managerPageBreadcrumbs("dashboard")}
         rightContent={
           <div className="flex items-center gap-3">
             <span className={cx("hidden ui-caption sm:inline", uiMutedTextClass)}>

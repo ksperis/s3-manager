@@ -1402,8 +1402,8 @@ export default function StorageEndpointsPage() {
         <WorkflowPage
           title="Loading storage endpoint"
           description="Retrieving endpoint configuration and access mode."
-          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: "Loading" }]}
-          contentClassName="mx-auto max-w-3xl"
+          breadcrumbs={adminPageBreadcrumbs("storage-endpoints", { label: "Loading" })}
+          width="narrow"
         >
           <PageBanner tone="info">Loading endpoint configuration...</PageBanner>
         </WorkflowPage>
@@ -1411,17 +1411,17 @@ export default function StorageEndpointsPage() {
         <WorkflowPage
           title="Storage endpoint not found"
           description="The requested endpoint does not exist or is no longer available."
-          breadcrumbs={[...adminPageBreadcrumbs("storage-endpoints"), { label: "Not found" }]}
+          breadcrumbs={adminPageBreadcrumbs("storage-endpoints", { label: "Not found" })}
           backLabel="Back to endpoints"
           onBack={() => navigate("/admin/storage-endpoints")}
-          contentClassName="mx-auto max-w-3xl"
+          width="narrow"
         >
           <PageBanner tone="warning">Select an endpoint from the current storage endpoint list.</PageBanner>
         </WorkflowPage>
       ) : !showForm ? (
         <>
       <PageHeader
-        title="Storage endpoints"
+        title="S3 Endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
         breadcrumbs={adminPageBreadcrumbs("storage-endpoints")}
         actions={envManaged || !canEditEndpoints ? [] : [{ label: "New endpoint", onClick: startCreate }]}
@@ -1448,7 +1448,7 @@ export default function StorageEndpointsPage() {
       {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       <ListPageSection
-          title="Storage endpoints"
+          title="S3 Endpoints"
           description="Configured S3/Ceph endpoints and operational capabilities."
           countLabel={`${endpoints.length} endpoint${endpoints.length === 1 ? "" : "s"}`}
       >
@@ -1473,13 +1473,13 @@ export default function StorageEndpointsPage() {
         <WorkflowPage
           title={editorTitle}
           description="Review connection settings, operational credentials, capabilities and health checks in dedicated sections."
-          breadcrumbs={[
-            ...adminPageBreadcrumbs("storage-endpoints"),
-            { label: editingId ? editingEndpoint?.name ?? "Endpoint" : "Create" },
-          ]}
+          breadcrumbs={adminPageBreadcrumbs("storage-endpoints", {
+            label: editingId ? editingEndpoint?.name ?? "Endpoint" : "Create",
+          })}
           backLabel="Back to endpoints"
           onBack={formCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && <PageBanner tone="error">{formError}</PageBanner>}
@@ -1491,16 +1491,14 @@ export default function StorageEndpointsPage() {
               </PageBanner>
             )}
             {endpointTagCatalogError && <PageBanner tone="warning">{endpointTagCatalogError}</PageBanner>}
-            <div className="border-b border-[color:var(--ui-border)] pb-3">
-              <PageTabs
-                tabs={editorTabs}
-                activeTab={activeTab}
-                onChange={(tab) => setActiveTab(tab as EndpointEditorTab)}
-                variant="bar"
-                ariaLabel="Endpoint configuration sections"
-                idPrefix="endpoint-editor"
-              />
-            </div>
+            <PageTabs
+              tabs={editorTabs}
+              activeTab={activeTab}
+              onChange={(tab) => setActiveTab(tab as EndpointEditorTab)}
+              variant="line"
+              ariaLabel="Endpoint configuration sections"
+              idPrefix="endpoint-editor"
+            />
 
             {activeTab === "general" && (
               <div

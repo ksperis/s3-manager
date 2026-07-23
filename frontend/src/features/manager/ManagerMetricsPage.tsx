@@ -14,17 +14,17 @@ import {
   type UsageHistoryTrendWindow,
 } from "../../api/usageHistory";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
-import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
+import PageShell from "../../components/PageShell";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
 import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageEmptyState from "../../components/PageEmptyState";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
-import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
 import TrafficAnalytics from "./TrafficAnalytics";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import { useManagerStats } from "./useManagerStats";
 
 type ManagerMetricsTab = "storage" | "usage-composition" | "usage-history" | "traffic";
@@ -187,13 +187,11 @@ export default function ManagerMetricsPage() {
   }, [activeTab, metricsTabs]);
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Usage & Metrics"
-        description="Logical usage composition, storage analytics, and traffic analytics for the active execution context."
-        breadcrumbs={[{ label: "Manager" }, { label: "Overview" }, { label: "Usage & Metrics" }]}
-      />
-
+    <PageShell
+      title="Usage & Metrics"
+      description="Logical usage composition, storage analytics, and traffic analytics for the active execution context."
+      breadcrumbs={managerPageBreadcrumbs("metrics")}
+    >
       {!hasContext ? (
         <PageEmptyState
           title="Select an account to view usage and metrics"
@@ -217,15 +215,16 @@ export default function ManagerMetricsPage() {
         />
       ) : (
         <>
-          <div className={cx("border-b pb-3", uiDividerClass)}>
-            <PageTabs
-              tabs={metricsTabs}
-              activeTab={activeTab}
-              onChange={(tab) => setActiveTab(tab as ManagerMetricsTab)}
-              variant="bar"
-            />
-          </div>
+          <PageTabs
+            tabs={metricsTabs}
+            activeTab={activeTab}
+            onChange={(tab) => setActiveTab(tab as ManagerMetricsTab)}
+            variant="line"
+            ariaLabel="Manager metrics sections"
+            idPrefix="manager-metrics"
+          />
 
+          <PageTabPanel idPrefix="manager-metrics" tabId={activeTab} className="space-y-4 pt-4">
           {activeTab === "storage" ? (
             <>
               {managerMetricsMessage && !showUsageBreakdowns && (
@@ -337,8 +336,9 @@ export default function ManagerMetricsPage() {
               visible={activeTab === "traffic"}
             />
           )}
+          </PageTabPanel>
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

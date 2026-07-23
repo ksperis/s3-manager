@@ -28,12 +28,11 @@ import MetricsUnavailableCard from "../../components/MetricsUnavailableCard";
 import PageControlStrip from "../../components/PageControlStrip";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
-import PageTabs from "../../components/PageTabs";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageTabs, { PageTabPanel } from "../../components/PageTabs";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import UsageHistoryTrendsSection from "../../components/UsageHistoryTrendsSection";
 import UiSelect from "../../components/ui/UiSelect";
-import { cx, uiDividerClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCard";
@@ -325,7 +324,7 @@ export default function AdminMetricsPage() {
       <PageHeader
         title="Usage & Metrics"
         description="Managed account usage composition, platform storage, and traffic analytics."
-        breadcrumbs={adminBreadcrumbs({ label: "Overview", to: "/admin" }, { label: "Usage & Metrics" })}
+        breadcrumbs={adminPageBreadcrumbs("metrics")}
       />
       <PageControlStrip
         label="Metrics scope"
@@ -373,15 +372,16 @@ export default function AdminMetricsPage() {
 
       {selectedEndpointId != null && (
         <>
-          <div className={cx("border-b pb-3", uiDividerClass)}>
-            <PageTabs
-              tabs={metricsTabs}
-              activeTab={activeTab}
-              onChange={(tab) => setActiveTab(tab as AdminMetricsTab)}
-              variant="bar"
-            />
-          </div>
+          <PageTabs
+            tabs={metricsTabs}
+            activeTab={activeTab}
+            onChange={(tab) => setActiveTab(tab as AdminMetricsTab)}
+            variant="line"
+            ariaLabel="Admin metrics sections"
+            idPrefix="admin-metrics"
+          />
 
+          <PageTabPanel idPrefix="admin-metrics" tabId={activeTab} className="space-y-4 pt-4">
           {activeTab === "storage" ? (
             storageError ? (
               <MetricsUnavailableCard
@@ -491,6 +491,7 @@ export default function AdminMetricsPage() {
               showEmpty={missingTraffic}
             />
           ) : null}
+          </PageTabPanel>
         </>
       )}
     </div>

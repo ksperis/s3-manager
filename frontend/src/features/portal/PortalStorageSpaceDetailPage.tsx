@@ -1486,10 +1486,14 @@ export default function PortalStorageSpaceDetailPage() {
             fr: "Choisissez les collaborateurs et attribuez-leur le rôle nécessaire pour cet espace.",
             de: "Wählen Sie Mitwirkende aus und vergeben Sie die passende Rolle für diesen Bereich.",
           })}
-          breadcrumbs={[{ label: "Portal" }, { label: space.name }, { label: t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" }) }]}
+          breadcrumbs={portalBreadcrumbs(
+            { label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), to: "/portal/storage-spaces" },
+            { label: space.name },
+            { label: t({ en: "Add people", fr: "Ajouter", de: "Hinzufügen" }) },
+          )}
           backLabel={t({ en: "Back to the space", fr: "Retour à l'espace", de: "Zurück zum Bereich" })}
           onBack={accessBusy ? undefined : closeAccessPeopleDialog}
-          contentClassName="mx-auto max-w-6xl"
+          width="wide"
         >
           <div className="space-y-4">
             {accessError ? <PageBanner tone="error">{accessError}</PageBanner> : null}
@@ -1625,10 +1629,20 @@ export default function PortalStorageSpaceDetailPage() {
             fr: "Vérifiez l'impact, suivez l'analyse complète et conservez le résultat du nettoyage visible.",
             de: "Prüfen Sie die Auswirkungen, verfolgen Sie den vollständigen Scan und behalten Sie das Ergebnis sichtbar.",
           })}
-          breadcrumbs={[{ label: "Portal" }, { label: space.name }, { label: t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historienbereinigung" }) }]}
+          breadcrumbs={portalBreadcrumbs(
+            { label: t({ en: "Spaces", fr: "Espaces", de: "Bereiche" }), to: "/portal/storage-spaces" },
+            { label: space.name },
+            {
+              label: t({
+                en: "History cleanup",
+                fr: "Nettoyage de l'historique",
+                de: "Historienbereinigung",
+              }),
+            },
+          )}
           backLabel={t({ en: "Back to the space", fr: "Retour à l'espace", de: "Zurück zum Bereich" })}
           onBack={historyCleanupRunning ? undefined : closeHistoryCleanupDialog}
-          contentClassName="mx-auto max-w-5xl"
+          width="standard"
         >
           <div className="space-y-4">
             {historyCleanupError ? <PageBanner tone="warning">{historyCleanupError}</PageBanner> : null}

@@ -9,6 +9,7 @@ import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 
 export default function CephAdminBrowserPage() {
   const navigate = useNavigate();
@@ -18,8 +19,8 @@ export default function CephAdminBrowserPage() {
   const [selectedBrowserBucketName, setSelectedBrowserBucketName] = useState("");
   const browserSelector = acceptedRisk && selectedEndpointId ? `ceph-admin-${selectedEndpointId}` : null;
   const breadcrumbs = selectedBrowserBucketName
-    ? [{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Browser" }, { label: selectedBrowserBucketName }]
-    : [{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Browser" }];
+    ? cephAdminPageBreadcrumbs("browser", { label: selectedBrowserBucketName })
+    : cephAdminPageBreadcrumbs("browser");
 
   const handleCloseModal = () => {
     setShowRiskModal(false);

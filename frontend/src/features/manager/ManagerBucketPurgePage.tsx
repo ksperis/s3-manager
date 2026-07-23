@@ -15,6 +15,7 @@ import { extractApiError } from "../../utils/apiError";
 import BucketPurgeRunModal from "../shared/BucketPurgeRunModal";
 import ManagerBucketSelectionPanel from "./ManagerBucketSelectionPanel";
 import { useS3AccountContext } from "./S3AccountContext";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
 export default function ManagerBucketPurgePage() {
   const { accounts, selectedS3AccountId, requiresS3AccountSelection } = useS3AccountContext();
@@ -118,7 +119,7 @@ export default function ManagerBucketPurgePage() {
       <PageHeader
         title="Bucket purge"
         description="Empty selected buckets without deleting bucket configuration."
-        breadcrumbs={[{ label: "Manager" }, { label: "Tools" }, { label: "Purge" }]}
+        breadcrumbs={managerPageBreadcrumbs("purge")}
       />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}

@@ -17,7 +17,7 @@ type PageTabsProps = {
   activeTab: string;
   onChange: (id: string) => void;
   headerActions?: ReactNode;
-  variant?: "card" | "bar";
+  variant?: "card" | "bar" | "line";
   ariaLabel?: string;
   idPrefix?: string;
 };
@@ -84,7 +84,11 @@ export default function PageTabs({
   };
 
   const tabList = (
-    <div className="flex flex-wrap gap-2" role={ariaLabel ? "tablist" : undefined} aria-label={ariaLabel}>
+    <div
+      className="flex min-w-0 flex-1 flex-wrap gap-2"
+      role={ariaLabel ? "tablist" : undefined}
+      aria-label={ariaLabel}
+    >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
@@ -113,12 +117,32 @@ export default function PageTabs({
       })}
     </div>
   );
+  const activeContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
-  if (variant === "bar") {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2">
+  if (variant === "bar" || variant === "line") {
+    const tabBar = (
+      <div
+        className={cx(
+          "flex min-w-0 flex-wrap items-center justify-between gap-2",
+          variant === "line" && "border-b pb-3",
+          variant === "line" && uiDividerClass,
+        )}
+      >
         {tabList}
         {headerActions ? <div className="flex items-center gap-2">{headerActions}</div> : null}
+      </div>
+    );
+    if (!activeContent) return tabBar;
+    return (
+      <div>
+        {tabBar}
+        {ariaLabel && idPrefix ? (
+          <PageTabPanel idPrefix={idPrefix} tabId={activeTab} className="mt-4">
+            {activeContent}
+          </PageTabPanel>
+        ) : (
+          <div className="mt-4">{activeContent}</div>
+        )}
       </div>
     );
   }
@@ -129,13 +153,13 @@ export default function PageTabs({
         {tabList}
         {headerActions ? <div className="flex items-center gap-2">{headerActions}</div> : null}
       </div>
-      {tabs.find((t) => t.id === activeTab)?.content &&
+      {activeContent &&
         (ariaLabel && idPrefix ? (
           <PageTabPanel idPrefix={idPrefix} tabId={activeTab} className="p-3">
-            {tabs.find((t) => t.id === activeTab)?.content}
+            {activeContent}
           </PageTabPanel>
         ) : (
-          <div className="p-3">{tabs.find((t) => t.id === activeTab)?.content}</div>
+          <div className="p-3">{activeContent}</div>
         ))}
     </div>
   );

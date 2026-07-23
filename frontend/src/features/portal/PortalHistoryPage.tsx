@@ -8,7 +8,7 @@ import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
 import PageEmptyState from "../../components/PageEmptyState";
-import PageHeader from "../../components/PageHeader";
+import PageShell from "../../components/PageShell";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiBadge from "../../components/ui/UiBadge";
@@ -992,8 +992,7 @@ export default function PortalHistoryPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <PageShell
         title={t({ en: "History", fr: "Historique", de: "Verlauf" })}
         description={
           canViewServerAccessLogs
@@ -1015,7 +1014,7 @@ export default function PortalHistoryPage() {
             {t({ en: "Visible spaces only", fr: "Espaces visibles uniquement", de: "Nur sichtbare Bereiche" })}
           </div>
         }
-      />
+    >
 
       <PortalPageTabs
         tabs={historyTabs}
@@ -1342,6 +1341,6 @@ export default function PortalHistoryPage() {
           </form>
         </Modal>
       ) : null}
-    </div>
+    </PageShell>
   );
 }

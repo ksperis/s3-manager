@@ -22,6 +22,7 @@ import { tableActionMenuItemClasses, tableCompactIconActionButtonClasses } from 
 import CephAdminAdminOpsModal from "./CephAdminAdminOpsModal";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
+import { cephAdminPageBreadcrumbs } from "./cephAdminBreadcrumbs";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import {
   FILTER_COST_LABEL,
@@ -1100,7 +1101,7 @@ export default function CephAdminUsersPage() {
       <PageHeader
         title="RGW Users"
         description="Complete list of RGW users (admin ops)."
-        breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Users" }]}
+        breadcrumbs={cephAdminPageBreadcrumbs("users")}
         actions={
           selectedEndpointId
             ? [

@@ -3,8 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from "react";
-import PageHeader from "../../components/PageHeader";
-import { adminBreadcrumbs } from "./adminBreadcrumbs";
+import PageShell from "../../components/PageShell";
+import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import PageBanner from "../../components/PageBanner";
 import {
   SettingsCard,
@@ -556,25 +556,24 @@ export default function AuthenticationSettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Authentication settings"
-        description="Configure login behavior, private connection access, OIDC providers, and LDAP providers."
-        breadcrumbs={adminBreadcrumbs({ label: "Authentication" }, { label: "Settings" })}
-        actions={[
-          {
-            label: resetting ? "Resetting..." : "Reset to defaults",
-            onClick: handleResetDefaults,
-            variant: "ghost",
-            disabled: !settings || saving || resetting,
-          },
-          {
-            label: saving ? "Saving..." : "Save changes",
-            onClick: handleSave,
-            disabled: !settings || saving || resetting,
-          },
-        ]}
-      />
+    <PageShell
+      title="Authentication settings"
+      description="Configure login behavior, private connection access, OIDC providers, and LDAP providers."
+      breadcrumbs={adminPageBreadcrumbs("authentication-settings")}
+      actions={[
+        {
+          label: resetting ? "Resetting..." : "Reset to defaults",
+          onClick: handleResetDefaults,
+          variant: "ghost",
+          disabled: !settings || saving || resetting,
+        },
+        {
+          label: saving ? "Saving..." : "Save changes",
+          onClick: handleSave,
+          disabled: !settings || saving || resetting,
+        },
+      ]}
+    >
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
       {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
@@ -1373,6 +1372,6 @@ export default function AuthenticationSettingsPage() {
           </form>
         )}
       </SettingsCard>
-    </div>
+    </PageShell>
   );
 }

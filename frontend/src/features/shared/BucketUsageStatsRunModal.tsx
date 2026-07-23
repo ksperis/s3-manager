@@ -28,6 +28,11 @@ import {
   bucketOperationTableHeaderClass,
   bucketOperationTableHeaderRightClass,
 } from "./bucketOperationRunUi";
+import {
+  CEPH_ADMIN_PAGE_CONTRACTS,
+  STORAGE_OPS_PAGE_CONTRACTS,
+  buildWorkspacePageBreadcrumbs,
+} from "../../navigation/workspacePages";
 
 export type BucketUsageStatsUiTarget = {
   bucketName: string;
@@ -153,14 +158,16 @@ export default function BucketUsageStatsRunModal(props: BucketUsageStatsRunModal
     props.onClose();
   };
 
-  const workspaceLabel = props.mode === "ceph-admin" ? "Ceph Admin" : "Storage Ops";
-  const bucketsPath = props.mode === "ceph-admin" ? "/ceph-admin/buckets" : "/storage-ops/buckets";
+  const breadcrumbs =
+    props.mode === "ceph-admin"
+      ? buildWorkspacePageBreadcrumbs("ceph-admin", CEPH_ADMIN_PAGE_CONTRACTS.buckets, { label: "Usage stats" })
+      : buildWorkspacePageBreadcrumbs("storage-ops", STORAGE_OPS_PAGE_CONTRACTS.buckets, { label: "Usage stats" });
 
   return (
     <WorkflowPage
       title="Calculate bucket usage stats"
       description="Run the calculation as a page-level task and keep progress and per-bucket results visible."
-      breadcrumbs={[{ label: workspaceLabel }, { label: "Buckets", to: bucketsPath }, { label: "Usage stats" }]}
+      breadcrumbs={breadcrumbs}
       onBack={closeModal}
       backLabel={running ? "Stop and return" : "Back to buckets"}
       contentClassName="min-w-0"

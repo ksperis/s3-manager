@@ -6,6 +6,7 @@ import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import WorkflowPage from "../../components/WorkflowPage";
+import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiDetails from "../../components/ui/UiDetails";
@@ -960,12 +961,7 @@ export default function ManagerBucketCompareModal({
     <WorkflowPage
       title="Compare buckets"
       description="Configure the target mapping, run the comparison, and review or remediate differences without leaving the workflow."
-      breadcrumbs={[
-        { label: "Manager" },
-        { label: "Tools" },
-        { label: "Compare" },
-        { label: "Run" },
-      ]}
+      breadcrumbs={managerPageBreadcrumbs("compare", { label: "Run" })}
       backLabel="Back to bucket selection"
       onBack={handleClose}
       contentClassName="space-y-4"

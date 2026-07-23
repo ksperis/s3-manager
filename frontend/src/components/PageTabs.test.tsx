@@ -55,4 +55,39 @@ describe("PageTabs", () => {
     );
     expect(screen.getByRole("tab", { name: "Disabled" })).toBeDisabled();
   });
+
+  it("renders content below bar tabs without adding a card frame", () => {
+    render(
+      <PageTabs
+        tabs={[
+          { id: "general", label: "General", content: <p>General settings</p> },
+          { id: "access", label: "Access", content: <p>Access settings</p> },
+        ]}
+        activeTab="general"
+        onChange={() => undefined}
+        ariaLabel="Editor sections"
+        idPrefix="editor"
+        variant="bar"
+      />
+    );
+
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("General settings");
+    expect(screen.getByRole("tabpanel")).toHaveClass("mt-4");
+    expect(screen.getByRole("tabpanel").parentElement).not.toHaveClass("ui-surface-card");
+  });
+
+  it("owns the shared baseline for top-level page tabs", () => {
+    const { container } = render(
+      <PageTabs
+        tabs={[{ id: "general", label: "General" }]}
+        activeTab="general"
+        onChange={() => undefined}
+        variant="line"
+      />
+    );
+
+    expect(container.firstElementChild).toHaveClass("border-b", "pb-3");
+    expect(container.firstElementChild).toHaveClass("border-[color:var(--ui-border-soft)]");
+    expect(screen.getByText("General").parentElement).toHaveClass("min-w-0", "flex-1", "flex-wrap");
+  });
 });

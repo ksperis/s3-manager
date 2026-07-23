@@ -19,7 +19,12 @@ import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import ListPageSection from "../../components/list/ListPageSection";
-import WorkflowPage, { workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, {
+  WorkflowActions,
+  WorkflowMetadata,
+  workflowPageHostClass,
+} from "../../components/WorkflowPage";
+import WorkflowTabs from "../../components/WorkflowTabs";
 import PageHeader from "../../components/PageHeader";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import {
@@ -34,7 +39,6 @@ import {
   ManagerToolAccessSection,
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
-import AdminModalTabs from "./AdminModalTabs";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
   PORTAL_ROLE_OPTIONS,
@@ -46,13 +50,14 @@ import {
 } from "./adminAccessConfig";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
+import UiButton from "../../components/ui/UiButton";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { cx, uiButtonBaseClass, uiButtonVariants, uiInputClass } from "../../components/ui/styles";
+import { cx, uiInputClass } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../utils/clientStorage";
 import { stableSignature } from "../../utils/stableSignature";
@@ -101,7 +106,6 @@ type Option = {
 
 const userModalLabelClass = "ui-body font-medium text-[var(--ui-text)]";
 const userModalFieldClass = cx(uiInputClass, "px-3 py-2 ui-body");
-const userModalCancelButtonClass = cx(uiButtonBaseClass, uiButtonVariants.secondary, "px-4 py-2 ui-body");
 const associationAddPanelClass = adminAssociationAddPanelClass;
 const associationCompactInputClass = adminAssociationCompactInputClass;
 const associationCompactSelectClass = adminAssociationCompactSelectClass;
@@ -1774,10 +1778,11 @@ export default function UsersPage() {
         <WorkflowPage
           title="Create user"
           description="Configure the identity, workspace access, groups and storage associations in one page-level workflow."
-          breadcrumbs={[...adminPageBreadcrumbs("users"), { label: "Create" }]}
+          breadcrumbs={adminPageBreadcrumbs("users", { label: "Create" })}
           backLabel="Back to users"
           onBack={createCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
         >
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -1790,9 +1795,11 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={handleCreate} className="space-y-4">
-            <AdminModalTabs<UserModalTab>
+            <WorkflowTabs<UserModalTab>
               activeTab={createModalTab}
               onTabChange={setCreateModalTab}
+              ariaLabel="User creation sections"
+              idPrefix="admin-user-create"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "associations", label: "Associations" },
@@ -1800,7 +1807,7 @@ export default function UsersPage() {
                 { id: "access", label: "Workspaces" },
                 { id: "browser", label: "Browser" },
               ]}
-            />
+            >
 
             {createModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1978,22 +1985,16 @@ export default function UsersPage() {
                 setSearch: setCreateGroupSearch,
                 visibleGroups: visibleCreateGroups,
               })}
+            </WorkflowTabs>
 
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={createCloseGuard.requestClose}
-                className={userModalCancelButtonClass}
-              >
+            <WorkflowActions>
+              <UiButton variant="secondary" onClick={createCloseGuard.requestClose}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-              >
+              </UiButton>
+              <UiButton type="submit">
                 Create
-              </button>
-            </div>
+              </UiButton>
+            </WorkflowActions>
           </form>
           {createCloseGuard.confirmationDialog}
         </WorkflowPage>
@@ -2058,12 +2059,13 @@ export default function UsersPage() {
         <WorkflowPage
           title="Edit user"
           description="Review direct access, inherited associations and Manager tools without a constrained dialog."
-          breadcrumbs={[...adminPageBreadcrumbs("users"), { label: "Edit" }]}
+          breadcrumbs={adminPageBreadcrumbs("users", { label: "Edit" })}
           backLabel="Back to users"
           onBack={editCloseGuard.requestClose}
-          contentClassName="mx-auto max-w-7xl"
+          contentVariant="plain"
+          width="wide"
+          metaContent={<WorkflowMetadata items={[{ label: "Identity", value: editingUser.email }]} />}
         >
-          <p className="mb-3 ui-body text-slate-500 dark:text-slate-300">{editingUser.email}</p>
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
@@ -2075,9 +2077,11 @@ export default function UsersPage() {
             </PageBanner>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
-            <AdminModalTabs<UserModalTab>
+            <WorkflowTabs<UserModalTab>
               activeTab={editModalTab}
               onTabChange={setEditModalTab}
+              ariaLabel="User configuration sections"
+              idPrefix="admin-user-edit"
               tabs={[
                 { id: "general", label: "General" },
                 { id: "associations", label: "Associations" },
@@ -2086,7 +2090,7 @@ export default function UsersPage() {
                 { id: "browser", label: "Browser" },
                 { id: "manager_tools", label: "Manager tools" },
               ]}
-            />
+            >
 
             {editModalTab === "general" && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -2303,23 +2307,19 @@ export default function UsersPage() {
                 setSearch: setEditGroupSearch,
                 visibleGroups: visibleEditGroups,
               })}
+            </WorkflowTabs>
 
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={editCloseGuard.requestClose}
-                className={userModalCancelButtonClass}
-              >
+            <WorkflowActions>
+              <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
                 Cancel
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 type="submit"
                 disabled={busyId === editingUser.id}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {busyId === editingUser.id ? "Saving..." : "Save"}
-              </button>
-            </div>
+              </UiButton>
+            </WorkflowActions>
           </form>
           {editCloseGuard.confirmationDialog}
         </WorkflowPage>
