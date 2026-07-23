@@ -263,14 +263,14 @@ export default function PortalStorageSpacesPage() {
             space.visibility === "shared" && space.shareScope === "account";
           return (
             <div className="flex min-w-[132px] flex-col items-start gap-2">
-              {isWholeTeam ? (
-                <span className={cx("text-xs", uiMutedTextClass)}>
-                  {t({
-                    en: "All team members",
-                    fr: "Toute l’équipe",
-                    de: "Alle Teammitglieder",
-                  })}
-                </span>
+              {space.visibility === "private" ? (
+                <UiBadge tone={portalVisibilityTone(space.visibility)}>
+                  {portalShareScopeLabel(space.visibility, space.shareScope, t)}
+                </UiBadge>
+              ) : isWholeTeam ? (
+                <UiBadge tone={portalVisibilityTone(space.visibility)}>
+                  {portalShareScopeLabel(space.visibility, space.shareScope, t)}
+                </UiBadge>
               ) : collaborators.length > 0 ? (
                 <UserAvatarStack
                   people={collaborators}
@@ -283,19 +283,14 @@ export default function PortalStorageSpacesPage() {
                   {t({ en: "No collaborators", fr: "Aucun collaborateur", de: "Keine Mitwirkenden" })}
                 </span>
               )}
-              <div className="flex flex-wrap items-center gap-2">
-                <UiBadge tone={portalVisibilityTone(space.visibility)}>
-                  {portalShareScopeLabel(space.visibility, space.shareScope, t)}
+              {status ? (
+                <UiBadge tone={portalStorageSpaceStatusTone(space)}>
+                  {portalStatusLabel(
+                    status as "Active" | "Attention" | "Archived",
+                    t,
+                  )}
                 </UiBadge>
-                {status ? (
-                  <UiBadge tone={portalStorageSpaceStatusTone(space)}>
-                    {portalStatusLabel(
-                      status as "Active" | "Attention" | "Archived",
-                      t,
-                    )}
-                  </UiBadge>
-                ) : null}
-              </div>
+              ) : null}
             </div>
           );
         },

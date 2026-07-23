@@ -237,8 +237,8 @@ describe("PortalStorageSpacesPage", () => {
       "responsive-data-table",
     );
     expect(
-      within(researchRow!).getByText("Selected people"),
-    ).toBeInTheDocument();
+      within(researchRow!).queryByText("Selected people"),
+    ).not.toBeInTheDocument();
     expect(within(researchRow!).getByTitle("Owner Example")).toHaveTextContent(
       "OE",
     );
@@ -268,7 +268,7 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
-  it("shows the whole team instead of no collaborators for account-wide spaces", () => {
+  it("shows only the team badge for account-wide spaces", () => {
     mocks.hookResult.workspace.spaces = [
       {
         ...mocks.hookResult.workspace.spaces[0],
@@ -285,8 +285,31 @@ describe("PortalStorageSpacesPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("All team members")).toBeInTheDocument();
+    expect(screen.getByText("Team")).toBeInTheDocument();
+    expect(screen.queryByText("All team members")).not.toBeInTheDocument();
     expect(screen.queryByText("No collaborators")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Owner Example")).not.toBeInTheDocument();
+  });
+
+  it("shows only the private badge for private spaces", () => {
+    mocks.hookResult.workspace.spaces = [
+      {
+        ...mocks.hookResult.workspace.spaces[0],
+        visibility: "private",
+        shareScope: "restricted",
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Private")).toBeInTheDocument();
+    expect(screen.queryByText("Selected people")).not.toBeInTheDocument();
+    expect(screen.queryByText("No collaborators")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Owner Example")).not.toBeInTheDocument();
   });
 
   it("shows the start guide only before the first space and lets users dismiss it", async () => {
