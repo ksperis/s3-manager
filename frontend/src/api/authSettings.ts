@@ -65,6 +65,7 @@ export type LdapProviderAdminItem = {
   start_tls: boolean;
   tls_verify: boolean;
   tls_ca_file?: string | null;
+  allow_legacy_tls: boolean;
   timeout_seconds: number;
   enabled: boolean;
   allow_insecure: boolean;
@@ -89,6 +90,7 @@ export type LdapProviderAdminPayload = {
   start_tls: boolean;
   tls_verify: boolean;
   tls_ca_file?: string | null;
+  allow_legacy_tls: boolean;
   timeout_seconds: number;
   enabled: boolean;
   allow_insecure: boolean;

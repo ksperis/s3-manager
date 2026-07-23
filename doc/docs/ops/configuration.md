@@ -107,7 +107,11 @@ Common environment fields:
 - `LDAP_PROVIDERS__<key>__USER_BASE_DN`
 - `LDAP_PROVIDERS__<key>__USER_FILTER` containing `{username}`
 - optional attributes: `EMAIL_ATTRIBUTE`, `NAME_ATTRIBUTE`, `SUBJECT_ATTRIBUTE`
-- TLS and safety knobs: `START_TLS`, `TLS_VERIFY`, `TLS_CA_FILE`, `ALLOW_INSECURE`, `ALLOW_EMAIL_LINKING`
+- TLS and safety knobs: `START_TLS`, `TLS_VERIFY`, `TLS_CA_FILE`,
+  `ALLOW_LEGACY_TLS`, `ALLOW_INSECURE`, `ALLOW_EMAIL_LINKING`.
+  `ALLOW_LEGACY_TLS=true` enables the OpenSSL `DEFAULT` cipher set for a
+  provider that cannot negotiate the modern client defaults; prefer enabling
+  ECDHE cipher suites on the LDAP server.
 
 Provider keys must match `[a-z0-9_-]+`. `ALLOW_INSECURE=true`,
 `TLS_VERIFY=false`, and `ALLOW_EMAIL_LINKING=true` are startup-warning

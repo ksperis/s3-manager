@@ -81,6 +81,7 @@ type LdapProviderFormState = {
   start_tls: boolean;
   tls_verify: boolean;
   tls_ca_file: string;
+  allow_legacy_tls: boolean;
   timeout_seconds: string;
   enabled: boolean;
   allow_insecure: boolean;
@@ -173,6 +174,7 @@ function emptyLdapForm(): LdapProviderFormState {
     start_tls: false,
     tls_verify: true,
     tls_ca_file: "",
+    allow_legacy_tls: false,
     timeout_seconds: "5",
     enabled: true,
     allow_insecure: false,
@@ -195,6 +197,7 @@ function ldapProviderToForm(provider: LdapProviderAdminItem): LdapProviderFormSt
     start_tls: provider.start_tls,
     tls_verify: provider.tls_verify,
     tls_ca_file: provider.tls_ca_file ?? "",
+    allow_legacy_tls: provider.allow_legacy_tls,
     timeout_seconds: String(provider.timeout_seconds),
     enabled: provider.enabled,
     allow_insecure: provider.allow_insecure,
@@ -220,6 +223,7 @@ function ldapPayloadFromForm(form: LdapProviderFormState): LdapProviderAdminPayl
     start_tls: form.start_tls,
     tls_verify: form.tls_verify,
     tls_ca_file: form.tls_ca_file.trim() || null,
+    allow_legacy_tls: form.allow_legacy_tls,
     timeout_seconds: Number.isFinite(timeoutSeconds) ? timeoutSeconds : 5,
     enabled: form.enabled,
     allow_insecure: form.allow_insecure,
@@ -1316,6 +1320,17 @@ export default function AuthenticationSettingsPage() {
               <label className="inline-flex items-center gap-2 ui-body text-[var(--ui-text)]">
                 <input
                   type="checkbox"
+                  aria-label="Allow legacy LDAP TLS ciphers"
+                  checked={ldapForm.allow_legacy_tls}
+                  onChange={(event) => updateLdapFormField("allow_legacy_tls", event.target.checked)}
+                  disabled={isLdapFieldLocked("allow_legacy_tls")}
+                  className={settingsCheckboxClassName}
+                />
+                Allow legacy TLS ciphers
+              </label>
+              <label className="inline-flex items-center gap-2 ui-body text-[var(--ui-text)]">
+                <input
+                  type="checkbox"
                   checked={ldapForm.allow_insecure}
                   onChange={(event) => updateLdapFormField("allow_insecure", event.target.checked)}
                   disabled={isLdapFieldLocked("allow_insecure")}
@@ -1334,6 +1349,12 @@ export default function AuthenticationSettingsPage() {
                 Allow email linking
               </label>
             </div>
+            {ldapForm.allow_legacy_tls && (
+              <p className={settingsHelperClassName}>
+                Legacy TLS compatibility enables the OpenSSL DEFAULT cipher set. Prefer enabling modern ECDHE
+                cipher suites on the LDAP server.
+              </p>
+            )}
 
             {!ldapFormReadOnly && (
               <div className="mt-5 flex justify-end gap-2">

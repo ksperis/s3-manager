@@ -130,6 +130,35 @@ def test_startup_security_warnings_include_unverified_ldap_tls_notice(monkeypatc
     assert any("disable TLS certificate verification" in item for item in warnings)
 
 
+def test_startup_security_warnings_include_legacy_ldap_tls_notice(monkeypatch):
+    monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
+    monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])
+    monkeypatch.setattr(main.settings, "seed_super_admin_password", "very-strong-password")
+    monkeypatch.setattr(main.settings, "refresh_token_cookie_secure", True)
+    monkeypatch.setattr(main.settings, "cors_origins", ["http://localhost:5173"])
+    monkeypatch.setattr(
+        main.settings,
+        "ldap_providers",
+        {
+            "legacy": type(
+                "LDAPProvider",
+                (),
+                {
+                    "enabled": True,
+                    "allow_insecure": False,
+                    "tls_verify": True,
+                    "allow_legacy_tls": True,
+                    "allow_email_linking": False,
+                },
+            )()
+        },
+    )
+
+    warnings = main._startup_security_warnings()
+
+    assert any("allow legacy TLS cipher compatibility" in item for item in warnings)
+
+
 def test_startup_security_warnings_include_ldap_email_linking_notice(monkeypatch):
     monkeypatch.setattr(main.settings, "jwt_keys", ["a" * 32])
     monkeypatch.setattr(main.settings, "credential_keys", ["b" * 32])

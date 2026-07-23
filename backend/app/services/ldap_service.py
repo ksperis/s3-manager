@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import logging
+import math
 import ssl
+from struct import error as StructError
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -22,6 +24,7 @@ from app.services.users_service import UsersService, get_users_service
 
 LOGGER = logging.getLogger(__name__)
 LDAP_INVALID_CREDENTIALS_RESULT = 49
+LDAP_LEGACY_TLS_CIPHERS = "DEFAULT"
 
 
 class LDAPError(Exception):
@@ -146,7 +149,7 @@ class LDAPAuthService:
             auto_referrals=False,
             raise_exceptions=False,
             read_only=True,
-            receive_timeout=provider.timeout_seconds,
+            receive_timeout=max(1, math.ceil(provider.timeout_seconds)),
         )
         try:
             if provider.start_tls:
@@ -169,7 +172,7 @@ class LDAPAuthService:
         except LDAPConfigurationError:
             self._unbind(connection)
             raise
-        except LDAPExceptionError as exc:
+        except (LDAPExceptionError, OSError, StructError) as exc:
             self._unbind(connection)
             if invalid_credentials_as_auth:
                 raise LDAPAuthenticationError("Invalid credentials") from exc
@@ -183,6 +186,8 @@ class LDAPAuthService:
         tls = Tls(
             validate=ssl.CERT_REQUIRED if provider.tls_verify else ssl.CERT_NONE,
             ca_certs_file=provider.tls_ca_file,
+            ciphers=LDAP_LEGACY_TLS_CIPHERS if provider.allow_legacy_tls else None,
+            sni=parsed.hostname,
         )
         return Server(
             parsed.hostname or "",

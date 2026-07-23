@@ -25,6 +25,7 @@ class LdapProvider(Base):
     start_tls = Column(Boolean, nullable=False, default=False)
     tls_verify = Column(Boolean, nullable=False, default=True)
     tls_ca_file = Column(String, nullable=True)
+    allow_legacy_tls = Column(Boolean, nullable=False, default=False)
     timeout_seconds = Column(Float, nullable=False, default=5.0)
     enabled = Column(Boolean, nullable=False, default=True)
     allow_insecure = Column(Boolean, nullable=False, default=False)

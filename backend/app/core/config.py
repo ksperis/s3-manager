@@ -57,6 +57,7 @@ class LDAPProviderSettings(BaseModel):
     start_tls: bool = False
     tls_verify: bool = True
     tls_ca_file: Optional[str] = None
+    allow_legacy_tls: bool = False
     timeout_seconds: float = Field(5.0, gt=0, le=60)
     enabled: bool = True
     allow_insecure: bool = False
@@ -643,6 +644,16 @@ def collect_secret_warnings(settings: Settings) -> list[str]:
         warnings.append(
             "LDAP provider(s) disable TLS certificate verification: "
             f"{', '.join(sorted(tls_unverified_ldap))}. This should be limited to isolated labs."
+        )
+    legacy_tls_ldap = [
+        key
+        for key, provider in ldap_providers.items()
+        if getattr(provider, "enabled", False) and getattr(provider, "allow_legacy_tls", False)
+    ]
+    if legacy_tls_ldap:
+        warnings.append(
+            "LDAP provider(s) allow legacy TLS cipher compatibility: "
+            f"{', '.join(sorted(legacy_tls_ldap))}. Prefer modern ECDHE cipher suites on the LDAP server."
         )
     email_linking_ldap = [
         key

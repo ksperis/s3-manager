@@ -50,6 +50,7 @@ class LDAPProviderAdminItem(BaseModel):
     start_tls: bool = False
     tls_verify: bool = True
     tls_ca_file: Optional[str] = None
+    allow_legacy_tls: bool = False
     timeout_seconds: float = 5.0
     enabled: bool = True
     allow_insecure: bool = False
@@ -74,6 +75,7 @@ class LDAPProviderAdminPayload(BaseModel):
     start_tls: bool = False
     tls_verify: bool = True
     tls_ca_file: Optional[str] = None
+    allow_legacy_tls: bool = False
     timeout_seconds: float = Field(5.0, gt=0, le=60)
     enabled: bool = True
     allow_insecure: bool = False

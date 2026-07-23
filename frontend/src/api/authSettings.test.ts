@@ -54,6 +54,7 @@ const ldapPayload: LdapProviderAdminPayload = {
   start_tls: false,
   tls_verify: true,
   tls_ca_file: null,
+  allow_legacy_tls: false,
   timeout_seconds: 5,
   enabled: true,
   allow_insecure: false,

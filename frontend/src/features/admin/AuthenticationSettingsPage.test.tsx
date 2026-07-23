@@ -181,6 +181,7 @@ function buildLdapProvider(overrides: Partial<LdapProviderAdminItem> = {}): Ldap
     start_tls: false,
     tls_verify: true,
     tls_ca_file: null,
+    allow_legacy_tls: false,
     timeout_seconds: 5,
     enabled: true,
     allow_insecure: false,
@@ -209,6 +210,7 @@ function buildEnvLdapProvider(): LdapProviderAdminItem {
       "start_tls",
       "tls_verify",
       "tls_ca_file",
+      "allow_legacy_tls",
       "timeout_seconds",
       "enabled",
       "allow_insecure",
@@ -551,8 +553,10 @@ describe("AuthenticationSettingsPage", () => {
     await user.clear(urlInput);
     await user.type(urlInput, "ldaps://ldap.example.test");
     await user.type(within(ldapSection).getByLabelText("LDAP User base DN"), "ou=people,dc=example,dc=test");
+    await user.click(within(ldapSection).getByLabelText("Allow legacy LDAP TLS ciphers"));
 
     expect(within(ldapSection).getByText(/search the directory anonymously/i)).toBeInTheDocument();
+    expect(within(ldapSection).getByText(/Prefer enabling modern ECDHE/i)).toBeInTheDocument();
     expect(within(ldapSection).getByLabelText("LDAP Bind DN")).not.toBeRequired();
     expect(within(ldapSection).getByLabelText("LDAP Bind password")).not.toBeRequired();
     await user.click(within(ldapSection).getByRole("button", { name: "Save LDAP provider" }));
@@ -564,6 +568,7 @@ describe("AuthenticationSettingsPage", () => {
     expect(payload.bind_dn).toBeNull();
     expect(payload.bind_password).toBeNull();
     expect(payload.clear_bind_password).toBe(true);
+    expect(payload.allow_legacy_tls).toBe(true);
   });
 
   it("edits an LDAP provider while preserving a blank bind password", async () => {

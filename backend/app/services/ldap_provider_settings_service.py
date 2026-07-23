@@ -32,6 +32,7 @@ LDAP_PROVIDER_FIELDS = (
     "start_tls",
     "tls_verify",
     "tls_ca_file",
+    "allow_legacy_tls",
     "timeout_seconds",
     "enabled",
     "allow_insecure",
@@ -186,6 +187,7 @@ def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *,
         start_tls=payload.start_tls,
         tls_verify=payload.tls_verify,
         tls_ca_file=payload.tls_ca_file,
+        allow_legacy_tls=payload.allow_legacy_tls,
         timeout_seconds=payload.timeout_seconds,
         enabled=payload.enabled,
         allow_insecure=payload.allow_insecure,
@@ -204,6 +206,7 @@ def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *,
     provider.start_tls = bool(payload.start_tls)
     provider.tls_verify = bool(payload.tls_verify)
     provider.tls_ca_file = payload.tls_ca_file
+    provider.allow_legacy_tls = bool(payload.allow_legacy_tls)
     provider.timeout_seconds = float(payload.timeout_seconds)
     provider.enabled = bool(payload.enabled)
     provider.allow_insecure = bool(payload.allow_insecure)
@@ -226,6 +229,7 @@ def _ui_provider_to_settings(provider: LdapProvider) -> LDAPProviderSettings:
         start_tls=bool(provider.start_tls),
         tls_verify=bool(provider.tls_verify),
         tls_ca_file=provider.tls_ca_file,
+        allow_legacy_tls=bool(provider.allow_legacy_tls),
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),
@@ -247,6 +251,7 @@ def _ui_provider_item(provider: LdapProvider) -> LDAPProviderAdminItem:
         start_tls=bool(provider.start_tls),
         tls_verify=bool(provider.tls_verify),
         tls_ca_file=provider.tls_ca_file,
+        allow_legacy_tls=bool(provider.allow_legacy_tls),
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),
@@ -271,6 +276,7 @@ def _environment_provider_item(provider_id: str, provider: LDAPProviderSettings)
         start_tls=bool(provider.start_tls),
         tls_verify=bool(provider.tls_verify),
         tls_ca_file=provider.tls_ca_file,
+        allow_legacy_tls=bool(provider.allow_legacy_tls),
         timeout_seconds=provider.timeout_seconds,
         enabled=bool(provider.enabled),
         allow_insecure=bool(provider.allow_insecure),

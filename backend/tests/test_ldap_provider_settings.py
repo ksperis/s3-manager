@@ -164,6 +164,39 @@ def test_optional_ldap_bind_credentials_migration_changes_nullability(monkeypatc
         assert columns["bind_password"]["nullable"] is False
 
 
+def test_ldap_legacy_tls_compatibility_migration_adds_and_drops_flag(monkeypatch):
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0068_ldap_legacy_tls_compatibility.py"
+    )
+    spec = util.spec_from_file_location("migration_0068_ldap_legacy_tls_compatibility", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite:///:memory:")
+    metadata = sa.MetaData()
+    sa.Table(
+        "ldap_providers",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+    )
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", operations)
+
+        migration.upgrade()
+        columns = {column["name"]: column for column in sa.inspect(connection).get_columns("ldap_providers")}
+        assert columns["allow_legacy_tls"]["nullable"] is False
+
+        migration.downgrade()
+        columns = {column["name"] for column in sa.inspect(connection).get_columns("ldap_providers")}
+        assert "allow_legacy_tls" not in columns
+
+
 def test_ldap_resolver_merges_env_and_ui_with_env_precedence(db_session):
     settings = Settings(ldap_providers={"corp": _provider_settings(display_name="Env LDAP")})
     db_session.add_all(
@@ -303,10 +336,13 @@ def test_admin_ldap_api_supports_anonymous_search_and_clears_stored_credentials(
         json=_payload(
             bind_dn="cn=s3-manager,ou=svc,dc=example,dc=test",
             bind_password="service-secret",
+            allow_legacy_tls=True,
         ),
     )
     assert response.status_code == 200, response.text
     assert response.json()["has_bind_password"] is True
+    assert response.json()["allow_legacy_tls"] is True
+    assert db_session.query(LdapProvider).filter(LdapProvider.provider_id == "ui").one().allow_legacy_tls is True
 
     response = client.put(
         "/api/admin/settings/ldap/providers/ui",

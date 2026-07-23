@@ -329,6 +329,7 @@ def _ldap_audit_metadata(payload: LDAPProviderAdminPayload, *, secret_action: st
             "start_tls",
             "tls_verify",
             "tls_ca_file",
+            "allow_legacy_tls",
             "timeout_seconds",
             "enabled",
             "allow_insecure",

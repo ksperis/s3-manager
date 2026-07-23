@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from importlib.metadata import version
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,7 @@ from app.services.ldap_service import (
     LDAPAuthService,
     LDAPConfigurationError,
     LDAPIdentity,
+    LDAP_LEGACY_TLS_CIPHERS,
     LDAPUserConflictError,
 )
 from app.services.users_service import get_users_service
@@ -91,6 +93,69 @@ def test_search_filter_escapes_username():
     provider = _provider(user_filter="(uid={username})")
 
     assert service._build_search_filter(provider, "a*b(c)\\") == r"(uid=a\2ab\28c\29\5c)"
+
+
+def test_build_server_enables_legacy_tls_ciphers_only_when_requested(db_session):
+    service = _service(db_session)
+
+    modern_server = service._build_server(_provider())
+    compatible_server = service._build_server(_provider(allow_legacy_tls=True))
+
+    assert modern_server.tls.ciphers is None
+    assert modern_server.tls.sni == "ldap.example.test"
+    assert compatible_server.tls.ciphers == LDAP_LEGACY_TLS_CIPHERS
+    assert compatible_server.tls.sni == "ldap.example.test"
+
+
+def test_bind_connection_uses_integer_receive_timeout(db_session, monkeypatch):
+    service = _service(db_session)
+    captured = {}
+
+    class Connection:
+        def __init__(self, _server, **kwargs):
+            captured.update(kwargs)
+
+        def bind(self):
+            return True
+
+    monkeypatch.setattr("app.services.ldap_service.Connection", Connection)
+
+    service._bind_connection(
+        _provider(timeout_seconds=5.1),
+        user=None,
+        password=None,
+        invalid_credentials_as_auth=False,
+    )
+
+    assert captured["receive_timeout"] == 6
+    assert isinstance(captured["receive_timeout"], int)
+
+
+def test_bind_connection_converts_socket_timeout_packing_error_to_configuration_error(
+    db_session,
+    monkeypatch,
+):
+    service = _service(db_session)
+
+    class Connection:
+        def __init__(self, _server, **_kwargs):
+            pass
+
+        def bind(self):
+            raise struct.error("required argument is not an integer")
+
+        def unbind(self):
+            return True
+
+    monkeypatch.setattr("app.services.ldap_service.Connection", Connection)
+
+    with pytest.raises(LDAPConfigurationError, match="Unable to bind"):
+        service._bind_connection(
+            _provider(),
+            user=None,
+            password=None,
+            invalid_credentials_as_auth=False,
+        )
 
 
 def test_search_identity_reads_attributes_and_normalizes_email(db_session):
