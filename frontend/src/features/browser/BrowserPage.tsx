@@ -948,7 +948,9 @@ export default function BrowserPage({
   const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
   const workspaceNounPlural = `${workspaceNoun}s`;
   const workspaceNounCapitalized = usePortalWorkspaceLabels ? "Storage Space" : "Bucket";
-  const workspaceNounTitle = usePortalWorkspaceLabels ? "Storage Spaces" : "Buckets";
+  const selectorWorkspaceNoun = isPortalBrowserSurface ? "storage space" : workspaceNoun;
+  const selectorWorkspaceNounPlural = `${selectorWorkspaceNoun}s`;
+  const selectorWorkspaceNounTitle = isPortalBrowserSurface ? "Storage Spaces" : "Buckets";
   const workspaceObjectNoun = usePortalWorkspaceLabels ? "file" : "object";
   const workspaceObjectNounPlural = `${workspaceObjectNoun}s`;
   const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
@@ -4495,9 +4497,9 @@ export default function BrowserPage({
       return lockedBucketLabel?.trim() || resolvedLockedBucketName;
     }
     if (bucketName) return bucketDisplayNameByName.get(bucketName) ?? bucketName;
-    if (loadingBuckets) return `Loading ${workspaceNounPlural}...`;
-    if (bucketTotalCount === 0) return `No ${workspaceNounPlural}`;
-    return `Select ${workspaceNoun}`;
+    if (loadingBuckets) return `Loading ${selectorWorkspaceNounPlural}...`;
+    if (bucketTotalCount === 0) return `No ${selectorWorkspaceNounPlural}`;
+    return `Select ${selectorWorkspaceNoun}`;
   }, [
     bucketDisplayNameByName,
     bucketName,
@@ -4505,8 +4507,8 @@ export default function BrowserPage({
     loadingBuckets,
     lockedBucketLabel,
     resolvedLockedBucketName,
-    workspaceNoun,
-    workspaceNounPlural,
+    selectorWorkspaceNoun,
+    selectorWorkspaceNounPlural,
   ]);
   const bucketSelectorNeedsAttention =
     hasS3AccountContext && !bucketName && bucketTotalCount > 0;
@@ -4516,7 +4518,9 @@ export default function BrowserPage({
       ? "border-amber-300 bg-amber-50 text-amber-800 ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
       : "border-slate-200 bg-white text-slate-700 hover:border-primary/60 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:bg-slate-800",
   );
-  const bucketButtonActionLabel = resolvedLockedBucketName ? `Selected ${workspaceNoun}` : `Select ${workspaceNoun}`;
+  const bucketButtonActionLabel = resolvedLockedBucketName
+    ? `Selected ${selectorWorkspaceNoun}`
+    : `Select ${selectorWorkspaceNoun}`;
   const useBucketsPanel = showWorkspaceSidebar;
   const { currentBucket: currentBucketPanelItem } = useMemo(
     () => splitBucketPanelBuckets(bucketName, bucketMenuItems),
@@ -12680,7 +12684,7 @@ export default function BrowserPage({
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           <div className="min-w-0">
                             <p className={browserSectionEyebrowClasses}>
-                              {workspaceNounTitle}
+                              {selectorWorkspaceNounTitle}
                             </p>
                           </div>
                         </div>
@@ -12708,7 +12712,7 @@ export default function BrowserPage({
                               setBucketFilter(event.target.value)
                             }
                             placeholder={
-                              `Filter ${workspaceNounPlural}`
+                              `Filter ${selectorWorkspaceNounPlural}`
                             }
                             className={`${browserInputClasses} pl-9`}
                             spellCheck={false}
@@ -12718,14 +12722,14 @@ export default function BrowserPage({
                       <div className="max-h-56 overflow-y-auto px-1 pb-1">
                         {loadingBuckets && bucketOptions.length === 0 ? (
                           <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {`Loading ${workspaceNounPlural}...`}
+                            {`Loading ${selectorWorkspaceNounPlural}...`}
                           </div>
                         ) : bucketTotalCount === 0 ? (
                           <div className="space-y-2 px-2 py-2">
                             <div className="ui-caption text-slate-500 dark:text-slate-400">
                               {bucketError
-                                ? `Unable to load ${workspaceNounPlural}.`
-                                : `No ${workspaceNounPlural} available.`}
+                                ? `Unable to load ${selectorWorkspaceNounPlural}.`
+                                : `No ${selectorWorkspaceNounPlural} available.`}
                             </div>
                             <button
                               type="button"
@@ -12738,7 +12742,7 @@ export default function BrowserPage({
                           </div>
                         ) : bucketOptions.length === 0 ? (
                           <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                            {`No ${workspaceNounPlural} match this filter.`}
+                            {`No ${selectorWorkspaceNounPlural} match this filter.`}
                           </div>
                         ) : (
                           bucketMenuItems.map((bucket) => {
@@ -12774,7 +12778,7 @@ export default function BrowserPage({
                       {!loadingBuckets && bucketTotalCount > 0 && (
                         <div className="border-t border-slate-200 px-2.5 py-2 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
                           {`${bucketOptions.length} of ${bucketMenuTotal} ${
-                            `${workspaceNoun}${bucketMenuTotal === 1 ? "" : "s"}`
+                            `${selectorWorkspaceNoun}${bucketMenuTotal === 1 ? "" : "s"}`
                           }`}
                         </div>
                       )}

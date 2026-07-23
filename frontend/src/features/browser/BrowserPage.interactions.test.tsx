@@ -981,6 +981,7 @@ describe("BrowserPage interactions", () => {
   });
 
   it("uses Portal storage-space labels in the root Browser sidebar", async () => {
+    const user = userEvent.setup();
     searchBrowserBucketsMock.mockResolvedValue({
       items: [
         {
@@ -1013,13 +1014,21 @@ describe("BrowserPage interactions", () => {
       "acc-portal",
       expect.objectContaining({ workspaceSurface: "portal" }),
     );
-    expect(screen.getByRole("button", { name: "Select bucket" })).toHaveTextContent("Research Data");
+    const selector = screen.getByRole("button", { name: "Select storage space" });
+    expect(selector).toHaveTextContent("Research Data");
     const sidebar = screen.getByTestId("browser-workspace-sidebar");
     expect(sidebar).toHaveAttribute("aria-label", "Storage Spaces");
     expect(within(sidebar).getByText("Research Data")).toBeInTheDocument();
     const description = within(sidebar).getByText("Shared research datasets with a deliberately detailed description");
     expect(description).toHaveAttribute("title", "Shared research datasets with a deliberately detailed description");
     expect(within(sidebar).queryByText("Storage Space")).not.toBeInTheDocument();
+
+    await user.click(selector);
+    expect(screen.getByPlaceholderText("Filter storage spaces")).toBeInTheDocument();
+    expect(screen.getAllByText("Storage Spaces", { exact: true })).toHaveLength(2);
+    expect(screen.getByText("1 of 1 storage space")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Filter buckets")).not.toBeInTheDocument();
+    expect(screen.queryByText("Buckets", { exact: true })).not.toBeInTheDocument();
   });
 
   it("runs the Portal public-link action for a selected Browser file", async () => {
