@@ -69,6 +69,18 @@ def test_ldap_provider_requires_username_placeholder_in_filter():
         _provider(user_filter="(mail=admin@example.test)")
 
 
+def test_ldap_provider_allows_anonymous_search_and_rejects_partial_bind_credentials():
+    provider = _provider(bind_dn=None, bind_password=None)
+
+    assert provider.bind_dn is None
+    assert provider.bind_password is None
+
+    with pytest.raises(ValidationError, match="must be configured together"):
+        _provider(bind_password=None)
+    with pytest.raises(ValidationError, match="must be configured together"):
+        _provider(bind_dn=None)
+
+
 def test_settings_rejects_invalid_ldap_provider_ids():
     with pytest.raises(ValidationError, match="LDAP provider keys"):
         Settings(ldap_providers={"corp/prod": _provider()})
@@ -143,6 +155,39 @@ def test_search_identity_rejects_ambiguous_results(db_session):
 
     with pytest.raises(LDAPAuthenticationError):
         service._search_identity("corp", service.settings.ldap_providers["corp"], Connection(), "jane")
+
+
+def test_authenticate_directory_uses_anonymous_bind_for_user_search(db_session, monkeypatch):
+    provider = _provider(bind_dn=None, bind_password=None)
+    service = _service(db_session, provider)
+    bind_calls = []
+
+    class Connection:
+        def unbind(self):
+            return True
+
+    def fake_bind(provider_arg, *, user, password, invalid_credentials_as_auth):
+        assert provider_arg is provider
+        bind_calls.append((user, password, invalid_credentials_as_auth))
+        return Connection()
+
+    identity = LDAPIdentity(
+        provider="corp",
+        subject="uuid-123",
+        dn="uid=jane,ou=people,dc=example,dc=test",
+        email="jane@example.test",
+        full_name="Jane Doe",
+    )
+    monkeypatch.setattr(service, "_bind_connection", fake_bind)
+    monkeypatch.setattr(service, "_search_identity", lambda *args: identity)
+
+    result = service._authenticate_directory("corp", provider, "jane", "user-secret")
+
+    assert result is identity
+    assert bind_calls == [
+        (None, None, False),
+        ("uid=jane,ou=people,dc=example,dc=test", "user-secret", True),
+    ]
 
 
 def test_authenticate_creates_ldap_user_without_ui_access(db_session, monkeypatch):

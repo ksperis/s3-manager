@@ -185,7 +185,7 @@ function ldapProviderToForm(provider: LdapProviderAdminItem): LdapProviderFormSt
     provider_id: provider.provider_id,
     display_name: provider.display_name,
     url: provider.url,
-    bind_dn: provider.bind_dn,
+    bind_dn: provider.bind_dn ?? "",
     bind_password: "",
     user_base_dn: provider.user_base_dn,
     user_filter: provider.user_filter,
@@ -203,13 +203,14 @@ function ldapProviderToForm(provider: LdapProviderAdminItem): LdapProviderFormSt
 }
 
 function ldapPayloadFromForm(form: LdapProviderFormState): LdapProviderAdminPayload {
+  const bindDn = form.bind_dn.trim();
   const bindPassword = form.bind_password.trim();
   const timeoutSeconds = Number.parseFloat(form.timeout_seconds);
   return {
     provider_id: form.provider_id.trim().toLowerCase(),
     display_name: form.display_name.trim(),
     url: form.url.trim(),
-    bind_dn: form.bind_dn.trim(),
+    bind_dn: bindDn || null,
     bind_password: bindPassword || null,
     user_base_dn: form.user_base_dn.trim(),
     user_filter: form.user_filter.trim(),
@@ -223,7 +224,7 @@ function ldapPayloadFromForm(form: LdapProviderFormState): LdapProviderAdminPayl
     enabled: form.enabled,
     allow_insecure: form.allow_insecure,
     allow_email_linking: form.allow_email_linking,
-    clear_bind_password: false,
+    clear_bind_password: !bindDn,
   };
 }
 
@@ -1168,19 +1169,19 @@ export default function AuthenticationSettingsPage() {
                 {ldapLockHint("url")}
               </label>
               <label className="block">
-                <span className={settingsLabelClassName}>Bind DN</span>
+                <span className={settingsLabelClassName}>Bind DN (optional)</span>
                 <input
                   aria-label="LDAP Bind DN"
                   className={settingsInputClassName}
                   value={ldapForm.bind_dn}
                   onChange={(event) => updateLdapFormField("bind_dn", event.target.value)}
                   disabled={isLdapFieldLocked("bind_dn")}
-                  required
                 />
+                <p className={settingsHelperClassName}>Leave both bind fields empty to search the directory anonymously.</p>
                 {ldapLockHint("bind_dn")}
               </label>
               <label className="block">
-                <span className={settingsLabelClassName}>Bind password</span>
+                <span className={settingsLabelClassName}>Bind password (optional)</span>
                 <input
                   aria-label="LDAP Bind password"
                   className={settingsInputClassName}
@@ -1189,7 +1190,7 @@ export default function AuthenticationSettingsPage() {
                   onChange={(event) => updateLdapFormField("bind_password", event.target.value)}
                   disabled={isLdapFieldLocked("bind_password")}
                   placeholder={selectedLdapProvider?.has_bind_password ? "Stored password is not displayed" : ""}
-                  required={ldapFormMode === "create"}
+                  required={Boolean(ldapForm.bind_dn.trim()) && !selectedLdapProvider?.has_bind_password}
                 />
                 {ldapLockHint("bind_password")}
               </label>

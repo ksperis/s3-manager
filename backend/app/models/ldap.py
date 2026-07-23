@@ -41,7 +41,7 @@ class LDAPProviderAdminItem(BaseModel):
     provider_id: str
     display_name: str
     url: str
-    bind_dn: str
+    bind_dn: Optional[str] = None
     user_base_dn: str
     user_filter: str = LDAP_PROVIDER_DEFAULT_USER_FILTER
     email_attribute: str = "mail"
@@ -64,7 +64,7 @@ class LDAPProviderAdminPayload(BaseModel):
     provider_id: str
     display_name: str
     url: str
-    bind_dn: str
+    bind_dn: Optional[str] = None
     bind_password: Optional[str] = None
     user_base_dn: str
     user_filter: str = LDAP_PROVIDER_DEFAULT_USER_FILTER
@@ -95,7 +95,6 @@ class LDAPProviderAdminPayload(BaseModel):
     @field_validator(
         "display_name",
         "url",
-        "bind_dn",
         "user_base_dn",
         "user_filter",
         "email_attribute",
@@ -110,7 +109,14 @@ class LDAPProviderAdminPayload(BaseModel):
             raise ValueError("LDAP provider fields cannot be empty")
         return normalized
 
-    @field_validator("bind_password", "name_attribute", "subject_attribute", "tls_ca_file", mode="before")
+    @field_validator(
+        "bind_dn",
+        "bind_password",
+        "name_attribute",
+        "subject_attribute",
+        "tls_ca_file",
+        mode="before",
+    )
     @classmethod
     def normalize_optional_strings(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
@@ -137,6 +143,8 @@ class LDAPProviderAdminPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_transport(self):
+        if self.bind_password and not self.bind_dn:
+            raise ValueError("LDAP provider bind_password requires bind_dn")
         parsed = urlparse(self.url)
         if parsed.scheme == "ldaps" and self.start_tls:
             raise ValueError("LDAP provider start_tls cannot be used with ldaps:// URLs")

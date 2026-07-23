@@ -101,9 +101,6 @@ def create_ldap_provider(db: Session, payload: LDAPProviderAdminPayload) -> LDAP
         raise LDAPProviderManagedByEnvironmentError("LDAP provider is managed by environment settings")
     if _get_ui_provider(db, provider_id):
         raise LDAPProviderAlreadyExistsError("LDAP provider already exists")
-    if not payload.bind_password:
-        raise ValueError("bind_password is required for new LDAP providers")
-
     provider = LdapProvider(provider_id=provider_id)
     _apply_payload(provider, payload, replace_secret=True)
     db.add(provider)
@@ -168,10 +165,14 @@ def _get_ui_provider(db: Session, provider_id: str) -> Optional[LdapProvider]:
 
 
 def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *, replace_secret: bool) -> None:
-    if payload.clear_bind_password:
-        raise ValueError("bind_password cannot be cleared for LDAP providers")
-
-    candidate_secret = payload.bind_password if payload.bind_password is not None else provider.bind_password
+    if payload.bind_dn is None:
+        candidate_secret = None
+    elif payload.clear_bind_password:
+        candidate_secret = None
+    elif payload.bind_password is not None:
+        candidate_secret = payload.bind_password
+    else:
+        candidate_secret = provider.bind_password
     LDAPProviderSettings(
         display_name=payload.display_name,
         url=payload.url,
@@ -207,8 +208,8 @@ def _apply_payload(provider: LdapProvider, payload: LDAPProviderAdminPayload, *,
     provider.enabled = bool(payload.enabled)
     provider.allow_insecure = bool(payload.allow_insecure)
     provider.allow_email_linking = bool(payload.allow_email_linking)
-    if replace_secret or payload.bind_password is not None:
-        provider.bind_password = payload.bind_password
+    if replace_secret or payload.bind_password is not None or payload.bind_dn is None or payload.clear_bind_password:
+        provider.bind_password = candidate_secret
 
 
 def _ui_provider_to_settings(provider: LdapProvider) -> LDAPProviderSettings:

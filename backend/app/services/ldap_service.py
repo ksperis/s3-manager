@@ -133,8 +133,8 @@ class LDAPAuthService:
         self,
         provider: LDAPProviderSettings,
         *,
-        user: str,
-        password: str,
+        user: Optional[str],
+        password: Optional[str],
         invalid_credentials_as_auth: bool,
     ) -> Connection:
         server = self._build_server(provider)
@@ -161,7 +161,8 @@ class LDAPAuthService:
                 if invalid_credentials_as_auth:
                     raise LDAPAuthenticationError("Invalid credentials")
                 detail = result.get("description") or "bind failed"
-                raise LDAPConfigurationError(f"LDAP service bind failed: {detail}")
+                bind_kind = "service" if user else "anonymous"
+                raise LDAPConfigurationError(f"LDAP {bind_kind} bind failed: {detail}")
         except LDAPAuthenticationError:
             self._unbind(connection)
             raise

@@ -127,6 +127,43 @@ def test_ldap_providers_migration_creates_and_drops_table(monkeypatch):
         assert "ldap_providers" not in sa.inspect(connection).get_table_names()
 
 
+def test_optional_ldap_bind_credentials_migration_changes_nullability(monkeypatch):
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0067_optional_ldap_bind_credentials.py"
+    )
+    spec = util.spec_from_file_location("migration_0067_optional_ldap_bind_credentials", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite:///:memory:")
+    metadata = sa.MetaData()
+    sa.Table(
+        "ldap_providers",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("bind_dn", sa.String(), nullable=False),
+        sa.Column("bind_password", sa.String(), nullable=False),
+    )
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", operations)
+
+        migration.upgrade()
+        columns = {column["name"]: column for column in sa.inspect(connection).get_columns("ldap_providers")}
+        assert columns["bind_dn"]["nullable"] is True
+        assert columns["bind_password"]["nullable"] is True
+
+        migration.downgrade()
+        columns = {column["name"]: column for column in sa.inspect(connection).get_columns("ldap_providers")}
+        assert columns["bind_dn"]["nullable"] is False
+        assert columns["bind_password"]["nullable"] is False
+
+
 def test_ldap_resolver_merges_env_and_ui_with_env_precedence(db_session):
     settings = Settings(ldap_providers={"corp": _provider_settings(display_name="Env LDAP")})
     db_session.add_all(
@@ -235,6 +272,70 @@ def test_admin_ldap_api_never_returns_secret_and_preserves_replaces_it(client, d
     assert "second-secret" not in audit_payload
     assert "ldap_provider.create" in {log.action for log in db_session.query(AuditLog).all()}
     assert "ldap_provider.update" in {log.action for log in db_session.query(AuditLog).all()}
+
+
+def test_admin_ldap_api_supports_anonymous_search_and_clears_stored_credentials(
+    client,
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.services.ldap_provider_settings_service.get_settings",
+        lambda: Settings(ldap_providers={}),
+    )
+    app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
+    app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+
+    response = client.post(
+        "/api/admin/settings/ldap/providers",
+        json=_payload(bind_dn="", bind_password=""),
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["bind_dn"] is None
+    assert response.json()["has_bind_password"] is False
+
+    provider = db_session.query(LdapProvider).filter(LdapProvider.provider_id == "ui").one()
+    assert provider.bind_dn is None
+    assert provider.bind_password is None
+
+    response = client.put(
+        "/api/admin/settings/ldap/providers/ui",
+        json=_payload(
+            bind_dn="cn=s3-manager,ou=svc,dc=example,dc=test",
+            bind_password="service-secret",
+        ),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["has_bind_password"] is True
+
+    response = client.put(
+        "/api/admin/settings/ldap/providers/ui",
+        json=_payload(bind_dn="", bind_password="", clear_bind_password=True),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["bind_dn"] is None
+    assert response.json()["has_bind_password"] is False
+    db_session.expire_all()
+    provider = db_session.query(LdapProvider).filter(LdapProvider.provider_id == "ui").one()
+    assert provider.bind_dn is None
+    assert provider.bind_password is None
+
+
+def test_admin_ldap_api_rejects_partial_bind_credentials(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ldap_provider_settings_service.get_settings",
+        lambda: Settings(ldap_providers={}),
+    )
+    app.dependency_overrides[dependencies.get_current_user] = _superadmin_user
+    app.dependency_overrides.pop(dependencies.get_current_ui_superadmin, None)
+
+    response = client.post(
+        "/api/admin/settings/ldap/providers",
+        json=_payload(bind_password=""),
+    )
+
+    assert response.status_code == 400, response.text
+    assert "configured together" in response.text
 
 
 def test_admin_ldap_api_locks_environment_managed_provider(client, monkeypatch):

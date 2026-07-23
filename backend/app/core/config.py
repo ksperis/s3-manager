@@ -47,8 +47,8 @@ class LDAPProviderSettings(BaseModel):
 
     display_name: str
     url: str
-    bind_dn: str
-    bind_password: str
+    bind_dn: Optional[str] = None
+    bind_password: Optional[str] = None
     user_base_dn: str
     user_filter: str = "(|(mail={username})(uid={username})(sAMAccountName={username})(userPrincipalName={username}))"
     email_attribute: str = "mail"
@@ -65,8 +65,6 @@ class LDAPProviderSettings(BaseModel):
     @field_validator(
         "display_name",
         "url",
-        "bind_dn",
-        "bind_password",
         "user_base_dn",
         "user_filter",
         "email_attribute",
@@ -81,7 +79,14 @@ class LDAPProviderSettings(BaseModel):
             raise ValueError("LDAP provider fields cannot be empty")
         return normalized
 
-    @field_validator("name_attribute", "subject_attribute", "tls_ca_file", mode="before")
+    @field_validator(
+        "bind_dn",
+        "bind_password",
+        "name_attribute",
+        "subject_attribute",
+        "tls_ca_file",
+        mode="before",
+    )
     @classmethod
     def normalize_optional_strings(cls, value):
         if value is None:
@@ -108,6 +113,8 @@ class LDAPProviderSettings(BaseModel):
 
     @model_validator(mode="after")
     def validate_transport(self):
+        if bool(self.bind_dn) != bool(self.bind_password):
+            raise ValueError("LDAP provider bind_dn and bind_password must be configured together")
         parsed = urlparse(self.url)
         if parsed.scheme == "ldaps" and self.start_tls:
             raise ValueError("LDAP provider start_tls cannot be used with ldaps:// URLs")

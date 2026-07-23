@@ -101,7 +101,9 @@ Common environment fields:
 
 - `LDAP_PROVIDERS__<key>__DISPLAY_NAME`
 - `LDAP_PROVIDERS__<key>__URL` (`ldaps://...` or `ldap://...` with `START_TLS=true`)
-- `LDAP_PROVIDERS__<key>__BIND_DN` / `LDAP_PROVIDERS__<key>__BIND_PASSWORD`
+- optional service credentials: `LDAP_PROVIDERS__<key>__BIND_DN` /
+  `LDAP_PROVIDERS__<key>__BIND_PASSWORD`; configure both together or omit both
+  to search anonymously when directory ACLs permit it
 - `LDAP_PROVIDERS__<key>__USER_BASE_DN`
 - `LDAP_PROVIDERS__<key>__USER_FILTER` containing `{username}`
 - optional attributes: `EMAIL_ATTRIBUTE`, `NAME_ATTRIBUTE`, `SUBJECT_ATTRIBUTE`

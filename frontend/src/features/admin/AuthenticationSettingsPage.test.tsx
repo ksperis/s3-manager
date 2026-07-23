@@ -534,6 +534,38 @@ describe("AuthenticationSettingsPage", () => {
     expect(screen.queryByDisplayValue("ldap-secret")).not.toBeInTheDocument();
   });
 
+  it("creates an LDAP provider without bind credentials for anonymous search", async () => {
+    const user = userEvent.setup();
+    fetchLdapAdminProvidersMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      buildLdapProvider({ bind_dn: null, has_bind_password: false }),
+    ]);
+
+    render(<AuthenticationSettingsPage />);
+
+    await screen.findByText("LDAP PROVIDERS");
+    const ldapSection = sectionByText("LDAP PROVIDERS");
+    await user.click(within(ldapSection).getByRole("button", { name: "Add LDAP provider" }));
+    await user.type(within(ldapSection).getByLabelText("LDAP Provider ID"), "anonymous");
+    await user.type(within(ldapSection).getByLabelText("LDAP Display name"), "Anonymous LDAP");
+    const urlInput = within(ldapSection).getByLabelText("LDAP URL");
+    await user.clear(urlInput);
+    await user.type(urlInput, "ldaps://ldap.example.test");
+    await user.type(within(ldapSection).getByLabelText("LDAP User base DN"), "ou=people,dc=example,dc=test");
+
+    expect(within(ldapSection).getByText(/search the directory anonymously/i)).toBeInTheDocument();
+    expect(within(ldapSection).getByLabelText("LDAP Bind DN")).not.toBeRequired();
+    expect(within(ldapSection).getByLabelText("LDAP Bind password")).not.toBeRequired();
+    await user.click(within(ldapSection).getByRole("button", { name: "Save LDAP provider" }));
+
+    await waitFor(() => {
+      expect(createLdapAdminProviderMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = createLdapAdminProviderMock.mock.calls[0][0];
+    expect(payload.bind_dn).toBeNull();
+    expect(payload.bind_password).toBeNull();
+    expect(payload.clear_bind_password).toBe(true);
+  });
+
   it("edits an LDAP provider while preserving a blank bind password", async () => {
     const user = userEvent.setup();
     const provider = buildLdapProvider({ has_bind_password: true });

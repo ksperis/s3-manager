@@ -307,7 +307,7 @@ def _oidc_audit_metadata(payload: OIDCProviderAdminPayload, *, secret_action: st
 
 
 def _bind_password_update_action(payload: LDAPProviderAdminPayload) -> str:
-    if payload.clear_bind_password:
+    if payload.clear_bind_password or payload.bind_dn is None:
         return "cleared"
     if payload.bind_password:
         return "replaced"

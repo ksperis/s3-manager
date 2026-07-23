@@ -184,6 +184,7 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 ```
 
 - Provider keys must use lowercase letters, digits, `_`, or `-` only, for example `corp` or `openldap-prod`.
+- `bind_dn` and `bind_password` are optional, but must be configured together. When both are omitted, s3-manager searches the directory anonymously before binding as the matched user; the directory ACLs must allow anonymous access to the configured user attributes.
 - Use `ldaps://` or `ldap://` with `start_tls=true`. Plain LDAP without STARTTLS is rejected unless `allow_insecure=true`, which should be limited to isolated labs.
 - `tls_verify=false` and `allow_email_linking=true` are allowed for compatibility and planned migrations, but they emit startup security warnings.
 - First LDAP sign-in creates an active external UI user with role `ui_none` and no storage access. An administrator must grant the intended role and bindings.
