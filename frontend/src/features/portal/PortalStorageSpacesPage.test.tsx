@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { LanguageProvider } from "../../components/language";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import PortalStorageSpacesPage from "./PortalStorageSpacesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -249,12 +250,14 @@ describe("PortalStorageSpacesPage", () => {
       "href",
       "/portal/storage-spaces/research-data",
     );
-    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
+    const openLink = screen.getByRole("link", { name: "Open" });
+    expect(openLink).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data",
     );
+    expect(openLink).toHaveAttribute("class", tableActionButtonClasses);
     expect(
-      screen.getByRole("link", { name: "Open" }).closest("td"),
+      openLink.closest("td"),
     ).toHaveAttribute("data-mobile-actions", "true");
     expect(
       screen.getByRole("button", { name: "Create space" }),

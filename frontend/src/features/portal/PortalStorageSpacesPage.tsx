@@ -29,6 +29,7 @@ import WorkflowPage, {
   WorkflowActions,
   workflowPageHostClass,
 } from "../../components/WorkflowPage";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -327,7 +328,7 @@ export default function PortalStorageSpacesPage() {
         render: (space) => (
           <Link
             to={storageSpacePath(space)}
-            className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+            className={tableActionButtonClasses}
           >
             {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
           </Link>
