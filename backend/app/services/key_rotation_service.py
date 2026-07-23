@@ -31,6 +31,13 @@ class KeyRotationService:
         KeyRotationType.CEPH_ADMIN,
         KeyRotationType.ENDPOINT_ADMIN,
     )
+    _ENV_MANAGED_ENDPOINT_KEY_TYPES: frozenset[KeyRotationType] = frozenset(
+        {
+            KeyRotationType.ENDPOINT_ADMIN,
+            KeyRotationType.ENDPOINT_SUPERVISION,
+            KeyRotationType.CEPH_ADMIN,
+        }
+    )
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -90,6 +97,25 @@ class KeyRotationService:
         key_type: KeyRotationType,
         deactivate_only: bool,
     ) -> tuple[list[KeyRotationResultItem], int, int]:
+        if key_type in self._ENV_MANAGED_ENDPOINT_KEY_TYPES and not endpoint.is_editable:
+            return (
+                [
+                    self._build_result(
+                        endpoint=endpoint,
+                        key_type=key_type,
+                        target_type="endpoint",
+                        target_id=str(endpoint.id),
+                        target_label=endpoint.name,
+                        status="skipped",
+                        message=(
+                            "Endpoint credentials are managed by ENV_STORAGE_ENDPOINTS; "
+                            "rotate this key externally and redeploy with the updated environment values."
+                        ),
+                    )
+                ],
+                0,
+                0,
+            )
         if key_type == KeyRotationType.ACCOUNT:
             return self._rotate_account_keys(endpoint, key_type, deactivate_only)
         if key_type == KeyRotationType.S3_USER:

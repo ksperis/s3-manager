@@ -39,6 +39,29 @@ Only superadmins can access key rotation. Check role assignment before checking 
 !!! warning
     Key rotation can interrupt automation that still depends on an old credential. Validate schedulers, CronJobs, external integrations, and backup access after rotation.
 
+### Endpoints managed by the environment
+
+When an endpoint is configured through `ENV_STORAGE_ENDPOINTS`, the environment
+remains the source of truth for its Admin Ops, supervision, and Ceph Admin
+credentials. The Admin key rotation page skips those three key types rather
+than creating a key that would be lost or overwritten on the next backend
+restart. Account and standalone S3 user keys remain eligible because they are
+stored in the database.
+
+Rotate environment-managed endpoint credentials without interruption:
+
+1. Create a second key for the same RGW identity and keep the old key active.
+2. Replace the access key and secret together in the deployment secret or
+   configuration that supplies `ENV_STORAGE_ENDPOINTS`.
+3. Redeploy every backend replica, then validate Admin Ops, Ceph Admin, and
+   supervision or metrics access as applicable.
+4. Disable or delete the old key only after every replica is using the new
+   environment values and the validation checks pass.
+
+Do not retire the old key before the deployment configuration has been updated.
+In a multi-replica deployment, do not retire it while any replica may still use
+the previous environment.
+
 ## Related pages
 
 - [Workspace: Admin](workspace-admin.md)

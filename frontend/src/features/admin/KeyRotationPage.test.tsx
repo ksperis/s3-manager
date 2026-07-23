@@ -34,6 +34,7 @@ describe("KeyRotationPage", () => {
         endpoint_url: "https://rgw.example.test",
         provider: "ceph",
         capabilities: { admin: true },
+        is_editable: true,
       },
       {
         id: 8,
@@ -41,6 +42,7 @@ describe("KeyRotationPage", () => {
         endpoint_url: "https://archive.example.test",
         provider: "aws",
         capabilities: { admin: false },
+        is_editable: true,
       },
     ]);
     mocks.rotateS3Keys.mockResolvedValue({
@@ -94,5 +96,61 @@ describe("KeyRotationPage", () => {
     expect(within(table).getByText("Tenant A").closest("td")).toHaveAttribute("data-label", "Target");
     expect(within(table).getByText("rotated").closest("td")).toHaveAttribute("data-label", "Status");
     expect(within(table).getByText(/OLD123 -> NEW456/).closest("td")).toHaveAttribute("data-label", "Details");
+  });
+
+  it("warns that environment-managed endpoint keys will be skipped", async () => {
+    mocks.listStorageEndpoints.mockResolvedValue([
+      {
+        id: 7,
+        name: "Ceph env",
+        endpoint_url: "https://rgw-env.example.test",
+        provider: "ceph",
+        capabilities: { admin: true },
+        is_editable: false,
+      },
+    ]);
+    mocks.rotateS3Keys.mockResolvedValue({
+      mode: "delete_old_keys",
+      summary: {
+        total: 3,
+        rotated: 0,
+        failed: 0,
+        skipped: 3,
+        deleted_old_keys: 0,
+        disabled_old_keys: 0,
+      },
+      results: [
+        {
+          endpoint_id: 7,
+          endpoint_name: "Ceph env",
+          key_type: "endpoint_admin",
+          target_type: "endpoint",
+          target_id: "7",
+          target_label: "Ceph env",
+          status: "skipped",
+          message: "Endpoint credentials are managed by ENV_STORAGE_ENDPOINTS.",
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Ceph env")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Endpoint admin, supervision, and Ceph-admin keys managed by ENV_STORAGE_ENDPOINTS/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Endpoint credentials must be rotated through ENV_STORAGE_ENDPOINTS/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Run rotation" }));
+
+    await waitFor(() =>
+      expect(mocks.rotateS3Keys).toHaveBeenCalledWith({
+        endpoint_ids: [7],
+        key_types: ["endpoint_admin", "endpoint_supervision", "account", "s3_user", "ceph_admin"],
+        deactivate_only: false,
+      })
+    );
+    expect(await screen.findByText("Rotation completed with skipped items. Review details below.")).toBeInTheDocument();
+    expect(screen.getByText("Skipped: 3")).toBeInTheDocument();
   });
 });

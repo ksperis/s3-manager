@@ -66,6 +66,12 @@ const KEY_TYPE_LABEL: Record<KeyRotationType, string> = {
   ceph_admin: "Ceph-admin",
 };
 
+const ENV_MANAGED_ENDPOINT_KEY_TYPES: KeyRotationType[] = [
+  "endpoint_admin",
+  "endpoint_supervision",
+  "ceph_admin",
+];
+
 function isEndpointEligible(endpoint: StorageEndpoint): boolean {
   if (endpoint.provider !== "ceph") return false;
   const adminEnabled = endpoint.capabilities?.admin ?? endpoint.features?.admin?.enabled ?? false;
@@ -169,6 +175,16 @@ export default function KeyRotationPage() {
     () => endpoints.filter((endpoint) => isEndpointEligible(endpoint)),
     [endpoints]
   );
+  const selectedEnvManagedEndpoints = useMemo(
+    () =>
+      eligibleEndpoints.filter(
+        (endpoint) => selectedEndpointIds.includes(endpoint.id) && endpoint.is_editable === false
+      ),
+    [eligibleEndpoints, selectedEndpointIds]
+  );
+  const hasSelectedEnvManagedEndpointKeys =
+    selectedEnvManagedEndpoints.length > 0 &&
+    selectedTypes.some((type) => ENV_MANAGED_ENDPOINT_KEY_TYPES.includes(type));
   const resultRows = useMemo<KeyRotationResultRow[]>(
     () =>
       (result?.results ?? []).map((item, index) => ({
@@ -225,6 +241,8 @@ export default function KeyRotationPage() {
       setResult(response);
       if (response.summary.failed > 0) {
         setActionMessage("Rotation completed with errors. Review details below.");
+      } else if (response.summary.skipped > 0) {
+        setActionMessage("Rotation completed with skipped items. Review details below.");
       } else {
         setActionMessage("Rotation completed successfully.");
       }
@@ -252,7 +270,18 @@ export default function KeyRotationPage() {
 
       {loading && <PageBanner tone="info">Loading endpoints...</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {actionMessage && <PageBanner tone={result?.summary.failed ? "warning" : "success"}>{actionMessage}</PageBanner>}
+      {actionMessage && (
+        <PageBanner tone={result?.summary.failed || result?.summary.skipped ? "warning" : "success"}>
+          {actionMessage}
+        </PageBanner>
+      )}
+      {hasSelectedEnvManagedEndpointKeys && (
+        <PageBanner tone="warning">
+          Endpoint admin, supervision, and Ceph-admin keys managed by ENV_STORAGE_ENDPOINTS will be
+          skipped. Rotate them externally and redeploy with the updated environment values. Account
+          and S3 user keys remain eligible.
+        </PageBanner>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SettingsCard>
@@ -285,11 +314,14 @@ export default function KeyRotationPage() {
           <div>
             {endpoints.map((endpoint) => {
               const eligible = isEndpointEligible(endpoint);
+              const envManaged = endpoint.is_editable === false;
               return (
                 <SettingsChoiceRow
                   key={endpoint.id}
                   title={endpoint.name}
-                  description={`${endpoint.endpoint_url} · ${endpoint.provider}`}
+                  description={`${endpoint.endpoint_url} · ${endpoint.provider}${
+                    envManaged ? " · managed by environment" : ""
+                  }`}
                   checked={selectedEndpointIds.includes(endpoint.id)}
                   disabled={!eligible}
                   onChange={() => toggleEndpoint(endpoint.id)}
@@ -297,6 +329,11 @@ export default function KeyRotationPage() {
                   {!eligible && (
                     <span className="block text-amber-700 dark:text-amber-300">
                       Unsupported: endpoint is not Ceph or admin feature is disabled.
+                    </span>
+                  )}
+                  {eligible && envManaged && (
+                    <span className="block text-amber-700 dark:text-amber-300">
+                      Endpoint credentials must be rotated through ENV_STORAGE_ENDPOINTS.
                     </span>
                   )}
                 </SettingsChoiceRow>

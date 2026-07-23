@@ -310,6 +310,148 @@ def test_rotate_keys_reports_error_for_non_ceph_endpoint(db_session):
     assert "only supported for Ceph" in (result.results[0].message or "")
 
 
+def test_env_managed_endpoint_credentials_are_skipped_without_rgw_calls(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session, name="ceph-env-managed")
+    endpoint.is_editable = False
+    db_session.add(endpoint)
+    db_session.commit()
+
+    def unexpected_client_factory(**kwargs):  # noqa: ANN003, ARG001
+        raise AssertionError("RGW client must not be built for environment-managed endpoint keys")
+
+    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", unexpected_client_factory)
+
+    service = KeyRotationService(db_session)
+    result = service.rotate_keys(
+        KeyRotationRequest(
+            endpoint_ids=[endpoint.id],
+            key_types=[
+                KeyRotationType.ENDPOINT_ADMIN,
+                KeyRotationType.ENDPOINT_SUPERVISION,
+                KeyRotationType.CEPH_ADMIN,
+            ],
+            deactivate_only=False,
+        )
+    )
+
+    db_session.refresh(endpoint)
+    assert result.summary.total == 3
+    assert result.summary.rotated == 0
+    assert result.summary.failed == 0
+    assert result.summary.skipped == 3
+    assert {item.key_type for item in result.results} == {
+        KeyRotationType.ENDPOINT_ADMIN,
+        KeyRotationType.ENDPOINT_SUPERVISION,
+        KeyRotationType.CEPH_ADMIN,
+    }
+    assert all("ENV_STORAGE_ENDPOINTS" in (item.message or "") for item in result.results)
+    assert endpoint.admin_access_key == "ADM-OLD"
+    assert endpoint.admin_secret_key == "ADM-OLD-SEC"
+    assert endpoint.supervision_access_key == "SUP-OLD"
+    assert endpoint.supervision_secret_key == "SUP-OLD-SEC"
+    assert endpoint.ceph_admin_access_key == "CADM-OLD"
+    assert endpoint.ceph_admin_secret_key == "CADM-OLD-SEC"
+
+
+def test_env_managed_endpoint_mixed_rotation_still_rotates_accounts_and_s3_users(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session, name="ceph-env-mixed")
+    endpoint.is_editable = False
+    account = S3Account(
+        name="env-account",
+        rgw_account_id="RGW00000000000000002",
+        rgw_user_uid="RGW00000000000000002-admin",
+        rgw_access_key="ENV-ACC-OLD",
+        rgw_secret_key="ENV-ACC-OLD-SEC",
+        storage_endpoint_id=endpoint.id,
+    )
+    s3_user = S3User(
+        name="env-user",
+        rgw_user_uid="env-user",
+        rgw_access_key="ENV-USR-OLD",
+        rgw_secret_key="ENV-USR-OLD-SEC",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(endpoint)
+    db_session.add(account)
+    db_session.add(s3_user)
+    db_session.commit()
+
+    registry = FakeRgwRegistry()
+    registry.add_identity(uid="svc-admin", tenant=None, keys=[("ADM-OLD", "ADM-OLD-SEC")], admin=True)
+    registry.add_identity(
+        uid="RGW00000000000000002-admin",
+        tenant="RGW00000000000000002",
+        keys=[("ENV-ACC-OLD", "ENV-ACC-OLD-SEC")],
+        account_id="RGW00000000000000002",
+    )
+    registry.add_identity(uid="env-user", tenant=None, keys=[("ENV-USR-OLD", "ENV-USR-OLD-SEC")])
+
+    def fake_client_factory(access_key: Optional[str] = None, **kwargs):  # noqa: ANN003, ARG001
+        if not access_key or access_key not in registry.access_index:
+            raise RGWAdminError("unknown access key")
+        return FakeRGWAdmin(registry)
+
+    monkeypatch.setattr("app.services.key_rotation_service.get_rgw_admin_client", fake_client_factory)
+
+    service = KeyRotationService(db_session)
+    result = service.rotate_keys(
+        KeyRotationRequest(
+            endpoint_ids=[endpoint.id],
+            key_types=[
+                KeyRotationType.ENDPOINT_ADMIN,
+                KeyRotationType.ACCOUNT,
+                KeyRotationType.S3_USER,
+            ],
+            deactivate_only=False,
+        )
+    )
+
+    db_session.refresh(endpoint)
+    db_session.refresh(account)
+    db_session.refresh(s3_user)
+    assert result.summary.total == 3
+    assert result.summary.rotated == 2
+    assert result.summary.failed == 0
+    assert result.summary.skipped == 1
+    assert endpoint.admin_access_key == "ADM-OLD"
+    assert endpoint.admin_secret_key == "ADM-OLD-SEC"
+    assert account.rgw_access_key != "ENV-ACC-OLD"
+    assert s3_user.rgw_access_key != "ENV-USR-OLD"
+    assert "ENV-ACC-OLD" not in registry.access_index
+    assert "ENV-USR-OLD" not in registry.access_index
+
+
+def test_endpoint_identity_rotation_failure_returns_failed_result(db_session, monkeypatch):
+    endpoint = _seed_endpoint(db_session, name="ceph-endpoint-failure")
+
+    class FailingRGWAdmin:
+        def get_user_by_access_key(self, access_key: str, allow_not_found: bool = False):  # noqa: ARG002
+            raise RGWAdminError("identity lookup failed")
+
+    monkeypatch.setattr(
+        "app.services.key_rotation_service.get_rgw_admin_client",
+        lambda **kwargs: FailingRGWAdmin(),
+    )
+
+    service = KeyRotationService(db_session)
+    result = service.rotate_keys(
+        KeyRotationRequest(
+            endpoint_ids=[endpoint.id],
+            key_types=[KeyRotationType.ENDPOINT_ADMIN],
+            deactivate_only=False,
+        )
+    )
+
+    db_session.refresh(endpoint)
+    assert result.summary.total == 1
+    assert result.summary.rotated == 0
+    assert result.summary.failed == 1
+    assert result.summary.skipped == 0
+    assert result.results[0].status == "failed"
+    assert endpoint.admin_access_key == "ADM-OLD"
+    assert endpoint.admin_secret_key == "ADM-OLD-SEC"
+
+
 def test_rotate_supervision_uses_admin_ops_identity(db_session, monkeypatch):
     endpoint = _seed_endpoint(db_session, name="ceph-main-supervision-via-admin")
     registry = FakeRgwRegistry()
