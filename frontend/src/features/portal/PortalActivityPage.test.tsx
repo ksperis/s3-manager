@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import PortalActivityPage from "./PortalActivityPage";
 import type { PortalWorkspaceActivityItem, PortalWorkspaceSpace } from "./portalWorkspaceModel";
 
@@ -86,11 +87,19 @@ describe("PortalActivityPage", () => {
     expect(screen.getAllByText("Uploaded").length).toBeGreaterThan(0);
     expect(screen.getByText("alice@example.com").closest("td")).toHaveTextContent("report.csv");
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
-    expect(screen.getByRole("columnheader", { name: "Next step" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Open space" })[0]).toHaveAttribute(
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
+    const openSpaceLinks = screen.getAllByRole("link", { name: "Open space" });
+    expect(openSpaceLinks[0]).toHaveAttribute(
       "href",
       "/portal/storage-spaces/research-data"
     );
+    openSpaceLinks.forEach((link) => {
+      expect(link).toHaveAttribute("class", tableActionButtonClasses);
+    });
+    const showDetailsButtons = screen.getAllByRole("button", { name: "Show details" });
+    showDetailsButtons.forEach((button) => {
+      expect(button).toHaveAttribute("class", tableActionButtonClasses);
+    });
     expect(screen.getByText("alice@example.com").closest("td")).toHaveAttribute("data-mobile-primary", "true");
     const researchDataCell = screen.getAllByText("Research Data").find((element) => element.closest("td"));
     expect(researchDataCell).toBeDefined();
@@ -98,9 +107,13 @@ describe("PortalActivityPage", () => {
     expect(screen.queryByRole("columnheader", { name: "IP Address" })).not.toBeInTheDocument();
     expect(screen.queryByText("192.0.2.10")).not.toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "Show details" })[0]);
+    await user.click(showDetailsButtons[0]);
     expect(screen.getByText("IP address")).toBeInTheDocument();
     expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide details" })).toHaveAttribute(
+      "class",
+      tableActionButtonClasses,
+    );
 
     await user.click(screen.getByRole("tab", { name: "Audit details" }));
     expect(screen.getByText("Recent workspace history")).toBeInTheDocument();
@@ -108,6 +121,7 @@ describe("PortalActivityPage", () => {
     expect(screen.getByText("Spaces touched")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "File or item" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Action" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
   });
 
   it("points empty activity back to spaces", () => {

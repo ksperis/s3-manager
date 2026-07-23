@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import UiCard from "../../components/ui/UiCard";
 import UiSelect from "../../components/ui/UiSelect";
 import {
@@ -112,7 +113,7 @@ export default function PortalActivityPage() {
       },
       {
         id: "details",
-        label: t({ en: "Next step", fr: "Suite", de: "Nächster Schritt" }),
+        label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }),
         align: "right",
         mobileRole: "actions",
         render: (item) => {
@@ -123,7 +124,7 @@ export default function PortalActivityPage() {
               {spacePath ? (
                 <Link
                   to={spacePath}
-                  className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+                  className={tableActionButtonClasses}
                 >
                   {t({ en: "Open space", fr: "Ouvrir l'espace", de: "Bereich öffnen" })}
                 </Link>
@@ -131,7 +132,7 @@ export default function PortalActivityPage() {
               <button
                 type="button"
                 onClick={() => setExpandedActivityId(expanded ? null : item.id)}
-                className="text-xs font-bold text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+                className={tableActionButtonClasses}
               >
                 {expanded ? t({ en: "Hide details", fr: "Masquer les détails", de: "Details ausblenden" }) : t({ en: "Show details", fr: "Afficher les détails", de: "Details anzeigen" })}
               </button>
