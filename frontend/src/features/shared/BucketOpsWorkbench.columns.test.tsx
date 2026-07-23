@@ -303,6 +303,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
       expect(screen.getByText(/Page 2 of 3/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
     });
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}"
+      ) as Record<string, { page?: number; pageSize?: number }>;
+      expect(stored["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "bucket-a" }));
 
