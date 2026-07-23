@@ -278,6 +278,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
   });
 
   it("persists the current page and page size before opening a bucket", async () => {
+    let storedAtNavigation: Record<string, { page?: number; pageSize?: number }> | null = null;
+    mocks.navigate.mockImplementation(() => {
+      storedAtNavigation = JSON.parse(
+        window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}"
+      ) as Record<string, { page?: number; pageSize?: number }>;
+    });
     mocks.listStorageOpsBuckets.mockImplementation(async (_endpointId, params) => ({
       items: [baseBucket],
       ...baseResponse,
@@ -295,18 +301,12 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
     fireEvent.click(nextButton);
     await waitFor(() => {
       expect(screen.getByText(/Page 2 of 3/)).toBeInTheDocument();
-      expect(nextButton).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "bucket-a" }));
 
-    await waitFor(() => {
-      const stored = JSON.parse(window.localStorage.getItem(STORAGE_OPS_LIST_STATE_STORAGE_KEY) ?? "{}") as Record<
-        string,
-        { page?: number; pageSize?: number }
-      >;
-      expect(stored["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
-    });
+    expect(storedAtNavigation?.["1"]).toEqual(expect.objectContaining({ page: 2, pageSize: 10 }));
   });
 
   it("restores the list scroll position and focuses the originating bucket", async () => {

@@ -65,16 +65,15 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const contextUserKey = requiresContextResolution
     ? `${user?.id ?? "unknown"}:${user?.email ?? "unknown"}`
     : null;
-  const contextAvailability =
-    contextUserKey && resolvedContextAvailability.userKey === contextUserKey
-      ? resolvedContextAvailability.availability
-      : contextUserKey
-        ? { manager: false, browser: false }
-        : undefined;
-  const environments = useMemo(
-    () => resolveAvailableWorkspacesWithFlags(user, generalSettings, contextAvailability),
-    [contextAvailability, generalSettings, user]
-  );
+  const environments = useMemo(() => {
+    const contextAvailability =
+      contextUserKey && resolvedContextAvailability.userKey === contextUserKey
+        ? resolvedContextAvailability.availability
+        : contextUserKey
+          ? { manager: false, browser: false }
+          : undefined;
+    return resolveAvailableWorkspacesWithFlags(user, generalSettings, contextAvailability);
+  }, [contextUserKey, generalSettings, resolvedContextAvailability, user]);
   const current = resolveWorkspaceFromPath(location.pathname, environments);
 
   useEffect(() => {

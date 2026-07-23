@@ -946,7 +946,6 @@ export default function BrowserPage({
     (isPortalBrowserSurface && !isMainBrowserPath);
   const usePortalWorkspaceLabels = isPortalBrowserSurface && !isMainBrowserPath;
   const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
-  const workspaceNounPlural = `${workspaceNoun}s`;
   const workspaceNounCapitalized = usePortalWorkspaceLabels ? "Storage Space" : "Bucket";
   const selectorWorkspaceNoun = isPortalBrowserSurface ? "storage space" : workspaceNoun;
   const selectorWorkspaceNounPlural = `${selectorWorkspaceNoun}s`;
@@ -6430,7 +6429,6 @@ export default function BrowserPage({
       usageSummary,
       usageSummaryError,
       usageSummaryLoading,
-      usePortalWorkspaceLabels,
       workspaceAccountAction,
       workspaceSidebarRows,
     ],
