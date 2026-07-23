@@ -90,6 +90,7 @@ class PortalState(BaseModel):
 class PortalAccessKeysState(BaseModel):
     iam_user: PortalIAMUser
     s3_endpoint: Optional[str] = None
+    force_path_style: bool = False
     access_keys: list[PortalAccessKey]
     can_manage_access_keys: bool = False
     max_access_keys: int = Field(default=2, ge=1)

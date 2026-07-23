@@ -44,6 +44,7 @@ class PortalAccessKeysMixin:
 
     def get_access_keys_state(self, user: User, access: "AccountAccess") -> PortalAccessKeysState:
         portal_settings = self._effective_portal_settings(access.account)
+        s3_endpoint, _, force_path_style, _ = resolve_s3_client_options(access.account)
         link = self._existing_portal_link(user, access.account)
         iam_user = None
         access_keys: list[PortalAccessKey] = []
@@ -60,7 +61,8 @@ class PortalAccessKeysMixin:
                 arn=iam_user.arn if iam_user else None,
                 created_at=link.created_at if link else None,
             ),
-            s3_endpoint=resolve_s3_endpoint(access.account),
+            s3_endpoint=s3_endpoint,
+            force_path_style=force_path_style,
             access_keys=access_keys,
             can_manage_access_keys=portal_settings.allow_portal_user_access_key_create,
             max_access_keys=portal_settings.max_portal_user_access_keys,

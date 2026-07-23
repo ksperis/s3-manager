@@ -51,6 +51,8 @@ workflow.
   Use the space name everywhere else in Portal.
 - Cyberduck bookmark files do not include the secret. Cyberduck asks for it
   when connecting.
+- Cyberduck bookmarks automatically use path-style S3 addressing when the
+  selected storage endpoint requires it.
 
 ## You are done when
 

@@ -29,6 +29,7 @@ function connection(overrides: Partial<PortalExternalToolConnection> = {}): Port
   return {
     key: externalKey,
     endpoint: parsePortalExternalToolEndpoint("https://s3.example.test:9443")!,
+    forcePathStyle: false,
     storageSpaceName: "Research Data",
     bucketName: "research-data-bucket",
     permissionLabel: portalExternalToolPermissionLabel(externalKey.permission),
@@ -68,7 +69,18 @@ describe("portalExternalToolAccess", () => {
     expect(bookmark).toContain("<string>9443</string>");
     expect(bookmark).toContain("<string>AK-EXT</string>");
     expect(bookmark).toContain("<string>/research-data-bucket</string>");
+    expect(bookmark).not.toContain("s3.bucket.virtualhost.disable");
     expect(bookmark).not.toContain("SK-EXT");
+  });
+
+  it("disables virtual-host addressing for path-style endpoints", () => {
+    const bookmark = buildCyberduckBookmark(connection({ forcePathStyle: true }));
+    const document = new DOMParser().parseFromString(bookmark, "application/xml");
+
+    expect(document.querySelector("parsererror")).toBeNull();
+    expect(bookmark).toContain("<key>Custom</key>");
+    expect(bookmark).toContain("<key>s3.bucket.virtualhost.disable</key>");
+    expect(bookmark).toContain("<string>true</string>");
   });
 
   it("builds generic connection sheets with an explicit one-time secret option", () => {

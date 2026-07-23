@@ -14,6 +14,7 @@ export type PortalExternalToolEndpoint = {
 export type PortalExternalToolConnection = {
   key: PortalAccessKey;
   endpoint: PortalExternalToolEndpoint | null;
+  forcePathStyle: boolean;
   storageSpaceName: string;
   bucketName: string;
   permissionLabel: string;
@@ -104,7 +105,12 @@ export function buildCyberduckBookmark(connection: PortalExternalToolConnection)
   <string>${escapeXml(connection.key.access_key_id)}</string>
   <key>Path</key>
   <string>/${escapeXml(connection.bucketName)}</string>
-</dict>
+${connection.forcePathStyle ? `  <key>Custom</key>
+  <dict>
+    <key>s3.bucket.virtualhost.disable</key>
+    <string>true</string>
+  </dict>
+` : ""}</dict>
 </plist>
 `;
 }

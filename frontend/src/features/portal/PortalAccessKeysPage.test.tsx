@@ -204,6 +204,21 @@ describe("PortalAccessKeysPage", () => {
     expect(bookmark).not.toContain("SK-NEW");
   });
 
+  it("configures Cyberduck for path-style addressing when required by the endpoint", async () => {
+    mocks.state = { ...mocks.state, force_path_style: true };
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByRole("heading", { name: "External S3 tools" });
+    const setupDialog = await openSetupDialog(user);
+    await user.click(within(setupDialog).getByRole("button", { name: "Cyberduck bookmark" }));
+    const bookmark = await readDownloadedBlobText(downloadedBlobs.at(-1));
+
+    expect(bookmark).toContain("<key>Custom</key>");
+    expect(bookmark).toContain("<key>s3.bucket.virtualhost.disable</key>");
+    expect(bookmark).toContain("<string>true</string>");
+  });
+
   it("keeps generic connection details available when Cyberduck cannot use the endpoint", async () => {
     mocks.state = { ...mocks.state, s3_endpoint: "mailto:user@example.test" };
     renderPage();

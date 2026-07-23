@@ -844,9 +844,19 @@ def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session)
 
 
 def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_session):
-    account = S3Account(name="portal-account-keys-state", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    endpoint = StorageEndpoint(
+        name="portal-keys-path-style",
+        endpoint_url="https://portal-keys.example.test",
+        force_path_style=True,
+    )
+    account = S3Account(
+        name="portal-account-keys-state",
+        rgw_access_key="ROOT-AK",
+        rgw_secret_key="ROOT-SK",
+        storage_endpoint=endpoint,
+    )
     user = User(email="portal-keys-state@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
+    db_session.add_all([endpoint, account, user])
     db_session.commit()
 
     link = AccountIAMUser(
@@ -882,6 +892,8 @@ def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_s
     state = service.get_access_keys_state(user, _portal_access(account, user))
 
     assert state.iam_user.iam_username == "portal-user-iam"
+    assert state.s3_endpoint == "https://portal-keys.example.test"
+    assert state.force_path_style is True
     assert state.can_manage_access_keys is True
     assert state.max_access_keys == 3
     assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]

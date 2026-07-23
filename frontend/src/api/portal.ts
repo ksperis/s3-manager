@@ -69,6 +69,7 @@ export type PortalState = {
 export type PortalAccessKeysState = {
   iam_user: PortalIAMUser;
   s3_endpoint?: string | null;
+  force_path_style?: boolean;
   access_keys: PortalAccessKey[];
   can_manage_access_keys: boolean;
   max_access_keys: number;

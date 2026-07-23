@@ -256,6 +256,7 @@ export default function PortalAccessKeysPage() {
     ? {
         key: selectedConnectionKey,
         endpoint: parsePortalExternalToolEndpoint(state?.s3_endpoint),
+        forcePathStyle: Boolean(state?.force_path_style),
         storageSpaceName: storageSpaceNameForPortalExternalTool(selectedConnectionKey, selectedConnectionSpace),
         bucketName: selectedConnectionBucketName,
         permissionLabel: portalExternalToolPermissionLabel(selectedConnectionKey.permission),
