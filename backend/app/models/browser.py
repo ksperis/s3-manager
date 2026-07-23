@@ -11,6 +11,7 @@ class BrowserBucket(BaseModel):
     creation_date: Optional[datetime] = None
     display_name: Optional[str] = None
     workspace_label: Optional[str] = None
+    description: Optional[str] = None
     used_bytes: Optional[int] = None
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None

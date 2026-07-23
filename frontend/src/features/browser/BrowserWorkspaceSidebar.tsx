@@ -204,6 +204,7 @@ export default function BrowserWorkspaceSidebar({
           {rows.map(({ bucket, access }) => {
             const isActive = bucket.name === activeBucketName;
             const displayName = getBucketDisplayName(bucket, isPortalContext);
+            const description = isPortalContext ? bucket.description?.trim() : "";
             const rowTitle =
               access.status === "unavailable"
                 ? unavailableBucketTitle
@@ -239,6 +240,14 @@ export default function BrowserWorkspaceSidebar({
                   <>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{displayName}</span>
+                      {isPortalContext && description && (
+                        <span
+                          className="block truncate text-[11px] font-medium text-[var(--shell-muted-text)]"
+                          title={description}
+                        >
+                          {description}
+                        </span>
+                      )}
                       {!isPortalContext && bucket.workspace_label && (
                         <span className="block truncate text-[11px] font-medium text-[var(--shell-muted-text)]">
                           {bucket.workspace_label}

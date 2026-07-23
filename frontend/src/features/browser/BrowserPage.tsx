@@ -6378,7 +6378,7 @@ export default function BrowserPage({
         compact={compact}
         variant={variant}
         closeMobile={closeMobile}
-        isPortalContext={usePortalWorkspaceLabels}
+        isPortalContext={isPortalBrowserSurface}
         rows={workspaceSidebarRows}
         activeBucketName={bucketName}
         bucketFilter={bucketFilter}
@@ -6419,6 +6419,7 @@ export default function BrowserPage({
       canLoadMoreBucketResults,
       handleBucketChange,
       handleBucketMenuLoadMore,
+      isPortalBrowserSurface,
       loadingBuckets,
       openCreateBucketDialog,
       refreshBucketList,

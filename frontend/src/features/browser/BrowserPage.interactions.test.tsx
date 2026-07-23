@@ -980,7 +980,21 @@ describe("BrowserPage interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps root Browser bucket labels while preserving Portal-scoped requests", async () => {
+  it("uses Portal storage-space labels in the root Browser sidebar", async () => {
+    searchBrowserBucketsMock.mockResolvedValue({
+      items: [
+        {
+          name: "internal-research",
+          display_name: "Research Data",
+          workspace_label: "Storage Space",
+          description: "Shared research datasets with a deliberately detailed description",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_next: false,
+    });
     setBrowserContext({
       selectorForApi: "acc-portal",
       selectedContextId: "portal-101",
@@ -999,9 +1013,13 @@ describe("BrowserPage interactions", () => {
       "acc-portal",
       expect.objectContaining({ workspaceSurface: "portal" }),
     );
-    expect(screen.getByRole("button", { name: "Select bucket" })).toHaveTextContent("bucket-1");
-    expect(screen.getByTestId("browser-workspace-sidebar")).toHaveAttribute("aria-label", "Buckets");
-    expect(screen.queryByText("Storage Spaces")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select bucket" })).toHaveTextContent("Research Data");
+    const sidebar = screen.getByTestId("browser-workspace-sidebar");
+    expect(sidebar).toHaveAttribute("aria-label", "Storage Spaces");
+    expect(within(sidebar).getByText("Research Data")).toBeInTheDocument();
+    const description = within(sidebar).getByText("Shared research datasets with a deliberately detailed description");
+    expect(description).toHaveAttribute("title", "Shared research datasets with a deliberately detailed description");
+    expect(within(sidebar).queryByText("Storage Space")).not.toBeInTheDocument();
   });
 
   it("runs the Portal public-link action for a selected Browser file", async () => {

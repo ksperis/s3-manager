@@ -17,6 +17,7 @@ export type BrowserBucket = {
   creation_date?: string | null;
   display_name?: string | null;
   workspace_label?: string | null;
+  description?: string | null;
   used_bytes?: number | null;
   object_count?: number | null;
   quota_max_size_bytes?: number | null;

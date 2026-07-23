@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -26,6 +27,25 @@ def _clear_browser_caches():
     browser_service._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
     browser_service._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
     browser_service._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
+
+
+def test_list_portal_storage_spaces_includes_descriptions():
+    account = _account()
+    account._portal_storage_spaces = [  # type: ignore[attr-defined]
+        SimpleNamespace(
+            id="space-1",
+            internal_bucket_name="internal-space-1",
+            name="Research Data",
+            description="Shared research datasets",
+        )
+    ]
+
+    result = BrowserService().list_buckets(account)
+
+    assert len(result) == 1
+    assert result[0].display_name == "Research Data"
+    assert result[0].workspace_label == "Storage Space"
+    assert result[0].description == "Shared research datasets"
 
 
 def test_list_objects_recursive_folder_filter_builds_prefixes(monkeypatch):
