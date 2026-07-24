@@ -147,7 +147,8 @@ describe("S3ConnectionsPage modal tabs", () => {
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
-    expect(within(table).getByText("connection-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    const connectionName = await within(table).findByText("connection-1");
+    expect(connectionName.closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("https://endpoint-1.example.test").closest("td")).toHaveAttribute("data-label", "Endpoint");
     expect(within(table).getByText("Active").closest("td")).toHaveAttribute("data-label", "Status");
     expect(within(table).getByTitle("owner@example.com").closest("td")).toHaveAttribute("data-label", "Created by");
