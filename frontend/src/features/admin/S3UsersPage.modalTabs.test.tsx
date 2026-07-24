@@ -186,7 +186,8 @@ describe("S3UsersPage modal tabs", () => {
     expect(await screen.findByRole("columnheader", { name: "UI Users / Groups" })).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(table).toHaveClass("responsive-data-table");
-    expect(within(table).getByText("rgw-user-1").closest("td")).toHaveAttribute("data-mobile-primary", "true");
+    const userName = await within(table).findByText("rgw-user-1");
+    expect(userName.closest("td")).toHaveAttribute("data-mobile-primary", "true");
     expect(within(table).getByText("rgw-uid-1").closest("td")).toHaveAttribute("data-label", "UID");
     expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     const associations = await screen.findByLabelText("2 linked principals");
