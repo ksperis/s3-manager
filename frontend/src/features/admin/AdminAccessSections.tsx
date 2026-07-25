@@ -25,19 +25,19 @@ export type WorkspaceAccessToggle = {
   onChange: (value: boolean) => void;
 };
 
-export function WorkspaceAccessSection({
+export function AdminAccessToggleSection({
+  title,
   description,
-  cephAdmin,
-  storageOps,
+  items,
 }: {
+  title: string;
   description: string;
-  cephAdmin: WorkspaceAccessToggle;
-  storageOps: WorkspaceAccessToggle;
+  items: WorkspaceAccessToggle[];
 }) {
   return (
     <div className={adminModalSettingsGroupClass}>
-      <PortalSettingsSection title="Mass management workspaces" description={description} layout="stack">
-        {[cephAdmin, storageOps].map((item) => {
+      <PortalSettingsSection title={title} description={description} layout="stack">
+        {items.map((item) => {
           const disabled = Boolean(item.disabled);
           return (
             <PortalSettingsItem
@@ -58,6 +58,24 @@ export function WorkspaceAccessSection({
         })}
       </PortalSettingsSection>
     </div>
+  );
+}
+
+export function WorkspaceAccessSection({
+  description,
+  cephAdmin,
+  storageOps,
+}: {
+  description: string;
+  cephAdmin: WorkspaceAccessToggle;
+  storageOps: WorkspaceAccessToggle;
+}) {
+  return (
+    <AdminAccessToggleSection
+      title="Mass management workspaces"
+      description={description}
+      items={[cephAdmin, storageOps]}
+    />
   );
 }
 

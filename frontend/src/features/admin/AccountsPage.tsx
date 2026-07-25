@@ -33,6 +33,7 @@ import Modal from "../../components/Modal";
 import WorkflowPage, {
   WorkflowActions,
   WorkflowMetadata,
+  WorkflowSection,
   workflowPageHostClass,
 } from "../../components/WorkflowPage";
 import WorkflowTabs from "../../components/WorkflowTabs";
@@ -54,6 +55,8 @@ import {
   AssociationPrincipalStack,
   type AssociationPrincipalItem,
 } from "./AssociationSummary";
+import { AdminAccessToggleSection } from "./AdminAccessSections";
+import AdminQuotaFields from "./AdminQuotaFields";
 import {
   AdminAssociationAdminCheckbox,
   AdminAssociationPickerPanel,
@@ -1561,6 +1564,10 @@ export default function S3AccountsPage() {
             <WorkflowMetadata
               items={[
                 {
+                  label: "RGW ID",
+                  value: editingS3Account.rgw_account_id,
+                },
+                {
                   label: "Endpoint",
                   value: editingS3Account.storage_endpoint_name ?? "—",
                   title: editingS3Account.storage_endpoint_url || undefined,
@@ -1574,7 +1581,7 @@ export default function S3AccountsPage() {
               {actionError}
             </PageBanner>
           )}
-          <div className="space-y-4">
+          <form onSubmit={submitEditS3Account} className="space-y-4">
             <WorkflowTabs<EditTab>
               activeTab={editTab}
               onTabChange={(tab) => {
@@ -1597,27 +1604,11 @@ export default function S3AccountsPage() {
               ]}
             >
             {showGeneralTab && (
-              <StorageUsageCard
-                accountName={editingS3Account.name}
-                storage={{
-                  used: editingUsageStats?.total_bytes ?? null,
-                  quotaBytes:
-                    editingS3Account.quota_max_size_gb != null ? editingS3Account.quota_max_size_gb * 1024 ** 3 : null,
-                }}
-                objects={{
-                  used: editingUsageStats?.total_objects ?? null,
-                  quota: editingS3Account.quota_max_objects ?? null,
-                }}
-                bucketOverview={editingUsageStats?.bucket_overview}
-                loading={editingUsageLoading}
-                metricsDisabled={!allowUsageStats}
-                errorMessage={editingUsageError}
-              />
-            )}
-            <form onSubmit={submitEditS3Account} className="space-y-4">
-              {showGeneralTab && (
                 <>
-                  <div className="space-y-3">
+                  <WorkflowSection
+                    title="Account details"
+                    description="Use administrative tags to make this account easier to find and organize."
+                  >
                     {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                     <UiTagEditor
                       label="Tags"
@@ -1627,45 +1618,40 @@ export default function S3AccountsPage() {
                       placeholder="Add a tag for this account"
                       hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
                     />
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
-                      <div className="flex gap-2">
-                        <UiInput
-                          aria-label="Max quota"
-                          type="number"
-                          min={0}
-                          step="any"
-                          fieldClassName="flex-1"
-                          value={editForm.quota_max_size_gb}
-                          disabled={!allowQuotaUpdates}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                          placeholder="Leave empty to disable"
-                        />
-                        <UiSelect
-                          aria-label="Max quota unit"
-                          fieldClassName="w-24"
-                          value={editForm.quota_max_size_unit}
-                          disabled={!allowQuotaUpdates}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                        >
-                          <option value="MiB">MiB</option>
-                          <option value="GiB">GiB</option>
-                          <option value="TiB">TiB</option>
-                        </UiSelect>
-                      </div>
-                    </div>
-                    <UiInput
-                      label="Object quota"
-                      type="number"
-                      min={0}
-                      value={editForm.quota_max_objects}
-                      disabled={!allowQuotaUpdates}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                      placeholder="Leave empty to disable"
-                    />
-                  </div>
+                  </WorkflowSection>
+                  <StorageUsageCard
+                    accountName={editingS3Account.name}
+                    storage={{
+                      used: editingUsageStats?.total_bytes ?? null,
+                      quotaBytes:
+                        editingS3Account.quota_max_size_gb != null
+                          ? editingS3Account.quota_max_size_gb * 1024 ** 3
+                          : null,
+                    }}
+                    objects={{
+                      used: editingUsageStats?.total_objects ?? null,
+                      quota: editingS3Account.quota_max_objects ?? null,
+                    }}
+                    bucketOverview={editingUsageStats?.bucket_overview}
+                    loading={editingUsageLoading}
+                    metricsDisabled={!allowUsageStats}
+                    errorMessage={editingUsageError}
+                  />
+                  <AdminQuotaFields
+                    storageValue={editForm.quota_max_size_gb}
+                    storageUnit={editForm.quota_max_size_unit}
+                    objectValue={editForm.quota_max_objects}
+                    disabled={!allowQuotaUpdates}
+                    onStorageValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, quota_max_size_gb: value }))
+                    }
+                    onStorageUnitChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, quota_max_size_unit: value }))
+                    }
+                    onObjectValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, quota_max_objects: value }))
+                    }
+                  />
                 </>
               )}
               {showUsersTab && (
@@ -2057,26 +2043,23 @@ export default function S3AccountsPage() {
                 </div>
               )}
               {canManagePrivilegedTargets && showPrivilegedTab && (
-                <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      checked={editForm.allow_manager_bucket_quota}
-                      onChange={(e) =>
+                <AdminAccessToggleSection
+                  title="Privileged Ceph access"
+                  description="Ceph admin-API actions granted directly to this account outside the Ceph Admin workspace."
+                  items={[
+                    {
+                      title: "Bucket quota management",
+                      description: "Allow privileged Ceph bucket quota updates in Manager and Storage Ops.",
+                      ariaLabel: "Bucket quota management",
+                      checked: editForm.allow_manager_bucket_quota,
+                      onChange: (checked) =>
                         setEditForm((prev) => ({
                           ...prev,
-                          allow_manager_bucket_quota: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span>
-                      <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
-                        Bucket quota management
-                      </span>
-                    </span>
-                  </label>
-                </div>
+                          allow_manager_bucket_quota: checked,
+                        })),
+                    },
+                  ]}
+                />
               )}
               {showPortalTab && (
                 <div className="ui-surface-card p-4">
@@ -2292,18 +2275,17 @@ export default function S3AccountsPage() {
                   </div>
                 </div>
               )}
-              <WorkflowActions>
-                <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
-                  Cancel
-                </UiButton>
-                <UiButton type="submit">
-                  Save
-                </UiButton>
-              </WorkflowActions>
-              {editCloseGuard.confirmationDialog}
-            </form>
             </WorkflowTabs>
-          </div>
+            <WorkflowActions>
+              <UiButton variant="secondary" onClick={editCloseGuard.requestClose}>
+                Cancel
+              </UiButton>
+              <UiButton type="submit">
+                Save changes
+              </UiButton>
+            </WorkflowActions>
+            {editCloseGuard.confirmationDialog}
+          </form>
         </WorkflowPage>
       )}
 

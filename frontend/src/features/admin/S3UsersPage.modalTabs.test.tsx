@@ -151,6 +151,28 @@ describe("S3UsersPage modal tabs", () => {
     expect(screen.queryByText("Import or create standalone RGW users to expose them to managers.")).not.toBeInTheDocument();
   });
 
+  it("presents user identity and quotas in consistent General sections", async () => {
+    render(
+      <MemoryRouter>
+        <S3UsersPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("rgw-user-1");
+    fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
+
+    const generalPanel = await screen.findByRole("tabpanel", { name: "General" });
+    expect(within(generalPanel).getByRole("heading", { name: "User details" })).toBeInTheDocument();
+    expect(within(generalPanel).getByRole("heading", { name: "Quotas" })).toBeInTheDocument();
+    expect(within(generalPanel).getByLabelText("Storage quota")).toHaveClass("ui-control");
+    expect(within(generalPanel).getByLabelText("Storage quota unit")).toHaveClass("ui-control");
+    expect(within(generalPanel).getByLabelText("Object quota")).toHaveClass("ui-control");
+    expect(within(generalPanel).queryByLabelText("Ceph endpoint (locked)")).not.toBeInTheDocument();
+    expect(within(generalPanel).queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(screen.getAllByText("UID").some((node) => node.tagName === "DT")).toBe(true);
+  });
+
   it("renders direct UI users and UI groups in the combined listing column", async () => {
     listS3UsersMock.mockResolvedValueOnce({
       items: [
@@ -367,6 +389,14 @@ describe("S3UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
+    expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ceph admin-API actions granted directly to this RGW user outside the Ceph Admin workspace.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Allow privileged Ceph bucket quota updates in Manager and Storage Ops.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Allow access to Manager > Ceph > Access keys.")).toBeInTheDocument();
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     const keysCheckbox = screen.getByRole("checkbox", { name: /Ceph S3 User keys/ });
     expect(quotaCheckbox).not.toBeChecked();

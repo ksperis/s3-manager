@@ -205,6 +205,23 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("No accounts yet.")).not.toBeInTheDocument();
   });
 
+  it("presents account identity and quotas in consistent General sections", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+
+    const generalPanel = await screen.findByRole("tabpanel", { name: "General" });
+    expect(within(generalPanel).getByRole("heading", { name: "Account details" })).toBeInTheDocument();
+    expect(within(generalPanel).getByRole("heading", { name: "Quotas" })).toBeInTheDocument();
+    expect(within(generalPanel).getByLabelText("Storage quota")).toHaveClass("ui-control");
+    expect(within(generalPanel).getByLabelText("Storage quota unit")).toHaveClass("ui-control");
+    expect(within(generalPanel).getByLabelText("Object quota")).toHaveClass("ui-control");
+    expect(within(generalPanel).queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(screen.getAllByText("RGW ID").some((node) => node.tagName === "DT")).toBe(true);
+  });
+
   it("renders direct UI users and UI groups in the combined listing column", async () => {
     portalEnabled = true;
     listS3AccountsMock.mockResolvedValueOnce({
@@ -292,7 +309,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -328,7 +345,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     expect(screen.getByText("Research Group")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -373,7 +390,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Research Group" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -454,7 +471,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -481,10 +498,17 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Privileged access" }));
 
+    expect(screen.getByText("Privileged Ceph access")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ceph admin-API actions granted directly to this account outside the Ceph Admin workspace.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Allow privileged Ceph bucket quota updates in Manager and Storage Ops.")
+    ).toBeInTheDocument();
     const quotaCheckbox = screen.getByRole("checkbox", { name: /Bucket quota management/ });
     expect(quotaCheckbox).not.toBeChecked();
     fireEvent.click(quotaCheckbox);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -511,7 +535,7 @@ describe("AccountsPage modal tabs", () => {
     expect(quotaCheckbox).not.toBeChecked();
     fireEvent.click(quotaCheckbox);
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();
@@ -650,7 +674,7 @@ describe("AccountsPage modal tabs", () => {
     expect(within(userRow).getByRole("checkbox", { name: "Admin" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateS3AccountMock).toHaveBeenCalled();

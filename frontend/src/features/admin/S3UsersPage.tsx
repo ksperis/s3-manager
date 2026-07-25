@@ -24,7 +24,12 @@ import PageHeader from "../../components/PageHeader";
 import ToolbarSearchInput from "../../components/ToolbarSearchInput";
 import { adminPageBreadcrumbs } from "./adminBreadcrumbs";
 import Modal from "../../components/Modal";
-import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
+import WorkflowPage, {
+  WorkflowActions,
+  WorkflowMetadata,
+  WorkflowSection,
+  workflowPageHostClass,
+} from "../../components/WorkflowPage";
 import WorkflowTabs from "../../components/WorkflowTabs";
 import PageBanner from "../../components/PageBanner";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
@@ -33,7 +38,6 @@ import StorageUsageCard from "../../components/StorageUsageCard";
 import UiTagBadgeList from "../../components/UiTagBadgeList";
 import UiTagEditor from "../../components/UiTagEditor";
 import UiButton from "../../components/ui/UiButton";
-import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import UiInput from "../../components/ui/UiInput";
 import UiSelect from "../../components/ui/UiSelect";
@@ -62,6 +66,8 @@ import {
   adminAssociationTableHeaderRightClass,
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
+import { AdminAccessToggleSection } from "./AdminAccessSections";
+import AdminQuotaFields from "./AdminQuotaFields";
 import { AssociationPrincipalStack, type AssociationPrincipalItem } from "./AssociationSummary";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
@@ -1140,6 +1146,21 @@ export default function S3UsersPage() {
           onBack={editCloseGuard.requestClose}
           contentVariant="plain"
           width="wide"
+          metaContent={
+            <WorkflowMetadata
+              items={[
+                {
+                  label: "UID",
+                  value: editingUser.rgw_user_uid,
+                },
+                {
+                  label: "Endpoint",
+                  value: editingUser.storage_endpoint_name ?? "—",
+                  title: editingUser.storage_endpoint_url || undefined,
+                },
+              ]}
+            />
+          }
         >
           {editError && (
             <UiInlineMessage tone="error" className="mb-3">
@@ -1170,6 +1191,35 @@ export default function S3UsersPage() {
 
             {showEditGeneralTab && (
               <>
+                <WorkflowSection
+                  title="User details"
+                  description="Update the display information and administrative tags for this RGW user."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <UiInput
+                      label="Display name"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                    />
+                    <UiInput
+                      label="Email"
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                    />
+                    <div className="md:col-span-2">
+                      {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
+                      <UiTagEditor
+                        label="Tags"
+                        tags={editForm.tags}
+                        catalog={adminTagCatalog}
+                        onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
+                        placeholder="Add a tag for this RGW user"
+                        hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
+                      />
+                    </div>
+                  </div>
+                </WorkflowSection>
                 <StorageUsageCard
                   accountName={editingUser.name}
                   storage={{
@@ -1186,84 +1236,21 @@ export default function S3UsersPage() {
                   metricsDisabled={false}
                   errorMessage={editingUsageError}
                 />
-                <div className="space-y-3">
-                  {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
-                  <UiTagEditor
-                    label="Tags"
-                    tags={editForm.tags}
-                    catalog={adminTagCatalog}
-                    onChange={(tags) => setEditForm((prev) => ({ ...prev, tags }))}
-                    placeholder="Add a tag for this RGW user"
-                    hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
-                  />
-                </div>
-                <UiInput
-                  label="Display name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                <AdminQuotaFields
+                  storageValue={editForm.quota_max_size_gb}
+                  storageUnit={editForm.quota_max_size_unit}
+                  objectValue={editForm.quota_max_objects}
+                  disabled={!allowUserQuotaUpdates}
+                  onStorageValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, quota_max_size_gb: value }))
+                  }
+                  onStorageUnitChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, quota_max_size_unit: value }))
+                  }
+                  onObjectValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, quota_max_objects: value }))
+                  }
                 />
-                <UiInput
-                  label="Email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                />
-                <UiSelect
-                  label="Ceph endpoint (locked)"
-                  value={editForm.storage_endpoint_id}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                  disabled
-                  required
-                >
-                  <option value="" disabled>
-                    {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
-                  </option>
-                  {cephEndpoints.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(default)" : ""}
-                    </option>
-                  ))}
-                </UiSelect>
-                <div className={cx("flex flex-col gap-2 px-3 py-2", uiPanelMutedClass)}>
-                  <div className="flex flex-col gap-1">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
-                    <div className="flex gap-2">
-                      <UiInput
-                        aria-label="Quota max size"
-                        type="number"
-                        min={0}
-                        step="any"
-                        fieldClassName="w-full"
-                        value={editForm.quota_max_size_gb}
-                        disabled={!allowUserQuotaUpdates}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                        placeholder="e.g. 500"
-                      />
-                      <UiSelect
-                        aria-label="Quota max size unit"
-                        value={editForm.quota_max_size_unit}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                        disabled={!allowUserQuotaUpdates || !editForm.quota_max_size_gb}
-                      >
-                        {["MiB", "GiB", "TiB"].map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </UiSelect>
-                    </div>
-                  </div>
-                  <UiInput
-                    label="Quota max objects"
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={editForm.quota_max_objects}
-                    disabled={!allowUserQuotaUpdates}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                    placeholder="e.g. 1000000"
-                  />
-                </div>
               </>
             )}
 
@@ -1485,42 +1472,34 @@ export default function S3UsersPage() {
             )}
 
             {showEditPrivilegedTab && (
-              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <UiCheckboxField
-                  className="items-start gap-3"
-                  checkboxClassName="mt-1"
-                    checked={editForm.allow_manager_bucket_quota}
-                    onChange={(e) =>
+              <AdminAccessToggleSection
+                title="Privileged Ceph access"
+                description="Ceph admin-API actions granted directly to this RGW user outside the Ceph Admin workspace."
+                items={[
+                  {
+                    title: "Bucket quota management",
+                    description: "Allow privileged Ceph bucket quota updates in Manager and Storage Ops.",
+                    ariaLabel: "Bucket quota management",
+                    checked: editForm.allow_manager_bucket_quota,
+                    onChange: (checked) =>
                       setEditForm((prev) => ({
                         ...prev,
-                        allow_manager_bucket_quota: e.target.checked,
-                      }))
-                    }
-                >
-                  <span>
-                    <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
-                      Bucket quota management
-                    </span>
-                  </span>
-                </UiCheckboxField>
-                <UiCheckboxField
-                  className="items-start gap-3"
-                  checkboxClassName="mt-1"
-                    checked={editForm.allow_manager_ceph_s3_user_keys}
-                    onChange={(e) =>
+                        allow_manager_bucket_quota: checked,
+                      })),
+                  },
+                  {
+                    title: "Ceph S3 User keys",
+                    description: "Allow access to Manager > Ceph > Access keys.",
+                    ariaLabel: "Ceph S3 User keys",
+                    checked: editForm.allow_manager_ceph_s3_user_keys,
+                    onChange: (checked) =>
                       setEditForm((prev) => ({
                         ...prev,
-                        allow_manager_ceph_s3_user_keys: e.target.checked,
-                      }))
-                    }
-                >
-                  <span>
-                    <span className="block ui-body font-medium text-slate-800 dark:text-slate-100">
-                      Ceph S3 User keys
-                    </span>
-                  </span>
-                </UiCheckboxField>
-              </div>
+                        allow_manager_ceph_s3_user_keys: checked,
+                      })),
+                  },
+                ]}
+              />
             )}
             </WorkflowTabs>
 
