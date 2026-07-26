@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.11 - 2026-07-26
+
+### Added
+
+- Added anonymous LDAP directory searches with optional bind credentials and compatibility support for legacy TLS servers.
+- Added unified Admin workflows for associating users, accounts, connections, and S3 identities.
+- Added a consolidated Portal history experience combining activity and transfer records.
+
+### Changed
+
+- Standardized page layouts, breadcrumbs, tabs, list actions, and identity editing workflows across Admin, Portal, and Browser workspaces.
+- Refined Portal Storage Space indicators, traffic labels, and navigation while keeping technical identifiers available where useful.
+- Protected environment-managed storage endpoint credentials from database-only key rotation.
+
+### Fixed/Security
+
+- Filtered workspaces using effective access so inherited authorization is honored without exposing unauthorized workspaces.
+- Propagated path-style endpoint configuration to Cyberduck bookmarks and improved compatibility with legacy LDAP TLS servers.
+- Preserved initial bucket pagination and stabilized asynchronous identity listings, endpoint summaries, and related frontend interactions.
+
+### Tests
+
+- Expanded frontend coverage for S3 identity workflows, effective workspace access, bucket pagination, and asynchronous Admin listings.
+- Stabilized CI-facing frontend validation for delayed API responses and persisted pagination state.
+
 ## 0.1.10 - 2026-07-22
 
 ### Added
