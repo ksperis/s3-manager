@@ -464,7 +464,9 @@ describe("AdminDashboard feature summary", () => {
 
     await renderDashboard();
 
-    for (let index = 1; index <= 8; index += 1) {
+    const firstEndpoint = await screen.findByText("Endpoint 1");
+    expect(firstEndpoint).toHaveAttribute("title", "Endpoint 1");
+    for (let index = 2; index <= 8; index += 1) {
       expect(screen.getByText(`Endpoint ${index}`)).toHaveAttribute("title", `Endpoint ${index}`);
     }
     expect(screen.queryByText("Endpoint 9")).not.toBeInTheDocument();
