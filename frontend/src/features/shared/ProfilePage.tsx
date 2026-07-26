@@ -1840,7 +1840,7 @@ export default function ProfilePage({
       {showConnectionsSection && showCreateConnectionModal && (
         <WorkflowPage
           title="Add private S3 connection"
-          description="Configure endpoint identity, credentials and workspace access on a dedicated page."
+          description="Configure endpoint access, credentials, and workspace availability for this private connection."
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Create" }]}
           backLabel="Back to connections"
           onBack={createConnectionCloseGuard.requestClose}
@@ -1944,7 +1944,7 @@ export default function ProfilePage({
       {showConnectionsSection && editingConnection && (
         <WorkflowPage
           title={`Edit connection - ${editingConnection.name}`}
-          description="Review endpoint identity, credentials and access without a constrained overlay."
+          description="Manage endpoint access, credentials, and workspace availability for this private connection."
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Edit" }]}
           backLabel="Back to connections"
           onBack={editConnectionCloseGuard.requestClose}

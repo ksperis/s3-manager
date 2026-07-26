@@ -203,7 +203,7 @@ export default function PortalSettingsPage() {
   return (
     <PageShell
       title="Portal settings"
-      description="Configure Portal self-service behavior and storage projections."
+      description="Configure Portal self-service behavior and backing storage defaults."
       breadcrumbs={adminPageBreadcrumbs("portal-settings")}
       actions={[
         {

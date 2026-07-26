@@ -1217,7 +1217,7 @@ export default function S3ConnectionsPage() {
       {showCreateModal && (
         <WorkflowPage
           title="Add S3 connection"
-          description="Configure the endpoint, credentials, validation and workspace access in one page-level form."
+          description="Configure endpoint access, credentials, and workspace availability for this shared connection."
           breadcrumbs={adminPageBreadcrumbs("shared-connections", { label: "Create" })}
           backLabel="Back to connections"
           onBack={createCloseGuard.requestClose}
@@ -1237,7 +1237,7 @@ export default function S3ConnectionsPage() {
                 onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
                 required
               />
-              <div className="space-y-3 sm:pt-6">
+              <div className="space-y-3">
                 {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                 <UiTagEditor
                   label="Tags"
@@ -1246,7 +1246,6 @@ export default function S3ConnectionsPage() {
                   onChange={(tags) => setCreateForm((current) => ({ ...current, tags }))}
                   placeholder="Add a tag for this shared connection"
                   hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
-                  hideLabel
                   compact
                 />
               </div>
@@ -1319,7 +1318,7 @@ export default function S3ConnectionsPage() {
       {editing && (
         <WorkflowPage
           title={`Edit connection · ${editing.name}`}
-          description="Review endpoint identity, credentials and associations with enough room for validation feedback."
+          description="Manage endpoint access, credentials, workspace availability, and UI associations for this shared connection."
           breadcrumbs={adminPageBreadcrumbs("shared-connections", { label: "Edit" })}
           backLabel="Back to connections"
           onBack={editCloseGuard.requestClose}
@@ -1353,7 +1352,7 @@ export default function S3ConnectionsPage() {
                     onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
                     required
                   />
-                  <div className="space-y-3 sm:pt-6">
+                  <div className="space-y-3">
                     {adminTagCatalogError && <PageBanner tone="warning">{adminTagCatalogError}</PageBanner>}
                     <UiTagEditor
                       label="Tags"
@@ -1362,7 +1361,6 @@ export default function S3ConnectionsPage() {
                       onChange={(tags) => setEditForm((current) => ({ ...current, tags }))}
                       placeholder="Add a tag for this shared connection"
                       hint={adminTagCatalogLoading ? "Loading existing tag catalog..." : undefined}
-                      hideLabel
                       compact
                     />
                   </div>

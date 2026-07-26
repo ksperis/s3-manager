@@ -155,6 +155,11 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
 
     expect(await screen.findByRole("heading", { name: "Edit user" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Manage direct access, inherited associations, workspace permissions, and Manager tools for this UI user."
+      )
+    ).toBeInTheDocument();
     expect(screen.getAllByText("linked.user@example.com")).toHaveLength(2);
     expect(listUsersMock).toHaveBeenCalledWith(
       expect.objectContaining({ search: "linked.user@example.com" }),
@@ -300,6 +305,9 @@ describe("UsersPage modal tabs", () => {
     render(<UsersPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    expect(
+      screen.getByText("Configure identity, workspace access, groups, and storage associations for this UI user.")
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "jane@example.com" } });
     fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });

@@ -1436,7 +1436,7 @@ export default function S3AccountsPage() {
       {isSuperAdmin && showImportModal && (
         <WorkflowPage
           title="Import RGW accounts"
-          description="Validate and import multiple RGW tenant identifiers while keeping endpoint permissions and results visible."
+          description="Import multiple RGW accounts, validate endpoint access, and review the results."
           breadcrumbs={adminPageBreadcrumbs("accounts", { label: "Import" })}
           backLabel="Back to accounts"
           onBack={importCloseGuard.requestClose}
@@ -1554,7 +1554,7 @@ export default function S3AccountsPage() {
       {isSuperAdmin && editingS3Account && (
         <WorkflowPage
           title={`Edit ${editingS3Account.name}`}
-          description="Review usage, associations, privileged access and Portal overrides on a dedicated account page."
+          description="Manage quotas, usage, UI associations, privileged access, and Portal overrides for this account."
           breadcrumbs={adminPageBreadcrumbs("accounts", { label: "Edit" })}
           backLabel="Back to accounts"
           onBack={editCloseGuard.requestClose}

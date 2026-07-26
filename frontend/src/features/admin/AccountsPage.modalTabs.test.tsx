@@ -212,6 +212,9 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
     const generalPanel = await screen.findByRole("tabpanel", { name: "General" });
+    expect(
+      screen.getByText("Manage quotas, usage, UI associations, privileged access, and Portal overrides for this account.")
+    ).toBeInTheDocument();
     expect(within(generalPanel).getByRole("heading", { name: "Account details" })).toBeInTheDocument();
     expect(within(generalPanel).getByRole("heading", { name: "Quotas" })).toBeInTheDocument();
     expect(within(generalPanel).getByLabelText("Storage quota")).toHaveClass("ui-control");

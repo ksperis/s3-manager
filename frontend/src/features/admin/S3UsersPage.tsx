@@ -853,7 +853,7 @@ export default function S3UsersPage() {
     <div className={workflowPageHostClass(showImportModal || Boolean(editingUser))}>
       <PageHeader
         title="RGW Users"
-        description="Persist RGW standalone users for direct manager access (no IAM)."
+        description="Manage standalone RGW users for direct access to Manager."
         breadcrumbs={adminPageBreadcrumbs("rgw-users")}
         actions={[
           {
@@ -1060,7 +1060,7 @@ export default function S3UsersPage() {
       {showImportModal && (
         <WorkflowPage
           title="Import RGW users"
-          description="Import multiple RGW identities and keep endpoint validation and generated-key results visible."
+          description="Import multiple RGW users, validate endpoint access, and review generated keys."
           breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: "Import" })}
           backLabel="Back to RGW users"
           onBack={importCloseGuard.requestClose}
@@ -1140,7 +1140,7 @@ export default function S3UsersPage() {
       {editingUser && (
         <WorkflowPage
           title={`Edit ${editingUser.name}`}
-          description="Review quotas, UI associations and privileged access without an overlay or nested scrolling."
+          description="Manage quotas, UI associations, and privileged access for this RGW user."
           breadcrumbs={adminPageBreadcrumbs("rgw-users", { label: "Edit" })}
           backLabel="Back to RGW users"
           onBack={editCloseGuard.requestClose}

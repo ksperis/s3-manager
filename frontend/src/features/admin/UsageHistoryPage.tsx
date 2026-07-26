@@ -367,7 +367,7 @@ export default function UsageHistoryPage() {
   return (
     <PageShell
       title="Usage history"
-      description="Stored quota usage snapshots collected for RGW accounts and users."
+      description="Review quota usage trends for RGW accounts and users."
       breadcrumbs={adminPageBreadcrumbs("usage-history")}
       rightContent={
         <UiButton

@@ -31,6 +31,16 @@ function getTagChip(label: string) {
 }
 
 describe("UiTagEditor", () => {
+  it("uses the standard field spacing and associates its visible label", () => {
+    render(<StatefulEditor />);
+
+    const input = screen.getByRole("textbox", { name: "Add a tag" });
+    const label = screen.getByText("Tags");
+
+    expect(label.parentElement).toHaveClass("flex", "flex-col", "gap-1");
+    expect(label).toHaveAttribute("for", input.id);
+  });
+
   it("adds an existing catalog tag from inline suggestions", async () => {
     const user = userEvent.setup();
 

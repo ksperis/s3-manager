@@ -122,6 +122,7 @@ describe("UsageHistoryPage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Usage history" })).toBeInTheDocument();
+    expect(screen.getByText("Review quota usage trends for RGW accounts and users.")).toBeInTheDocument();
     expect(screen.getByText("History scope")).toBeInTheDocument();
     expect(await screen.findByText("Tenant A")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();

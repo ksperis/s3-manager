@@ -148,6 +148,7 @@ describe("S3UsersPage modal tabs", () => {
     );
 
     expect(await screen.findByText("No users.")).toBeInTheDocument();
+    expect(screen.getByText("Manage standalone RGW users for direct access to Manager.")).toBeInTheDocument();
     expect(screen.queryByText("Import or create standalone RGW users to expose them to managers.")).not.toBeInTheDocument();
   });
 
@@ -162,6 +163,9 @@ describe("S3UsersPage modal tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "rgw-user-1" }));
 
     const generalPanel = await screen.findByRole("tabpanel", { name: "General" });
+    expect(
+      screen.getByText("Manage quotas, UI associations, and privileged access for this RGW user.")
+    ).toBeInTheDocument();
     expect(within(generalPanel).getByRole("heading", { name: "User details" })).toBeInTheDocument();
     expect(within(generalPanel).getByRole("heading", { name: "Quotas" })).toBeInTheDocument();
     expect(within(generalPanel).getByLabelText("Storage quota")).toHaveClass("ui-control");

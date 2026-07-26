@@ -231,6 +231,11 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Add private S3 connection");
 
     const dialog = getWorkflowPage("Add private S3 connection");
+    expect(
+      within(dialog).getByText(
+        "Configure endpoint access, credentials, and workspace availability for this private connection."
+      )
+    ).toBeInTheDocument();
     const nameInput = within(dialog).getByLabelText("Name");
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this private connection" });
     const endpointHeading = within(dialog).getByText("Endpoint");
@@ -283,6 +288,11 @@ describe("ProfilePage live validation", () => {
     await screen.findByText("Edit connection - managed-connection");
 
     const dialog = getWorkflowPage("Edit connection - managed-connection");
+    expect(
+      within(dialog).getByText(
+        "Manage endpoint access, credentials, and workspace availability for this private connection."
+      )
+    ).toBeInTheDocument();
     const presetRadio = within(dialog).getByRole("radio", { name: "Configured endpoint" }) as HTMLInputElement;
     expect(presetRadio.checked).toBe(true);
     expect(within(dialog).getByRole("radio", { name: "Custom endpoint" })).not.toBeChecked();

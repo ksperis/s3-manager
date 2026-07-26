@@ -1817,7 +1817,7 @@ export default function UsersPage() {
       {showCreateModal && (
         <WorkflowPage
           title="Create user"
-          description="Configure the identity, workspace access, groups and storage associations in one page-level workflow."
+          description="Configure identity, workspace access, groups, and storage associations for this UI user."
           breadcrumbs={adminPageBreadcrumbs("users", { label: "Create" })}
           backLabel="Back to users"
           onBack={createCloseGuard.requestClose}
@@ -2104,7 +2104,7 @@ export default function UsersPage() {
       {editingUser && showEditModal && (
         <WorkflowPage
           title="Edit user"
-          description="Review direct access, inherited associations and Manager tools without a constrained dialog."
+          description="Manage direct access, inherited associations, workspace permissions, and Manager tools for this UI user."
           breadcrumbs={adminPageBreadcrumbs("users", { label: "Edit" })}
           backLabel="Back to users"
           onBack={editCloseGuard.requestClose}

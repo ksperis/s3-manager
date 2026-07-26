@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TagDefinitionSummary, TagScope } from "../api/tags";
 import { getTagColorOption, TAG_COLOR_OPTIONS } from "../utils/tagPalette";
 import { DEFAULT_TAG_SCOPE, normalizeUiTags, type UiTagDefinition } from "../utils/uiTags";
@@ -58,6 +58,7 @@ export default function UiTagEditor({
   const [draft, setDraft] = useState("");
   const [activeTagKey, setActiveTagKey] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputId = useId();
   const normalizedTags = useMemo(() => normalizeUiTags(tags), [tags]);
   const normalizedCatalog = useMemo(() => normalizeUiTags(catalog), [catalog]);
   const selectedTagKeys = useMemo(
@@ -192,8 +193,12 @@ export default function UiTagEditor({
       : "Administrative tags stay in management views. Standard tags can also appear in selectors.";
 
   return (
-    <div className={compact && hideLabel ? "space-y-1" : "space-y-2"}>
-      {!hideLabel && <label className={uiLabelClass}>{label}</label>}
+    <div className="flex flex-col gap-1">
+      {!hideLabel && (
+        <label htmlFor={inputId} className={uiLabelClass}>
+          {label}
+        </label>
+      )}
       <div className="space-y-2">
         <div className="relative">
           <div
@@ -244,6 +249,7 @@ export default function UiTagEditor({
             })}
             <div className="min-w-[5rem] flex-1">
               <input
+                id={inputId}
                 type="text"
                 value={draft}
                 onChange={(event) => {

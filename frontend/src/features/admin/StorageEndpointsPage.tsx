@@ -1472,7 +1472,7 @@ export default function StorageEndpointsPage() {
       {showForm && (
         <WorkflowPage
           title={editorTitle}
-          description="Review connection settings, operational credentials, capabilities and health checks in dedicated sections."
+          description="Manage connection settings, operational credentials, capabilities, and health checks for this endpoint."
           breadcrumbs={adminPageBreadcrumbs("storage-endpoints", {
             label: editingId ? editingEndpoint?.name ?? "Endpoint" : "Create",
           })}

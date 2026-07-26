@@ -108,6 +108,9 @@ describe("PortalSettingsPage", () => {
   it("sends max portal user keys in save payload", async () => {
     render(<PortalSettingsPage />);
 
+    expect(
+      await screen.findByText("Configure Portal self-service behavior and backing storage defaults.")
+    ).toBeInTheDocument();
     const input = (await screen.findByLabelText("Max S3 access keys per portal user")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "5" } });
 

@@ -127,6 +127,11 @@ describe("GroupsPage", () => {
     render(<GroupsPage />);
 
     expect(await screen.findByRole("heading", { name: "Edit UI group" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Manage members, storage associations, and inherited workspace permissions for this UI group."
+      )
+    ).toBeInTheDocument();
     expect(listGroupsMock).toHaveBeenCalledWith(expect.objectContaining({ search: "ops-group" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Back to groups" }));

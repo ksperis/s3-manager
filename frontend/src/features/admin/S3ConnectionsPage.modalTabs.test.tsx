@@ -172,10 +172,17 @@ describe("S3ConnectionsPage modal tabs", () => {
     const usersTab = screen.getByRole("tab", { name: "Linked UI users" });
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
     const dialog = getWorkflowPage("Edit connection · connection-1");
+    expect(
+      within(dialog).getByText(
+        "Manage endpoint access, credentials, workspace availability, and UI associations for this shared connection."
+      )
+    ).toBeInTheDocument();
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
     expect(tagInput).toBeInTheDocument();
     expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
-    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    const tagLabel = within(dialog).getByText("Tags");
+    expect(tagLabel).toHaveAttribute("for", tagInput.id);
+    expect(tagLabel.parentElement).toHaveClass("flex", "flex-col", "gap-1");
     expect(
       within(dialog).queryByText("Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain.")
     ).not.toBeInTheDocument();
@@ -297,6 +304,11 @@ describe("S3ConnectionsPage modal tabs", () => {
     await screen.findByRole("heading", { name: "Add S3 connection" });
 
     const dialog = getWorkflowPage("Add S3 connection");
+    expect(
+      within(dialog).getByText(
+        "Configure endpoint access, credentials, and workspace availability for this shared connection."
+      )
+    ).toBeInTheDocument();
     const nameInput = dialog.querySelector("input[required]") as HTMLInputElement | null;
     if (!nameInput) {
       throw new Error("Name input not found");
@@ -306,7 +318,9 @@ describe("S3ConnectionsPage modal tabs", () => {
     fireEvent.change(nameInput, { target: { value: "tagged-shared-connection" } });
     const tagInput = within(dialog).getByRole("textbox", { name: "Add a tag for this shared connection" });
     expect(tagInput.parentElement?.parentElement?.className).toContain("min-h-10");
-    expect(within(dialog).queryByText("Tags")).not.toBeInTheDocument();
+    const tagLabel = within(dialog).getByText("Tags");
+    expect(tagLabel).toHaveAttribute("for", tagInput.id);
+    expect(tagLabel.parentElement).toHaveClass("flex", "flex-col", "gap-1");
     expect(
       within(dialog).queryByText("Shared tags are reused across accounts, S3 users and shared connections in the admin-managed domain.")
     ).not.toBeInTheDocument();

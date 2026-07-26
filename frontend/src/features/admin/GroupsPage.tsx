@@ -1124,7 +1124,7 @@ export default function GroupsPage() {
       {showModal && (
         <WorkflowPage
           title={editingGroup ? "Edit UI group" : "Create UI group"}
-          description="Manage members, associations and inherited workspace permissions in one dedicated page."
+          description="Manage members, storage associations, and inherited workspace permissions for this UI group."
           breadcrumbs={adminPageBreadcrumbs("groups", { label: editingGroup ? "Edit" : "Create" })}
           backLabel="Back to groups"
           onBack={closeModal}

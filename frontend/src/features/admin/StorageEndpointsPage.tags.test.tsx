@@ -175,6 +175,11 @@ describe("StorageEndpointsPage tags", () => {
 
     fireEvent.click(endpointRow.getByRole("button", { name: "Open endpoint Ceph Endpoint" }));
     expect(await screen.findByRole("heading", { name: "Edit storage endpoint · Ceph Endpoint" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Manage connection settings, operational credentials, capabilities, and health checks for this endpoint."
+      )
+    ).toBeInTheDocument();
   });
 
   it("lets superadmin edit endpoint tags even when endpoints are env-managed", async () => {
