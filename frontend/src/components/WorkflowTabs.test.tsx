@@ -34,6 +34,7 @@ describe("WorkflowTabs", () => {
     const tablist = screen.getByRole("tablist", { name: "Editor sections" });
     expect(tablist.parentElement).toHaveClass("border-b", "pb-3");
     expect(screen.queryByRole("tab", { name: "Hidden" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tabpanel")).toHaveClass("mt-4", "min-w-0", "space-y-4");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("General settings");
 
     fireEvent.click(screen.getByRole("tab", { name: "Access" }));

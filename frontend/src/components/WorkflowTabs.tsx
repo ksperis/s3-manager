@@ -35,7 +35,7 @@ export default function WorkflowTabs<T extends string>({
   ariaLabel,
   children,
   idPrefix,
-  panelClassName = "mt-4 min-w-0",
+  panelClassName = "mt-4 min-w-0 space-y-4",
 }: WorkflowTabsProps<T>) {
   const generatedId = useId().replaceAll(":", "");
   const resolvedIdPrefix = idPrefix ?? `workflow-tabs-${generatedId}`;
