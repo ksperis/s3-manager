@@ -83,7 +83,7 @@ export default function WorkflowPage({
 
   return (
     <div
-      className={cx("workflow-page space-y-4", workflowWidthClasses[width], className)}
+      className={cx("workflow-page w-full space-y-4", className)}
       data-workflow-width={width}
     >
       <PageHeader
@@ -97,6 +97,8 @@ export default function WorkflowPage({
       />
       <div
         className={cx(
+          "workflow-page-content",
+          workflowWidthClasses[width],
           contentVariant === "panel" && uiPanelClass,
           contentVariant === "panel" && "px-4 py-4 sm:px-6 sm:py-5",
           contentClassName

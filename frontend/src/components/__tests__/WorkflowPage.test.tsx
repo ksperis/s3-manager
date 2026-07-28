@@ -61,11 +61,13 @@ describe("WorkflowPage", () => {
     expect(activeClassName).toContain("[&>.workflow-page]:!mt-0");
   });
 
-  it("keeps the header and content on the same bounded page axis", () => {
+  it("keeps page actions on the full shell axis while bounding content on the left", () => {
     const { container } = render(
       <WorkflowPage
         title="Edit user"
         metaContent={<WorkflowMetadata items={[{ label: "Identity", value: "jane@example.com" }]} />}
+        onBack={() => undefined}
+        backLabel="Back to users"
         width="wide"
         contentVariant="plain"
       >
@@ -74,9 +76,16 @@ describe("WorkflowPage", () => {
     );
 
     const workflow = container.querySelector(".workflow-page");
+    const content = container.querySelector(".workflow-page-content");
+    const backAction = screen.getByRole("button", { name: "Back to users" });
     expect(workflow).toHaveAttribute("data-workflow-width", "wide");
-    expect(workflow).toHaveClass("w-full", "max-w-7xl");
+    expect(workflow).toHaveClass("w-full");
+    expect(workflow).not.toHaveClass("max-w-7xl");
+    expect(workflow?.querySelector(":scope > header")).toContainElement(backAction);
+    expect(content).toHaveClass("w-full", "max-w-7xl");
+    expect(content).not.toHaveClass("mx-auto");
+    expect(content).not.toContainElement(backAction);
     expect(screen.getByText("jane@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Configuration").parentElement).not.toHaveClass("mx-auto");
+    expect(content).toContainElement(screen.getByText("Configuration"));
   });
 });
