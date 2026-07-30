@@ -243,3 +243,48 @@ def test_proxy_upload_passes_sse_customer(monkeypatch):
     assert extra_args["SSECustomerAlgorithm"] == "AES256"
     assert "SSECustomerKey" in extra_args
     assert "SSECustomerKeyMD5" in extra_args
+
+
+def test_upload_via_proxy_falls_back_to_upload_file_content_type(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeUpload:
+        file = BytesIO(b"content")
+        content_type = "text/plain"
+
+    service = BrowserService()
+
+    def capture_proxy_upload(
+        bucket_name,
+        account,
+        key,
+        file_obj,
+        content_type,
+        sse_customer=None,
+    ):  # noqa: ANN001
+        captured.update(
+            {
+                "bucket_name": bucket_name,
+                "account": account,
+                "key": key,
+                "file_obj": file_obj,
+                "content_type": content_type,
+                "sse_customer": sse_customer,
+            }
+        )
+
+    monkeypatch.setattr(service, "proxy_upload", capture_proxy_upload)
+
+    upload = FakeUpload()
+    service.upload_via_proxy(
+        "bucket-a",
+        _account(),
+        upload,
+        key="docs/report.txt",
+        content_type=None,
+    )
+
+    assert captured["bucket_name"] == "bucket-a"
+    assert captured["key"] == "docs/report.txt"
+    assert captured["file_obj"] is upload.file
+    assert captured["content_type"] == "text/plain"

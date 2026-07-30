@@ -869,6 +869,7 @@ export async function proxyUpload(
 ): Promise<void> {
   const form = new FormData();
   form.append("key", key);
+  form.append("content_type", file.type || "application/octet-stream");
   const inferredName =
     fileName ??
     ("name" in file && typeof file.name === "string" && file.name

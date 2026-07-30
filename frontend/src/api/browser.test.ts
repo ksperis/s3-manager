@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const clientMock = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
 }));
 
 vi.mock("./client", () => ({
@@ -9,7 +10,7 @@ vi.mock("./client", () => ({
   LONG_RUNNING_REQUEST_TIMEOUT_MS: 0,
 }));
 
-import { listBrowserObjects } from "./browser";
+import { listBrowserObjects, proxyUpload } from "./browser";
 
 describe("browser api", () => {
   beforeEach(() => {
@@ -23,6 +24,8 @@ describe("browser api", () => {
         next_continuation_token: null,
       },
     });
+    clientMock.post.mockReset();
+    clientMock.post.mockResolvedValue({ data: undefined });
   });
 
   it("passes force_refresh when listing objects with an explicit refresh", async () => {
@@ -44,4 +47,19 @@ describe("browser api", () => {
       }),
     );
   });
+
+  it.each([
+    ["text/plain", "text/plain"],
+    ["", "application/octet-stream"],
+  ])(
+    "sends the browser file content type '%s' as proxy upload metadata",
+    async (fileType, expectedContentType) => {
+      const file = new File(["payload"], "report.txt", { type: fileType });
+
+      await proxyUpload("conn-7", "bucket-a", "uploads/report.txt", file);
+
+      const form = clientMock.post.mock.calls[0]?.[1] as FormData;
+      expect(form.get("content_type")).toBe(expectedContentType);
+    },
+  );
 });

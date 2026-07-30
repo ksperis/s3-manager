@@ -135,7 +135,8 @@ class BrowserTransfersMixin:
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> None:
         file_obj = getattr(file, "file", file)
-        self.proxy_upload(bucket_name, account, key, file_obj, content_type, sse_customer=sse_customer)
+        resolved_content_type = content_type or getattr(file, "content_type", None) or "application/octet-stream"
+        self.proxy_upload(bucket_name, account, key, file_obj, resolved_content_type, sse_customer=sse_customer)
 
     def proxy_download(
         self,
