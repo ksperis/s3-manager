@@ -191,6 +191,7 @@ describe("PortalStorageSpacesPage", () => {
     ).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({
       includeArchived: true,
+      includeUsage: true,
     });
     expect(
       screen.queryByRole("heading", { name: "Create a space" }),
@@ -228,6 +229,8 @@ describe("PortalStorageSpacesPage", () => {
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     const researchRow = screen.getByText("Research Data").closest("tr");
     expect(researchRow).not.toBeNull();
+    expect(within(researchRow!).getByText("12")).toBeInTheDocument();
+    expect(within(researchRow!).getByText("512 B")).toBeInTheDocument();
     const storageSpaceIcon = researchRow!.querySelector(
       'svg[aria-hidden="true"]',
     );

@@ -126,7 +126,10 @@ export default function PortalStorageSpacesPage() {
     accountLoading,
     accountIdForApi,
     state,
-  } = usePortalWorkspaceData({ includeArchived: true });
+  } = usePortalWorkspaceData({
+    includeArchived: true,
+    includeUsage: true,
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState("");
