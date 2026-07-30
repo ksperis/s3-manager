@@ -131,8 +131,6 @@ export type BulkMetadataDraft = {
   expires: string;
 };
 
-export type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
-
 export type ObjectDetailsTabId =
   | "preview"
   | "versions"

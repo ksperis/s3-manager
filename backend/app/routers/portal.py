@@ -33,6 +33,9 @@ from app.models.portal import (
     PortalTransfer,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
+    PortalStorageObjectRestoreRequest,
+    PortalStorageObjectRestoreResponse,
+    PortalStorageObjectVersionsResponse,
     PortalStorageSpace,
     PortalStorageSpaceAccessSummary,
     PortalStorageSpaceCreate,
@@ -47,6 +50,7 @@ from app.models.portal import (
     PortalStorageSpaceSummary,
     PortalStorageSpaceUpdate,
     PortalUsage,
+    PortalTrashResponse,
 )
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
@@ -1146,6 +1150,115 @@ def portal_storage_space_object_detail(
     try:
         return service.get_storage_space_object_detail(actor, access, space_id, key)
     except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get(
+    "/storage-spaces/{space_id}/objects/versions",
+    response_model=PortalStorageObjectVersionsResponse,
+)
+def portal_storage_space_object_versions(
+    space_id: str,
+    key: str = Query(..., min_length=1),
+    key_marker: Optional[str] = None,
+    version_id_marker: Optional[str] = None,
+    max_keys: int = Query(default=1000, ge=1, le=1000),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectVersionsResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.get_storage_space_object_versions(
+            actor,
+            access,
+            space_id,
+            key,
+            key_marker=key_marker,
+            version_id_marker=version_id_marker,
+            max_keys=max_keys,
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/trash", response_model=PortalTrashResponse)
+def portal_storage_space_trash(
+    space_id: str,
+    key_marker: Optional[str] = None,
+    version_id_marker: Optional[str] = None,
+    max_keys: int = Query(default=1000, ge=1, le=1000),
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalTrashResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.list_storage_space_trash(
+            actor,
+            access,
+            space_id,
+            key_marker=key_marker,
+            version_id_marker=version_id_marker,
+            max_keys=max_keys,
+        )
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.post(
+    "/storage-spaces/{space_id}/objects/restore",
+    response_model=PortalStorageObjectRestoreResponse,
+)
+def portal_restore_storage_space_object(
+    space_id: str,
+    payload: PortalStorageObjectRestoreRequest,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageObjectRestoreResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    action = "restore_object_version" if payload.version_id else "restore_deleted_object"
+    try:
+        result = service.restore_storage_space_object_version(
+            actor,
+            access,
+            space_id,
+            payload.key,
+            version_id=payload.version_id,
+        )
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action=action,
+            entity_type="object",
+            entity_id=result.key,
+            account=access.account,
+            metadata={
+                "storage_space_id": space_id,
+                "restored_from_version_id": result.restored_from_version_id,
+            },
+        )
+        return result
+    except RuntimeError as exc:
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action=action,
+            entity_type="object",
+            entity_id=payload.key,
+            account=access.account,
+            metadata={
+                "storage_space_id": space_id,
+                "requested_version_id": payload.version_id,
+            },
+            status="failed",
+            message=sanitized_error_log_detail(exc),
+        )
         _raise_portal_storage_runtime(exc)
 
 

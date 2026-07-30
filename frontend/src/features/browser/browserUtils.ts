@@ -235,38 +235,6 @@ export const isImageFile = (name: string) => {
   return ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext);
 };
 
-export const isVideoFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["mp4", "webm", "ogg", "mov", "m4v"].includes(ext);
-};
-
-export const isAudioFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["mp3", "wav", "ogg", "m4a", "flac"].includes(ext);
-};
-
-export const isPdfFile = (name: string) => getExtension(name) === "pdf";
-
-export const isTextFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["txt", "md", "markdown", "csv", "json", "yml", "yaml", "xml", "html", "css", "js", "ts", "log"].includes(ext);
-};
-
-export const previewKindForItem = (item: BrowserItem, contentType?: string | null) => {
-  const normalized = (contentType ?? "").toLowerCase();
-  if (normalized.startsWith("image/")) return "image";
-  if (normalized.startsWith("video/")) return "video";
-  if (normalized.startsWith("audio/")) return "audio";
-  if (normalized.includes("pdf")) return "pdf";
-  if (normalized.startsWith("text/") || normalized.includes("json") || normalized.includes("xml")) return "text";
-  if (isImageFile(item.name)) return "image";
-  if (isVideoFile(item.name)) return "video";
-  if (isAudioFile(item.name)) return "audio";
-  if (isPdfFile(item.name)) return "pdf";
-  if (isTextFile(item.name)) return "text";
-  return "generic";
-};
-
 export const previewLabelForItem = (item: BrowserItem) => {
   if (item.type === "folder") return "FOLDER";
   const ext = getExtension(item.name);

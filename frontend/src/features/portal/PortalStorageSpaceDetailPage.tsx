@@ -8,10 +8,12 @@ import {
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpace,
   fetchPortalStorageSpaceAccessSummary,
+  fetchPortalStorageSpaceTrash,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpaceShare,
+  restorePortalStorageSpaceObject,
   streamPortalStorageSpaceVersionCleanup,
   takePortalStorageSpaceOwnership,
   updatePortalStorageSpace,
@@ -24,6 +26,8 @@ import {
   type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceShare,
   type PortalStorageSpaceShareCandidate,
+  type PortalTrashItem,
+  type PortalTrashResponse,
 } from "../../api/portal";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -66,6 +70,7 @@ import {
 } from "./PortalAccessControls";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
+import PortalTrashPanel from "./PortalTrashPanel";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import {
@@ -73,7 +78,12 @@ import {
   portalStorageSpaceStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
-import { portalRoleLabel, portalShareScopeLabel, portalStatusLabel } from "./portalI18n";
+import {
+  portalDateTimeLabel,
+  portalRoleLabel,
+  portalShareScopeLabel,
+  portalStatusLabel,
+} from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
 function decodeRouteValue(value?: string): string {
@@ -108,7 +118,7 @@ type PublicLinkTarget = {
   name: string;
 };
 
-type SpaceDetailTab = "files" | "collaborators" | "settings";
+type SpaceDetailTab = "files" | "trash" | "collaborators" | "settings";
 
 function ObjectMetricCard({
   label,
@@ -140,13 +150,18 @@ function isAbortError(err: unknown): boolean {
 }
 
 export default function PortalStorageSpaceDetailPage() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { spaceId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { generalSettings } = useGeneralSettings();
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SpaceDetailTab>("files");
+  const [trash, setTrash] = useState<PortalTrashResponse | null>(null);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [trashError, setTrashError] = useState<string | null>(null);
+  const [trashRestoreTarget, setTrashRestoreTarget] = useState<PortalTrashItem | null>(null);
+  const [restoringTrashKey, setRestoringTrashKey] = useState<string | null>(null);
   const [metadataName, setMetadataName] = useState("");
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataBusy, setMetadataBusy] = useState(false);
@@ -223,6 +238,90 @@ export default function PortalStorageSpaceDetailPage() {
   );
   const onboardingState = (location.state as { portalSpaceCreated?: boolean; portalSpaceImported?: boolean } | null) ?? null;
   const showSpaceReadyBanner = Boolean(onboardingState?.portalSpaceCreated || onboardingState?.portalSpaceImported);
+  const requestedTab = useMemo(
+    () => new URLSearchParams(location.search).get("tab"),
+    [location.search],
+  );
+
+  const selectSpaceDetailTab = useCallback(
+    (tab: SpaceDetailTab) => {
+      setActiveTab(tab);
+      const params = new URLSearchParams(location.search);
+      if (tab === "files") {
+        params.delete("tab");
+      } else {
+        params.set("tab", tab);
+      }
+      const search = params.toString();
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search ? `?${search}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+
+  const loadTrash = useCallback(
+    async (
+      markers?: { keyMarker?: string | null; versionIdMarker?: string | null },
+      append = false,
+    ) => {
+      if (
+        !space ||
+        !accountIdForApi ||
+        !space.canBrowse ||
+        space.status === "Archived"
+      ) {
+        setTrash(null);
+        setTrashLoading(false);
+        setTrashError(null);
+        return;
+      }
+      setTrashLoading(true);
+      setTrashError(null);
+      try {
+        const response = await fetchPortalStorageSpaceTrash(
+          accountIdForApi,
+          space.id,
+          markers,
+        );
+        setTrash((current) => {
+          if (!append || !current) return response;
+          const items = [...current.items, ...response.items].filter(
+            (item, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.delete_marker_version_id ===
+                  item.delete_marker_version_id,
+              ) === index,
+          );
+          return { ...response, items };
+        });
+      } catch (err) {
+        console.error(err);
+        setTrashError(
+          extractApiError(
+            err,
+            t({
+              en: "Unable to load the trash.",
+              fr: "Impossible de charger la corbeille.",
+              de: "Der Papierkorb kann nicht geladen werden.",
+            }),
+          ),
+        );
+      } finally {
+        setTrashLoading(false);
+      }
+    },
+    [accountIdForApi, space, t],
+  );
+
+  useEffect(() => {
+    void loadTrash();
+  }, [loadTrash]);
 
   useEffect(() => {
     if (!space) return;
@@ -233,15 +332,21 @@ export default function PortalStorageSpaceDetailPage() {
   }, [space, spaceAccessMode]);
 
   useEffect(() => {
-    const requestedTab = new URLSearchParams(location.search).get("tab");
     if (
       requestedTab === "files" ||
+      requestedTab === "trash" ||
       requestedTab === "collaborators" ||
       requestedTab === "settings"
     ) {
       setActiveTab(requestedTab);
     }
-  }, [location.search]);
+  }, [requestedTab]);
+
+  useEffect(() => {
+    if (trash?.versioning_status === "Disabled" && activeTab === "trash") {
+      selectSpaceDetailTab("files");
+    }
+  }, [activeTab, selectSpaceDetailTab, trash?.versioning_status]);
 
   useEffect(() => {
     if (!startGuideStorageKey) {
@@ -555,6 +660,40 @@ export default function PortalStorageSpaceDetailPage() {
     }
   };
 
+  const confirmTrashRestore = async (item: PortalTrashItem) => {
+    if (!space || !accountIdForApi || restoringTrashKey) return;
+    setRestoringTrashKey(item.key);
+    setMessage(null);
+    try {
+      await restorePortalStorageSpaceObject(accountIdForApi, space.id, item.key);
+      setTrashRestoreTarget(null);
+      await loadTrash();
+      refreshWorkspaceData();
+      setMessage(
+        t({
+          en: `${item.name} restored to its original location.`,
+          fr: `${item.name} restauré à son emplacement d'origine.`,
+          de: `${item.name} wurde am ursprünglichen Ort wiederhergestellt.`,
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      setMessage(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to restore this file.",
+            fr: "Impossible de restaurer ce fichier.",
+            de: "Diese Datei kann nicht wiederhergestellt werden.",
+          }),
+        ),
+      );
+      setTrashRestoreTarget(null);
+    } finally {
+      setRestoringTrashKey(null);
+    }
+  };
+
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
     loading,
@@ -574,6 +713,10 @@ export default function PortalStorageSpaceDetailPage() {
     Boolean(generalSettings.browser_enabled) && Boolean(generalSettings.browser_portal_enabled);
   const isArchived = space.status === "Archived";
   const canBrowse = Boolean(space.canBrowse) && !isArchived;
+  const trashAvailable =
+    canBrowse &&
+    trash?.versioning_status !== "Disabled" &&
+    (trash != null || requestedTab === "trash");
   const hasFullAccess = space.role === "Owner" || space.role === "Manager";
   const canRename = hasFullAccess && space.nameEditable;
   const canModifyObjects = canBrowse && (hasFullAccess || space.role === "Editor");
@@ -878,7 +1021,7 @@ export default function PortalStorageSpaceDetailPage() {
           <button
             type="button"
             onClick={() => {
-              setActiveTab("collaborators");
+              selectSpaceDetailTab("collaborators");
               setAccessPeopleDialogOpen(true);
             }}
             className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
@@ -1015,7 +1158,7 @@ export default function PortalStorageSpaceDetailPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab("collaborators");
+                  selectSpaceDetailTab("collaborators");
                   setAccessPeopleDialogOpen(true);
                 }}
                 className={cx(uiButtonBaseClass, uiButtonVariants.secondary, "h-8 px-3 py-1.5 text-xs")}
@@ -1154,7 +1297,7 @@ export default function PortalStorageSpaceDetailPage() {
             ? [{
                 label: t({ en: "Invite people", fr: "Inviter", de: "Einladen" }),
                 onClick: () => {
-                  setActiveTab("collaborators");
+                  selectSpaceDetailTab("collaborators");
                   setAccessPeopleDialogOpen(true);
                 },
                 variant: "secondary" as const,
@@ -1188,11 +1331,30 @@ export default function PortalStorageSpaceDetailPage() {
       <PortalPageTabs
         tabs={[
           { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
+          ...(trashAvailable
+            ? [
+                {
+                  id: "trash",
+                  label:
+                    (trash?.items.length ?? 0) > 0
+                      ? t({
+                          en: `Trash (${trash?.items.length ?? 0}${trash?.is_truncated ? "+" : ""})`,
+                          fr: `Corbeille (${trash?.items.length ?? 0}${trash?.is_truncated ? "+" : ""})`,
+                          de: `Papierkorb (${trash?.items.length ?? 0}${trash?.is_truncated ? "+" : ""})`,
+                        })
+                      : t({
+                          en: "Trash",
+                          fr: "Corbeille",
+                          de: "Papierkorb",
+                        }),
+                },
+              ]
+            : []),
           { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
           { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
         ]}
         activeTab={activeTab}
-        onChange={(tab) => setActiveTab(tab as SpaceDetailTab)}
+        onChange={(tab) => selectSpaceDetailTab(tab as SpaceDetailTab)}
         ariaLabel={t({
           en: "Space sections",
           fr: "Sections de l'espace",
@@ -1206,6 +1368,28 @@ export default function PortalStorageSpaceDetailPage() {
           {startSpacePanel}
           {filesSection}
           {spaceMetricsSection}
+        </PortalTabPanel>
+      ) : null}
+
+      {activeTab === "trash" && trashAvailable ? (
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="trash">
+          <PortalTrashPanel
+            trash={trash}
+            loading={trashLoading}
+            error={trashError}
+            restoringKey={restoringTrashKey}
+            onRefresh={() => void loadTrash()}
+            onLoadMore={() =>
+              void loadTrash(
+                {
+                  keyMarker: trash?.next_key_marker,
+                  versionIdMarker: trash?.next_version_id_marker,
+                },
+                true,
+              )
+            }
+            onRestore={setTrashRestoreTarget}
+          />
         </PortalTabPanel>
       ) : null}
 
@@ -1411,6 +1595,58 @@ export default function PortalStorageSpaceDetailPage() {
           {historyCleanupCard}
           {externalToolsCard}
         </PortalTabPanel>
+      ) : null}
+
+      {trashRestoreTarget ? (
+        <ConfirmActionDialog
+          title={t({
+            en: "Restore this file?",
+            fr: "Restaurer ce fichier ?",
+            de: "Diese Datei wiederherstellen?",
+          })}
+          description={t({
+            en: "The latest recoverable version will return to its original folder.",
+            fr: "La dernière version récupérable retournera dans son dossier d'origine.",
+            de: "Die neueste wiederherstellbare Version wird in ihren ursprünglichen Ordner zurückgelegt.",
+          })}
+          confirmLabel={t({
+            en: "Restore file",
+            fr: "Restaurer le fichier",
+            de: "Datei wiederherstellen",
+          })}
+          cancelLabel={t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+          tone="primary"
+          loading={restoringTrashKey === trashRestoreTarget.key}
+          details={[
+            {
+              label: t({ en: "File", fr: "Fichier", de: "Datei" }),
+              value: trashRestoreTarget.name,
+            },
+            {
+              label: t({ en: "Original location", fr: "Emplacement d'origine", de: "Ursprünglicher Ort" }),
+              value: trashRestoreTarget.key,
+              mono: true,
+            },
+            {
+              label: t({ en: "Deleted", fr: "Supprimé", de: "Gelöscht" }),
+              value: portalDateTimeLabel(trashRestoreTarget.deleted_at, locale),
+            },
+          ]}
+          impacts={[
+            t({
+              en: "The file will reappear in Files at the same location.",
+              fr: "Le fichier réapparaîtra dans Fichiers, au même emplacement.",
+              de: "Die Datei erscheint unter Dateien wieder am selben Ort.",
+            }),
+            t({
+              en: "Its previous history remains available.",
+              fr: "Son historique précédent reste disponible.",
+              de: "Der bisherige Verlauf bleibt verfügbar.",
+            }),
+          ]}
+          onCancel={() => setTrashRestoreTarget(null)}
+          onConfirm={() => void confirmTrashRestore(trashRestoreTarget)}
+        />
       ) : null}
 
       {publicLinkTarget ? (

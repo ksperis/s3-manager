@@ -238,6 +238,7 @@ class PortalStorageSpaceUpdate(BaseModel):
 
 PortalStorageSpaceVersionCleanupStatus = Literal["completed", "failed", "canceled"]
 PortalStorageSpaceVersionCleanupStage = Literal["prepare", "list", "delete", "completed"]
+PortalStorageSpaceVersioningStatus = Literal["Enabled", "Suspended", "Disabled"]
 
 
 class PortalStorageSpaceVersionCleanupRequest(BaseModel):
@@ -292,6 +293,55 @@ class PortalStorageObjectDetail(BaseModel):
     preview_type: PortalStorageObjectPreviewType = "unavailable"
     preview_text: Optional[str] = None
     preview_unavailable_reason: Optional[str] = None
+
+
+class PortalStorageObjectVersion(BaseModel):
+    key: str
+    version_id: str
+    is_latest: bool = False
+    is_delete_marker: bool = False
+    last_modified: Optional[datetime] = None
+    size: Optional[int] = None
+
+
+class PortalStorageObjectVersionsResponse(BaseModel):
+    key: str
+    versioning_status: PortalStorageSpaceVersioningStatus
+    can_restore: bool = False
+    versions: list[PortalStorageObjectVersion] = Field(default_factory=list)
+    is_truncated: bool = False
+    next_key_marker: Optional[str] = None
+    next_version_id_marker: Optional[str] = None
+
+
+class PortalTrashItem(BaseModel):
+    key: str
+    name: str
+    deleted_at: Optional[datetime] = None
+    delete_marker_version_id: str
+    previous_version_id: Optional[str] = None
+    previous_last_modified: Optional[datetime] = None
+    size: Optional[int] = None
+
+
+class PortalTrashResponse(BaseModel):
+    versioning_status: PortalStorageSpaceVersioningStatus
+    can_restore: bool = False
+    items: list[PortalTrashItem] = Field(default_factory=list)
+    is_truncated: bool = False
+    next_key_marker: Optional[str] = None
+    next_version_id_marker: Optional[str] = None
+
+
+class PortalStorageObjectRestoreRequest(BaseModel):
+    key: str = Field(min_length=1)
+    version_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class PortalStorageObjectRestoreResponse(BaseModel):
+    key: str
+    restored_from_version_id: str
+    message: str = "Restored"
 
 
 class PortalStorageSpaceShare(BaseModel):

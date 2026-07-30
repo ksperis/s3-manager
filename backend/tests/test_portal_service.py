@@ -44,6 +44,8 @@ from app.models.portal import (
     PortalServerAccessLogFilterQuery,
     PortalServerAccessLogFilterRule,
     PortalState,
+    PortalStorageObjectRestoreRequest,
+    PortalStorageObjectRestoreResponse,
     PortalStorageSpace,
     PortalStorageSpaceInitialShare,
     PortalStorageSpaceShare,
@@ -1953,6 +1955,12 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     assert "arn:aws:iam:::user/manager-iam" in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:user/manager-iam" in allowed_principals
     assert "arn:aws:iam::rgw-policy-account:root" not in allowed_principals
+    assert {
+        "s3:GetBucketVersioning",
+        "s3:ListBucketVersions",
+        "s3:GetObjectVersion",
+        "s3:DeleteObjectVersion",
+    }.issubset(private_statement["Action"])
 
     metadata.archived_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     archived_policy = service._storage_space_bucket_policy(account, "research-data", metadata, private_policy)
@@ -3747,6 +3755,222 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
     assert fake_client.deletes == [{"Bucket": "bucket-research-data", "Key": "raw-data/old.txt"}]
 
 
+def test_portal_object_history_lists_versions_and_delete_markers(monkeypatch, db_session):
+    account = S3Account(name="portal-object-history")
+    user = User(email="history@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "history-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Editor")
+
+    class FakeClient:
+        def get_bucket_versioning(self, **kwargs):
+            assert kwargs == {"Bucket": "history-bucket"}
+            return {"Status": "Enabled"}
+
+        def list_object_versions(self, **kwargs):
+            assert kwargs == {
+                "Bucket": "history-bucket",
+                "Prefix": "folder/report.txt",
+                "MaxKeys": 1000,
+            }
+            return {
+                "Versions": [
+                    {
+                        "Key": "folder/report.txt",
+                        "VersionId": "v2",
+                        "IsLatest": True,
+                        "LastModified": datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+                        "Size": 20,
+                    },
+                    {
+                        "Key": "folder/report.txt",
+                        "VersionId": "v1",
+                        "LastModified": datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc),
+                        "Size": 10,
+                    },
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "folder/report.txt",
+                        "VersionId": "d1",
+                        "LastModified": datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc),
+                    }
+                ],
+                "IsTruncated": False,
+            }
+
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: FakeClient())
+
+    result = service.get_storage_space_object_versions(
+        user,
+        access,
+        "research-data",
+        "/folder/report.txt",
+    )
+
+    assert result.versioning_status == "Enabled"
+    assert result.can_restore is True
+    assert [entry.version_id for entry in result.versions] == ["v2", "d1", "v1"]
+    assert result.versions[1].is_delete_marker is True
+
+
+def test_portal_trash_lists_only_current_delete_markers(monkeypatch, db_session):
+    account = S3Account(name="portal-trash")
+    user = User(email="trash@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "trash-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Viewer")
+
+    class FakeClient:
+        def get_bucket_versioning(self, **_kwargs):
+            return {"Status": "Suspended"}
+
+        def list_object_versions(self, **kwargs):
+            assert kwargs == {"Bucket": "trash-bucket", "MaxKeys": 1000}
+            return {
+                "Versions": [
+                    {
+                        "Key": "folder/deleted.txt",
+                        "VersionId": "v1",
+                        "LastModified": datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc),
+                        "Size": 14,
+                    }
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "folder/deleted.txt",
+                        "VersionId": "d2",
+                        "IsLatest": True,
+                        "LastModified": datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+                    },
+                    {
+                        "Key": "folder/restored.txt",
+                        "VersionId": "d1",
+                        "IsLatest": False,
+                        "LastModified": datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc),
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: FakeClient())
+
+    result = service.list_storage_space_trash(user, access, "research-data")
+
+    assert result.versioning_status == "Suspended"
+    assert result.can_restore is False
+    assert len(result.items) == 1
+    assert result.items[0].key == "folder/deleted.txt"
+    assert result.items[0].previous_version_id == "v1"
+    assert result.items[0].size == 14
+
+
+def test_portal_restore_deleted_object_creates_new_current_version(monkeypatch, db_session):
+    account = S3Account(name="portal-trash-restore")
+    user = User(email="trash-restore@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "trash-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Editor")
+
+    class FakeClient:
+        def __init__(self):
+            self.head_calls = []
+            self.copy_calls = []
+
+        def get_bucket_versioning(self, **_kwargs):
+            return {"Status": "Enabled"}
+
+        def list_object_versions(self, **kwargs):
+            assert kwargs == {
+                "Bucket": "trash-bucket",
+                "Prefix": "folder/deleted.txt",
+                "MaxKeys": 1000,
+            }
+            return {
+                "Versions": [
+                    {
+                        "Key": "folder/deleted.txt",
+                        "VersionId": "v7",
+                        "LastModified": datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc),
+                    }
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "folder/deleted.txt",
+                        "VersionId": "d8",
+                        "IsLatest": True,
+                        "LastModified": datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc),
+                    }
+                ],
+            }
+
+        def head_object(self, **kwargs):
+            self.head_calls.append(kwargs)
+            return {"ContentLength": 12}
+
+        def copy_object(self, **kwargs):
+            self.copy_calls.append(kwargs)
+            return {"VersionId": "v9"}
+
+    client = FakeClient()
+    monkeypatch.setattr(service, "_portal_object_client", lambda *_args, **_kwargs: client)
+
+    result = service.restore_storage_space_object_version(
+        user,
+        access,
+        "research-data",
+        "/folder/deleted.txt",
+    )
+
+    assert result.restored_from_version_id == "v7"
+    assert client.head_calls == [
+        {
+            "Bucket": "trash-bucket",
+            "Key": "folder/deleted.txt",
+            "VersionId": "v7",
+        }
+    ]
+    assert client.copy_calls == [
+        {
+            "Bucket": "trash-bucket",
+            "Key": "folder/deleted.txt",
+            "CopySource": {
+                "Bucket": "trash-bucket",
+                "Key": "folder/deleted.txt",
+                "VersionId": "v7",
+            },
+        }
+    ]
+
+
+def test_portal_viewer_cannot_restore_object_version(monkeypatch, db_session):
+    account = S3Account(name="portal-history-viewer")
+    user = User(email="history-viewer@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+    service = PortalService(db_session)
+    monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args: "history-bucket")
+    monkeypatch.setattr(service, "_require_storage_space_content_role", lambda *_args: "Viewer")
+
+    with pytest.raises(RuntimeError, match="Restore not allowed"):
+        service.restore_storage_space_object_version(
+            user,
+            access,
+            "research-data",
+            "folder/report.txt",
+            version_id="v1",
+        )
+
+
 def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
     service = PortalService(db_session)
 
@@ -3773,7 +3997,12 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     assert access == {"research-data": "Viewer"}
     viewer_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceViewer")
-    assert {"s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}.issubset(viewer_statement["Action"])
+    assert {
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:ListBucket",
+        "s3:GetObject",
+    }.issubset(viewer_statement["Action"])
 
     service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Editor"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
@@ -5403,6 +5632,61 @@ def test_portal_object_download_route_audits_scope_portal(db_session):
     assert audit_service.actions[0]["scope"] == "portal"
     assert audit_service.actions[0]["action"] == "download_object"
     assert audit_service.actions[0]["metadata"] == {"storage_space_id": "research-data"}
+
+
+def test_portal_object_restore_route_audits_recovery_source(db_session):
+    account = S3Account(name="portal-object-restore-route")
+    user = User(email="portal-object-restore-route@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
+
+    class FakeService:
+        def restore_storage_space_object_version(
+            self,
+            user_obj,
+            access_obj,
+            space_id,
+            key,
+            *,
+            version_id,
+        ):
+            assert user_obj == user
+            assert access_obj == access
+            assert space_id == "research-data"
+            assert key == "raw-data/readme.txt"
+            assert version_id == "v2"
+            return PortalStorageObjectRestoreResponse(
+                key=key,
+                restored_from_version_id=version_id,
+            )
+
+    class FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    audit_service = FakeAuditService()
+    response = portal_router.portal_restore_storage_space_object(
+        "research-data",
+        payload=PortalStorageObjectRestoreRequest(
+            key="raw-data/readme.txt",
+            version_id="v2",
+        ),
+        access=access,
+        audit_service=audit_service,
+        service=FakeService(),
+    )
+
+    assert response.restored_from_version_id == "v2"
+    assert audit_service.actions[0]["scope"] == "portal"
+    assert audit_service.actions[0]["action"] == "restore_object_version"
+    assert audit_service.actions[0]["metadata"] == {
+        "storage_space_id": "research-data",
+        "restored_from_version_id": "v2",
+    }
 
 
 def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_session):

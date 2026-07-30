@@ -86,6 +86,285 @@ class PortalObjectsMixin:
         normalized = key.rstrip("/")
         return os.path.basename(normalized) or normalized or key
 
+    def _storage_space_versioning_status(self, client, bucket_name: str, space_id: str) -> str:
+        try:
+            response = client.get_bucket_versioning(Bucket=bucket_name)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to load versioning status for storage space '{space_id}': {exc}"
+            ) from exc
+        status = response.get("Status")
+        return status if status in {"Enabled", "Suspended"} else "Disabled"
+
+    def _list_storage_space_object_versions_page(
+        self,
+        client,
+        bucket_name: str,
+        *,
+        key: Optional[str] = None,
+        key_marker: Optional[str] = None,
+        version_id_marker: Optional[str] = None,
+        max_keys: int = 1000,
+    ) -> dict:
+        kwargs: dict[str, object] = {
+            "Bucket": bucket_name,
+            "MaxKeys": max_keys,
+        }
+        if key:
+            kwargs["Prefix"] = key
+        if key_marker:
+            kwargs["KeyMarker"] = key_marker
+        if version_id_marker:
+            kwargs["VersionIdMarker"] = version_id_marker
+        try:
+            return client.list_object_versions(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to load file history for storage space bucket '{bucket_name}': {exc}"
+            ) from exc
+
+    def _portal_version_entry(
+        self,
+        value: dict,
+        *,
+        is_delete_marker: bool,
+    ) -> Optional[PortalStorageObjectVersion]:
+        key = value.get("Key")
+        version_id = value.get("VersionId")
+        if not key or not version_id:
+            return None
+        return PortalStorageObjectVersion(
+            key=key,
+            version_id=version_id,
+            is_latest=bool(value.get("IsLatest")),
+            is_delete_marker=is_delete_marker,
+            last_modified=value.get("LastModified"),
+            size=None if is_delete_marker else int(value.get("Size") or 0),
+        )
+
+    def get_storage_space_object_versions(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+        *,
+        key_marker: Optional[str] = None,
+        version_id_marker: Optional[str] = None,
+        max_keys: int = 1000,
+    ) -> PortalStorageObjectVersionsResponse:
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        role = self._require_storage_space_content_role(user, access, bucket_name)
+        client = self._portal_object_client(user, access.account)
+        versioning_status = self._storage_space_versioning_status(client, bucket_name, space_id)
+        if versioning_status == "Disabled":
+            return PortalStorageObjectVersionsResponse(
+                key=target_key,
+                versioning_status="Disabled",
+                can_restore=False,
+            )
+        response = self._list_storage_space_object_versions_page(
+            client,
+            bucket_name,
+            key=target_key,
+            key_marker=key_marker,
+            version_id_marker=version_id_marker,
+            max_keys=max_keys,
+        )
+        entries: list[PortalStorageObjectVersion] = []
+        for value in response.get("Versions", []):
+            if value.get("Key") != target_key:
+                continue
+            entry = self._portal_version_entry(value, is_delete_marker=False)
+            if entry is not None:
+                entries.append(entry)
+        for value in response.get("DeleteMarkers", []):
+            if value.get("Key") != target_key:
+                continue
+            entry = self._portal_version_entry(value, is_delete_marker=True)
+            if entry is not None:
+                entries.append(entry)
+        entries.sort(
+            key=lambda entry: entry.last_modified or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return PortalStorageObjectVersionsResponse(
+            key=target_key,
+            versioning_status=versioning_status,
+            can_restore=role != "Viewer",
+            versions=entries,
+            is_truncated=bool(response.get("IsTruncated")),
+            next_key_marker=response.get("NextKeyMarker"),
+            next_version_id_marker=response.get("NextVersionIdMarker"),
+        )
+
+    def list_storage_space_trash(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        *,
+        key_marker: Optional[str] = None,
+        version_id_marker: Optional[str] = None,
+        max_keys: int = 1000,
+    ) -> PortalTrashResponse:
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        role = self._require_storage_space_content_role(user, access, bucket_name)
+        client = self._portal_object_client(user, access.account)
+        versioning_status = self._storage_space_versioning_status(client, bucket_name, space_id)
+        if versioning_status == "Disabled":
+            return PortalTrashResponse(versioning_status="Disabled", can_restore=False)
+        response = self._list_storage_space_object_versions_page(
+            client,
+            bucket_name,
+            key_marker=key_marker,
+            version_id_marker=version_id_marker,
+            max_keys=max_keys,
+        )
+        versions_by_key: dict[str, list[dict]] = {}
+        for version in response.get("Versions", []):
+            version_key = version.get("Key")
+            if version_key:
+                versions_by_key.setdefault(version_key, []).append(version)
+        items: list[PortalTrashItem] = []
+        for marker in response.get("DeleteMarkers", []):
+            key = marker.get("Key")
+            marker_version_id = marker.get("VersionId")
+            if not key or not marker_version_id or not marker.get("IsLatest"):
+                continue
+            previous_versions = versions_by_key.get(key, [])
+            previous = max(
+                previous_versions,
+                key=lambda value: value.get("LastModified")
+                or datetime.min.replace(tzinfo=timezone.utc),
+                default=None,
+            )
+            items.append(
+                PortalTrashItem(
+                    key=key,
+                    name=self._object_name(key),
+                    deleted_at=marker.get("LastModified"),
+                    delete_marker_version_id=marker_version_id,
+                    previous_version_id=previous.get("VersionId") if previous else None,
+                    previous_last_modified=previous.get("LastModified") if previous else None,
+                    size=int(previous.get("Size") or 0) if previous else None,
+                )
+            )
+        items.sort(
+            key=lambda item: item.deleted_at or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return PortalTrashResponse(
+            versioning_status=versioning_status,
+            can_restore=role != "Viewer",
+            items=items,
+            is_truncated=bool(response.get("IsTruncated")),
+            next_key_marker=response.get("NextKeyMarker"),
+            next_version_id_marker=response.get("NextVersionIdMarker"),
+        )
+
+    def _latest_restorable_storage_space_version(
+        self,
+        client,
+        bucket_name: str,
+        target_key: str,
+    ) -> str:
+        key_marker: Optional[str] = None
+        version_id_marker: Optional[str] = None
+        current_is_deleted = False
+        while True:
+            response = self._list_storage_space_object_versions_page(
+                client,
+                bucket_name,
+                key=target_key,
+                key_marker=key_marker,
+                version_id_marker=version_id_marker,
+            )
+            exact_markers = [
+                marker
+                for marker in response.get("DeleteMarkers", [])
+                if marker.get("Key") == target_key
+            ]
+            if any(marker.get("IsLatest") for marker in exact_markers):
+                current_is_deleted = True
+            exact_versions = [
+                version
+                for version in response.get("Versions", [])
+                if version.get("Key") == target_key and version.get("VersionId")
+            ]
+            if current_is_deleted and exact_versions:
+                latest = max(
+                    exact_versions,
+                    key=lambda value: value.get("LastModified")
+                    or datetime.min.replace(tzinfo=timezone.utc),
+                )
+                return str(latest["VersionId"])
+            if not response.get("IsTruncated"):
+                break
+            key_marker = response.get("NextKeyMarker")
+            version_id_marker = response.get("NextVersionIdMarker")
+            if not key_marker:
+                break
+        if not current_is_deleted:
+            raise RuntimeError(f"Object '{target_key}' is not in the trash.")
+        raise RuntimeError(f"No restorable version was found for object '{target_key}'.")
+
+    def restore_storage_space_object_version(
+        self,
+        user: User,
+        access: "AccountAccess",
+        space_id: str,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ) -> PortalStorageObjectRestoreResponse:
+        target_key = (key or "").lstrip("/")
+        if not target_key:
+            raise RuntimeError("Object key is required.")
+        bucket_name = self._resolve_storage_space_bucket_name(user, access, space_id)
+        if not bucket_name:
+            raise RuntimeError("Storage space not found or not allowed.")
+        if self._require_storage_space_content_role(user, access, bucket_name) == "Viewer":
+            raise RuntimeError("Restore not allowed for this storage space role.")
+        client = self._portal_object_client(user, access.account, request_profile="long_running")
+        if self._storage_space_versioning_status(client, bucket_name, space_id) == "Disabled":
+            raise RuntimeError("File history is not enabled for this storage space.")
+        source_version_id = version_id or self._latest_restorable_storage_space_version(
+            client,
+            bucket_name,
+            target_key,
+        )
+        try:
+            client.head_object(
+                Bucket=bucket_name,
+                Key=target_key,
+                VersionId=source_version_id,
+            )
+            client.copy_object(
+                Bucket=bucket_name,
+                Key=target_key,
+                CopySource={
+                    "Bucket": bucket_name,
+                    "Key": target_key,
+                    "VersionId": source_version_id,
+                },
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to restore object '{target_key}' in storage space '{space_id}': {exc}"
+            ) from exc
+        return PortalStorageObjectRestoreResponse(
+            key=target_key,
+            restored_from_version_id=source_version_id,
+        )
+
     def _head_storage_space_object(self, client, bucket_name: str, space_id: str, target_key: str) -> dict:
         try:
             return client.head_object(Bucket=bucket_name, Key=target_key)

@@ -62,6 +62,9 @@ from app.models.portal import (
     PortalState,
     PortalTransfer,
     PortalStorageObjectDetail,
+    PortalStorageObjectRestoreResponse,
+    PortalStorageObjectVersion,
+    PortalStorageObjectVersionsResponse,
     PortalStorageSpace,
     PortalStorageSpaceAccessPerson,
     PortalStorageSpaceAccessSummary,
@@ -75,6 +78,8 @@ from app.models.portal import (
     PortalStorageSpaceShareScope,
     PortalStorageSpaceSummary,
     PortalStorageSpaceVisibility,
+    PortalTrashItem,
+    PortalTrashResponse,
     PortalUsage,
     PortalUsageStorageSpace,
 )

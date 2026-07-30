@@ -2,10 +2,13 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { extractApiError } from "../../utils/apiError";
+import ObjectPreview, {
+  type ObjectPreviewLoadResult,
+} from "../shared/ObjectPreview";
 import {
   fetchObjectMetadata,
   getObjectLegalHold,
@@ -44,7 +47,6 @@ import {
 import {
   buildVersionRows,
   formatLocalDateTime,
-  previewKindForItem,
   toIsoString,
 } from "./browserUtils";
 import {
@@ -56,7 +58,6 @@ import {
   isObjectLockUnavailableMessage,
   nextTabAfterDeleted,
   normalizeObjectDetailPairs,
-  readBlobAsText,
   storageClassOptions,
 } from "./browserObjectDetailsModel";
 import type {
@@ -131,17 +132,6 @@ export default function BrowserObjectDetailsModal({
   );
   const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewContentType, setPreviewContentType] = useState<string | null>(
-    null,
-  );
-  const [previewTextContent, setPreviewTextContent] = useState<string | null>(
-    null,
-  );
-  const [previewError, setPreviewError] = useState<string | null>(null);
-
   const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataLoaded, setMetadataLoaded] = useState(false);
@@ -209,7 +199,6 @@ export default function BrowserObjectDetailsModal({
   const [savingPresign, setSavingPresign] = useState(false);
   const [savingVersionAction, setSavingVersionAction] = useState(false);
 
-  const previewObjectUrlRef = useRef<string | null>(null);
   const tagIdRef = useRef(0);
   const metadataIdRef = useRef(0);
 
@@ -234,10 +223,6 @@ export default function BrowserObjectDetailsModal({
   const isDeletedCurrent = Boolean(
     itemSnapshot.isDeleted || latestVersionRow?.is_delete_marker,
   );
-  const previewKind = useMemo(
-    () => previewKindForItem(itemSnapshot, previewContentType),
-    [itemSnapshot, previewContentType],
-  );
   const versionId = metadata?.version_id ?? tagsVersionId ?? undefined;
   const currentStorageClass =
     metadata?.storage_class ?? storageClass ?? itemSnapshot.storageClass;
@@ -257,12 +242,6 @@ export default function BrowserObjectDetailsModal({
     }
     return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-900/30 dark:text-emerald-100";
   }, [actionTone]);
-
-  const clearPreviewObjectUrl = () => {
-    if (!previewObjectUrlRef.current) return;
-    URL.revokeObjectURL(previewObjectUrlRef.current);
-    previewObjectUrlRef.current = null;
-  };
 
   const pushStatus = (message: string, tone: "success" | "error") => {
     setActionMessage(message);
@@ -494,20 +473,88 @@ export default function BrowserObjectDetailsModal({
     }
   };
 
+  const loadObjectPreview = useCallback(
+    async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
+      const previewRequest: PresignRequest = {
+        key: itemSnapshot.key,
+        operation: "get_object",
+        expires_in: 900,
+        response_content_disposition: buildInlinePreviewDisposition(
+          itemSnapshot.name,
+        ),
+      };
+      const blob = useProxyTransfers
+        ? await proxyDownload(
+            accountId,
+            bucketName,
+            itemSnapshot.key,
+            signal,
+            sseCustomerKeyBase64,
+          )
+        : await (async () => {
+            const presign = await presignObjectRequest(
+              bucketName,
+              previewRequest,
+            );
+            const response = await fetch(presign.url, {
+              headers: presign.headers || undefined,
+              signal,
+            });
+            if (!response.ok) {
+              throw new Error("Preview download failed.");
+            }
+            return response.blob();
+          })();
+      return {
+        blob,
+        contentType: blob.type || null,
+      };
+    },
+    [
+      accountId,
+      bucketName,
+      itemSnapshot.key,
+      itemSnapshot.name,
+      presignObjectRequest,
+      sseCustomerKeyBase64,
+      useProxyTransfers,
+    ],
+  );
+
+  const resolveObjectPreviewContentType = useCallback(
+    async (signal: AbortSignal) => {
+      if (metadataLoaded) return metadata?.content_type ?? null;
+      try {
+        const nextMetadata = await fetchObjectMetadata(
+          accountId,
+          bucketName,
+          itemSnapshot.key,
+          null,
+          sseCustomerKeyBase64,
+          signal,
+        );
+        return nextMetadata.content_type ?? null;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return null;
+      }
+    },
+    [
+      accountId,
+      bucketName,
+      itemSnapshot.key,
+      metadata?.content_type,
+      metadataLoaded,
+      sseCustomerKeyBase64,
+    ],
+  );
+
   useEffect(() => {
     setItemSnapshot(item);
     setActiveTab(initialTab);
     setActionMessage(null);
     setActionTone(null);
     setCopyDialogValue(null);
-
-    clearPreviewObjectUrl();
-    setPreviewLoading(false);
-    setPreviewLoaded(false);
-    setPreviewUrl(null);
-    setPreviewContentType(null);
-    setPreviewTextContent(null);
-    setPreviewError(null);
 
     setMetadata(null);
     setMetadataLoading(false);
@@ -549,10 +596,6 @@ export default function BrowserObjectDetailsModal({
     setPresignHeaders(null);
     setPresignError(null);
     setSavingVersionAction(false);
-
-    return () => {
-      clearPreviewObjectUrl();
-    };
     // Draft reset is intentionally tied to modal target changes, not helper identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTab, item]);
@@ -571,96 +614,6 @@ export default function BrowserObjectDetailsModal({
   }, [activeTab, isDeletedCurrent, versioningEnabled]);
 
   useEffect(() => {
-    if (activeTab === "preview" && !previewLoaded && !isDeletedCurrent) {
-      let isMounted = true;
-      setPreviewLoading(true);
-      setPreviewError(null);
-      setPreviewUrl(null);
-      setPreviewContentType(null);
-      setPreviewTextContent(null);
-      clearPreviewObjectUrl();
-
-      const loadPreview = async () => {
-        const previewRequest: PresignRequest = {
-          key: itemSnapshot.key,
-          operation: "get_object",
-          expires_in: 900,
-          response_content_disposition: buildInlinePreviewDisposition(
-            itemSnapshot.name,
-          ),
-        };
-        const contentTypePromise = metadataLoaded
-          ? Promise.resolve(metadata?.content_type ?? null)
-          : fetchObjectMetadata(
-              accountId,
-              bucketName,
-              itemSnapshot.key,
-              null,
-              sseCustomerKeyBase64,
-            )
-              .then((nextMetadata) => nextMetadata.content_type ?? null)
-              .catch(() => null);
-
-        const blob = useProxyTransfers
-          ? await proxyDownload(
-              accountId,
-              bucketName,
-              itemSnapshot.key,
-              undefined,
-              sseCustomerKeyBase64,
-            )
-          : await (async () => {
-              const presign = await presignObjectRequest(
-                bucketName,
-                previewRequest,
-              );
-              const response = await fetch(presign.url, {
-                headers: presign.headers || undefined,
-              });
-              if (!response.ok) {
-                throw new Error("Preview download failed.");
-              }
-              return response.blob();
-            })();
-        if (!isMounted) return;
-        const url = URL.createObjectURL(blob);
-        previewObjectUrlRef.current = url;
-        const contentType = (await contentTypePromise) ?? blob.type ?? null;
-        const kind = previewKindForItem(itemSnapshot, contentType);
-        if (kind === "text") {
-          const textContent = await readBlobAsText(blob);
-          if (!isMounted) return;
-          setPreviewTextContent(textContent);
-          setPreviewUrl(null);
-        } else {
-          setPreviewTextContent(null);
-          setPreviewUrl(url);
-        }
-        setPreviewContentType(contentType);
-      };
-
-      loadPreview()
-        .catch((err) => {
-          if (!isMounted) return;
-          setPreviewError(
-            extractApiError(
-              err,
-              useProxyTransfers || sseActive
-                ? "Unable to load preview."
-                : "Unable to generate preview URL.",
-            ),
-          );
-        })
-        .finally(() => {
-          if (!isMounted) return;
-          setPreviewLoading(false);
-          setPreviewLoaded(true);
-        });
-
-      return () => {
-        isMounted = false;
-      };
-    }
     if (activeTab === "versions" && versioningEnabled && !versionsLoaded) {
       void loadVersions();
     }
@@ -678,18 +631,9 @@ export default function BrowserObjectDetailsModal({
     // Lazy loading is driven by tab transitions and modal state, not helper identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    accountId,
     activeTab,
-    bucketName,
     isDeletedCurrent,
-    itemSnapshot,
-    metadata,
     metadataLoaded,
-    presignObjectRequest,
-    previewLoaded,
-    sseActive,
-    sseCustomerKeyBase64,
-    useProxyTransfers,
     versioningEnabled,
     versionsLoaded,
   ]);
@@ -962,71 +906,21 @@ export default function BrowserObjectDetailsModal({
       return null;
     }
     return (
-      <div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-          {previewLoading && (
-            <div className="ui-body text-slate-500 dark:text-slate-300">
-              Loading preview...
-            </div>
-          )}
-          {previewError && (
-            <div className="ui-body font-semibold text-rose-600 dark:text-rose-200">
-              {previewError}
-            </div>
-          )}
-          {!previewLoading &&
-            !previewError &&
-            previewUrl &&
-            previewKind === "image" && (
-              <img
-                src={previewUrl}
-                alt={itemSnapshot.name}
-                className="mx-auto max-h-[58vh] w-full rounded-lg bg-white object-contain dark:bg-slate-950"
-              />
-            )}
-          {!previewLoading &&
-            !previewError &&
-            previewUrl &&
-            previewKind === "video" && (
-              <video
-                src={previewUrl}
-                controls
-                className="mx-auto max-h-[58vh] w-full rounded-lg bg-black"
-              />
-            )}
-          {!previewLoading &&
-            !previewError &&
-            previewUrl &&
-            previewKind === "audio" && (
-              <audio src={previewUrl} controls className="w-full" />
-            )}
-          {!previewLoading &&
-            !previewError &&
-            previewTextContent !== null &&
-            previewKind === "text" && (
-              <pre className="max-h-[58vh] overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-4 ui-caption text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
-                {previewTextContent}
-              </pre>
-            )}
-          {!previewLoading &&
-            !previewError &&
-            previewUrl &&
-            previewKind === "pdf" && (
-              <iframe
-                title="Object preview"
-                src={previewUrl}
-                className="h-[58vh] w-full rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950"
-              />
-            )}
-          {!previewLoading &&
-            !previewError &&
-            (!previewUrl || previewKind === "generic") && (
-              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Preview not available for this file type.
-              </div>
-            )}
-        </div>
-      </div>
+      <ObjectPreview
+        name={itemSnapshot.name}
+        sizeBytes={itemSnapshot.sizeBytes}
+        contentType={metadataLoaded ? metadata?.content_type : null}
+        resolveContentType={resolveObjectPreviewContentType}
+        loadBlob={loadObjectPreview}
+        formatError={(error) =>
+          extractApiError(
+            error,
+            useProxyTransfers || sseActive
+              ? "Unable to load preview."
+              : "Unable to generate preview URL.",
+          )
+        }
+      />
     );
   };
 
@@ -1746,10 +1640,7 @@ export default function BrowserObjectDetailsModal({
     <>
       <Modal
         title={`Object details · ${itemSnapshot.name}`}
-        onClose={() => {
-          clearPreviewObjectUrl();
-          onClose();
-        }}
+        onClose={onClose}
         maxWidthClass="max-w-7xl"
         maxBodyHeightClass="h-[88vh]"
       >

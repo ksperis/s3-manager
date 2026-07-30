@@ -10,10 +10,12 @@ const mocks = vi.hoisted(() => ({
   createPortalRequestMock: vi.fn(),
   deleteStorageSpaceMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
+  fetchTrashMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
   revokeShareMock: vi.fn(),
   streamHistoryCleanupMock: vi.fn(),
+  restoreObjectMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
   updateShareMock: vi.fn(),
   usePortalWorkspaceDataMock: vi.fn(),
@@ -113,10 +115,12 @@ vi.mock("../../api/portal", () => ({
   createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
+  fetchPortalStorageSpaceTrash: (...args: unknown[]) => mocks.fetchTrashMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
   revokePortalStorageSpaceShare: (...args: unknown[]) => mocks.revokeShareMock(...args),
+  restorePortalStorageSpaceObject: (...args: unknown[]) => mocks.restoreObjectMock(...args),
   streamPortalStorageSpaceVersionCleanup: (...args: unknown[]) => mocks.streamHistoryCleanupMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
@@ -175,6 +179,12 @@ describe("PortalStorageSpaceDetailPage", () => {
       public_link_count: 2,
       can_manage_access: true,
       can_create_public_links: true,
+    });
+    mocks.fetchTrashMock.mockImplementation(() => new Promise(() => undefined));
+    mocks.restoreObjectMock.mockResolvedValue({
+      key: "reports/deleted.csv",
+      restored_from_version_id: "v1",
+      message: "Restored",
     });
     mocks.listShareCandidatesMock.mockResolvedValue([
       {
@@ -268,6 +278,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("Storage used")).toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Trash" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Collaborators" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
@@ -300,6 +311,75 @@ describe("PortalStorageSpaceDetailPage", () => {
       fail: expect.any(Function),
     });
     expect(embedProps.hiddenActionIds).toBeUndefined();
+  });
+
+  it("offers an intuitive trash view and restores a deleted file", async () => {
+    mocks.fetchTrashMock.mockResolvedValue({
+      versioning_status: "Enabled",
+      can_restore: true,
+      items: [
+        {
+          key: "reports/deleted.csv",
+          name: "deleted.csv",
+          deleted_at: "2026-07-29T12:00:00Z",
+          delete_marker_version_id: "d2",
+          previous_version_id: "v1",
+          previous_last_modified: "2026-07-28T12:00:00Z",
+          size: 2048,
+        },
+      ],
+      is_truncated: false,
+      next_key_marker: null,
+      next_version_id_marker: null,
+    });
+
+    renderPage(["/portal/storage-spaces/research-data?tab=trash"]);
+
+    const trashTab = await screen.findByRole("tab", { name: "Trash (1)" });
+    expect(trashTab).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByText(
+        "Deleted files stay here while their history is retained. Restoring puts the file back in its original location without removing older history.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Deleted files" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Trash" })).not.toBeInTheDocument();
+    expect(screen.getByText("reports/deleted.csv")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    const dialog = screen.getByRole("dialog", { name: "Restore this file?" });
+    expect(
+      within(dialog).getByText("The file will reappear in Files at the same location."),
+    ).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore file" }));
+
+    await waitFor(() => {
+      expect(mocks.restoreObjectMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        "reports/deleted.csv",
+      );
+    });
+    expect(
+      await screen.findByText("deleted.csv restored to its original location."),
+    ).toBeInTheDocument();
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalled();
+  });
+
+  it("keeps a directly opened trash view usable when loading fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.fetchTrashMock.mockRejectedValue(new Error("trash unavailable"));
+
+    renderPage(["/portal/storage-spaces/research-data?tab=trash"]);
+
+    const trashTab = await screen.findByRole("tab", { name: "Trash" });
+    expect(trashTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Trash" })).toBeInTheDocument();
+    expect(await screen.findByText("trash unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+
+    consoleError.mockRestore();
   });
 
   it("guides users to add files and invite people after creating a space", () => {

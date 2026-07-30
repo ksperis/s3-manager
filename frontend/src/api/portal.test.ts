@@ -39,7 +39,9 @@ import {
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
+  fetchPortalStorageSpaceObjectVersions,
   fetchPortalStorageSpaceAccessSummary,
+  fetchPortalStorageSpaceTrash,
   fetchPortalStorageSpace,
   fetchPortalUsageHistoryTrends,
   fetchPortalTransfers,
@@ -54,6 +56,7 @@ import {
   portalStorageSpaceVersionCleanupConfirmationPhrase,
   revokePortalStorageSpacePublicLink,
   revokePortalStorageSpaceShare,
+  restorePortalStorageSpaceObject,
   updatePortalAccessKeyStatus,
   updatePortalStorageSpace,
   updatePortalStorageSpaceShare,
@@ -170,6 +173,63 @@ describe("portal storage spaces api", () => {
     });
   });
 
+  it("loads file history and trash, then restores a selected version", async () => {
+    clientMock.get.mockResolvedValue({ data: { versions: [], items: [] } });
+    clientMock.post.mockResolvedValueOnce({
+      data: {
+        key: "raw-data/report.csv",
+        restored_from_version_id: "v2",
+        message: "Restored",
+      },
+    });
+
+    await fetchPortalStorageSpaceObjectVersions(
+      "101",
+      "research data",
+      "raw-data/report.csv",
+      { keyMarker: "raw-data/report.csv", versionIdMarker: "v3" },
+    );
+    await fetchPortalStorageSpaceTrash("101", "research data", {
+      keyMarker: "raw-data/old.csv",
+      versionIdMarker: "d2",
+    });
+    await restorePortalStorageSpaceObject(
+      "101",
+      "research data",
+      "raw-data/report.csv",
+      "v2",
+    );
+
+    expect(clientMock.get).toHaveBeenNthCalledWith(
+      1,
+      "/portal/storage-spaces/research%20data/objects/versions",
+      {
+        params: {
+          account_id: "101",
+          key: "raw-data/report.csv",
+          key_marker: "raw-data/report.csv",
+          version_id_marker: "v3",
+        },
+      },
+    );
+    expect(clientMock.get).toHaveBeenNthCalledWith(
+      2,
+      "/portal/storage-spaces/research%20data/trash",
+      {
+        params: {
+          account_id: "101",
+          key_marker: "raw-data/old.csv",
+          version_id_marker: "d2",
+        },
+      },
+    );
+    expect(clientMock.post).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/objects/restore",
+      { key: "raw-data/report.csv", version_id: "v2" },
+      { params: { account_id: "101" } },
+    );
+  });
+
   it("downloads a storage space object as a blob with filename", async () => {
     const blob = new Blob(["hello"], { type: "text/plain" });
     clientMock.get.mockResolvedValueOnce({
@@ -189,6 +249,26 @@ describe("portal storage spaces api", () => {
     });
     expect(result.blob).toBe(blob);
     expect(result.filename).toBe("report.csv");
+  });
+
+  it("forwards an abort signal while loading a storage space object", async () => {
+    const controller = new AbortController();
+    clientMock.get.mockResolvedValueOnce({
+      data: new Blob(["preview"], { type: "image/png" }),
+      headers: {},
+    });
+
+    await downloadPortalStorageSpaceObject(
+      "101",
+      "research data",
+      "raw-data/photo.png",
+      controller.signal,
+    );
+
+    expect(clientMock.get).toHaveBeenCalledWith(
+      "/portal/storage-spaces/research%20data/objects/download",
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 
   it("manages storage space shares through canonical portal endpoints", async () => {

@@ -190,6 +190,52 @@ export type PortalStorageObjectDownload = {
   filename: string;
 };
 
+export type PortalStorageSpaceVersioningStatus = "Enabled" | "Suspended" | "Disabled";
+
+export type PortalStorageObjectVersion = {
+  key: string;
+  version_id: string;
+  is_latest: boolean;
+  is_delete_marker: boolean;
+  last_modified?: string | null;
+  size?: number | null;
+};
+
+export type PortalStorageObjectVersionsResponse = {
+  key: string;
+  versioning_status: PortalStorageSpaceVersioningStatus;
+  can_restore: boolean;
+  versions: PortalStorageObjectVersion[];
+  is_truncated: boolean;
+  next_key_marker?: string | null;
+  next_version_id_marker?: string | null;
+};
+
+export type PortalTrashItem = {
+  key: string;
+  name: string;
+  deleted_at?: string | null;
+  delete_marker_version_id: string;
+  previous_version_id?: string | null;
+  previous_last_modified?: string | null;
+  size?: number | null;
+};
+
+export type PortalTrashResponse = {
+  versioning_status: PortalStorageSpaceVersioningStatus;
+  can_restore: boolean;
+  items: PortalTrashItem[];
+  is_truncated: boolean;
+  next_key_marker?: string | null;
+  next_version_id_marker?: string | null;
+};
+
+export type PortalStorageObjectRestoreResponse = {
+  key: string;
+  restored_from_version_id: string;
+  message: string;
+};
+
 export type PortalStorageSpaceVersionCleanupProgress = {
   request_id?: string | null;
   stage: "prepare" | "list" | "delete" | "completed";
@@ -723,6 +769,75 @@ export async function fetchPortalStorageSpaceObjectDetail(
   return data;
 }
 
+export async function fetchPortalStorageSpaceObjectVersions(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  key: string,
+  markers?: {
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+  }
+): Promise<PortalStorageObjectVersionsResponse> {
+  const { data } = await client.get<PortalStorageObjectVersionsResponse>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/versions`,
+    {
+      params: withS3AccountParam(
+        {
+          key,
+          ...(markers?.keyMarker ? { key_marker: markers.keyMarker } : {}),
+          ...(markers?.versionIdMarker
+            ? { version_id_marker: markers.versionIdMarker }
+            : {}),
+        },
+        accountId
+      ),
+    }
+  );
+  return data;
+}
+
+export async function fetchPortalStorageSpaceTrash(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  markers?: {
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+  }
+): Promise<PortalTrashResponse> {
+  const { data } = await client.get<PortalTrashResponse>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/trash`,
+    {
+      params: withS3AccountParam(
+        {
+          ...(markers?.keyMarker ? { key_marker: markers.keyMarker } : {}),
+          ...(markers?.versionIdMarker
+            ? { version_id_marker: markers.versionIdMarker }
+            : {}),
+        },
+        accountId
+      ),
+    }
+  );
+  return data;
+}
+
+export async function restorePortalStorageSpaceObject(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  key: string,
+  versionId?: string | null
+): Promise<PortalStorageObjectRestoreResponse> {
+  const { data } = await client.post<PortalStorageObjectRestoreResponse>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/restore`,
+    {
+      key,
+      ...(versionId ? { version_id: versionId } : {}),
+    },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
 export async function deletePortalStorageSpaceObject(
   accountId: S3AccountSelector,
   spaceId: string,
@@ -795,13 +910,15 @@ function filenameFromContentDisposition(value: unknown, fallback: string): strin
 export async function downloadPortalStorageSpaceObject(
   accountId: S3AccountSelector,
   spaceId: string,
-  key: string
+  key: string,
+  signal?: AbortSignal
 ): Promise<PortalStorageObjectDownload> {
   const response = await client.get<Blob>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}/objects/download`,
     {
       params: withS3AccountParam({ key }, accountId),
       responseType: "blob",
+      ...(signal ? { signal } : {}),
       timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,
     }
   );

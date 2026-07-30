@@ -80,12 +80,3 @@ export const buildInlinePreviewDisposition = (filename: string) => {
   const encoded = encodeURIComponent(filename);
   return `inline; filename="${fallback || "preview"}"; filename*=UTF-8''${encoded}`;
 };
-
-export const readBlobAsText = async (blob: Blob) => {
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("Unable to read blob."));
-    reader.readAsText(blob);
-  });
-};

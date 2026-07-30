@@ -69,6 +69,8 @@ class PortalActivityMixin:
             "download_object": "Downloaded",
             "create_folder": "Created folder",
             "delete_object": "Deleted",
+            "restore_object_version": "Restored version",
+            "restore_deleted_object": "Restored from trash",
             "grant_storage_space_share": "Shared",
             "update_storage_space_share": "Updated share",
             "revoke_storage_space_share": "Removed share",

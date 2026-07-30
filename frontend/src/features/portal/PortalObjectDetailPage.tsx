@@ -2,17 +2,21 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpaceObject,
   downloadPortalStorageSpaceObject,
   fetchPortalStorageSpaceObjectDetail,
+  fetchPortalStorageSpaceObjectVersions,
   listPortalStorageSpacePublicLinks,
+  restorePortalStorageSpaceObject,
   revokePortalStorageSpacePublicLink,
   type PortalPublicLink,
   type PortalStorageObjectDetail,
+  type PortalStorageObjectVersion,
+  type PortalStorageObjectVersionsResponse,
 } from "../../api/portal";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
@@ -29,7 +33,11 @@ import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { formatBytes } from "../../utils/format";
+import ObjectPreview, {
+  type ObjectPreviewLoadResult,
+} from "../shared/ObjectPreview";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
+import PortalObjectHistoryPanel from "./PortalObjectHistoryPanel";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpacePath } from "./portalWorkspaceModel";
 import {
@@ -40,10 +48,11 @@ import { portalDateTimeLabel, portalPublicLinkStatusLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
-type ObjectTab = "preview" | "sharing" | "details" | "events";
+type ObjectTab = "preview" | "history" | "sharing" | "details" | "events";
 
 type PendingObjectAction =
   | { type: "delete-object" }
+  | { type: "restore-version"; version: PortalStorageObjectVersion }
   | { type: "revoke-public-link"; link: PortalPublicLink };
 
 function decodeRouteValue(value?: string): string {
@@ -139,6 +148,10 @@ export default function PortalObjectDetailPage() {
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [objectDetail, setObjectDetail] = useState<PortalStorageObjectDetail | null>(null);
+  const [objectHistory, setObjectHistory] = useState<PortalStorageObjectVersionsResponse | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
   const [publicLinkDialogOpen, setPublicLinkDialogOpen] = useState(false);
   const [linkExpiration, setLinkExpiration] = useState("");
@@ -192,6 +205,67 @@ export default function PortalObjectDetailPage() {
     };
   }, [accountIdForApi, objectPath, space, t]);
 
+  const loadObjectHistory = useCallback(
+    async (
+      markers?: { keyMarker?: string | null; versionIdMarker?: string | null },
+      append = false,
+    ) => {
+      if (!space || !accountIdForApi || !objectPath) {
+        setObjectHistory(null);
+        setHistoryLoading(false);
+        setHistoryError(null);
+        return;
+      }
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const response = await fetchPortalStorageSpaceObjectVersions(
+          accountIdForApi,
+          space.id,
+          objectPath,
+          markers,
+        );
+        setObjectHistory((current) => {
+          if (!append || !current) return response;
+          const versions = [...current.versions, ...response.versions].filter(
+            (version, index, all) =>
+              all.findIndex(
+                (candidate) =>
+                  candidate.version_id === version.version_id &&
+                  candidate.is_delete_marker === version.is_delete_marker,
+              ) === index,
+          );
+          return { ...response, versions };
+        });
+      } catch (err) {
+        console.error(err);
+        setHistoryError(
+          extractApiError(
+            err,
+            t({
+              en: "Unable to load file history.",
+              fr: "Impossible de charger l'historique du fichier.",
+              de: "Der Dateiverlauf kann nicht geladen werden.",
+            }),
+          ),
+        );
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [accountIdForApi, objectPath, space, t],
+  );
+
+  useEffect(() => {
+    void loadObjectHistory();
+  }, [loadObjectHistory]);
+
+  useEffect(() => {
+    if (objectHistory?.versioning_status === "Disabled" && activeTab === "history") {
+      setActiveTab("preview");
+    }
+  }, [activeTab, objectHistory?.versioning_status]);
+
   const object = useMemo(
     () => ({
       name: objectDetail?.name || objectName(objectPath),
@@ -201,11 +275,28 @@ export default function PortalObjectDetailPage() {
       storageClass: objectDetail?.storage_class ?? "STANDARD",
       encryption: objectDetail?.encryption ?? "-",
       lastModified: portalDateTimeLabel(objectDetail?.last_modified, locale),
-      previewType: objectDetail?.preview_type ?? "unavailable",
       previewText: objectDetail?.preview_text ?? null,
-      previewUnavailableReason: objectDetail?.preview_unavailable_reason ?? t({ en: "Preview unavailable.", fr: "Aperçu indisponible.", de: "Vorschau nicht verfügbar." }),
     }),
     [locale, objectDetail, objectPath, t]
+  );
+
+  const loadPortalObjectPreview = useCallback(
+    async (signal: AbortSignal): Promise<ObjectPreviewLoadResult> => {
+      if (!accountIdForApi || !space || !objectPath) {
+        throw new Error("Portal file context is unavailable.");
+      }
+      const result = await downloadPortalStorageSpaceObject(
+        accountIdForApi,
+        space.id,
+        objectPath,
+        signal,
+      );
+      return {
+        blob: result.blob,
+        contentType: objectDetail?.content_type || result.blob.type || null,
+      };
+    },
+    [accountIdForApi, objectDetail?.content_type, objectPath, space],
   );
 
   const pageState = resolvePortalWorkspacePageState({
@@ -225,6 +316,19 @@ export default function PortalObjectDetailPage() {
 
   const displayPath = object.path;
   const parentPath = object.path.split("/").slice(0, -1).join("/");
+  const historyAvailable =
+    objectHistory != null && objectHistory.versioning_status !== "Disabled";
+  const historyTabVisible =
+    historyAvailable || historyLoading || Boolean(historyError);
+  const deletionMode =
+    historyAvailable
+      ? "trash"
+      : objectHistory?.versioning_status === "Disabled"
+        ? "permanent"
+        : "unknown";
+  const fileListPath = `${storageSpacePath(space)}?prefix=${encodeURIComponent(
+    parentPath ? `${parentPath}/` : "",
+  )}`;
   const canCreatePublicLink = space.role === "Manager" && space.visibility === "shared" && space.status !== "Archived";
   const activePublicLinkCount = publicLinks.filter((link) => link.status === "Active").length;
   const publicLinkUnavailableReason = !accountIdForApi
@@ -254,6 +358,12 @@ export default function PortalObjectDetailPage() {
     ? t({ en: "Select a project first.", fr: "Sélectionnez d'abord un projet.", de: "Wählen Sie zuerst ein Projekt aus." })
     : space.role === "Viewer"
       ? t({ en: "Viewers cannot delete files.", fr: "Les Lecteurs ne peuvent pas supprimer de fichiers.", de: "Betrachter können keine Dateien löschen." })
+      : historyLoading && !objectHistory
+        ? t({
+            en: "Checking recovery options...",
+            fr: "Vérification des options de récupération...",
+            de: "Wiederherstellungsoptionen werden geprüft...",
+          })
       : null;
   const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const openPublicLinkDialog = () => {
@@ -373,16 +483,90 @@ export default function PortalObjectDetailPage() {
     setDownloadMessage(null);
     try {
       await deletePortalStorageSpaceObject(accountIdForApi, space.id, object.path);
-      setDownloadMessage(t({ en: `${object.name} deleted.`, fr: `${object.name} supprimé.`, de: `${object.name} gelöscht.` }));
+      setDownloadMessage(
+        deletionMode === "trash"
+          ? t({
+              en: `${object.name} moved to trash.`,
+              fr: `${object.name} placé dans la corbeille.`,
+              de: `${object.name} wurde in den Papierkorb verschoben.`,
+            })
+          : deletionMode === "permanent"
+            ? t({
+                en: `${object.name} deleted.`,
+                fr: `${object.name} supprimé.`,
+                de: `${object.name} gelöscht.`,
+              })
+            : t({
+                en: `${object.name} removed from the file list.`,
+                fr: `${object.name} retiré de la liste des fichiers.`,
+                de: `${object.name} wurde aus der Dateiliste entfernt.`,
+              }),
+      );
       setPendingAction(null);
       window.setTimeout(() => {
-        window.location.href = `${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`;
+        window.location.href = deletionMode === "trash"
+          ? `${storageSpacePath(space)}?tab=trash`
+          : fileListPath;
       }, 250);
     } catch (err) {
       console.error(err);
       setDownloadMessage(extractApiError(err, t({ en: "Unable to delete this file.", fr: "Impossible de supprimer ce fichier.", de: "Diese Datei kann nicht gelöscht werden." })));
       setPendingAction(null);
       setDeleteBusy(false);
+    }
+  };
+  const requestRestoreVersion = (version: PortalStorageObjectVersion) => {
+    if (
+      !accountIdForApi ||
+      !objectHistory?.can_restore ||
+      version.is_delete_marker ||
+      version.is_latest
+    ) {
+      return;
+    }
+    setPendingAction({ type: "restore-version", version });
+  };
+  const confirmRestoreVersion = async (version: PortalStorageObjectVersion) => {
+    if (!accountIdForApi || !space || restoringVersionId) return;
+    setRestoringVersionId(version.version_id);
+    setDownloadMessage(null);
+    try {
+      await restorePortalStorageSpaceObject(
+        accountIdForApi,
+        space.id,
+        object.path,
+        version.version_id,
+      );
+      const detail = await fetchPortalStorageSpaceObjectDetail(
+        accountIdForApi,
+        space.id,
+        object.path,
+      );
+      setObjectDetail(detail);
+      await loadObjectHistory();
+      setPendingAction(null);
+      setDownloadMessage(
+        t({
+          en: "Version restored. It is now the current version.",
+          fr: "Version restaurée. Elle est maintenant la version actuelle.",
+          de: "Version wiederhergestellt. Sie ist jetzt die aktuelle Version.",
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      setDownloadMessage(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to restore this version.",
+            fr: "Impossible de restaurer cette version.",
+            de: "Diese Version kann nicht wiederhergestellt werden.",
+          }),
+        ),
+      );
+      setPendingAction(null);
+    } finally {
+      setRestoringVersionId(null);
     }
   };
   const publicLinksTableStatus = publicLinks.length === 0 ? "empty" : "ready";
@@ -441,6 +625,15 @@ export default function PortalObjectDetailPage() {
           { label: object.name || objectName(object.path) },
         )}
         actions={[
+          {
+            label: t({
+              en: "Back to files",
+              fr: "Retour aux fichiers",
+              de: "Zurück zu den Dateien",
+            }),
+            to: fileListPath,
+            variant: "ghost",
+          },
           { label: downloading ? t({ en: "Downloading...", fr: "Téléchargement...", de: "Wird heruntergeladen..." }) : t({ en: "Download", fr: "Télécharger", de: "Herunterladen" }), onClick: handleDownload, variant: "secondary", disabled: !accountIdForApi || downloading },
           { label: t({ en: "Share", fr: "Partager", de: "Freigeben" }), onClick: openPublicLinkDialog, variant: "secondary", disabled: Boolean(publicLinkUnavailableReason) || linkBusy },
         ]}
@@ -484,6 +677,18 @@ export default function PortalObjectDetailPage() {
       <PortalPageTabs
         tabs={[
           { id: "preview", label: t({ en: "Preview", fr: "Aperçu", de: "Vorschau" }) },
+          ...(historyTabVisible
+            ? [
+                {
+                  id: "history",
+                  label: t({
+                    en: "History",
+                    fr: "Historique",
+                    de: "Verlauf",
+                  }),
+                },
+              ]
+            : []),
           { id: "sharing", label: t({ en: "Sharing", fr: "Partage", de: "Freigabe" }) },
           { id: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
           { id: "events", label: t({ en: "Events", fr: "Événements", de: "Ereignisse" }) },
@@ -502,18 +707,61 @@ export default function PortalObjectDetailPage() {
         <PortalTabPanel idPrefix="portal-object-detail" tabId="preview" className="space-y-4">
           <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
             <UiCard title={t({ en: "Quick preview", fr: "Aperçu rapide", de: "Schnellvorschau" })}>
-              {object.previewType === "text" && object.previewText ? (
-                <pre className="max-h-72 overflow-auto rounded-md border border-[color:var(--ui-border)] bg-slate-950 p-3 text-xs leading-5 text-slate-50">{object.previewText}</pre>
-              ) : (
-                <div className={cx(uiCardMutedClass, "min-h-28 p-3 text-xs font-semibold leading-5", uiMutedTextClass)}>
-                  {object.previewUnavailableReason}
-                </div>
-              )}
-              <div className="mt-3 text-right text-xs font-bold">
-                <Link to={`${storageSpacePath(space)}?prefix=${encodeURIComponent(parentPath ? `${parentPath}/` : "")}`}>
-                  {t({ en: "Open in file list", fr: "Ouvrir dans la liste des fichiers", de: "In Dateiliste öffnen" })}
-                </Link>
-              </div>
+              <ObjectPreview
+                name={object.name}
+                sizeBytes={object.sizeBytes}
+                contentType={objectDetail?.content_type}
+                initialText={object.previewText}
+                loadBlob={loadPortalObjectPreview}
+                variant="card"
+                labels={{
+                  loading: t({
+                    en: "Loading preview...",
+                    fr: "Chargement de l'aperçu...",
+                    de: "Vorschau wird geladen...",
+                  }),
+                  unavailable: t({
+                    en: "Preview is unavailable for this file type.",
+                    fr: "L'aperçu n'est pas disponible pour ce type de fichier.",
+                    de: "Für diesen Dateityp ist keine Vorschau verfügbar.",
+                  }),
+                  tooLarge: t({
+                    en: "Preview is limited to files of 50 MiB or less. Download the file to open it.",
+                    fr: "L'aperçu est limité aux fichiers de 50 Mio maximum. Téléchargez le fichier pour l'ouvrir.",
+                    de: "Die Vorschau ist auf Dateien bis 50 MiB begrenzt. Laden Sie die Datei herunter, um sie zu öffnen.",
+                  }),
+                  unknownSize: t({
+                    en: "Preview is unavailable because the file size could not be determined.",
+                    fr: "L'aperçu est indisponible car la taille du fichier n'a pas pu être déterminée.",
+                    de: "Die Vorschau ist nicht verfügbar, da die Dateigröße nicht ermittelt werden konnte.",
+                  }),
+                  truncated: t({
+                    en: "Preview truncated to the first 64 KiB.",
+                    fr: "Aperçu limité aux 64 premiers Kio.",
+                    de: "Vorschau auf die ersten 64 KiB gekürzt.",
+                  }),
+                  error: t({
+                    en: "Unable to load preview.",
+                    fr: "Impossible de charger l'aperçu.",
+                    de: "Vorschau kann nicht geladen werden.",
+                  }),
+                  frameTitle: t({
+                    en: "File preview",
+                    fr: "Aperçu du fichier",
+                    de: "Dateivorschau",
+                  }),
+                }}
+                formatError={(error) =>
+                  extractApiError(
+                    error,
+                    t({
+                      en: "Unable to load preview.",
+                      fr: "Impossible de charger l'aperçu.",
+                      de: "Vorschau kann nicht geladen werden.",
+                    }),
+                  )
+                }
+              />
             </UiCard>
 
             <UiCard title={t({ en: "Quick actions", fr: "Actions rapides", de: "Schnellaktionen" })}>
@@ -526,10 +774,56 @@ export default function PortalObjectDetailPage() {
                   reason={publicLinkUnavailableReason}
                 />
                 <QuickAction label={t({ en: "Copy file location", fr: "Copier l'emplacement du fichier", de: "Dateispeicherort kopieren" })} onClick={copyPath} />
-                <QuickAction label={deleteBusy ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird gelöscht..." }) : t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })} tone="rose" onClick={handleDelete} disabled={Boolean(deleteUnavailableReason) || deleteBusy} reason={deleteUnavailableReason} />
+                <QuickAction
+                  label={
+                    deleteBusy
+                      ? t({
+                          en: "Deleting...",
+                          fr: "Suppression...",
+                          de: "Wird gelöscht...",
+                        })
+                      : deletionMode === "trash"
+                        ? t({
+                            en: "Move to trash",
+                            fr: "Placer dans la corbeille",
+                            de: "In den Papierkorb",
+                          })
+                        : t({
+                            en: "Delete file",
+                            fr: "Supprimer le fichier",
+                            de: "Datei löschen",
+                          })
+                  }
+                  tone="rose"
+                  onClick={handleDelete}
+                  disabled={Boolean(deleteUnavailableReason) || deleteBusy}
+                  reason={deleteUnavailableReason}
+                />
               </div>
             </UiCard>
           </section>
+        </PortalTabPanel>
+      ) : null}
+
+      {activeTab === "history" && historyTabVisible ? (
+        <PortalTabPanel idPrefix="portal-object-detail" tabId="history">
+          <PortalObjectHistoryPanel
+            history={objectHistory}
+            loading={historyLoading}
+            error={historyError}
+            restoringVersionId={restoringVersionId}
+            onRetry={() => void loadObjectHistory()}
+            onLoadMore={() =>
+              void loadObjectHistory(
+                {
+                  keyMarker: objectHistory?.next_key_marker,
+                  versionIdMarker: objectHistory?.next_version_id_marker,
+                },
+                true,
+              )
+            }
+            onRestore={requestRestoreVersion}
+          />
         </PortalTabPanel>
       ) : null}
 
@@ -611,21 +905,151 @@ export default function PortalObjectDetailPage() {
         </PortalTabPanel>
       ) : null}
 
+      {pendingAction?.type === "restore-version" ? (
+        <ConfirmActionDialog
+          title={t({
+            en: "Restore this version?",
+            fr: "Restaurer cette version ?",
+            de: "Diese Version wiederherstellen?",
+          })}
+          description={t({
+            en: "This version will become the file's new current state.",
+            fr: "Cette version deviendra le nouvel état actuel du fichier.",
+            de: "Diese Version wird zum neuen aktuellen Stand der Datei.",
+          })}
+          confirmLabel={t({
+            en: "Restore version",
+            fr: "Restaurer la version",
+            de: "Version wiederherstellen",
+          })}
+          cancelLabel={t({ en: "Cancel", fr: "Annuler", de: "Abbrechen" })}
+          tone="primary"
+          loading={restoringVersionId === pendingAction.version.version_id}
+          details={[
+            {
+              label: t({ en: "File", fr: "Fichier", de: "Datei" }),
+              value: object.name,
+            },
+            {
+              label: t({ en: "Version date", fr: "Date de la version", de: "Versionsdatum" }),
+              value: portalDateTimeLabel(pendingAction.version.last_modified, locale),
+            },
+            {
+              label: t({ en: "Size", fr: "Taille", de: "Größe" }),
+              value: formatBytes(pendingAction.version.size),
+            },
+          ]}
+          impacts={[
+            t({
+              en: "A new current version will be created.",
+              fr: "Une nouvelle version actuelle sera créée.",
+              de: "Eine neue aktuelle Version wird erstellt.",
+            }),
+            t({
+              en: "The current and older versions remain in history.",
+              fr: "La version actuelle et les versions antérieures restent dans l'historique.",
+              de: "Die aktuelle und ältere Versionen bleiben im Verlauf erhalten.",
+            }),
+          ]}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => void confirmRestoreVersion(pendingAction.version)}
+        />
+      ) : null}
+
       {pendingAction?.type === "delete-object" ? (
         <ConfirmActionDialog
-          title={t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })}
-          description={t({ en: "Confirm that you want to delete this file.", fr: "Confirmez que vous voulez supprimer ce fichier.", de: "Bestätigen Sie, dass Sie diese Datei löschen möchten." })}
-          confirmLabel={t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })}
+          title={
+            deletionMode === "trash"
+              ? t({
+                  en: "Move file to trash?",
+                  fr: "Placer le fichier dans la corbeille ?",
+                  de: "Datei in den Papierkorb verschieben?",
+                })
+              : t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })
+          }
+          description={
+            deletionMode === "trash"
+              ? t({
+                  en: "The file will leave the file list and remain recoverable from the trash.",
+                  fr: "Le fichier quittera la liste des fichiers et restera récupérable depuis la corbeille.",
+                  de: "Die Datei wird aus der Dateiliste entfernt und kann aus dem Papierkorb wiederhergestellt werden.",
+                })
+              : deletionMode === "permanent"
+                ? t({
+                    en: "Confirm that you want to delete this file.",
+                    fr: "Confirmez que vous voulez supprimer ce fichier.",
+                    de: "Bestätigen Sie, dass Sie diese Datei löschen möchten.",
+                  })
+                : t({
+                    en: "The file will leave the file list. Its recovery status could not be verified.",
+                    fr: "Le fichier quittera la liste. Son état de récupération n'a pas pu être vérifié.",
+                    de: "Die Datei wird aus der Dateiliste entfernt. Der Wiederherstellungsstatus konnte nicht geprüft werden.",
+                  })
+          }
+          confirmLabel={
+            deletionMode === "trash"
+              ? t({
+                  en: "Move to trash",
+                  fr: "Placer dans la corbeille",
+                  de: "In den Papierkorb",
+                })
+              : t({ en: "Delete file", fr: "Supprimer le fichier", de: "Datei löschen" })
+          }
           loading={deleteBusy}
           details={[
             { label: t({ en: "File", fr: "Fichier", de: "Datei" }), value: object.name || objectName(object.path) },
             { label: t({ en: "Path", fr: "Chemin", de: "Pfad" }), value: object.path, mono: true },
           ]}
-          impacts={[
-            t({ en: "The file is permanently removed from this space.", fr: "Le fichier est supprimé définitivement de cet espace.", de: "Die Datei wird dauerhaft aus diesem Bereich entfernt." }),
-            t({ en: "Existing public links for this file will stop working once the file is deleted.", fr: "Les liens publics existants de ce fichier cesseront de fonctionner après suppression du fichier.", de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr, sobald die Datei gelöscht wurde." }),
-            t({ en: "This action cannot be undone from the Portal.", fr: "Cette action ne peut pas être annulée depuis le Portal.", de: "Diese Aktion kann im Portal nicht rückgängig gemacht werden." }),
-          ]}
+          impacts={
+            deletionMode === "trash"
+              ? [
+                  t({
+                    en: "The file can be restored from the Trash tab.",
+                    fr: "Le fichier pourra être restauré depuis l'onglet Corbeille.",
+                    de: "Die Datei kann über den Papierkorb wiederhergestellt werden.",
+                  }),
+                  t({
+                    en: "Existing public links stop working while the file is in the trash.",
+                    fr: "Les liens publics existants cessent de fonctionner tant que le fichier est dans la corbeille.",
+                    de: "Bestehende öffentliche Links funktionieren nicht, solange sich die Datei im Papierkorb befindet.",
+                  }),
+                ]
+              : deletionMode === "permanent"
+                ? [
+                    t({
+                      en: "The file is permanently removed from this space.",
+                      fr: "Le fichier est supprimé définitivement de cet espace.",
+                      de: "Die Datei wird dauerhaft aus diesem Bereich entfernt.",
+                    }),
+                    t({
+                      en: "Existing public links for this file will stop working once the file is deleted.",
+                      fr: "Les liens publics existants de ce fichier cesseront de fonctionner après suppression du fichier.",
+                      de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr, sobald die Datei gelöscht wurde.",
+                    }),
+                    t({
+                      en: "This action cannot be undone from the Portal.",
+                      fr: "Cette action ne peut pas être annulée depuis le Portal.",
+                      de: "Diese Aktion kann im Portal nicht rückgängig gemacht werden.",
+                    }),
+                  ]
+                : [
+                    t({
+                      en: "If file history is available, the file will appear in Trash.",
+                      fr: "Si l'historique est disponible, le fichier apparaîtra dans la Corbeille.",
+                      de: "Wenn ein Dateiverlauf verfügbar ist, erscheint die Datei im Papierkorb.",
+                    }),
+                    t({
+                      en: "Otherwise, the deletion may be permanent.",
+                      fr: "Sinon, la suppression peut être définitive.",
+                      de: "Andernfalls kann die Löschung dauerhaft sein.",
+                    }),
+                    t({
+                      en: "Existing public links for this file will stop working.",
+                      fr: "Les liens publics existants de ce fichier cesseront de fonctionner.",
+                      de: "Bestehende öffentliche Links für diese Datei funktionieren nicht mehr.",
+                    }),
+                  ]
+          }
           onCancel={() => setPendingAction(null)}
           onConfirm={confirmDelete}
         />

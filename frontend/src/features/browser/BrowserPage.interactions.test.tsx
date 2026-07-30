@@ -27,6 +27,7 @@ import {
   BROWSER_EMBEDDED_COLUMNS_STORAGE_KEY,
   BROWSER_EMBEDDED_COLUMN_WIDTHS_STORAGE_KEY,
 } from "./browserEmbeddedColumnsState";
+import { OBJECT_PREVIEW_MAX_BYTES } from "../shared/ObjectPreview";
 
 const searchBrowserBucketsMock = vi.fn();
 const fetchBrowserUsageSummaryMock = vi.fn();
@@ -3848,6 +3849,40 @@ describe("BrowserPage interactions", () => {
       expect(getObjectLegalHoldMock).toHaveBeenCalledTimes(1);
       expect(getObjectRetentionMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("does not request a Browser preview when the object exceeds the shared limit", async () => {
+    const user = userEvent.setup();
+    listBrowserObjectsMock.mockResolvedValueOnce({
+      prefix: "",
+      objects: [
+        {
+          key: "large-video.mp4",
+          size: OBJECT_PREVIEW_MAX_BYTES + 1,
+          last_modified: "2026-03-10T10:15:00Z",
+          storage_class: "STANDARD",
+          etag: '"etag-large"',
+        },
+      ],
+      prefixes: [],
+      is_truncated: false,
+      next_continuation_token: null,
+    });
+    renderPage();
+
+    const row = await findRowByLabel("large-video.mp4");
+    await user.click(within(row).getByRole("button", { name: "Preview" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Object details · large-video.mp4",
+    });
+    expect(
+      within(dialog).getByText(
+        "Preview is limited to files of 50 MiB or less. Download the file to open it.",
+      ),
+    ).toBeInTheDocument();
+    expect(presignObjectMock).not.toHaveBeenCalled();
+    expect(proxyDownloadMock).not.toHaveBeenCalled();
   });
 
   it("clears Details content when Details is active and multi-selection is applied", async () => {

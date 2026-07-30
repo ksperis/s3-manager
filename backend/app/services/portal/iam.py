@@ -101,6 +101,7 @@ class PortalIamMixin:
     def _storage_space_role_actions(self, role: PortalStorageSpaceRole) -> list[str]:
         viewer_actions = [
             "s3:GetBucketLocation",
+            "s3:GetBucketVersioning",
             "s3:ListBucket",
             "s3:ListBucketVersions",
             "s3:ListBucketMultipartUploads",
@@ -127,7 +128,6 @@ class PortalIamMixin:
             "s3:DeleteObjectTagging",
             "s3:PutObjectVersionTagging",
             "s3:DeleteObjectVersionTagging",
-            "s3:GetBucketVersioning",
             "s3:GetBucketCORS",
             "s3:GetBucketAcl",
             "s3:GetBucketPolicy",
@@ -140,10 +140,14 @@ class PortalIamMixin:
     def _storage_space_policy_actions(self) -> list[str]:
         return [
             "s3:GetBucketLocation",
+            "s3:GetBucketVersioning",
             "s3:ListBucket",
+            "s3:ListBucketVersions",
             "s3:GetObject",
+            "s3:GetObjectVersion",
             "s3:PutObject",
             "s3:DeleteObject",
+            "s3:DeleteObjectVersion",
             "s3:AbortMultipartUpload",
             "s3:ListBucketMultipartUploads",
             "s3:ListMultipartUploadParts",

@@ -14,10 +14,14 @@ Use this page when you work with files inside a Portal space.
 |---|---|---|
 | Browse folders | Space file list | Breadcrumbs and folder rows keep navigation scoped to the selected space. |
 | Upload files | Object list action bar | Available for Editor, Owner, and Manager roles when storage permissions allow writes. |
+| Preview a file | File detail > Preview | Supports images, video, audio, PDF, and text files up to 50 MiB. Text previews show at most the first 64 KiB. |
+| Review or restore an older version | File detail > History | Available when file history is enabled for the space. Restoring creates a new current version and keeps the existing history. |
 | Download files | Object row or detail page | Available when your role and storage permissions allow reads. |
-| Share a file outside the workspace | File detail > Public links | Open the file, use **Share** or **Set up public link** to reach the public-link panel, create the link only when anyone with the link should have access, then use **Copy link** from the link row. |
+| Return to the containing folder | File detail > Back to files | Returns to the file list while preserving the file's parent folder. |
+| Share a file outside the workspace | File detail > Sharing | Open the file, use **Share** or **Set up public link** to reach the sharing panel, create the link only when anyone with the link should have access, then use **Copy link** from the link row. |
 | Create folders | Object list action bar | Creates a prefix marker or equivalent folder representation. |
-| Delete files | Object row actions | Available only for roles that can write/delete. |
+| Delete files | Object row actions | Available only for roles that can write/delete. When file history is enabled, deletion moves the file to the space trash. |
+| Restore a deleted file | Space > Trash | Restores the latest recoverable version to its original folder. Previous history remains available. |
 | Inspect safe details | File detail > Details | Shows size, type, last update, and location first. Storage class and encryption stay under **Technical details**. |
 
 ## You are done when
@@ -26,7 +30,11 @@ The file list reflects the new upload, folder, deletion, download-ready file, or
 
 ## If an action is hidden
 
-Viewer spaces hide upload, folder creation, and delete actions. Archived spaces hide file browsing entirely. Advanced file details such as versions, tags, raw headers, retention, and diagnostics belong in Browser or Manager.
+Viewer spaces hide upload, folder creation, delete, and restore actions. They can still review file history and the trash. Archived spaces hide file browsing entirely. Technical details such as tags, raw headers, retention, and diagnostics belong in Browser or Manager.
+
+Files larger than 50 MiB, files whose size cannot be determined, and unsupported formats are not loaded into memory for preview. Download the file to open it with a local application instead.
+
+The **History** and **Trash** tabs appear only when file history is available for the space. Deleted files remain recoverable while their history is retained. A history cleanup can permanently remove these recovery points, so restore anything needed before an owner or manager runs that cleanup.
 
 ## Related pages
 
