@@ -10,8 +10,11 @@ type PortalPageTabsProps = Omit<ComponentProps<typeof PageTabs>, "variant"> & {
   className?: string;
 };
 
-export function PortalTabPanel(props: ComponentProps<typeof PageTabPanel>) {
-  return <PageTabPanel {...props} />;
+export function PortalTabPanel({
+  className = "space-y-4",
+  ...props
+}: ComponentProps<typeof PageTabPanel>) {
+  return <PageTabPanel {...props} className={className} />;
 }
 
 /** Top-level Portal navigation with one consistent baseline and spacing. */

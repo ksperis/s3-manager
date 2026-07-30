@@ -27,6 +27,7 @@ describe("PortalPageTabs", () => {
     expect(container.firstElementChild).toHaveClass("border-b", "pb-3");
     expect(screen.getByRole("tablist", { name: "Page sections" })).toBeInTheDocument();
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Overview");
+    expect(screen.getByRole("tabpanel")).toHaveClass("space-y-4");
 
     fireEvent.click(screen.getByRole("tab", { name: "Details" }));
     expect(onChange).toHaveBeenCalledWith("details");
