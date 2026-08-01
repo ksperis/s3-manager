@@ -24,7 +24,7 @@ import DataTableShell, {
   type DataTableColumn,
 } from "../../components/list/DataTableShell";
 import PageHeader from "../../components/PageHeader";
-import { WorkspaceDashboardIconBubble } from "../../components/WorkspaceDashboardKit";
+import StorageSpaceIcon from "../../components/StorageSpaceIcon";
 import WorkflowPage, {
   WorkflowActions,
   workflowPageHostClass,
@@ -48,7 +48,6 @@ import {
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
-import { BucketIcon } from "../browser/browserIcons";
 import {
   PortalAccessModeFields,
   PortalShareCandidatePicker,
@@ -73,6 +72,7 @@ import {
   portalStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import StorageSpaceIconPickerModal from "./StorageSpaceIconPickerModal";
 
 type SpacesTab = "active" | "archived";
 
@@ -126,6 +126,7 @@ export default function PortalStorageSpacesPage() {
     accountLoading,
     accountIdForApi,
     state,
+    refreshWorkspaceData,
   } = usePortalWorkspaceData({
     includeArchived: true,
     includeUsage: true,
@@ -141,6 +142,7 @@ export default function PortalStorageSpacesPage() {
   const [activeTab, setActiveTab] = useState<SpacesTab>("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [iconSpace, setIconSpace] = useState<PortalWorkspaceSpace | null>(null);
   const [startGuideDismissed, setStartGuideDismissed] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -220,6 +222,7 @@ export default function PortalStorageSpacesPage() {
     });
   }, [normalizedQuery, roleFilter, sort, statusFilter, t, visibleSpaces]);
   const tableStatus = filteredSpaces.length === 0 ? "empty" : "ready";
+  const canConfigureIcons = state?.account_role === "portal_manager";
   const storageSpaceColumns = useMemo<DataTableColumn<PortalWorkspaceSpace>[]>(
     () => [
       {
@@ -229,12 +232,13 @@ export default function PortalStorageSpacesPage() {
         primary: true,
         render: (space) => (
           <div className="flex min-w-0 items-start gap-2">
-            <WorkspaceDashboardIconBubble
-              tone="emerald"
-              className="mt-0.5 h-7 w-7 rounded-md"
-            >
-              <BucketIcon className="h-4 w-4" />
-            </WorkspaceDashboardIconBubble>
+            <StorageSpaceIcon
+              icon={space.icon}
+              name={space.name}
+              size="sm"
+              className="mt-0.5"
+              decorative
+            />
             <div className="min-w-0">
               <Link
                 to={storageSpacePath(space)}
@@ -324,16 +328,27 @@ export default function PortalStorageSpacesPage() {
         align: "right",
         mobileRole: "actions",
         render: (space) => (
-          <Link
-            to={storageSpacePath(space)}
-            className={tableActionButtonClasses}
-          >
-            {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
-          </Link>
+          <div className="flex justify-end gap-2">
+            {canConfigureIcons ? (
+              <button
+                type="button"
+                className={tableActionButtonClasses}
+                onClick={() => setIconSpace(space)}
+              >
+                {t({ en: "Icon", fr: "Icône", de: "Symbol" })}
+              </button>
+            ) : null}
+            <Link
+              to={storageSpacePath(space)}
+              className={tableActionButtonClasses}
+            >
+              {t({ en: "Open", fr: "Ouvrir", de: "Öffnen" })}
+            </Link>
+          </div>
         ),
       },
     ],
-    [t],
+    [canConfigureIcons, t],
   );
 
   const canCreatePrivate = Boolean(state?.can_create_private_storage_spaces);
@@ -1337,6 +1352,14 @@ export default function PortalStorageSpacesPage() {
           </div>
         </UiCard>
       </PortalTabPanel>
+      {iconSpace ? (
+        <StorageSpaceIconPickerModal
+          accountId={accountIdForApi}
+          space={iconSpace}
+          onClose={() => setIconSpace(null)}
+          onSaved={refreshWorkspaceData}
+        />
+      ) : null}
     </div>
   );
 }

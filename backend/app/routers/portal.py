@@ -7,7 +7,7 @@ import threading
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,8 @@ from app.models.portal import (
     PortalStorageSpaceAccessSummary,
     PortalStorageSpaceCreate,
     PortalStorageSpaceImport,
+    PortalStorageSpaceIcon,
+    PortalStorageSpaceIconChoice,
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupRequest,
     PortalStorageSpaceVersionCleanupResult,
@@ -76,6 +78,7 @@ from app.routers.http_errors import (
     sanitized_error_log_detail,
 )
 from app.services.audit_service import AuditService
+from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -1210,6 +1213,135 @@ def take_portal_storage_space_ownership(
         return storage_space
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
+
+
+@router.put("/storage-spaces/{space_id}/icon", response_model=PortalStorageSpaceIcon)
+def update_portal_storage_space_icon(
+    space_id: str,
+    payload: PortalStorageSpaceIconChoice,
+    access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceIcon:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        icon = service.set_storage_space_icon_choice(
+            actor,
+            access,
+            space_id,
+            source=payload.source,
+            preset=payload.preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="update_storage_space_icon",
+        entity_type="storage_space",
+        entity_id=space_id,
+        account=access.account,
+        metadata={
+            "storage_space_id": space_id,
+            "icon_source": icon.source,
+            "icon_preset": icon.preset,
+        },
+    )
+    return icon
+
+
+@router.put("/storage-spaces/{space_id}/icon/image", response_model=PortalStorageSpaceIcon)
+async def upload_portal_storage_space_icon(
+    space_id: str,
+    file: UploadFile = File(...),
+    access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceIcon:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    image_payload = await file.read(MAX_AVATAR_BYTES + 1)
+    try:
+        icon = service.store_storage_space_icon_image(
+            actor,
+            access,
+            space_id,
+            image_payload,
+            file.content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="upload_storage_space_icon",
+        entity_type="storage_space",
+        entity_id=space_id,
+        account=access.account,
+        metadata={
+            "storage_space_id": space_id,
+            "content_type": file.content_type,
+            "size_bytes": len(image_payload),
+        },
+    )
+    return icon
+
+
+@router.delete("/storage-spaces/{space_id}/icon/image", response_model=PortalStorageSpaceIcon)
+def delete_portal_storage_space_icon(
+    space_id: str,
+    access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceIcon:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        icon = service.remove_storage_space_icon_image(actor, access, space_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="delete_storage_space_icon",
+        entity_type="storage_space",
+        entity_id=space_id,
+        account=access.account,
+        metadata={"storage_space_id": space_id},
+    )
+    return icon
+
+
+@router.get("/storage-spaces/{space_id}/icon/image")
+def read_portal_storage_space_icon(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> Response:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        payload, content_type, version = service.storage_space_icon_image(actor, access, space_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    return Response(
+        content=payload,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=86400",
+            "ETag": f'"storage-space-icon-{access.account.id}-{space_id}-{version}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/storage-spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)

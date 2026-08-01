@@ -8,6 +8,7 @@ import {
   toolbarCompactInputClasses,
 } from "../../components/toolbarControlClasses";
 import UiMeterBar from "../../components/ui/UiMeterBar";
+import StorageSpaceIcon from "../../components/StorageSpaceIcon";
 import { cx } from "../../components/ui/styles";
 import type { BrowserBucket, BrowserUsageSummary } from "../../api/browser";
 import { formatBytes } from "../../utils/format";
@@ -235,7 +236,16 @@ export default function BrowserWorkspaceSidebar({
                 aria-current={isActive ? "page" : undefined}
                 data-bucket-panel-name={bucket.name}
               >
-                <BucketIcon className="h-4 w-4 shrink-0" />
+                {isPortalContext ? (
+                  <StorageSpaceIcon
+                    icon={bucket.icon}
+                    name={displayName}
+                    size="compact"
+                    decorative
+                  />
+                ) : (
+                  <BucketIcon className="h-4 w-4 shrink-0" />
+                )}
                 {!compact && (
                   <>
                     <span className="min-w-0 flex-1">

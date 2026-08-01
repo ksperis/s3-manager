@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.db import S3Account
+from app.models.portal import PortalStorageSpaceIcon
 from app.services import browser_service
 from app.services.browser_service import BrowserService
 
@@ -37,6 +38,7 @@ def test_list_portal_storage_spaces_includes_descriptions():
             internal_bucket_name="internal-space-1",
             name="Research Data",
             description="Shared research datasets",
+            icon=PortalStorageSpaceIcon(source="preset", preset="database"),
         )
     ]
 
@@ -46,6 +48,7 @@ def test_list_portal_storage_spaces_includes_descriptions():
     assert result[0].display_name == "Research Data"
     assert result[0].workspace_label == "Storage Space"
     assert result[0].description == "Shared research datasets"
+    assert result[0].icon == PortalStorageSpaceIcon(source="preset", preset="database")
 
 
 def test_list_object_versions_preserves_hierarchy_and_s3_cursors(monkeypatch):

@@ -5,6 +5,8 @@ from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.portal import PortalStorageSpaceIcon
+
 
 class BrowserBucket(BaseModel):
     name: str
@@ -19,6 +21,7 @@ class BrowserBucket(BaseModel):
     status: Optional[str] = None
     role: Optional[str] = None
     internal_bucket_name: Optional[str] = None
+    icon: Optional[PortalStorageSpaceIcon] = None
 
 
 class BrowserObject(BaseModel):

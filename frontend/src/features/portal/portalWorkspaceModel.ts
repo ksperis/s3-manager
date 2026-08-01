@@ -13,6 +13,7 @@ import type {
   PortalUsage,
 } from "../../api/portal";
 import type { UiLanguage } from "../../components/language";
+import type { StorageSpaceIconDescriptor } from "../../api/storageSpaceIcons";
 import { translate, type I18nMessage } from "../../i18n";
 import { portalDateLabel } from "./portalI18n";
 
@@ -65,6 +66,7 @@ export type PortalWorkspaceSpace = {
   createdAt?: string | null;
   archivedAt?: string | null;
   shareCount: number | null;
+  icon: StorageSpaceIconDescriptor;
 };
 
 export type PortalWorkspaceActivityItem = {
@@ -242,6 +244,7 @@ export function buildPortalWorkspaceModel({
       createdAt: storageSpace.created_at ?? null,
       archivedAt: storageSpace.archived_at ?? null,
       shareCount: null,
+      icon: storageSpace.icon ?? { source: "preset", preset: "bucket" },
     };
   });
 

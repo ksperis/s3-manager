@@ -122,6 +122,8 @@ PortalStorageSpaceNamingMode = Literal["generic_uuid", "named_bucket"]
 PortalStorageSpaceVisibility = Literal["private", "shared"]
 PortalStorageSpaceShareScope = Literal["restricted", "account"]
 PortalStorageSpaceAccountMemberRole = Literal["Viewer", "Editor"]
+PortalStorageSpaceIconSource = Literal["preset", "uploaded"]
+PortalStorageSpaceIconPreset = Literal["bucket", "folder", "archive", "database", "media"]
 PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
 PortalTransferDirection = Literal["Upload", "Download"]
 PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
@@ -135,6 +137,18 @@ class PortalStorageSpaceCollaboratorPreview(BaseModel):
     display_name: Optional[str] = None
     role: PortalStorageSpaceRole
     avatar: UserAvatar
+
+
+class PortalStorageSpaceIcon(BaseModel):
+    source: PortalStorageSpaceIconSource = "preset"
+    preset: Optional[PortalStorageSpaceIconPreset] = "bucket"
+    url: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class PortalStorageSpaceIconChoice(BaseModel):
+    source: PortalStorageSpaceIconSource
+    preset: Optional[PortalStorageSpaceIconPreset] = None
 
 
 class PortalStorageSpaceSummary(BaseModel):
@@ -165,6 +179,7 @@ class PortalStorageSpaceSummary(BaseModel):
     archived_at: Optional[datetime] = None
     origin: PortalStorageSpaceOrigin = "imported"
     name_editable: bool = False
+    icon: PortalStorageSpaceIcon = Field(default_factory=PortalStorageSpaceIcon)
 
 
 class PortalStorageSpace(PortalStorageSpaceSummary):

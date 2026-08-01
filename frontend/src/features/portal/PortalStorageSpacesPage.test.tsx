@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   createStorageSpaceMock: vi.fn(),
   importStorageSpaceMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
+  updateStorageSpaceIconMock: vi.fn(),
+  uploadStorageSpaceIconMock: vi.fn(),
+  refreshWorkspaceDataMock: vi.fn(),
   usePortalWorkspaceDataMock: vi.fn(),
   hookResult: {
     accountIdForApi: "101",
@@ -64,6 +67,7 @@ const mocks = vi.hoisted(() => ({
           collaboratorCount: 1,
           origin: "portal_generic",
           nameEditable: true,
+          icon: { source: "preset", preset: "archive" },
         },
       ],
       activity: [],
@@ -82,6 +86,7 @@ const mocks = vi.hoisted(() => ({
     error: null,
     accountError: null,
     hasAccountContext: true,
+    refreshWorkspaceData: vi.fn(),
   },
 }));
 
@@ -98,6 +103,10 @@ vi.mock("../../api/portal", async () => {
       mocks.importStorageSpaceMock(...args),
     listPortalShareCandidates: (...args: unknown[]) =>
       mocks.listShareCandidatesMock(...args),
+    updatePortalStorageSpaceIcon: (...args: unknown[]) =>
+      mocks.updateStorageSpaceIconMock(...args),
+    uploadPortalStorageSpaceIcon: (...args: unknown[]) =>
+      mocks.uploadStorageSpaceIconMock(...args),
   };
 });
 
@@ -126,6 +135,9 @@ describe("PortalStorageSpacesPage", () => {
         already_shared: false,
       },
     ]);
+    mocks.updateStorageSpaceIconMock.mockResolvedValue({ source: "preset", preset: "database" });
+    mocks.uploadStorageSpaceIconMock.mockResolvedValue({ source: "uploaded", url: "/portal/icon?v=1" });
+    mocks.hookResult.refreshWorkspaceData = mocks.refreshWorkspaceDataMock;
     mocks.hookResult.workspace.spaces = [
       {
         id: "research-data",
@@ -164,6 +176,7 @@ describe("PortalStorageSpacesPage", () => {
         collaboratorCount: 1,
         origin: "portal_generic",
         nameEditable: true,
+        icon: { source: "preset", preset: "archive" },
       },
     ];
     mocks.hookResult.state = {
@@ -193,6 +206,7 @@ describe("PortalStorageSpacesPage", () => {
       includeArchived: true,
       includeUsage: true,
     });
+    expect(document.querySelector('[data-storage-space-icon-preset="archive"]')).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Create a space" }),
     ).not.toBeInTheDocument();
@@ -232,10 +246,10 @@ describe("PortalStorageSpacesPage", () => {
     expect(within(researchRow!).getByText("12")).toBeInTheDocument();
     expect(within(researchRow!).getByText("512 B")).toBeInTheDocument();
     const storageSpaceIcon = researchRow!.querySelector(
-      'svg[aria-hidden="true"]',
+      '[data-storage-space-icon-preset="archive"]',
     );
     expect(storageSpaceIcon).not.toBeNull();
-    expect(storageSpaceIcon).toHaveClass("h-4", "w-4");
+    expect(storageSpaceIcon).toHaveClass("h-7", "w-7");
     expect(screen.getByText("Research Data").closest("table")).toHaveClass(
       "responsive-data-table",
     );
@@ -754,6 +768,69 @@ describe("PortalStorageSpacesPage", () => {
     expect(
       screen.getByRole("button", { name: "Add existing space" }),
     ).toBeInTheDocument();
+  });
+
+  it("lets a portal manager choose a Storage Space pictogram", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Icon" }));
+    expect(screen.getByRole("dialog", { name: "Storage Space icon" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Database" }));
+    await user.click(screen.getByRole("button", { name: "Save icon" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceIconMock).toHaveBeenCalledWith("101", "research-data", {
+        source: "preset",
+        preset: "database",
+      });
+    });
+    expect(mocks.refreshWorkspaceDataMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a portal manager upload a custom Storage Space image", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+    const image = new File(["png"], "space.png", { type: "image/png" });
+
+    await user.click(screen.getByRole("button", { name: "Icon" }));
+    await user.upload(screen.getByLabelText("Custom image file"), image);
+    await user.click(screen.getByRole("button", { name: "Save icon" }));
+
+    await waitFor(() => {
+      expect(mocks.uploadStorageSpaceIconMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        image,
+      );
+    });
+    expect(mocks.refreshWorkspaceDataMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reserves Storage Space icon configuration for portal managers", () => {
+    mocks.hookResult.state = {
+      account_role: "portal_user",
+      can_manage_buckets: false,
+      can_create_private_storage_spaces: true,
+      can_create_team_storage_spaces: false,
+      allow_named_bucket_create: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <PortalStorageSpacesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Icon" })).not.toBeInTheDocument();
   });
 
   it("hides space creation when the portal user setting is disabled", () => {

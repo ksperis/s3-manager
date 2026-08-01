@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -19,6 +19,18 @@ class PortalStorageSpaceMetadata(Base):
         CheckConstraint(
             "account_member_role IS NULL OR account_member_role IN ('Viewer', 'Editor')",
             name="ck_portal_storage_space_metadata_account_member_role",
+        ),
+        CheckConstraint(
+            "icon_source IN ('preset', 'uploaded')",
+            name="ck_portal_storage_space_metadata_icon_source",
+        ),
+        CheckConstraint(
+            "icon_preset IN ('bucket', 'folder', 'archive', 'database', 'media')",
+            name="ck_portal_storage_space_metadata_icon_preset",
+        ),
+        CheckConstraint(
+            "icon_content_type IS NULL OR icon_content_type IN ('image/jpeg', 'image/png')",
+            name="ck_portal_storage_space_metadata_icon_content_type",
         ),
         CheckConstraint(
             "(visibility = 'private' AND owner_user_id IS NOT NULL) OR "
@@ -39,6 +51,11 @@ class PortalStorageSpaceMetadata(Base):
     account_member_role = Column(String, nullable=True)
     project_key = Column(String, nullable=True)
     dataset_label = Column(String, nullable=True)
+    icon_source = Column(String, nullable=False, default="preset", server_default="preset")
+    icon_preset = Column(String, nullable=False, default="bucket", server_default="bucket")
+    icon_image = Column(LargeBinary, nullable=True)
+    icon_content_type = Column(String, nullable=True)
+    icon_updated_at = Column(DateTime, nullable=True)
     origin = Column(String, nullable=False, default="imported")
     name_editable = Column(Boolean, nullable=False, default=False)
     archived_at = Column(DateTime, nullable=True)

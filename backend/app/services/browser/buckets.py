@@ -41,6 +41,7 @@ class BrowserBucketsMixin:
                     status=getattr(space, "status", None),
                     role=getattr(space, "role", None),
                     internal_bucket_name=name,
+                    icon=getattr(space, "icon", None),
                 )
             )
         buckets.sort(key=lambda bucket: (bucket.display_name or bucket.name).lower())

@@ -5,6 +5,7 @@
 import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS } from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import type { AxiosProgressEvent } from "axios";
+import type { StorageSpaceIconDescriptor } from "./storageSpaceIcons";
 
 export type BrowserWorkspaceSurface = "browser" | "manager" | "ceph-admin" | "portal";
 
@@ -25,6 +26,7 @@ export type BrowserBucket = {
   status?: string | null;
   role?: string | null;
   internal_bucket_name?: string | null;
+  icon?: StorageSpaceIconDescriptor | null;
 };
 
 export type PaginatedBrowserBucketsResponse = {

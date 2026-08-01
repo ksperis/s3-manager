@@ -11,6 +11,11 @@ import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
 import type { UserAvatarDescriptor } from "./users";
+import type {
+  StorageSpaceIconDescriptor,
+  StorageSpaceIconPreset,
+  StorageSpaceIconSource,
+} from "./storageSpaceIcons";
 
 export type PortalAccessKey = {
   access_key_id: string;
@@ -136,6 +141,7 @@ export type PortalStorageSpaceSummary = {
   archived_at?: string | null;
   origin?: "portal_generic" | "portal_named" | "imported";
   name_editable?: boolean;
+  icon?: StorageSpaceIconDescriptor | null;
 };
 
 export type PortalStorageSpace = PortalStorageSpaceSummary;
@@ -762,6 +768,34 @@ export async function updatePortalStorageSpace(
   const { data } = await client.patch<PortalStorageSpace>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
     payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function updatePortalStorageSpaceIcon(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  payload: { source: StorageSpaceIconSource; preset?: StorageSpaceIconPreset | null }
+): Promise<StorageSpaceIconDescriptor> {
+  const { data } = await client.put<StorageSpaceIconDescriptor>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/icon`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function uploadPortalStorageSpaceIcon(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  file: File
+): Promise<StorageSpaceIconDescriptor> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await client.put<StorageSpaceIconDescriptor>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/icon/image`,
+    formData,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
