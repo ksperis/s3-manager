@@ -411,6 +411,7 @@ export default function CephAdminUserEditModal({
   };
 
   const handleToggleKey = async (key: CephAdminRgwAccessKey, nextActive: boolean) => {
+    if (key.is_private_access_managed) return;
     const marker = `toggle:${key.access_key}`;
     setKeysBusy(marker);
     setKeysError(null);
@@ -427,6 +428,7 @@ export default function CephAdminUserEditModal({
   };
 
   const handleDeleteKey = async (key: CephAdminRgwAccessKey) => {
+    if (key.is_private_access_managed) return;
     if (!confirmAction(`Delete key ${key.access_key}?`)) return;
     const marker = `delete:${key.access_key}`;
     setKeysBusy(marker);
@@ -711,11 +713,21 @@ export default function CephAdminUserEditModal({
             )}
             {keys.map((key) => {
               const active = keyActive(key);
+              const managedPrivate = Boolean(key.is_private_access_managed);
               const toggleBusy = keysBusy === `toggle:${key.access_key}`;
               const deleteBusy = keysBusy === `delete:${key.access_key}`;
               return (
                 <tr key={key.access_key}>
-                  <td className="px-3 py-2 font-mono ui-body font-semibold text-slate-800 dark:text-slate-100">{key.access_key}</td>
+                  <td className="px-3 py-2 font-mono ui-body font-semibold text-slate-800 dark:text-slate-100">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{key.access_key}</span>
+                      {managedPrivate && (
+                        <span className="rounded border px-1.5 py-0.5 text-[10px] font-semibold" title="Managed private access key">
+                          Private access
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 ui-body text-slate-600 dark:text-slate-300">{key.status ?? (active ? "enabled" : "disabled")}</td>
                   <td className="px-3 py-2 ui-body text-slate-600 dark:text-slate-300">{formatDate(key.created_at)}</td>
                   <td className="px-3 py-2 text-right">
@@ -723,7 +735,8 @@ export default function CephAdminUserEditModal({
                       <button
                         type="button"
                         onClick={() => handleToggleKey(key, !active)}
-                        disabled={toggleBusy || deleteBusy}
+                        disabled={toggleBusy || deleteBusy || managedPrivate}
+                        title={managedPrivate ? "Update the linked private connection instead" : undefined}
                         className={tableActionButtonClasses}
                       >
                         {toggleBusy ? "Saving..." : active ? "Disable" : "Enable"}
@@ -731,7 +744,8 @@ export default function CephAdminUserEditModal({
                       <button
                         type="button"
                         onClick={() => handleDeleteKey(key)}
-                        disabled={toggleBusy || deleteBusy}
+                        disabled={toggleBusy || deleteBusy || managedPrivate}
+                        title={managedPrivate ? "Delete the linked private connection instead" : undefined}
                         className={tableDeleteActionClasses}
                       >
                         {deleteBusy ? "Deleting..." : "Delete"}

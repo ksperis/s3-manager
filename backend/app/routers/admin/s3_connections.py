@@ -480,9 +480,28 @@ def update_s3_connection(
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
+    payload_data = payload.model_dump(exclude_unset=True)
+    source_immutable_fields = {
+        "is_active",
+        "provider_hint",
+        "storage_endpoint_id",
+        "endpoint_url",
+        "region",
+        "force_path_style",
+        "verify_tls",
+        "credential_owner_type",
+        "credential_owner_identifier",
+    }
+    if (
+        S3ConnectionsService(db).is_active_managed_source(conn.id)
+        and source_immutable_fields.intersection(payload_data)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Connection endpoint and provenance are locked while managed private accesses depend on it",
+        )
     if payload.name is not None:
         conn.name = payload.name
-    payload_data = payload.model_dump(exclude_unset=True)
     should_probe_iam = False
     if "is_active" in payload_data:
         conn.is_active = bool(payload.is_active)
@@ -618,6 +637,11 @@ def rotate_s3_connection_credentials(
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
+    if S3ConnectionsService(db).is_active_managed_source(conn.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delete managed private accesses created from this source connection first",
+        )
     conn.access_key_id = payload.access_key_id
     conn.secret_access_key = payload.secret_access_key
     _refresh_detected_capabilities(conn)
@@ -659,6 +683,11 @@ def delete_s3_connection(
 ):
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
+    if S3ConnectionsService(db).is_active_managed_source(conn.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delete managed private accesses created from this source connection first",
+        )
     details = resolve_connection_details(conn)
     meta = {"name": conn.name, "endpoint_url": details.endpoint_url, "provider_hint": details.provider}
     db.query(UserS3Connection).filter(UserS3Connection.s3_connection_id == conn.id).delete()

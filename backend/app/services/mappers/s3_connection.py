@@ -36,6 +36,12 @@ def s3_connection_from_db(
         is_active=bool(row.is_active),
         access_manager=bool(row.access_manager),
         access_browser=bool(row.access_browser),
+        server_managed=bool(row.server_managed),
+        managed_access_state=(
+            row.managed_private_access.state
+            if getattr(row, "managed_private_access", None) is not None
+            else None
+        ),
         credential_owner_type=row.credential_owner_type,
         credential_owner_identifier=row.credential_owner_identifier,
         endpoint_url=details.endpoint_url or "",

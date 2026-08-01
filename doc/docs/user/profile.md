@@ -24,6 +24,9 @@ Use this page when you need to adjust personal UI preferences, manage your own p
    - manage tags directly from the main form: add them inline, remove them with `×`, and click a tag badge to open its compact settings popover for color and `Standard` / `Administrative` scope,
    - search by name, endpoint, provider, or tag,
    - enable or disable access for `Manager` and `Browser`.
+   - delete a **Server managed** connection from this inventory when you no
+     longer need it; S3-Manager first removes the remote key and dedicated IAM
+     identity, when applicable, before removing the local connection.
 4. Superadmins can use the **API tokens** tab for automation tokens. Other users do not see this tab.
 
 ## Expected result
@@ -53,6 +56,14 @@ the account menu in the topbar.
 
 !!! note
     Private S3 connections remain private to their owner. Tags on those connections are also editable only by the owner.
+
+!!! note
+    A connection marked **Server managed** was created by **Create my private
+    access** in Manager. Its endpoint, remote principal, and credentials cannot
+    be edited or rotated from Profile. The owner can still change its name,
+    tags, active state, and Manager/Browser availability. If remote deletion
+    fails, the connection remains visible as **cleanup required**; use **Retry
+    cleanup** instead of creating another access from the same source context.
 
 !!! note
     Tag colors are shared per tag inside your own private-connections catalog. Recoloring a private tag updates the same tag everywhere in your private connection inventory.

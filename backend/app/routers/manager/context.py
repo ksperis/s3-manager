@@ -19,7 +19,9 @@ from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
+from app.services.effective_access_service import EffectiveAccessService
 from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
 
@@ -33,6 +35,7 @@ class ManagerContext(BaseModel):
     manager_browser_enabled: bool = True
     manager_bucket_quota_enabled: bool = False
     manager_ceph_keys_enabled: bool = False
+    manager_private_access_enabled: bool = False
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     max_buckets: Optional[int] = None
@@ -120,6 +123,18 @@ def get_manager_context(
         if isinstance(actor, User)
         else False
     )
+    manager_private_access_enabled = False
+    if isinstance(actor, User) and EffectiveAccessService.private_connections_allowed(actor):
+        if s3_user_id is not None:
+            manager_private_access_enabled = manager_ceph_keys_enabled
+        else:
+            capabilities = getattr(account, "_manager_capabilities", None)
+            endpoint = getattr(account, "storage_endpoint", None)
+            manager_private_access_enabled = bool(
+                capabilities
+                and capabilities.can_manage_iam
+                and (endpoint is None or resolve_feature_flags(endpoint).iam_enabled)
+            )
     manager_bucket_quota_enabled = (
         is_manager_bucket_quota_available(account, actor, db=db)
         if isinstance(actor, User)
@@ -159,6 +174,7 @@ def get_manager_context(
         manager_browser_enabled=manager_browser_enabled,
         manager_bucket_quota_enabled=manager_bucket_quota_enabled,
         manager_ceph_keys_enabled=manager_ceph_keys_enabled,
+        manager_private_access_enabled=manager_private_access_enabled,
         quota_max_size_gb=quota_max_size_gb,
         quota_max_objects=quota_max_objects,
         max_buckets=max_buckets,

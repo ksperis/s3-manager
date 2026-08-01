@@ -98,7 +98,7 @@ def test_validate_credentials_success_admin_custom_endpoint(db_session, monkeypa
 
 def test_validate_credentials_access_denied_is_warning_user_route(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         endpoint = StorageEndpoint(
             name="endpoint-a",
             endpoint_url="https://s3-endpoint-a.example.test",
@@ -134,7 +134,7 @@ def test_validate_credentials_access_denied_is_warning_user_route(db_session, mo
 
 def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         monkeypatch.setattr(
             "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
             lambda value, field_name="Endpoint URL": value.rstrip("/"),
@@ -163,7 +163,7 @@ def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch)
 
 def test_validate_credentials_rejects_manual_private_endpoint(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
         monkeypatch.setattr(
             "app.services.s3_connection_validation_service.validate_user_supplied_s3_endpoint",
             lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -186,7 +186,7 @@ def test_validate_credentials_rejects_manual_private_endpoint(db_session, monkey
 
 def test_validate_credentials_rejects_verify_tls_false_for_manual_user_route(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
 
         response = client.post(
             "/api/connections/validate-credentials",
@@ -204,7 +204,7 @@ def test_validate_credentials_rejects_verify_tls_false_for_manual_user_route(db_
 
 def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
 
         response = client.post(
             "/api/connections/validate-credentials",
@@ -221,7 +221,7 @@ def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch
 
 def test_validate_credentials_forbidden_when_private_connections_disabled(db_session, monkeypatch):
     with _build_client(db_session) as (client, _):
-        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(False))
+        monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(False))
 
         response = client.post(
             "/api/connections/validate-credentials",

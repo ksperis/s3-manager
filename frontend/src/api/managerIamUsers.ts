@@ -22,6 +22,8 @@ export type AccessKey = {
   status?: string;
   created_at?: string;
   secret_access_key?: string;
+  is_private_access_managed?: boolean;
+  managed_connection_id?: number | null;
 };
 
 export type IAMUser = {
@@ -31,6 +33,8 @@ export type IAMUser = {
   policies?: string[];
   inline_policies?: string[];
   has_keys?: boolean;
+  is_private_access_managed?: boolean;
+  managed_connection_id?: number | null;
 };
 
 export type IAMUserWithKey = IAMUser & { access_key?: AccessKey };

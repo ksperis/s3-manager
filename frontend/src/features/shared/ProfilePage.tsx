@@ -40,6 +40,7 @@ import {
   validateConnectionCredentials,
 } from "../../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import { retryManagedPrivateAccessCleanup } from "../../api/managedPrivateAccess";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import { notifyExecutionContextsRefresh } from "../../utils/executionContextRefresh";
@@ -116,6 +117,9 @@ function getErrorMessage(error: unknown, fallback: string): string {
     const detail = error.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) {
       return detail;
+    }
+    if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") {
+      return detail.message;
     }
   }
   return fallback;
@@ -1053,17 +1057,19 @@ export default function ProfilePage({
     const accessKeyId = credentialDraft.access_key_id.trim();
     const secretAccessKey = credentialDraft.secret_access_key.trim();
     const usePresetEndpoint = editConnectionEndpointMode === "preset";
+    const connection = connections.find((item) => item.id === connectionId);
+    const serverManaged = Boolean(connection?.server_managed);
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!draft.name.trim()) {
       setConnectionsError("Connection name is required.");
       return false;
     }
-    if (usePresetEndpoint && !editConnectionEndpointId) {
+    if (!serverManaged && usePresetEndpoint && !editConnectionEndpointId) {
       setConnectionsError("Select a configured endpoint.");
       return false;
     }
-    if (!usePresetEndpoint && !draft.endpoint_url.trim()) {
+    if (!serverManaged && !usePresetEndpoint && !draft.endpoint_url.trim()) {
       setConnectionsError("Endpoint URL is required.");
       return false;
     }
@@ -1071,13 +1077,15 @@ export default function ProfilePage({
       setConnectionsError("Enable access to manager and/or browser.");
       return false;
     }
-    if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
+    if (!serverManaged && ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey))) {
       setConnectionsError("Provide both access key ID and secret access key to update credentials.");
       return false;
     }
     setSavingConnectionBusyId(connectionId);
     try {
-      const endpointPayload = usePresetEndpoint
+      const endpointPayload = serverManaged
+        ? {}
+        : usePresetEndpoint
         ? {
             storage_endpoint_id: Number(editConnectionEndpointId),
           }
@@ -1095,7 +1103,7 @@ export default function ProfilePage({
         access_manager: draft.access_manager,
         access_browser: draft.access_browser,
         ...endpointPayload,
-        ...(accessKeyId && secretAccessKey
+        ...(!serverManaged && accessKeyId && secretAccessKey
           ? {
               access_key_id: accessKeyId,
               secret_access_key: secretAccessKey,
@@ -1120,7 +1128,7 @@ export default function ProfilePage({
   };
 
   const editConnectionValidationPayload = useMemo(() => {
-    if (!editingConnection) return null;
+    if (!editingConnection || editingConnection.server_managed) return null;
     const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
     const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? { access_key_id: "", secret_access_key: "" };
     const accessKeyId = credentialDraft.access_key_id.trim();
@@ -1153,7 +1161,7 @@ export default function ProfilePage({
   ]);
 
   const editConnectionValidation = useLiveS3CredentialsValidation({
-    enabled: Boolean(editingConnection) && canManagePrivateConnections,
+    enabled: Boolean(editingConnection) && !editingConnection?.server_managed && canManagePrivateConnections,
     payload: editConnectionValidationPayload,
     validate: validatePrivateCreateCredentials,
     debounceMs: 450,
@@ -1174,6 +1182,23 @@ export default function ProfilePage({
     } catch (error) {
       console.error(error);
       setConnectionsError(getErrorMessage(error, "Unable to delete private S3 connection."));
+    } finally {
+      setDeletingConnectionBusyId(null);
+    }
+  };
+
+  const handleRetryManagedCleanup = async (connectionId: number) => {
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+    setDeletingConnectionBusyId(connectionId);
+    try {
+      await retryManagedPrivateAccessCleanup(connectionId);
+      setConnectionsMessage("Managed private access cleanup completed.");
+      await refreshConnections();
+      notifyExecutionContextsRefresh();
+    } catch (error) {
+      console.error(error);
+      setConnectionsError(getErrorMessage(error, "Unable to complete managed private access cleanup."));
     } finally {
       setDeletingConnectionBusyId(null);
     }
@@ -1726,6 +1751,11 @@ export default function ProfilePage({
                                     <p className="truncate ui-body font-semibold text-slate-900 dark:text-slate-100">
                                       {connection.name || "-"}
                                     </p>
+                                    {connection.server_managed && (
+                                      <span className="mt-1 inline-flex rounded border border-primary-200 bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700 dark:border-primary-900/50 dark:bg-primary-950/50 dark:text-primary-100">
+                                        Server managed{connection.managed_access_state === "cleanup_pending" ? " - cleanup required" : ""}
+                                      </span>
+                                    )}
                                     <p className="ui-caption text-slate-500 dark:text-slate-400">
                                       Access Key: {connection.access_key_id || "-"}
                                     </p>
@@ -1772,6 +1802,16 @@ export default function ProfilePage({
                               </td>
                               <td className="px-4 py-4 text-right">
                                 <div className="flex justify-end gap-2">
+                                  {connection.managed_access_state === "cleanup_pending" && (
+                                    <button
+                                      type="button"
+                                      className={tableActionButtonClasses}
+                                      disabled={deletingConnectionBusyId === connection.id}
+                                      onClick={() => void handleRetryManagedCleanup(connection.id)}
+                                    >
+                                      {deletingConnectionBusyId === connection.id ? "Retrying..." : "Retry cleanup"}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     className={tableActionButtonClasses}
@@ -1944,7 +1984,9 @@ export default function ProfilePage({
       {showConnectionsSection && editingConnection && (
         <WorkflowPage
           title={`Edit connection - ${editingConnection.name}`}
-          description="Manage endpoint access, credentials, and workspace availability for this private connection."
+          description={editingConnection.server_managed
+            ? "Manage the name, tags, status, and workspace availability. Endpoint and credentials are controlled by server provisioning."
+            : "Manage endpoint access, credentials, and workspace availability for this private connection."}
           breadcrumbs={[{ label: "Profile", to: "/profile" }, { label: "Private connections", to: "/profile?view=connections" }, { label: "Edit" }]}
           backLabel="Back to connections"
           onBack={editConnectionCloseGuard.requestClose}
@@ -1993,7 +2035,7 @@ export default function ProfilePage({
                         </div>
                       </div>
 
-                      <S3ConnectionEndpointFields
+                      {!editingConnection.server_managed && <S3ConnectionEndpointFields
                         mode={editConnectionEndpointMode}
                         onModeChange={setEditConnectionEndpointMode}
                         modeInputName={`edit-connection-endpoint-mode-${editingConnection.id}`}
@@ -2008,9 +2050,13 @@ export default function ProfilePage({
                             ? `Unable to load configured endpoints (${storageEndpointsError}). Use custom mode.`
                             : null
                         }
-                      />
+                      />}
 
-                      <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                      {editingConnection.server_managed ? (
+                        <PageBanner tone="info">
+                          This connection is server managed. Its source context, endpoint, remote principal, access key, and secret are immutable here.
+                        </PageBanner>
+                      ) : <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Credentials
                         </p>
@@ -2031,7 +2077,7 @@ export default function ProfilePage({
                           }
                         />
                         <S3CredentialsValidationMessage validation={editConnectionValidation} />
-                      </div>
+                      </div>}
 
                       <S3ConnectionAccessFields
                         accessManager={Boolean(draft.access_manager)}

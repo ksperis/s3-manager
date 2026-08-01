@@ -20,6 +20,8 @@ class S3Connection(BaseModel):
     is_active: bool = True
     access_manager: bool = False
     access_browser: bool = True
+    server_managed: bool = False
+    managed_access_state: Optional[str] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: str
@@ -88,6 +90,8 @@ class S3ConnectionCredentialsUpdate(BaseModel):
 
     The API never returns secrets back to the client.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     access_key_id: str
     secret_access_key: str

@@ -23,7 +23,12 @@ instead.
 2. Create or edit IAM resources.
 3. Attach/detach policies to users, groups, or roles.
 4. Manage IAM access keys from user key pages.
-5. Verify resulting access with your standard IAM validation process.
+5. To create a personal private S3 connection without handling its secret,
+   select **Create my private access** on the Users page. Choose the connection
+   name, IAM groups and policies, then Browser, Manager, or both. S3-Manager
+   creates a dedicated IAM identity and key on the server; it never displays
+   the generated secret in this flow.
+6. Verify resulting access with your standard IAM validation process.
 
 ## Expected result
 
@@ -41,6 +46,14 @@ Check endpoint IAM capability, Manager access, and the selected execution contex
 
 !!! note
     IAM UI is unavailable when selected context endpoint reports `iam = false`.
+
+!!! note
+    **Create my private access** is available only for an authorized RGW Account
+    or S3 Connection that is executable in Manager and reports IAM capability.
+    It does not reuse a Portal identity or the credentials of a shared
+    connection. Ordinary **Create user** and **New key** actions still display
+    a secret once for manual use, but no longer offer **Add as S3 Connection**
+    in Manager.
 
 ## Related pages
 

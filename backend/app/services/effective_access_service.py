@@ -317,6 +317,17 @@ class EffectiveAccessService:
         )
 
     @staticmethod
+    def private_connections_allowed(user: User) -> bool:
+        """Return the canonical permission to own private S3 credentials."""
+        if is_admin_ui_role(user.role):
+            return True
+        if user.role != UserRole.UI_USER.value:
+            return False
+        from app.services.app_settings_service import load_app_settings
+
+        return bool(load_app_settings().general.allow_user_private_connections)
+
+    @staticmethod
     def portal_account_is_compatible(account: object) -> bool:
         endpoint = getattr(account, "storage_endpoint", None)
         return bool(

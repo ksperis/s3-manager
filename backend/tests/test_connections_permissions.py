@@ -23,24 +23,24 @@ def _settings(allowed: bool):
 
 
 def test_connections_allowed_for_admin_even_if_flag_disabled(monkeypatch):
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(False))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(False))
     _ensure_private_connections_allowed(_user(UserRole.UI_ADMIN.value))
 
 
 def test_connections_allowed_for_ui_user_when_flag_enabled(monkeypatch):
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
     _ensure_private_connections_allowed(_user(UserRole.UI_USER.value))
 
 
 def test_connections_forbidden_for_ui_user_when_flag_disabled(monkeypatch):
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(False))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(False))
     with pytest.raises(HTTPException) as exc:
         _ensure_private_connections_allowed(_user(UserRole.UI_USER.value))
     assert exc.value.status_code == 403
 
 
 def test_connections_forbidden_for_unassigned_user(monkeypatch):
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(True))
     with pytest.raises(HTTPException) as exc:
         _ensure_private_connections_allowed(_user(UserRole.UI_NONE.value))
     assert exc.value.status_code == 403

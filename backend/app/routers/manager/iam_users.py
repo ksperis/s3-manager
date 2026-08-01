@@ -21,6 +21,7 @@ from app.routers.manager.iam_common import (
     save_inline_policy,
 )
 from app.services.audit_service import AuditService
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 
 router = APIRouter(prefix="/manager/iam/users", tags=["manager-iam-users"])
 
@@ -33,7 +34,20 @@ def list_users(
 ) -> list[IAMUser]:
     _, service = get_account_and_service(account)
     try:
-        return service.list_users()
+        users = service.list_users()
+        source = ManagedPrivateAccessService.iam_source_reference(account)
+        if source is not None:
+            managed = {
+                row.iam_username: row
+                for row in ManagedPrivateAccessService(db).managed_resources_for_source(*source)
+                if row.iam_username
+            }
+            for item in users:
+                provisioning = managed.get(item.name)
+                if provisioning is not None:
+                    item.is_private_access_managed = True
+                    item.managed_connection_id = provisioning.s3_connection_id
+        return users
     except RuntimeError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
@@ -85,7 +99,16 @@ def delete_user(
     account: S3Account = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> None:
+    source = ManagedPrivateAccessService.iam_source_reference(account)
+    if source is not None:
+        managed = ManagedPrivateAccessService(db).managed_iam_user(*source, user_name)
+        if managed is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This IAM user belongs to a managed private access; delete its private connection instead",
+            )
     _, service = get_account_and_service(account)
     try:
         service.delete_user(user_name)
@@ -106,10 +129,24 @@ def list_access_keys(
     user_name: str,
     account: S3Account = Depends(get_account_context),
     _: dict = Depends(require_iam_capable_manager),
+    db: Session = Depends(get_db),
 ) -> list[AccessKey]:
     _, service = get_account_and_service(account)
     try:
-        return service.list_access_keys(user_name)
+        keys = service.list_access_keys(user_name)
+        source = ManagedPrivateAccessService.iam_source_reference(account)
+        if source is not None:
+            managed = {
+                row.access_key_id: row
+                for row in ManagedPrivateAccessService(db).managed_resources_for_source(*source)
+                if row.iam_username == user_name and row.access_key_id
+            }
+            for key in keys:
+                provisioning = managed.get(key.access_key_id)
+                if provisioning is not None:
+                    key.is_private_access_managed = True
+                    key.managed_connection_id = provisioning.s3_connection_id
+        return keys
     except RuntimeError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
 
@@ -120,7 +157,14 @@ def create_access_key(
     account: S3Account = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> AccessKey:
+    source = ManagedPrivateAccessService.iam_source_reference(account)
+    if source is not None and ManagedPrivateAccessService(db).managed_iam_user(*source, user_name) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Managed private access IAM users cannot receive keys through the generic endpoint",
+        )
     _, service = get_account_and_service(account)
     try:
         key = service.create_access_key(user_name)
@@ -146,7 +190,14 @@ def update_access_key_status(
     account: S3Account = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> AccessKey:
+    source = ManagedPrivateAccessService.iam_source_reference(account)
+    if source is not None and ManagedPrivateAccessService(db).managed_key(*source, access_key_id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This key belongs to a managed private access; update or delete its private connection instead",
+        )
     _, service = get_account_and_service(account)
     status_value = "Active" if payload.active else "Inactive"
     try:
@@ -178,7 +229,14 @@ def delete_access_key(
     account: S3Account = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> None:
+    source = ManagedPrivateAccessService.iam_source_reference(account)
+    if source is not None and ManagedPrivateAccessService(db).managed_key(*source, access_key_id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This key belongs to a managed private access; delete its private connection instead",
+        )
     _, service = get_account_and_service(account)
     try:
         service.delete_access_key(user_name, access_key_id)

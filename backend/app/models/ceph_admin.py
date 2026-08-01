@@ -242,6 +242,8 @@ class CephAdminRgwAccessKey(BaseModel):
     created_at: Optional[datetime] = None
     user: Optional[str] = None
     subuser: Optional[str] = None
+    is_private_access_managed: bool = False
+    managed_connection_id: Optional[int] = None
 
 
 class CephAdminRgwGeneratedAccessKey(BaseModel):

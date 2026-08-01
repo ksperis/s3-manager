@@ -16,7 +16,6 @@ import {
 } from "../../api/managerIamUsers";
 import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
-import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageEmptyState from "../../components/PageEmptyState";
@@ -40,16 +39,22 @@ import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
-import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 import InlinePolicyDraftEditor, { type InlinePolicyDraftEditorMode } from "./InlinePolicyDraftEditor";
 import ManagerToolbarSearch from "./ManagerToolbarSearch";
+import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
 
 const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
 export default function ManagerUsersPage() {
   type SortField = SortableField<IAMUser>;
 
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
+  const {
+    selectedS3AccountType,
+    accountIdForApi,
+    requiresS3AccountSelection,
+    accessMode,
+    managerPrivateAccessEnabled,
+  } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   const [users, setUsers] = useState<IAMUser[]>([]);
@@ -72,7 +77,7 @@ export default function ManagerUsersPage() {
   const [selectedInlineDraftName, setSelectedInlineDraftName] = useState<string | null>(null);
   const [inlineDraftMode, setInlineDraftMode] = useState<InlinePolicyDraftEditorMode>("create");
   const [showInlinePolicyOptions, setShowInlinePolicyOptions] = useState(false);
-  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
+  const [showPrivateAccessModal, setShowPrivateAccessModal] = useState(false);
   const [filter, setFilter] = useState("");
   const [showGroupOptions, setShowGroupOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
@@ -414,28 +419,23 @@ export default function ManagerUsersPage() {
     setError(null);
   };
 
-  const selectedContext = useMemo(() => accounts.find((ctx) => ctx.id === accountIdForApi), [accountIdForApi, accounts]);
-  const addConnectionDefaults = useMemo(() => {
-    if (!createdKey || !createdForUser) return null;
-    return buildManagerConnectionDefaults(selectedContext, createdForUser, createdKey.access_key_id);
-  }, [createdForUser, createdKey, selectedContext]);
-
   return (
-    <div className={workflowPageHostClass(showAdvancedModal)}>
+    <div className={workflowPageHostClass(showAdvancedModal || showPrivateAccessModal)}>
       <PageHeader
         title="Users"
         description="Create/delete via the account root credentials. Optionally generate an access key on creation."
         breadcrumbs={managerPageBreadcrumbs("users")}
-        actions={
-          !needsS3AccountSelection && !isS3User
-            ? [
-                {
-                  label: "Create user",
-                  onClick: openAdvancedModal,
-                },
-              ]
-            : []
-        }
+        actions={!needsS3AccountSelection && !isS3User
+          ? [
+              {
+                label: "Create user",
+                onClick: openAdvancedModal,
+              },
+              ...(managerPrivateAccessEnabled
+                ? [{ label: "Create my private access", onClick: () => setShowPrivateAccessModal(true), variant: "primary" as const }]
+                : []),
+            ]
+          : []}
       />
 
       {error && <PageBanner tone="error">{error}</PageBanner>}
@@ -454,23 +454,12 @@ export default function ManagerUsersPage() {
             },
           ]}
           actions={
-            <>
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="xs"
-                onClick={() => setShowAddConnectionModal(true)}
-                disabled={!createdKey.secret_access_key}
-              >
-                Add as S3 Connection
-              </UiButton>
-              <Link
-                to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
-                className="ui-body font-medium text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
-              >
-                Manage keys
-              </Link>
-            </>
+            <Link
+              to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
+              className="ui-body font-medium text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
+            >
+              Manage keys
+            </Link>
           }
         />
       )}
@@ -536,6 +525,14 @@ export default function ManagerUsersPage() {
                   <td className={managerTablePrimaryCellClass}>
                     <div className="flex items-center gap-2">
                       <span>{u.name}</span>
+                      {u.is_private_access_managed && (
+                        <span
+                          className="rounded border border-primary-200 bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700 dark:border-primary-900/50 dark:bg-primary-950/50 dark:text-primary-100"
+                          title="Managed private access identity"
+                        >
+                          Private access
+                        </span>
+                      )}
                       {showWarning && (
                         <span
                           className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"
@@ -607,7 +604,8 @@ export default function ManagerUsersPage() {
                       <button
                         onClick={() => handleDelete(u.name)}
                         className={tableDeleteActionClasses}
-                        disabled={busy === u.name}
+                        disabled={busy === u.name || u.is_private_access_managed}
+                        title={u.is_private_access_managed ? "Delete the linked private connection instead" : undefined}
                       >
                         {busy === u.name ? "Deleting..." : "Delete"}
                       </button>
@@ -805,22 +803,15 @@ export default function ManagerUsersPage() {
         </WorkflowPage>
       )}
 
-      {showAddConnectionModal && createdKey && createdForUser && createdKey.secret_access_key && addConnectionDefaults && (
-        <AddS3ConnectionFromKeyModal
-          isOpen={showAddConnectionModal}
-          lockEndpoint
-          accessKeyId={createdKey.access_key_id}
-          secretAccessKey={createdKey.secret_access_key}
-          defaultName={addConnectionDefaults.name}
-          defaultEndpointId={addConnectionDefaults.endpointId}
-          defaultEndpointUrl={addConnectionDefaults.endpointUrl}
-          defaultAccessManager={false}
-          defaultAccessBrowser
-          defaultOwnerType={addConnectionDefaults.owner.ownerType}
-          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
-          onClose={() => setShowAddConnectionModal(false)}
-          onCreated={() => {
-            setActionMessage("S3 connection created.");
+      {showPrivateAccessModal && (
+        <CreateManagedPrivateAccessModal
+          variant="iam"
+          accountId={accountIdForApi}
+          groups={groups}
+          policies={policies}
+          onClose={() => setShowPrivateAccessModal(false)}
+          onCreated={(name) => {
+            setActionMessage(`Private connection ${name} created without exposing its secret.`);
             setError(null);
           }}
         />

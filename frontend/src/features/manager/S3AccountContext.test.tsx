@@ -146,5 +146,7 @@ describe("S3AccountProvider", () => {
     });
 
     await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("selected")).toHaveTextContent("conn-1");
+    expect(screen.getByTestId("location")).toHaveTextContent("/manager?ctx=conn-1");
   });
 });

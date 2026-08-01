@@ -55,6 +55,15 @@ describe("ManagerCephKeysPage", () => {
         is_ui_managed: false,
         is_active: false,
       },
+      {
+        access_key_id: "AK-PRIVATE",
+        status: "enabled",
+        created_at: "2026-01-03T00:00:00Z",
+        is_ui_managed: false,
+        is_private_access_managed: true,
+        managed_connection_id: 42,
+        is_active: true,
+      },
     ]);
     createManagerCephAccessKeyMock.mockResolvedValue({
       access_key_id: "AK-NEW",
@@ -85,6 +94,23 @@ describe("ManagerCephKeysPage", () => {
     expect((lockedButtons[0] as HTMLButtonElement).className).toContain("disabled:text-slate-400");
     expect((lockedButtons[1] as HTMLButtonElement).className).toContain("disabled:cursor-not-allowed");
     expect((lockedButtons[1] as HTMLButtonElement).className).toContain("disabled:text-slate-400");
+    expect(screen.getByText("Private access")).toHaveAttribute("title", "Managed private access key");
+    expect(screen.getAllByTitle("Update the linked private connection instead")).toHaveLength(1);
+    expect(screen.getAllByTitle("Delete the linked private connection instead")).toHaveLength(1);
+  });
+
+  it("shows the server-managed provisioning action only when enabled by the context", async () => {
+    const user = userEvent.setup();
+    useS3AccountContextMock.mockReturnValue(buildContext({ managerPrivateAccessEnabled: true }));
+
+    render(<ManagerCephKeysPage />);
+
+    await screen.findByText("AK-SECONDARY");
+    await user.click(screen.getByRole("button", { name: "Create my private access" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Connection name")).toBeInTheDocument();
+    expect(screen.queryByText("IAM groups")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
   });
 
   it("supports create, enable and delete for non-locked keys", async () => {

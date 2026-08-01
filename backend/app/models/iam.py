@@ -14,6 +14,8 @@ class IAMUser(BaseModel):
     policies: Optional[list[str]] = None
     inline_policies: Optional[list[str]] = None
     has_keys: bool = False
+    is_private_access_managed: bool = False
+    managed_connection_id: Optional[int] = None
 
 
 class AccessKey(BaseModel):
@@ -21,6 +23,8 @@ class AccessKey(BaseModel):
     status: Optional[str] = None
     created_at: Optional[str] = None
     secret_access_key: Optional[str] = None
+    is_private_access_managed: bool = False
+    managed_connection_id: Optional[int] = None
 
 
 class AccessKeyStatusChange(BaseModel):

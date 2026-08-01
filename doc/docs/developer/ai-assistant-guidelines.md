@@ -154,6 +154,10 @@ flows unless the pathway is explicit, authorized, and audited.
 ### Security is non-negotiable
 
 - Never log or return secrets such as access keys, tokens, or passwords.
+- Server-managed private access provisioning must never return the generated
+  secret to the frontend. Store it only in the encrypted S3 Connection field;
+  keep durable provenance and compensation state secret-free, and route remote
+  key/principal deletion through the provisioning orchestrator.
 - Validate inputs strictly.
 - Enforce tenant isolation.
 - Treat external data as a potential XSS surface.

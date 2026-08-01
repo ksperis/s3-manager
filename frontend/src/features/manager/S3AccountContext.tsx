@@ -30,6 +30,7 @@ type S3AccountContextType = {
   managerBrowserEnabled: boolean | null;
   managerBucketQuotaEnabled: boolean | null;
   managerCephKeysEnabled: boolean | null;
+  managerPrivateAccessEnabled: boolean | null;
 };
 
 const S3AccountContext = createContext<S3AccountContextType>({
@@ -49,6 +50,7 @@ const S3AccountContext = createContext<S3AccountContextType>({
   managerBrowserEnabled: null,
   managerBucketQuotaEnabled: null,
   managerCephKeysEnabled: null,
+  managerPrivateAccessEnabled: null,
 });
 
 type SessionInfo = {
@@ -106,6 +108,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [managerBrowserEnabled, setManagerBrowserEnabled] = useState<boolean | null>(null);
   const [managerBucketQuotaEnabled, setManagerBucketQuotaEnabled] = useState<boolean | null>(null);
   const [managerCephKeysEnabled, setManagerCephKeysEnabled] = useState<boolean | null>(null);
+  const [managerPrivateAccessEnabled, setManagerPrivateAccessEnabled] = useState<boolean | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -206,6 +209,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       setManagerBrowserEnabled(null);
       setManagerBucketQuotaEnabled(null);
       setManagerCephKeysEnabled(null);
+      setManagerPrivateAccessEnabled(null);
       return;
     }
     let isMounted = true;
@@ -214,6 +218,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     setManagerBrowserEnabled(null);
     setManagerBucketQuotaEnabled(null);
     setManagerCephKeysEnabled(null);
+    setManagerPrivateAccessEnabled(null);
     fetchManagerContext(accountIdForApi)
       .then((data) => {
         if (!isMounted) return;
@@ -224,6 +229,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setManagerBrowserEnabled(data.manager_browser_enabled !== false);
         setManagerBucketQuotaEnabled(Boolean(data.manager_bucket_quota_enabled));
         setManagerCephKeysEnabled(Boolean(data.manager_ceph_keys_enabled));
+        setManagerPrivateAccessEnabled(Boolean(data.manager_private_access_enabled));
       })
       .catch(() => {
         if (!isMounted) return;
@@ -234,6 +240,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setManagerBrowserEnabled(null);
         setManagerBucketQuotaEnabled(null);
         setManagerCephKeysEnabled(null);
+        setManagerPrivateAccessEnabled(null);
       });
     return () => {
       isMounted = false;
@@ -259,6 +266,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         managerBrowserEnabled,
         managerBucketQuotaEnabled,
         managerCephKeysEnabled,
+        managerPrivateAccessEnabled,
       }}
     >
       {children}

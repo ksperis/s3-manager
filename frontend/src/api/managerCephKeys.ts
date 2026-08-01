@@ -11,6 +11,8 @@ export type ManagerCephAccessKey = {
   created_at?: string | null;
   is_ui_managed: boolean;
   is_active?: boolean | null;
+  is_private_access_managed?: boolean;
+  managed_connection_id?: number | null;
 };
 
 export type ManagerCephGeneratedAccessKey = {

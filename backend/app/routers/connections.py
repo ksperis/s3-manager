@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User, UserRole, is_admin_ui_role
+from app.db import User
 from app.models.s3_connection import (
     S3Connection,
     S3ConnectionCreate,
@@ -16,9 +16,13 @@ from app.models.s3_connection import (
 )
 from app.models.tagging import TagDefinitionListResponse
 from app.routers.dependencies import get_current_account_user
-from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_connections_service import S3ConnectionsService
+from app.services.managed_private_access_service import (
+    ManagedPrivateAccessCleanupPending,
+    ManagedPrivateAccessService,
+)
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.utils.tagging import TAG_DOMAIN_PRIVATE_CONNECTION_USER
@@ -28,9 +32,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 
 def _ensure_private_connections_allowed(user: User) -> None:
-    if is_admin_ui_role(user.role):
-        return
-    if user.role == UserRole.UI_USER.value and load_app_settings().general.allow_user_private_connections:
+    if EffectiveAccessService.private_connections_allowed(user):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -200,6 +202,8 @@ def rotate_connection_credentials(
         return updated
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=sanitize_error_detail(str(exc))) from exc
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -212,6 +216,11 @@ def delete_connection(
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
+        if ManagedPrivateAccessService(db).delete_owned_connection(
+            user=user,
+            connection_id=connection_id,
+        ):
+            return None
         # Read minimal metadata for audit before deletion
         row = service.get_owned(user.id, connection_id)
         from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -233,6 +242,13 @@ def delete_connection(
         )
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    except ManagedPrivateAccessCleanupPending as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=sanitize_error_detail({"message": str(exc), "provisioning_id": exc.provisioning_id}),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=sanitize_error_detail(str(exc))) from exc
     return None
 
 

@@ -267,7 +267,70 @@ describe("ManagerUsersPage", () => {
     expect(screen.getByText("AKIA-BOB")).toHaveClass("font-mono");
     expect(screen.getByText("SECRET-BOB")).toHaveClass("font-mono");
     expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Add as S3 Connection" })).toHaveClass("h-7");
+    expect(screen.queryByRole("button", { name: "Add as S3 Connection" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage keys" })).toHaveAttribute("href", "/manager/users/bob/keys");
+  });
+
+  it("shows the managed private access action only when the backend enables it", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "acc-1", kind: "account", display_name: "Tenant account", endpoint_name: "Default" }],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+      managerPrivateAccessEnabled: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(listIamUsersMock).toHaveBeenCalledWith("acc-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Create my private access" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Connection name")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/IAM user/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
+  });
+
+  it("marks managed IAM identities and routes deletion through their private connection", async () => {
+    useS3AccountContextMock.mockReturnValue({
+      accounts: [{ id: "acc-1", kind: "account", display_name: "Tenant account", endpoint_name: "Default" }],
+      selectedS3AccountId: "acc-1",
+      selectedS3AccountType: "tenant",
+      accountIdForApi: "acc-1",
+      requiresS3AccountSelection: true,
+      accessMode: "default",
+      iamIdentity: null,
+      sessionS3AccountName: null,
+    });
+    listIamUsersMock.mockResolvedValue([
+      {
+        name: "s3m-private-u7-acc1",
+        arn: "arn:aws:iam::acc-1:user/s3m-private-u7-acc1",
+        groups: ["operators"],
+        policies: [],
+        inline_policies: [],
+        has_keys: true,
+        is_private_access_managed: true,
+        managed_connection_id: 77,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ManagerUsersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Private access")).toHaveAttribute("title", "Managed private access identity");
+    const deleteButton = screen.getByTitle("Delete the linked private connection instead") as HTMLButtonElement;
+    expect(deleteButton.disabled).toBe(true);
   });
 });

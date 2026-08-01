@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -48,6 +48,7 @@ class S3Connection(Base):
     access_browser = Column(Boolean, nullable=False, default=True, server_default="1")
     remediation_required = Column(Boolean, nullable=False, default=False, server_default="0")
     remediation_reason = Column(String, nullable=True)
+    server_managed = Column(Boolean, nullable=False, default=False, server_default="0")
     credential_owner_type = Column(String, nullable=True)
     credential_owner_identifier = Column(String, nullable=True)
 
@@ -88,6 +89,12 @@ class S3Connection(Base):
         cascade="all, delete-orphan",
     )
     tag_links = relationship("S3ConnectionTag", back_populates="connection", cascade="all, delete-orphan")
+    managed_private_access = relationship(
+        "ManagedPrivateAccess",
+        back_populates="connection",
+        uselist=False,
+        passive_deletes=True,
+    )
 
 
 class UserS3Connection(Base):
@@ -113,3 +120,60 @@ class UserS3Connection(Base):
         back_populates="user_links",
         overlaps="users,shared_s3_connections,created_by",
     )
+
+
+class ManagedPrivateAccess(Base):
+    """Durable saga state for server-provisioned private credentials."""
+
+    __tablename__ = "managed_private_accesses"
+    __table_args__ = (
+        CheckConstraint(
+            "source_context_type IN ('account', 'connection', 's3_user')",
+            name="ck_managed_private_access_source_type",
+        ),
+        CheckConstraint(
+            "remote_principal_type IN ('iam_user', 'rgw_user')",
+            name="ck_managed_private_access_principal_type",
+        ),
+        CheckConstraint(
+            "state IN ('provisioning', 'active', 'deleting', 'cleanup_pending', 'failed')",
+            name="ck_managed_private_access_state",
+        ),
+        Index(
+            "uq_managed_private_access_active_source",
+            "owner_user_id",
+            "source_context_type",
+            "source_context_id",
+            unique=True,
+            sqlite_where=text("state IN ('provisioning', 'active', 'deleting', 'cleanup_pending')"),
+            postgresql_where=text("state IN ('provisioning', 'active', 'deleting', 'cleanup_pending')"),
+        ),
+        UniqueConstraint("s3_connection_id", name="uq_managed_private_access_connection"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    source_context_type = Column(String, nullable=False)
+    source_context_id = Column(Integer, nullable=False)
+    remote_principal_type = Column(String, nullable=False)
+    remote_principal_identifier = Column(String, nullable=False)
+    iam_username = Column(String, nullable=True)
+    access_key_id = Column(String, nullable=True)
+    s3_connection_id = Column(
+        Integer,
+        ForeignKey("s3_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    state = Column(String, nullable=False, default="provisioning", server_default="provisioning")
+    cleanup_error = Column(Text, nullable=True)
+    iam_groups_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    iam_managed_policies_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    iam_inline_policy_names_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    created_remote_principal = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_access_key = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    owner = relationship("User")
+    connection = relationship("S3Connection", back_populates="managed_private_access")

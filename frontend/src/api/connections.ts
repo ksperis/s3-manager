@@ -15,6 +15,8 @@ export type S3Connection = {
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
+  server_managed?: boolean | null;
+  managed_access_state?: string | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   endpoint_url: string;

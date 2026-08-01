@@ -7,7 +7,17 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import AccountRole, S3Account, S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import (
+    AccountRole,
+    ManagedPrivateAccess,
+    S3Account,
+    S3Connection,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+    UserS3Account,
+)
 from app.main import app
 from app.routers import dependencies
 from app.services.tags_service import TagsService
@@ -205,6 +215,54 @@ def test_admin_connections_api_returns_404_for_non_shared_targets(contract_clien
     assert private_update.status_code == 404
     assert public_delete.status_code == 404
     assert private_users.status_code == 404
+
+
+def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_source(contract_client):
+    client, db_session, user = contract_client
+    source = S3Connection(
+        created_by_user_id=user.id,
+        name="managed-access-source",
+        is_shared=True,
+        is_active=True,
+        access_manager=True,
+        access_browser=False,
+        access_key_id="SOURCE-AK",
+        secret_access_key="SOURCE-SK",
+        custom_endpoint_config='{"endpoint_url":"https://source.example.test","verify_tls":true}',
+    )
+    db_session.add(source)
+    db_session.flush()
+    db_session.add(
+        ManagedPrivateAccess(
+            owner_user_id=user.id,
+            source_context_type="connection",
+            source_context_id=source.id,
+            remote_principal_type="iam_user",
+            remote_principal_identifier="s3m-private-source",
+            iam_username="s3m-private-source",
+            state="active",
+        )
+    )
+    db_session.commit()
+
+    endpoint_update = client.put(
+        f"/api/admin/s3-connections/{source.id}",
+        json={"endpoint_url": "https://replacement.example.test"},
+    )
+    status_update = client.put(
+        f"/api/admin/s3-connections/{source.id}",
+        json={"is_active": False},
+    )
+    credential_update = client.put(
+        f"/api/admin/s3-connections/{source.id}/credentials",
+        json={"access_key_id": "OTHER-AK", "secret_access_key": "OTHER-SK"},
+    )
+    deletion = client.delete(f"/api/admin/s3-connections/{source.id}")
+
+    assert endpoint_update.status_code == 409
+    assert status_update.status_code == 409
+    assert credential_update.status_code == 409
+    assert deletion.status_code == 409
 
 
 def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):

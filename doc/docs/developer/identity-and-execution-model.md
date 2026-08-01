@@ -104,6 +104,36 @@ These rules intentionally do not migrate former shared selector, selection, or
 Browser-position snapshots. Old values are ignored rather than kept through a
 compatibility layer.
 
+## Server-managed private access
+
+Manager exposes two specialized provisioning branches that never return the
+new secret to the frontend:
+
+- an authorized, IAM-capable RGW Account or S3 Connection creates a dedicated
+  deterministic IAM user, applies validated groups and policies, creates the
+  access key last, then stores it in an owned private S3 Connection;
+- an assigned RGW User with Ceph key-management permission creates a distinct
+  RGW key and immediately stores it in an owned private S3 Connection.
+
+The identity is independent of `AccountIAMUser` and every Portal identity. A
+shared connection is only an administration context; its credentials,
+associations, capabilities, and tags are never copied. Endpoint data is derived
+server-side from the selected Manager context.
+
+`managed_private_accesses` records the UI owner, immutable source context,
+remote principal, access key ID, private connection, applied IAM resources, and
+saga state. It deliberately contains no secret. A partial unique index permits
+only one `provisioning`, `active`, `deleting`, or `cleanup_pending` row per UI
+user and source context. Remote mutations are checkpointed, compensated in
+reverse order on failure, and retained as `cleanup_pending` when compensation
+cannot finish.
+
+Connections created through this flow have `server_managed = true`. Generic
+connection APIs may change only their name, tags, active state, and workspace
+flags. Endpoint, credentials, principal, provenance, rotation, and deletion are
+owned by the orchestrator. IAM/RGW key inventories expose the managed link and
+reject direct status or delete operations.
+
 ## Quick troubleshooting matrix
 
 | Symptom | Check first |

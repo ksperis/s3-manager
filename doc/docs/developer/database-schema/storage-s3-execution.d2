@@ -123,6 +123,7 @@ Legend: {
     "access_browser": "BOOLEAN [NN]"
     "remediation_required": "BOOLEAN [NN]"
     "remediation_reason": "VARCHAR"
+    "server_managed": "BOOLEAN [NN]"
     "credential_owner_type": "VARCHAR"
     "credential_owner_identifier": "VARCHAR"
     "storage_endpoint_id": "INTEGER [FK]"
@@ -139,6 +140,28 @@ Legend: {
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
     "last_used_at": "DATETIME"
+  }
+  "managed_private_accesses": {
+    class: table
+    tooltip: "PK: id\nUnique: uq_managed_private_access_connection(s3_connection_id)\nIndexes: ix_managed_private_accesses_id(id) [index]; ix_managed_private_accesses_owner_user_id(owner_user_id) [index]; ix_managed_private_accesses_s3_connection_id(s3_connection_id) [index]; uq_managed_private_access_active_source(owner_user_id, source_context_type, source_context_id) [partial unique]"
+    "id": "INTEGER [PK, NN]"
+    "owner_user_id": "INTEGER [FK, NN]"
+    "source_context_type": "VARCHAR [NN]"
+    "source_context_id": "INTEGER [NN]"
+    "remote_principal_type": "VARCHAR [NN]"
+    "remote_principal_identifier": "VARCHAR [NN]"
+    "iam_username": "VARCHAR"
+    "access_key_id": "VARCHAR"
+    "s3_connection_id": "INTEGER [FK, UQ]"
+    "state": "VARCHAR [NN]"
+    "cleanup_error": "TEXT"
+    "iam_groups_json": "TEXT [NN]"
+    "iam_managed_policies_json": "TEXT [NN]"
+    "iam_inline_policy_names_json": "TEXT [NN]"
+    "created_remote_principal": "BOOLEAN [NN]"
+    "created_access_key": "BOOLEAN [NN]"
+    "created_at": "DATETIME [NN]"
+    "updated_at": "DATETIME [NN]"
   }
   "user_s3_connections": {
     class: table
@@ -274,6 +297,8 @@ Legend: {
 "s3_accounts"."storage_endpoint_id" -> "storage_endpoints"."id"
 "s3_connections"."created_by_user_id" -> "users"
 "s3_connections"."storage_endpoint_id" -> "storage_endpoints"."id"
+"managed_private_accesses"."owner_user_id" -> "users"
+"managed_private_accesses"."s3_connection_id" -> "s3_connections"."id": "ondelete=SET NULL"
 "s3_users"."storage_endpoint_id" -> "storage_endpoints"."id"
 "account_iam_users"."account_id" -> "s3_accounts"."id"
 "account_iam_users"."user_id" -> "users"

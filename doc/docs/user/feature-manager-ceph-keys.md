@@ -36,10 +36,14 @@ This is different from:
    needed.
 4. Select **New key** only when the caller is ready to store the generated
    secret. The secret is shown once.
-5. Disable a key before deleting it when you need a reversible validation step.
-6. Delete unused keys only after confirming no external workflow still depends
+5. Select **Create my private access** to have S3-Manager create a distinct RGW
+   User key and private connection without transmitting the secret to the
+   browser. Choose the connection name and its Browser/Manager availability.
+6. Disable a key before deleting it when you need a reversible validation step.
+7. Delete unused keys only after confirming no external workflow still depends
    on them.
-7. Review the audit trail for create, status-change, or delete actions.
+8. Review the audit trail for create, status-change, provisioning, cleanup, or
+   delete actions.
 
 ## Expected result
 
@@ -68,6 +72,13 @@ and Ceph Admin Ops credentials.
 !!! note
     The UI-managed key marked `S3M` is locked. It cannot be disabled or deleted
     from this page.
+
+!!! note
+    A key marked **Private access** belongs to a server-managed private
+    connection. It cannot be disabled or deleted from this key inventory. Open
+    **Profile > Private S3 connections** and delete the linked connection so
+    the server can clean up the remote key and keep durable remediation state if
+    cleanup fails.
 
 !!! note
     This feature does not grant storage permission by itself. The resulting key

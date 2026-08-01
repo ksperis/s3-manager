@@ -30,6 +30,7 @@ import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
+import CreateManagedPrivateAccessModal from "./CreateManagedPrivateAccessModal";
 
 function parseError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -57,6 +58,7 @@ export default function ManagerCephKeysPage() {
     accountIdForApi,
     selectedS3AccountType,
     managerCephKeysEnabled,
+    managerPrivateAccessEnabled,
     accessMode,
   } = useS3AccountContext();
 
@@ -67,6 +69,7 @@ export default function ManagerCephKeysPage() {
   const [createdKey, setCreatedKey] = useState<ManagerCephGeneratedAccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [keyFilter, setKeyFilter] = useState("");
+  const [showPrivateAccessModal, setShowPrivateAccessModal] = useState(false);
 
   const isS3UserContext = selectedS3AccountType === "s3_user";
   const canManageCephKeys = Boolean(hasS3AccountContext && isS3UserContext && managerCephKeysEnabled);
@@ -169,6 +172,13 @@ export default function ManagerCephKeysPage() {
                 onClick: handleCreateKey,
                 variant: "primary",
               },
+              ...(managerPrivateAccessEnabled
+                ? [{
+                    label: "Create my private access",
+                    onClick: () => setShowPrivateAccessModal(true),
+                    variant: "secondary" as const,
+                  }]
+                : []),
             ]
           : []
       }
@@ -214,7 +224,7 @@ export default function ManagerCephKeysPage() {
       ) : (
         <ListPageSection
             title="Keys"
-            description="The portal key is locked and cannot be disabled or deleted from this page."
+            description="S3-Manager interface keys and managed private-access keys are locked; delete a managed key through its private connection."
             countLabel={`${filteredKeys.length} result(s)`}
             search={
               <input
@@ -243,7 +253,8 @@ export default function ManagerCephKeysPage() {
           >
             {filteredKeys.map((key) => {
               const active = isKeyActive(key);
-              const locked = Boolean(key.is_ui_managed);
+              const managedPrivate = Boolean(key.is_private_access_managed);
+              const locked = Boolean(key.is_ui_managed || managedPrivate);
               return (
                 <tr key={key.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
                   <td className={cx(managerTablePrimaryCellClass, "font-mono")}>
@@ -252,9 +263,9 @@ export default function ManagerCephKeysPage() {
                       {locked && (
                         <span
                           className="shrink-0 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-                          title="Portal key (locked)"
+                          title={managedPrivate ? "Managed private access key" : "Portal key (locked)"}
                         >
-                          S3M
+                          {managedPrivate ? "Private access" : "S3M"}
                         </span>
                       )}
                     </div>
@@ -270,7 +281,7 @@ export default function ManagerCephKeysPage() {
                         onClick={() => handleToggleKey(key)}
                         className={tableActionButtonClasses}
                         disabled={Boolean(busy) || locked}
-                        title={locked ? "Portal key is locked" : undefined}
+                        title={locked ? (managedPrivate ? "Update the linked private connection instead" : "Portal key is locked") : undefined}
                       >
                         {busy === `toggle:${key.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
                       </button>
@@ -279,7 +290,7 @@ export default function ManagerCephKeysPage() {
                         onClick={() => handleDeleteKey(key)}
                         className={tableDeleteActionClasses}
                         disabled={Boolean(busy) || locked}
-                        title={locked ? "Portal key is locked" : undefined}
+                        title={locked ? (managedPrivate ? "Delete the linked private connection instead" : "Portal key is locked") : undefined}
                       >
                         {busy === `delete:${key.access_key_id}` ? "Deleting..." : "Delete"}
                       </button>
@@ -290,6 +301,18 @@ export default function ManagerCephKeysPage() {
             })}
           </ManagerTable>
         </ListPageSection>
+      )}
+      {showPrivateAccessModal && (
+        <CreateManagedPrivateAccessModal
+          variant="rgw_user"
+          accountId={accountIdForApi}
+          onClose={() => setShowPrivateAccessModal(false)}
+          onCreated={(name) => {
+            setActionMessage(`Private connection ${name} created without exposing its secret.`);
+            setError(null);
+            void loadKeys();
+          }}
+        />
       )}
     </PageShell>
   );

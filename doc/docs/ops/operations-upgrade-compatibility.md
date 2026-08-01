@@ -1,5 +1,24 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 managed private access migration
+
+Migration `0070_managed_private_access` is DB-only. It adds
+`s3_connections.server_managed` with a false default and creates the durable
+`managed_private_accesses` saga table. Existing connections and remote RGW/IAM
+resources are not modified, adopted, or contacted during Alembic.
+
+Deploy backend and frontend together so Manager does not expose a provisioning
+action before the specialized endpoints and immutable-credential rules are
+available. After upgrade, smoke-test both **Create my private access** branches,
+Profile deletion, and **Retry cleanup**. A `cleanup_pending` row is operational
+state, not disposable bookkeeping: retain it until the idempotent remote
+cleanup succeeds.
+
+Downgrade removes only the new table and marker column. It cannot clean up
+remote identities or keys already created by the application; delete every
+server-managed private connection through the running orchestrator before
+downgrading.
+
 ## 2026-08 canonical access model migration
 
 Migration `0069_canonical_account_access_roles` is a breaking, DB-only

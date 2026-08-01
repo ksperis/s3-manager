@@ -14,7 +14,6 @@ import {
 } from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
-import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import ListPageSection from "../../components/list/ListPageSection";
 import OneTimeSecretPanel from "../../components/OneTimeSecretPanel";
 import PageBanner from "../../components/PageBanner";
@@ -27,11 +26,9 @@ import ManagerTable, {
 } from "../../components/list/ManagerTable";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import UiButton from "../../components/ui/UiButton";
 import { cx } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
-import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
@@ -39,7 +36,7 @@ function extractError(err: unknown): string {
 
 export default function ManagerUserKeysPage() {
   const { userName } = useParams<{ userName: string }>();
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   const [keys, setKeys] = useState<AccessKey[]>([]);
@@ -48,7 +45,6 @@ export default function ManagerUserKeysPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<AccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
 
   const formatDate = (value?: string) => {
     if (!value) return "-";
@@ -149,11 +145,6 @@ export default function ManagerUserKeysPage() {
     }
   }, [userName]);
 
-  const selectedContext = useMemo(() => accounts.find((ctx) => ctx.id === accountIdForApi), [accountIdForApi, accounts]);
-  const addConnectionDefaults = useMemo(() => {
-    if (!createdKey) return null;
-    return buildManagerConnectionDefaults(selectedContext, pageTitle, createdKey.access_key_id);
-  }, [createdKey, pageTitle, selectedContext]);
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -212,17 +203,6 @@ export default function ManagerUserKeysPage() {
           title={`Key created for ${pageTitle}`}
           description="The secret is shown only once."
           badge="Copy these values now"
-          actions={
-            <UiButton
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={() => setShowAddConnectionModal(true)}
-              disabled={!createdKey.secret_access_key}
-            >
-              Add as S3 Connection
-            </UiButton>
-          }
           values={[
             { label: "Access key", value: createdKey.access_key_id, copyLabel: "Copy" },
             { label: "Secret key", value: createdKey.secret_access_key, copyLabel: "Copy" },
@@ -252,9 +232,15 @@ export default function ManagerUserKeysPage() {
         >
           {keys.map((k) => {
             const active = isKeyActive(k);
+            const managed = Boolean(k.is_private_access_managed);
             return (
               <tr key={k.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
-                <td className={cx(managerTablePrimaryCellClass, "font-mono")}>{k.access_key_id}</td>
+                <td className={cx(managerTablePrimaryCellClass, "font-mono")}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>{k.access_key_id}</span>
+                    {managed && <span className="rounded border px-1.5 py-0.5 text-[10px] font-semibold">Private access</span>}
+                  </div>
+                </td>
                 <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
                   {k.status ?? (active ? "Active" : "Inactive")}
                 </td>
@@ -265,7 +251,8 @@ export default function ManagerUserKeysPage() {
                       type="button"
                       onClick={() => handleToggleKey(k.access_key_id, !active)}
                       className={tableActionButtonClasses}
-                      disabled={Boolean(busy)}
+                      disabled={Boolean(busy) || managed}
+                      title={managed ? "Update the linked private connection instead" : undefined}
                     >
                       {busy === `toggle:${k.access_key_id}` ? "Saving..." : active ? "Disable" : "Enable"}
                     </button>
@@ -273,7 +260,8 @@ export default function ManagerUserKeysPage() {
                       type="button"
                       onClick={() => handleDeleteKey(k.access_key_id)}
                       className={tableDeleteActionClasses}
-                      disabled={Boolean(busy)}
+                      disabled={Boolean(busy) || managed}
+                      title={managed ? "Delete the linked private connection instead" : undefined}
                     >
                       {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
                     </button>
@@ -285,26 +273,6 @@ export default function ManagerUserKeysPage() {
         </ManagerTable>
       </ListPageSection>
 
-      {showAddConnectionModal && createdKey && createdKey.secret_access_key && addConnectionDefaults && (
-        <AddS3ConnectionFromKeyModal
-          isOpen={showAddConnectionModal}
-          lockEndpoint
-          accessKeyId={createdKey.access_key_id}
-          secretAccessKey={createdKey.secret_access_key}
-          defaultName={addConnectionDefaults.name}
-          defaultEndpointId={addConnectionDefaults.endpointId}
-          defaultEndpointUrl={addConnectionDefaults.endpointUrl}
-          defaultAccessManager={false}
-          defaultAccessBrowser
-          defaultOwnerType={addConnectionDefaults.owner.ownerType}
-          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
-          onClose={() => setShowAddConnectionModal(false)}
-          onCreated={() => {
-            setActionMessage("S3 connection created.");
-            setError(null);
-          }}
-        />
-      )}
     </PageShell>
   );
 }

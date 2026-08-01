@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.db.s3_connection import S3Connection as DBS3Connection, UserS3Connection
+from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
 from app.services.mappers.s3_connection import mask_access_key_id, s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
@@ -92,6 +92,10 @@ class S3ConnectionsService:
     def update_credentials(self, user_id: int, connection_id: int, *, access_key_id: str, secret_access_key: str) -> S3Connection:
         """Rotate credentials without mixing with metadata updates."""
         row = self.get_owned(user_id, connection_id)
+        if row.server_managed:
+            raise ValueError("Server-managed connection credentials must be rotated by the provisioning service")
+        if self.is_active_managed_source(row.id):
+            raise ValueError("Connection credentials are locked while managed private accesses depend on this source")
         row.access_key_id = access_key_id
         row.secret_access_key = secret_access_key
         self._refresh_detected_capabilities(row)
@@ -224,6 +228,36 @@ class S3ConnectionsService:
     def update(self, user_id: int, connection_id: int, payload: S3ConnectionUpdate) -> S3Connection:
         row = self.get_owned(user_id, connection_id)
         payload_data = payload.model_dump(exclude_unset=True)
+        if row.server_managed:
+            immutable_fields = {
+                "provider_hint",
+                "storage_endpoint_id",
+                "credential_owner_type",
+                "credential_owner_identifier",
+                "endpoint_url",
+                "region",
+                "access_key_id",
+                "secret_access_key",
+                "force_path_style",
+                "verify_tls",
+            }
+            attempted = sorted(immutable_fields.intersection(payload_data))
+            if attempted:
+                raise ValueError(
+                    "Server-managed connection provenance, endpoint, and credentials are immutable"
+                )
+        source_immutable_fields = {
+            "provider_hint",
+            "storage_endpoint_id",
+            "endpoint_url",
+            "region",
+            "access_key_id",
+            "secret_access_key",
+            "force_path_style",
+            "verify_tls",
+        }
+        if self.is_active_managed_source(row.id) and source_immutable_fields.intersection(payload_data):
+            raise ValueError("Connection endpoint and credentials are locked while managed private accesses depend on it")
         should_probe_iam = False
         if payload.name is not None:
             row.name = payload.name
@@ -234,7 +268,16 @@ class S3ConnectionsService:
             if payload.storage_endpoint_id is not None:
                 row.custom_endpoint_config = None
             should_probe_iam = True
-        if row.storage_endpoint_id is None:
+        endpoint_fields = {
+            "endpoint_url",
+            "region",
+            "force_path_style",
+            "verify_tls",
+            "provider_hint",
+            "storage_endpoint_id",
+        }
+        should_rebuild_custom_endpoint = not row.server_managed or bool(endpoint_fields.intersection(payload_data))
+        if row.storage_endpoint_id is None and should_rebuild_custom_endpoint:
             current = parse_custom_endpoint_config(row.custom_endpoint_config)
             endpoint_url = current.get("endpoint_url")
             region = current.get("region")
@@ -290,6 +333,10 @@ class S3ConnectionsService:
 
     def delete(self, user_id: int, connection_id: int) -> None:
         row = self.get_owned(user_id, connection_id)
+        if row.server_managed:
+            raise ValueError("Server-managed connections must be deleted by the provisioning service")
+        if self.is_active_managed_source(row.id):
+            raise ValueError("Delete managed private accesses created from this source connection first")
         self.db.delete(row)
         self.db.flush()
         self.tags.cleanup_orphan_definitions()
@@ -331,6 +378,21 @@ class S3ConnectionsService:
             row,
             capabilities=self._capabilities(row),
             tags=self.tags.get_connection_tags(row),
+        )
+
+    def serialize(self, row: DBS3Connection) -> S3Connection:
+        return self._to_model(row)
+
+    def is_active_managed_source(self, connection_id: int) -> bool:
+        return (
+            self.db.query(ManagedPrivateAccess.id)
+            .filter(
+                ManagedPrivateAccess.source_context_type == "connection",
+                ManagedPrivateAccess.source_context_id == connection_id,
+                ManagedPrivateAccess.state.in_(("provisioning", "active", "deleting", "cleanup_pending")),
+            )
+            .first()
+            is not None
         )
 
     def _mask_access_key_id(self, value: str) -> str:

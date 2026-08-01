@@ -15,6 +15,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
+from app.services.managed_private_access_service import ManagedPrivateAccessService
 from app.routers.http_errors import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/ceph/keys", tags=["manager-ceph-keys"])
@@ -47,9 +48,22 @@ def list_ceph_access_keys(
     account: S3Account = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     _: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
 ) -> list[S3UserAccessKey]:
     try:
-        return service.list_keys(_resolve_s3_user_id(account))
+        source_id = _resolve_s3_user_id(account)
+        keys = service.list_keys(source_id)
+        managed = {
+            row.access_key_id: row
+            for row in ManagedPrivateAccessService(db).managed_resources_for_source("s3_user", source_id)
+            if row.access_key_id
+        }
+        for key in keys:
+            provisioning = managed.get(key.access_key_id)
+            if provisioning is not None:
+                key.is_private_access_managed = True
+                key.managed_connection_id = provisioning.s3_connection_id
+        return keys
     except ValueError as exc:
         raise _translate_s3_user_error(exc) from exc
 
@@ -86,8 +100,14 @@ def update_ceph_access_key_status(
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> S3UserAccessKey:
     s3_user_id = _resolve_s3_user_id(account)
+    if ManagedPrivateAccessService(db).managed_key("s3_user", s3_user_id, access_key) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This key belongs to a managed private access; update or delete its private connection instead",
+        )
     try:
         updated = service.set_key_status(s3_user_id, access_key, payload.active)
         audit_service.record_action(
@@ -116,8 +136,14 @@ def delete_ceph_access_key(
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_logger),
+    db: Session = Depends(get_db),
 ) -> Response:
     s3_user_id = _resolve_s3_user_id(account)
+    if ManagedPrivateAccessService(db).managed_key("s3_user", s3_user_id, access_key) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This key belongs to a managed private access; delete its private connection instead",
+        )
     try:
         service.delete_key(s3_user_id, access_key)
         audit_service.record_action(
