@@ -329,7 +329,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.refreshWorkspaceData.mockClear();
   });
 
-  it("embeds the main Browser in locked portal-basic mode for the space", () => {
+  it("embeds the main Browser with an explicit locked Portal profile", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
@@ -357,7 +357,15 @@ describe("PortalStorageSpaceDetailPage", () => {
       accountIdForApi: "101",
       hasContext: true,
       workspaceSurface: "portal",
-      actionProfile: "portal-basic",
+      functionalProfile: "portal",
+      layoutMode: "standard",
+      density: "compact",
+      capabilityFacts: {
+        canWriteObjects: true,
+        canDeleteObjects: true,
+        canRestoreObjects: true,
+        canCreatePublicLinks: false,
+      },
       lockedBucketName: "research-data-internal",
       lockedBucketLabel: "Research Data",
       quotaMaxSizeGb: 10,
@@ -370,7 +378,6 @@ describe("PortalStorageSpaceDetailPage", () => {
       complete: expect.any(Function),
       fail: expect.any(Function),
     });
-    expect(embedProps.hiddenActionIds).toBeUndefined();
   });
 
   it("maps the legacy trash URL to the mixed Browser view and restores a deleted file", async () => {
@@ -523,19 +530,19 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
   });
 
-  it("hides write Browser actions for read-only Viewer spaces", () => {
+  it("passes resolved read-only capabilities for Viewer spaces", () => {
     mocks.hookResult.workspace.spaces[0].role = "Viewer";
     mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
 
     renderPage();
 
     const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
-    expect(embedProps.hiddenActionIds).toEqual([
-      "uploadFiles",
-      "uploadFolder",
-      "newFolder",
-      "delete",
-    ]);
+    expect(embedProps.capabilityFacts).toEqual({
+      canWriteObjects: false,
+      canDeleteObjects: false,
+      canRestoreObjects: false,
+      canCreatePublicLinks: false,
+    });
     expect(embedProps.onCreatePublicLinkForObject).toBeUndefined();
   });
 

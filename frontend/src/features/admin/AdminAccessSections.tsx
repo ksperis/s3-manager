@@ -92,8 +92,8 @@ export function BrowserAccessSection({
     <div className={adminModalSettingsGroupClass}>
       <PortalSettingsSection title="Browser" description={description} layout="stack">
         <PortalSettingsItem
-          title="Advanced Browser features"
-          description="When disabled, the Browser keeps the same compact feature set as the Manager browser."
+          title="Advanced Browser actions and Workbench"
+          description="Allows technical S3 actions and access to the optional Workbench layout. When disabled, /browser uses the simpler Standard profile."
           className={adminSettingsItemSurfaceClass(false)}
           action={
             <PortalSettingsToggleAction

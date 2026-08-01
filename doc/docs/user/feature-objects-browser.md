@@ -21,35 +21,48 @@ Select the execution context before choosing a bucket. The same bucket name may 
    - Non-active buckets stay collapsed; inaccessible buckets are dimmed until selected.
 3. Use actions as needed:
    - Use the context menu for the full action set on the current path, object, or selection.
-   - On `/browser`, use the action bar in this order: `Open`, `Preview`, `New folder`, `Copy`, `Paste`, `Upload`, `Download`, `Delete`, then `Refresh` and `More`.
-   - Use the toolbar `More` menu when right-click is not available or when the action bar is compact.
+   - Activate the icon and name to open the primary destination. A folder
+     navigates, a previewable file up to 50 MiB opens on `Preview`, another file
+     opens `Properties`, and a deleted object opens `Versions` or Portal
+     `History`. A double-click on the same control still executes only once.
+   - Select from the rest of a row or mobile card. The desktop selection bar is
+     automatic; the mobile bottom bar exposes the essential actions without
+     horizontal scrolling. Use `More` for every secondary action.
    - Use `More > Columns` to choose which object columns are visible. The default column set stays unchanged until you customize it.
    - Drag a column separator in the objects table header to resize `Name` and visible object columns. Double-click a separator to restore that column default width.
-   - Use the inspector to access the same context and selection actions on the main `/browser` page. The `Details` tab stays lightweight and can open the full file object sheet directly.
+   - Use the inspector for context and selection information. It may open the
+     full file details but does not duplicate the action toolbars.
    - Upload files
    - Download objects
    - Preview supported files
    - Delete objects or delete markers
    - Manage versions, restores, metadata, tags, ACL, retention, signed URLs, and archive restore workflows from the unified `Object details` modal for files
 4. Use bulk actions when handling many objects.
-5. You can copy or cut items, switch to another Browser execution context, and paste into the target bucket or prefix.
+5. You can copy or cut items and paste into the target bucket or prefix.
    - Same-context paste keeps the existing storage-side copy path.
-   - Cross-context paste is frontend-driven and transfers items one by one.
+   - Cross-context paste is available only in the Advanced profile. It is
+     frontend-driven and transfers items one by one.
    - Cross-context move deletes the source only after the destination copy is verified.
 
 ## Action access
 
 - Path actions include upload, folder creation, paste, versions, restore, cleanup, and copy path.
-- The main `/browser` action bar exposes the most common current-path and single-selection shortcuts directly, while `More` keeps secondary and compact-layout actions available.
+- The desktop selection bar exposes primary selection shortcuts only while a
+  selection exists. Mobile uses a safe-area bottom bar and bottom sheet.
 - Selection actions include download, open, copy URL, copy, cut, bulk attributes, advanced actions, restore, and delete when the current selection allows them.
 - File entry points such as `Preview`, `Versions`, and advanced object actions converge into the same `Object details` modal, each opening the most relevant tab first.
 - Long-running bulk actions surface in **Operations overview**, where queued, active, completed, and failed work stays visible without leaving Browser.
-- The toolbar `More` menu remains available in `/manager/browser` and `/ceph-admin/browser`, where the inspector is not shown.
+- `More` remains available in embedded Manager, Ceph Admin, and Portal Browser
+  surfaces, where profile and resolved capability facts decide the visible set.
 - Object columns available from `More > Columns` include base listing columns such as `Size`, `Modified`, `Storage class`, and `ETag`, plus lazy detail columns such as `Content-Type`, `Tags`, `Metadata`, `Cache-Control`, `Expires`, and `Restore status`.
 - Custom column widths are stored locally in the current browser and stay separate between the main `/browser` page and embedded browser surfaces.
 - `Reset columns` restores both the default visible columns and the default widths.
 - Only base listing columns are sortable. Lazy detail columns are display-only and load on demand for visible rows.
 - Actions can be disabled for the current state. For example, `Copy URL` is disabled when SSE-C is active, and deleted items must be restored from versions before direct download or delete operations.
+- Standard includes normal file operations and read-only properties. Advanced
+  adds technical S3 tools, editable properties, bulk and cross-context
+  operations, multipart supervision, and bucket configuration. Portal exposes
+  only end-user actions authorized by the Portal-provided capabilities.
 
 ## Expected result
 

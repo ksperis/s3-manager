@@ -17,6 +17,7 @@ export const CLIENT_STORAGE_KEYS = {
   selectorTagsPreference: "showSelectorTags",
   portalTransfers: "portal:v3:transfers",
   browserRootUiState: "browser:root-ui-state:v1",
+  browserRootUiStateV2: "browser:root-ui-state:v2",
   browserRootContextSelections: "browser:root-context-selections:v2",
   browserPathHistory: "browser:path-history:v1",
   browserEmbeddedObjectColumns: "browser:embedded-object-columns:v1",

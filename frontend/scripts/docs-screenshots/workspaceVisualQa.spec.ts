@@ -9,10 +9,7 @@ const ROUTE_CASES: Array<{
   workspace: string;
   route?: string;
   waitFor?: string;
-  selectedExecutionContextId?: string;
   expectNormalBrowserUsageHidden?: boolean;
-  expectPortalBrowser?: boolean;
-  runScenarioWaitActions?: boolean;
 }> = [
   { scenarioId: "workspace-admin", workspace: "admin", route: "/admin" },
   {
@@ -30,12 +27,8 @@ const ROUTE_CASES: Array<{
   },
   {
     scenarioId: "workspace-browser",
-    workspace: "browser-portal",
-    route: "/browser?bucket=rgw-portal-genomics-2026",
-    waitFor: "main button:has-text('genomics-2026')",
-    selectedExecutionContextId: "101",
-    expectPortalBrowser: true,
-    runScenarioWaitActions: false,
+    workspace: "browser-workspace",
+    expectNormalBrowserUsageHidden: true,
   },
   { scenarioId: "workspace-ceph-admin", workspace: "ceph-admin", route: "/ceph-admin", waitFor: "h1:has-text('Ceph Admin')" },
   { scenarioId: "gallery-storage-ops-dashboard", workspace: "storage-ops", route: "/storage-ops" },
@@ -44,6 +37,7 @@ const ROUTE_CASES: Array<{
 
 const VIEWPORTS = [
   { name: "desktop", width: 1728, height: 972 },
+  { name: "tablet", width: 1024, height: 768 },
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 
@@ -170,7 +164,7 @@ async function expectShellVisibleAndSeparated(page: Page, viewportName: string) 
   expect(geometry.main?.top ?? 0).toBeGreaterThanOrEqual(geometry.topbar?.bottom ?? 0);
 
   const sidebarWidth = geometry.sidebar?.width ?? 0;
-  if (viewportName === "desktop") {
+  if (viewportName !== "mobile") {
     if (sidebarWidth > 0) {
       expect(sidebarWidth).toBeGreaterThan(48);
       expect(geometry.main?.left ?? 0).toBeGreaterThanOrEqual(geometry.sidebar?.right ?? 0);
@@ -250,7 +244,7 @@ async function expectBrowserNormalUsageHidden(page: Page) {
 }
 
 async function expectBrowserSidebarShell(page: Page, viewportName: string) {
-  if (viewportName === "desktop") {
+  if (viewportName !== "mobile") {
     const sidebar = page.locator("aside[data-sidebar-variant='desktop']");
     const profileLink = sidebar.getByRole("link", { name: "Profile" });
     const collapseButton = sidebar.getByRole("button", { name: "Collapse sidebar" });
@@ -295,29 +289,6 @@ async function expectBrowserSidebarShell(page: Page, viewportName: string) {
   await expect(sidebar.getByText("S3 Manager", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sidebar).toHaveClass(/-translate-x-full/);
-}
-
-async function expectPortalBrowserSidebar(page: Page, viewportName: string) {
-  let openedMobileDrawer = false;
-  const sidebar =
-    viewportName === "desktop"
-      ? page.locator("aside[data-sidebar-variant='desktop']")
-      : page.locator("aside[data-sidebar-variant='mobile']");
-  if (viewportName !== "desktop") {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-    openedMobileDrawer = true;
-  }
-  await expect(sidebar.getByText("Storage Spaces", { exact: true }).first()).toBeVisible();
-  await expect(sidebar.getByText("genomics-2026", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("rgw-portal-genomics-2026", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("rgw-portal-photos", { exact: false })).toHaveCount(0);
-  await expect(page.getByText("rgw-portal-datasets", { exact: false })).toHaveCount(0);
-  await expect(sidebar.getByText("Open in Portal", { exact: true }).first()).toBeVisible();
-  await expect(sidebar.getByText(/8\.3\s*TB/).first()).toBeVisible();
-  if (openedMobileDrawer) {
-    await page.keyboard.press("Escape");
-    await expect(sidebar).toHaveClass(/-translate-x-full/);
-  }
 }
 
 async function expectManagerKpiQuotaMeters(page: Page) {
@@ -397,10 +368,8 @@ test.describe("Workspace visual QA", () => {
             routeCase.waitFor ?? scenario.waitFor,
             theme,
             `${routeCase.workspace}-${theme}-${viewport.name}`,
-            routeCase.selectedExecutionContextId
-              ? { selectedExecutionContextId: routeCase.selectedExecutionContextId }
-              : {},
-            routeCase.runScenarioWaitActions ?? true
+            {},
+            true
           );
 
           await expectShellVisibleAndSeparated(page, viewport.name);
@@ -416,11 +385,8 @@ test.describe("Workspace visual QA", () => {
           if (routeCase.expectNormalBrowserUsageHidden) {
             await expectBrowserNormalUsageHidden(page);
           }
-          if (routeCase.workspace === "browser" || routeCase.workspace === "browser-portal") {
+          if (routeCase.workspace.startsWith("browser")) {
             await expectBrowserSidebarShell(page, viewport.name);
-          }
-          if (routeCase.expectPortalBrowser) {
-            await expectPortalBrowserSidebar(page, viewport.name);
           }
 
           mockRegistry.assertNoUnmatched();

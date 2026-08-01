@@ -148,11 +148,16 @@ describe("BrowserPage multipart uploads modal", () => {
     const user = userEvent.setup();
     renderPage();
 
-    const bucketTab = await screen.findByRole("tab", { name: "Bucket" });
-    await user.click(bucketTab);
-
-    const openButton = await screen.findByRole("button", { name: "Multipart uploads" });
-    await user.click(openButton);
+    const contextToolbar = await screen.findByRole("toolbar", {
+      name: "Browser context bar",
+    });
+    await user.click(
+      within(contextToolbar).getByRole("button", { name: "More" }),
+    );
+    const menu = await screen.findByRole("menu");
+    await user.click(
+      within(menu).getByRole("menuitem", { name: "Multipart uploads" }),
+    );
 
     expect(await screen.findByRole("dialog", { name: "Multipart uploads · bucket-1" })).toBeInTheDocument();
 
@@ -178,7 +183,7 @@ describe("BrowserPage multipart uploads modal", () => {
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
   });
 
-  it("opens the row actions menu from More actions and routes file Details to the inspector", async () => {
+  it("opens the row More menu without restoring an inspector action toolbar", async () => {
     const user = userEvent.setup();
 
     listBrowserObjectsMock.mockResolvedValue({
@@ -200,7 +205,12 @@ describe("BrowserPage multipart uploads modal", () => {
 
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
-    const moreButton = await screen.findByRole("button", { name: "More actions" });
+    const fileName = await screen.findByText(/monthly\.csv/);
+    const row = fileName.closest("[data-browser-item]");
+    expect(row).not.toBeNull();
+    const moreButton = within(row as HTMLElement).getByRole("button", {
+      name: /More actions/,
+    });
     await user.click(moreButton);
     const menu = await screen.findByRole("menu");
 
@@ -208,24 +218,20 @@ describe("BrowserPage multipart uploads modal", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
 
-    expect(within(menu).getByRole("button", { name: "Details" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Preview" })).toBeInTheDocument();
     expect(within(menu).getByRole("button", { name: "Properties" })).toBeInTheDocument();
-    expect(menuButtons.slice(0, 3)).toEqual([
-      "Details",
-      "Preview",
-      "Properties",
-    ]);
+    expect(menuButtons.slice(0, 2)).toEqual(["Preview", "Properties"]);
+    expect(menuButtons).not.toContain("Details");
     expect(menuButtons).not.toContain("Advanced");
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
 
-    await user.click(within(menu).getByRole("button", { name: "Details" }));
+    await user.click(within(menu).getByRole("button", { name: "Properties" }));
 
-    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    expect(screen.queryByText(/Object details · .*monthly\.csv/i)).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", {
+        name: /Object details · .*monthly\.csv/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
   });
 });

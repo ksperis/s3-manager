@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  applyBrowserActionProfile,
-  hideBrowserActions,
+  FULL_BROWSER_CAPABILITY_FACTS,
+  isBrowserItemPreviewAvailable,
   resolveBrowserActions,
+  resolveItemPrimaryAction,
+  runBrowserAction,
 } from "./browserActions";
 import type { BrowserItem } from "./browserTypes";
 
@@ -30,179 +32,177 @@ const folderItem: BrowserItem = {
   owner: "owner",
 };
 
+const baseInput = {
+  bucketName: "bucket-1",
+  hasS3AccountContext: true,
+  versioningEnabled: true,
+  canPaste: true,
+};
+
 describe("resolveBrowserActions", () => {
-  it("enables path actions consistently when bucket context is available", () => {
-    const actions = resolveBrowserActions({
+  it("keeps technical actions out of Standard while retaining essential object actions", () => {
+    const path = resolveBrowserActions({
+      ...baseInput,
       scope: "path",
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: true,
-      canPaste: true,
+      functionalProfile: "standard",
       clipboardMode: "move",
       currentPath: "bucket-1/docs",
-      showFolderItems: true,
-      showDeletedObjects: false,
+    });
+    const item = resolveBrowserActions({
+      ...baseInput,
+      scope: "item",
+      items: [fileItem],
+      functionalProfile: "standard",
+      previewAvailable: true,
     });
 
-    expect(actions.uploadFiles.enabled).toBe(true);
-    expect(actions.uploadFolder.enabled).toBe(true);
-    expect(actions.newFolder.enabled).toBe(true);
-    expect(actions.paste.label).toBe("Paste (Move)");
-    expect(actions.paste.enabled).toBe(true);
-    expect(actions.restoreToDate.visible).toBe(true);
-    expect(actions.cleanOldVersions.visible).toBe(true);
-    expect(actions.copyPath.enabled).toBe(true);
-    expect(actions.toggleShowFolders.label).toBe("Hide folders");
-    expect(actions.toggleShowDeleted.label).toBe("Show deleted");
+    expect(path.uploadFiles.visible).toBe(true);
+    expect(path.refresh.visible).toBe(true);
+    expect(path.paste.label).toBe("Paste (Move)");
+    expect(path.versions.visible).toBe(false);
+    expect(path.cleanOldVersions.visible).toBe(false);
+    expect(path.multipartUploads.visible).toBe(false);
+    expect(path.configureBucket.visible).toBe(false);
+    expect(item.preview.visible).toBe(true);
+    expect(item.properties.visible).toBe(true);
+    expect(item.copyUrl.visible).toBe(false);
+    expect(item.bulkAttributes.visible).toBe(false);
   });
 
-  it("disables copy URL in SSE-C mode for single file selection without hiding the action", () => {
+  it("exposes Advanced actions and keeps a temporarily blocked action visible with its reason", () => {
     const actions = resolveBrowserActions({
+      ...baseInput,
       scope: "selection",
       items: [fileItem],
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: false,
-      canPaste: false,
+      functionalProfile: "advanced",
       copyUrlDisabled: true,
       copyUrlDisabledReason: "Copy URL is disabled in SSE-C mode.",
     });
 
-    expect(actions.download.visible).toBe(true);
-    expect(actions.download.enabled).toBe(true);
     expect(actions.copyUrl.visible).toBe(true);
+    expect(actions.details).toMatchObject({ visible: true, enabled: true });
     expect(actions.copyUrl.enabled).toBe(false);
     expect(actions.copyUrl.disabledReason).toBe("Copy URL is disabled in SSE-C mode.");
     expect(actions.advanced.visible).toBe(true);
-    expect(actions.advanced.enabled).toBe(true);
+
+    const path = resolveBrowserActions({
+      ...baseInput,
+      scope: "path",
+      functionalProfile: "advanced",
+      multipartUploadsAvailable: true,
+      bucketConfigurationAvailable: true,
+    });
+    expect(path.multipartUploads).toMatchObject({ visible: true, enabled: true });
+    expect(path.configureBucket).toMatchObject({ visible: true, enabled: true });
   });
 
-  it("keeps destructive and clipboard actions visible but disabled when selection contains deleted items", () => {
-    const deletedFile: BrowserItem = { ...fileItem, id: "file-deleted", isDeleted: true };
-    const actions = resolveBrowserActions({
-      scope: "selection",
-      items: [fileItem, deletedFile],
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: true,
-      canPaste: false,
+  it("uses Portal capability facts without reconstructing permissions from roles", () => {
+    const viewerFacts = {
+      canWriteObjects: false,
+      canDeleteObjects: false,
+      canRestoreObjects: false,
+      canCreatePublicLinks: false,
+    };
+    const viewerPath = resolveBrowserActions({
+      ...baseInput,
+      scope: "path",
+      functionalProfile: "portal",
+      capabilityFacts: viewerFacts,
+      currentPath: "bucket-1",
+    });
+    const managerItem = resolveBrowserActions({
+      ...baseInput,
+      scope: "item",
+      items: [fileItem],
+      functionalProfile: "portal",
+      capabilityFacts: { ...FULL_BROWSER_CAPABILITY_FACTS, canCreatePublicLinks: true },
+      publicLinkAvailable: true,
+      previewAvailable: true,
     });
 
-    expect(actions.download.visible).toBe(false);
-    expect(actions.copy.visible).toBe(true);
-    expect(actions.copy.enabled).toBe(false);
-    expect(actions.cut.visible).toBe(true);
-    expect(actions.cut.enabled).toBe(false);
-    expect(actions.bulkAttributes.visible).toBe(true);
-    expect(actions.bulkAttributes.enabled).toBe(false);
-    expect(actions.delete.visible).toBe(true);
-    expect(actions.delete.enabled).toBe(false);
-    expect(actions.restoreToDate.visible).toBe(true);
-    expect(actions.restoreToDate.enabled).toBe(true);
+    expect(viewerPath.uploadFiles.visible).toBe(false);
+    expect(viewerPath.newFolder.visible).toBe(false);
+    expect(viewerPath.copyPath.visible).toBe(true);
+    expect(viewerPath.refresh.visible).toBe(true);
+    expect(viewerPath.multipartUploads.visible).toBe(false);
+    expect(viewerPath.configureBucket.visible).toBe(false);
+    expect(managerItem.createPublicLink.visible).toBe(true);
+    expect(managerItem.copyUrl.visible).toBe(false);
+    expect(managerItem.advanced.visible).toBe(false);
   });
 
-  it("keeps item-level disabled states for deleted objects while preserving versions access", () => {
-    const deletedFile: BrowserItem = { ...fileItem, isDeleted: true };
+  it("keeps refresh visible with a resolved temporary reason", () => {
     const actions = resolveBrowserActions({
+      ...baseInput,
+      scope: "path",
+      functionalProfile: "standard",
+      refreshPending: true,
+    });
+
+    expect(actions.refresh).toMatchObject({
+      visible: true,
+      enabled: false,
+      disabledReason: "Objects are already loading.",
+    });
+  });
+
+  it("keeps deleted objects outside ordinary actions but exposes authorized Portal restore", () => {
+    const deletedFile = { ...fileItem, id: "deleted", isDeleted: true };
+    const actions = resolveBrowserActions({
+      ...baseInput,
       scope: "item",
       items: [deletedFile],
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: true,
-      canPaste: false,
+      functionalProfile: "portal",
+      capabilityFacts: FULL_BROWSER_CAPABILITY_FACTS,
+      restoreAvailable: true,
       inspectorAvailable: true,
     });
 
-    expect(actions.details.visible).toBe(true);
-    expect(actions.details.enabled).toBe(true);
-    expect(actions.preview.visible).toBe(true);
-    expect(actions.preview.enabled).toBe(false);
-    expect(actions.properties.visible).toBe(true);
-    expect(actions.properties.enabled).toBe(true);
-    expect(actions.download.visible).toBe(true);
+    expect(actions.preview.visible).toBe(false);
     expect(actions.download.enabled).toBe(false);
-    expect(actions.versions.visible).toBe(true);
-    expect(actions.versions.enabled).toBe(true);
-    expect(actions.copy.enabled).toBe(false);
-    expect(actions.delete.enabled).toBe(false);
+    expect(actions.restore.visible).toBe(true);
+    expect(actions.restore.enabled).toBe(true);
+    expect(actions.copy.visible).toBe(false);
   });
 
-  it("hides file Details when the inspector panel is disabled but keeps preview and properties", () => {
+  it("keeps unknown S3 permissions available for backend enforcement", () => {
     const actions = resolveBrowserActions({
+      ...baseInput,
       scope: "item",
       items: [fileItem],
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: false,
-      canPaste: false,
-      inspectorAvailable: false,
+      functionalProfile: "standard",
+      capabilityFacts: FULL_BROWSER_CAPABILITY_FACTS,
+      previewAvailable: true,
     });
+    expect(actions.delete.visible).toBe(true);
+    expect(actions.delete.enabled).toBe(true);
+  });
+});
 
-    expect(actions.details.visible).toBe(false);
-    expect(actions.preview.visible).toBe(true);
-    expect(actions.preview.enabled).toBe(true);
-    expect(actions.properties.visible).toBe(true);
-    expect(actions.properties.enabled).toBe(true);
+describe("primary item activation", () => {
+  it("opens folders, previewable files, generic files, and deleted history deterministically", () => {
+    expect(resolveItemPrimaryAction(folderItem, { versioningEnabled: true })).toEqual({ kind: "open-folder" });
+    expect(resolveItemPrimaryAction(fileItem, { versioningEnabled: true })).toEqual({ kind: "open-file", initialTab: "preview" });
+    expect(resolveItemPrimaryAction({ ...fileItem, name: "archive.bin" }, { versioningEnabled: true })).toEqual({ kind: "open-file", initialTab: "properties" });
+    expect(resolveItemPrimaryAction({ ...fileItem, isDeleted: true }, { versioningEnabled: true })).toEqual({ kind: "open-versions" });
   });
 
-  it("keeps open available for a single folder selection", () => {
-    const actions = resolveBrowserActions({
-      scope: "selection",
-      items: [folderItem],
-      bucketName: "bucket-1",
-      hasS3AccountContext: true,
-      versioningEnabled: false,
-      canPaste: false,
-    });
-
-    expect(actions.download.visible).toBe(true);
-    expect(actions.download.label).toBe("Download folder");
-    expect(actions.open.visible).toBe(true);
-    expect(actions.open.enabled).toBe(true);
-    expect(actions.copyUrl.visible).toBe(false);
-    expect(actions.advanced.visible).toBe(false);
+  it("enforces the common 50 MiB preview ceiling", () => {
+    expect(isBrowserItemPreviewAvailable(fileItem)).toBe(true);
+    expect(isBrowserItemPreviewAvailable({ ...fileItem, sizeBytes: 50 * 1024 * 1024 })).toBe(true);
+    expect(isBrowserItemPreviewAvailable({ ...fileItem, sizeBytes: 50 * 1024 * 1024 + 1 })).toBe(false);
   });
+});
 
-  it("can hide portal-basic write actions for read-only embedded contexts", () => {
-    const pathActions = hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "path",
-          bucketName: "bucket-1",
-          hasS3AccountContext: true,
-          versioningEnabled: false,
-          canPaste: false,
-          currentPath: "bucket-1",
-          showFolderItems: true,
-          showDeletedObjects: false,
-        }),
-        "portal-basic",
-      ),
-      ["uploadFiles", "uploadFolder", "newFolder", "delete"],
-    );
-    const itemActions = hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "item",
-          items: [fileItem],
-          bucketName: "bucket-1",
-          hasS3AccountContext: true,
-          versioningEnabled: false,
-          canPaste: false,
-          inspectorAvailable: true,
-        }),
-        "portal-basic",
-        [fileItem],
-      ),
-      ["uploadFiles", "uploadFolder", "newFolder", "delete"],
-    );
+describe("runBrowserAction", () => {
+  it("executes one resolved handler and reports disabled reasons", () => {
+    const handler = vi.fn();
+    const enabled = resolveBrowserActions({ ...baseInput, scope: "selection", items: [folderItem] }).open;
+    expect(runBrowserAction(enabled, { open: handler })).toEqual({ executed: true });
+    expect(handler).toHaveBeenCalledTimes(1);
 
-    expect(pathActions.uploadFiles.visible).toBe(false);
-    expect(pathActions.uploadFolder.visible).toBe(false);
-    expect(pathActions.newFolder.visible).toBe(false);
-    expect(pathActions.copyPath.visible).toBe(true);
-    expect(itemActions.details.visible).toBe(true);
-    expect(itemActions.download.visible).toBe(true);
-    expect(itemActions.delete.visible).toBe(false);
+    const blocked = { ...enabled, enabled: false, disabledReason: "Operation in progress." };
+    expect(runBrowserAction(blocked, { open: handler })).toEqual({ executed: false, reason: "Operation in progress." });
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });

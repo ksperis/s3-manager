@@ -127,16 +127,18 @@ import BrowserWorkspaceSidebar from "./BrowserWorkspaceSidebar";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import {
-  applyBrowserActionProfile,
-  hideBrowserActions,
+  FULL_BROWSER_CAPABILITY_FACTS,
   type BrowserActionId,
-  type BrowserActionProfile,
+  type BrowserCapabilityFacts,
+  type BrowserDensity,
+  type BrowserFunctionalProfile,
+  type BrowserLayoutMode,
   type BrowserActionState,
   getVisibleBrowserActions,
-  INSPECTOR_CONTEXT_ACTION_IDS,
-  INSPECTOR_SELECTION_ACTION_IDS,
-  INSPECTOR_SELECTION_BULK_ACTION_IDS,
   resolveBrowserActions,
+  runBrowserAction,
+  resolveItemPrimaryAction,
+  isBrowserItemPreviewAvailable,
   TOOLBAR_MORE_PATH_ACTION_IDS,
   TOOLBAR_MORE_SELECTION_FULL_ACTION_IDS,
   TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS,
@@ -162,7 +164,10 @@ import {
   readBrowserRootObjectColumns,
   readBrowserRootObjectColumnWidths,
   readBrowserRootContextSelection,
+  readBrowserRootUiState,
   readStoredBrowserRootUiState,
+  writeBrowserRootActiveLayout,
+  writeBrowserRootDensity,
   writeBrowserRootContextSelection,
   writeBrowserRootObjectColumns,
   writeBrowserRootObjectColumnWidths,
@@ -213,6 +218,7 @@ import {
   TrashIcon,
   UpIcon,
   UploadIcon,
+  XIcon,
 } from "./browserIcons";
 import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
@@ -246,7 +252,6 @@ import {
   contextMenuSeparatorClasses,
   filterChipClasses,
   iconButtonClasses,
-  iconButtonDangerClasses,
   storageClassChipClasses,
   storageClassOptions,
   toolbarButtonClasses,
@@ -325,17 +330,21 @@ import type {
   ObjectDetailsTabId,
   OperationCompletionStatus,
   OperationItem,
-  SelectionStats,
   TreeNode,
   UploadCandidate,
   UploadQueueItem,
 } from "./browserTypes";
 
+const MOBILE_OBJECT_LIST_MEDIA_QUERY = "(max-width: 767px)";
+
 type BrowserPageProps = {
   accountIdForApi?: S3AccountSelector;
   hasContext?: boolean;
   workspaceSurface?: BrowserWorkspaceSurface;
-  actionProfile?: BrowserActionProfile;
+  functionalProfile?: BrowserFunctionalProfile;
+  layoutMode?: BrowserLayoutMode;
+  density?: BrowserDensity;
+  capabilityFacts?: BrowserCapabilityFacts;
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
@@ -347,7 +356,6 @@ type BrowserPageProps = {
   showPanelToggles?: boolean;
   defaultShowFolders?: boolean;
   defaultShowInspector?: boolean;
-  hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
   onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
@@ -360,6 +368,8 @@ export type BrowserObjectDetailsRouteTarget = {
   bucketName: string;
   key: string;
   name: string;
+  initialTab?: "preview" | "properties" | "versions";
+  isDeleted?: boolean;
 };
 
 export type BrowserDeletedObjectTarget = BrowserObjectDetailsRouteTarget & {
@@ -729,9 +739,12 @@ const resolveColumnWidthPx = (
   widths: BrowserObjectColumnWidths,
 ) => widths[columnId] ?? RESIZABLE_COLUMN_DEFINITIONS_BY_ID[columnId].defaultWidthPx;
 
-const loadVisibleColumnsForSurface = (isMainBrowserPath: boolean): BrowserColumnId[] => {
+const loadVisibleColumnsForSurface = (
+  isMainBrowserPath: boolean,
+  layoutMode: BrowserLayoutMode,
+): BrowserColumnId[] => {
   const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumns()
+    ? readBrowserRootObjectColumns(layoutMode)
     : readBrowserEmbeddedObjectColumns();
   if (!stored.length) {
     return DEFAULT_VISIBLE_COLUMN_IDS;
@@ -746,9 +759,10 @@ const loadVisibleColumnsForSurface = (isMainBrowserPath: boolean): BrowserColumn
 const persistVisibleColumnsForSurface = (
   isMainBrowserPath: boolean,
   columns: BrowserColumnId[],
+  layoutMode: BrowserLayoutMode,
 ) => {
   if (isMainBrowserPath) {
-    writeBrowserRootObjectColumns(columns);
+    writeBrowserRootObjectColumns(columns, layoutMode);
     return;
   }
   writeBrowserEmbeddedObjectColumns(columns);
@@ -756,9 +770,10 @@ const persistVisibleColumnsForSurface = (
 
 const loadColumnWidthsForSurface = (
   isMainBrowserPath: boolean,
+  layoutMode: BrowserLayoutMode,
 ): BrowserObjectColumnWidths => {
   const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumnWidths()
+    ? readBrowserRootObjectColumnWidths(layoutMode)
     : readBrowserEmbeddedObjectColumnWidths();
   return normalizeColumnWidths(stored);
 };
@@ -766,10 +781,11 @@ const loadColumnWidthsForSurface = (
 const persistColumnWidthsForSurface = (
   isMainBrowserPath: boolean,
   widths: BrowserObjectColumnWidths,
+  layoutMode: BrowserLayoutMode,
 ) => {
   const normalized = normalizeColumnWidths(widths);
   if (isMainBrowserPath) {
-    writeBrowserRootObjectColumnWidths(normalized);
+    writeBrowserRootObjectColumnWidths(normalized, layoutMode);
     return;
   }
   writeBrowserEmbeddedObjectColumnWidths(normalized);
@@ -905,8 +921,6 @@ const inspectorSectionTitleClasses =
   "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const inspectorEmptyStateClasses =
   "rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-4 ui-caption text-[var(--ui-text-muted)]";
-const inspectorInlineActionClasses =
-  "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
 const getMultipartUploadEntryId = (
   upload: Pick<MultipartUploadItem, "key" | "upload_id">,
 ) => `${upload.key}::${upload.upload_id}`;
@@ -914,7 +928,10 @@ export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   hasContext: hasContextOverride,
   workspaceSurface: workspaceSurfaceOverride,
-  actionProfile: actionProfileOverride,
+  functionalProfile: functionalProfileOverride,
+  layoutMode: layoutModeOverride,
+  density: densityOverride,
+  capabilityFacts: capabilityFactsOverride,
   lockedBucketName,
   lockedBucketLabel,
   storageEndpointCapabilities,
@@ -926,7 +943,6 @@ export default function BrowserPage({
   showPanelToggles = true,
   defaultShowFolders = false,
   defaultShowInspector = false,
-  hiddenActionIds = [],
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
@@ -943,12 +959,9 @@ export default function BrowserPage({
   const workspaceSurface =
     workspaceSurfaceOverride ??
     (selectedContext?.kind === "portal_account" ? "portal" : "browser");
-  const actionProfile =
-    actionProfileOverride ?? (workspaceSurface === "portal" ? "portal-basic" : "full");
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
   const isPortalBrowserSurface = workspaceSurface === "portal";
-  const isPortalBasicProfile = actionProfile === "portal-basic";
   const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
   const canCreateRoutedPublicLink = Boolean(onCreatePublicLinkForObject);
   const resolvedLockedBucketName = lockedBucketName?.trim() ?? "";
@@ -973,9 +986,6 @@ export default function BrowserPage({
   const workspaceObjectNoun = usePortalWorkspaceLabels ? "file" : "object";
   const workspaceObjectNounPlural = `${workspaceObjectNoun}s`;
   const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
-  const initialStoredRootUiState = useMemo(() => readStoredBrowserRootUiState(), []);
-  const initialStoredRootUiLayout = initialStoredRootUiState?.layout ?? null;
-  const initialRootUiLayout = isMainBrowserPath ? initialStoredRootUiLayout : null;
   const browserRootContextId =
     accountIdForApi == null ? null : String(accountIdForApi);
   const bucketAccessContextKey =
@@ -990,6 +1000,34 @@ export default function BrowserPage({
     : true;
   const rootBrowserAdvancedFeaturesEnabled =
     !isMainBrowserPath || userBrowserAdvancedFeaturesEnabled;
+  const initialStoredRootUiState = useMemo(
+    () => (isMainBrowserPath ? readStoredBrowserRootUiState() : null),
+    [isMainBrowserPath],
+  );
+  const resolvedFunctionalProfile: BrowserFunctionalProfile =
+    functionalProfileOverride ??
+    (isPortalBrowserSurface
+      ? "portal"
+      : rootBrowserAdvancedFeaturesEnabled
+        ? "advanced"
+        : "standard");
+  const initialLayoutMode: BrowserLayoutMode =
+    layoutModeOverride ??
+    (isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled
+      ? (initialStoredRootUiState?.activeLayout ?? "standard")
+      : "standard");
+  const initialRootUiLayout = isMainBrowserPath
+    ? initialStoredRootUiState?.layouts[initialLayoutMode] ?? null
+    : null;
+  const resolvedCapabilityFacts = useMemo<BrowserCapabilityFacts>(
+    () =>
+      capabilityFactsOverride ?? {
+        ...FULL_BROWSER_CAPABILITY_FACTS,
+        canCreatePublicLinks: Boolean(onCreatePublicLinkForObject),
+      },
+    [capabilityFactsOverride, onCreatePublicLinkForObject],
+  );
+  const isPortalProfile = resolvedFunctionalProfile === "portal";
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -1045,17 +1083,16 @@ export default function BrowserPage({
       ? (initialRootUiLayout?.showInspector ?? defaultShowInspector)
       : defaultShowInspector,
   );
-  const [showActionBar, setShowActionBar] = useState(() =>
-    isMainBrowserPath ? (initialRootUiLayout?.showActionBar ?? false) : false,
-  );
+  const [activeLayoutMode, setActiveLayoutMode] =
+    useState<BrowserLayoutMode>(initialLayoutMode);
   const [foldersPanelWidthPx, setFoldersPanelWidthPx] = useState(
     () =>
-      initialStoredRootUiLayout?.foldersPanelWidthPx ??
+      initialRootUiLayout?.foldersPanelWidthPx ??
       DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   );
   const [inspectorPanelWidthPx, setInspectorPanelWidthPx] = useState(
     () =>
-      initialStoredRootUiLayout?.inspectorPanelWidthPx ??
+      initialRootUiLayout?.inspectorPanelWidthPx ??
       DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
   );
   const [layoutContainerWidthPx, setLayoutContainerWidthPx] = useState(0);
@@ -1063,7 +1100,7 @@ export default function BrowserPage({
     "folders" | "inspector" | null
   >(null);
   const [columnWidths, setColumnWidths] = useState<BrowserObjectColumnWidths>(
-    () => loadColumnWidthsForSurface(isMainBrowserPath),
+    () => loadColumnWidthsForSurface(isMainBrowserPath, initialLayoutMode),
   );
   const [activeColumnResize, setActiveColumnResize] = useState<{
     columnId: BrowserResizableColumnId;
@@ -1074,12 +1111,24 @@ export default function BrowserPage({
     if (typeof window === "undefined") return false;
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
   });
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY).matches;
+  });
   const [inspectorTab, setInspectorTab] = useState<
     "context" | "bucket" | "selection" | "details"
   >("context");
-  const [compactMode, setCompactMode] = useState(() =>
-    normalizedPath.endsWith("/browser") || isPortalBrowserSurface,
+  const [density, setDensity] = useState<BrowserDensity>(() =>
+    densityOverride ??
+    (isMainBrowserPath
+      ? resolvedFunctionalProfile === "advanced"
+        ? (initialStoredRootUiState?.density ?? "comfortable")
+        : "comfortable"
+      : "compact"),
   );
+  const compactMode = density === "compact";
+  const setCompactMode = (value: boolean) =>
+    setDensity(value ? "compact" : "comfortable");
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>(
     [],
   );
@@ -1182,10 +1231,11 @@ export default function BrowserPage({
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
   const [showToolbarMoreMenu, setShowToolbarMoreMenu] = useState(false);
+  const [showMobileActionsSheet, setShowMobileActionsSheet] = useState(false);
   const [showToolbarColumnsMenu, setShowToolbarColumnsMenu] = useState(false);
   const [showUploadQuickMenu, setShowUploadQuickMenu] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(
-    () => loadVisibleColumnsForSurface(isMainBrowserPath),
+    () => loadVisibleColumnsForSurface(isMainBrowserPath, initialLayoutMode),
   );
   const [lazyColumnCache, setLazyColumnCache] = useState<
     Record<string, LazyColumnCacheEntry>
@@ -1318,13 +1368,6 @@ export default function BrowserPage({
   const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
   const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
-  const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(
-    null,
-  );
-  const [selectionStatsLoading, setSelectionStatsLoading] = useState(false);
-  const [selectionStatsError, setSelectionStatsError] = useState<string | null>(
-    null,
-  );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
@@ -1405,6 +1448,8 @@ export default function BrowserPage({
   const uploadQuickButtonRef = useRef<HTMLButtonElement | null>(null);
   const uploadQuickMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarMoreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileActionsSheetRef = useRef<HTMLDivElement | null>(null);
   const toolbarMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const toolbarColumnsButtonRef = useRef<HTMLButtonElement | null>(null);
   const toolbarColumnsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1475,7 +1520,6 @@ export default function BrowserPage({
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const contextCountIdRef = useRef(0);
   const bucketInspectorRequestIdRef = useRef(0);
-  const selectionStatsRequestIdRef = useRef(0);
   const browserPathRef = useRef("");
   const browserHistoryStateRef = useRef<{
     bucketName: string;
@@ -1535,26 +1579,16 @@ export default function BrowserPage({
     usageSummary
   );
   const isCephContext = effectiveContextEndpointProvider === "ceph";
-  const showActionBarToggle =
+  const showLayoutModeToggle =
     showPanelToggles && isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled;
   const bucketManagementEnabled =
     normalizedPath.endsWith("/browser") &&
     !isEmbeddedBrowserPath &&
-    !isPortalBasicProfile &&
-    rootBrowserAdvancedFeaturesEnabled;
-  const bucketConfigurationEnabled = bucketManagementEnabled;
+    resolvedFunctionalProfile === "advanced";
+  const bucketConfigurationEnabled =
+    resolvedFunctionalProfile === "advanced";
   const bucketConfigContextScope = "browser";
 
-  useEffect(() => {
-    if (
-      normalizedPath === "/browser" ||
-      normalizedPath.endsWith("/manager/browser") ||
-      normalizedPath.endsWith("/ceph-admin/browser") ||
-      isPortalBrowserSurface
-    ) {
-      setCompactMode(true);
-    }
-  }, [isPortalBrowserSurface, normalizedPath]);
   const contextId =
     typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isCephAdminContext = Boolean(
@@ -1567,8 +1601,9 @@ export default function BrowserPage({
     contextId && contextId.startsWith("conn-"),
   );
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
-  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext && !isPortalBasicProfile;
-  const sseFeatureEnabled = Boolean(effectiveCaps?.sse) && !isPortalBasicProfile;
+  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext && !isPortalProfile;
+  const sseFeatureEnabled =
+    Boolean(effectiveCaps?.sse) && resolvedFunctionalProfile === "advanced";
   const bucketInspectorUsageEnabled = effectiveCaps
     ? effectiveCaps.metrics !== false
     : true;
@@ -1616,6 +1651,9 @@ export default function BrowserPage({
   const canPaste = Boolean(
     clipboard && bucketName && hasS3AccountContext,
   );
+  const canPasteInFunctionalProfile =
+    canPaste &&
+    (resolvedFunctionalProfile === "advanced" || clipboardMatchesContext);
   const {
     canUseFoldersPanel,
     canUseInspectorPanel,
@@ -1624,12 +1662,12 @@ export default function BrowserPage({
   } = resolveBrowserPanelVisibility({
     allowFoldersPanel:
       allowFoldersPanel &&
-      rootBrowserAdvancedFeaturesEnabled &&
-      (!isPortalBasicProfile || isMainBrowserPath),
+      activeLayoutMode === "workbench" &&
+      resolvedFunctionalProfile === "advanced",
     allowInspectorPanel:
       allowInspectorPanel &&
-      rootBrowserAdvancedFeaturesEnabled &&
-      !isPortalBasicProfile,
+      activeLayoutMode === "workbench" &&
+      resolvedFunctionalProfile === "advanced",
     isNarrowViewport,
     showFolders,
     showInspector,
@@ -1655,13 +1693,35 @@ export default function BrowserPage({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(MOBILE_OBJECT_LIST_MEDIA_QUERY);
+    const syncViewportWidth = () => setIsMobileViewport(mediaQuery.matches);
+    syncViewportWidth();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncViewportWidth);
+      return () => mediaQuery.removeEventListener("change", syncViewportWidth);
+    }
+    mediaQuery.addListener(syncViewportWidth);
+    return () => mediaQuery.removeListener(syncViewportWidth);
+  }, []);
+
+  useEffect(() => {
     if (!isMainBrowserPath) return;
     writeBrowserRootUiLayout({
       showFolders,
       showInspector,
-      showActionBar,
-    });
-  }, [isMainBrowserPath, showActionBar, showFolders, showInspector]);
+    }, activeLayoutMode);
+  }, [activeLayoutMode, isMainBrowserPath, showFolders, showInspector]);
+
+  useEffect(() => {
+    if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
+    writeBrowserRootActiveLayout(activeLayoutMode);
+  }, [activeLayoutMode, isMainBrowserPath, resolvedFunctionalProfile]);
+
+  useEffect(() => {
+    if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
+    writeBrowserRootDensity(density);
+  }, [density, isMainBrowserPath, resolvedFunctionalProfile]);
 
   useEffect(() => {
     foldersPanelWidthRef.current = foldersPanelWidthPx;
@@ -1703,11 +1763,12 @@ export default function BrowserPage({
 
   useEffect(() => {
     if (activePanelResize) return;
+    if (!isMainBrowserPath) return;
     writeBrowserRootUiPanelWidths({
       foldersPanelWidthPx,
       inspectorPanelWidthPx,
     });
-  }, [activePanelResize, foldersPanelWidthPx, inspectorPanelWidthPx]);
+  }, [activePanelResize, foldersPanelWidthPx, inspectorPanelWidthPx, isMainBrowserPath]);
 
   useEffect(() => {
     if (!activePanelResize) return;
@@ -1757,21 +1818,21 @@ export default function BrowserPage({
   }, [activePanelResize]);
 
   useEffect(() => {
-    setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath));
-  }, [isMainBrowserPath]);
+    setVisibleColumns(loadVisibleColumnsForSurface(isMainBrowserPath, activeLayoutMode));
+  }, [activeLayoutMode, isMainBrowserPath]);
 
   useEffect(() => {
-    persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns);
-  }, [isMainBrowserPath, visibleColumns]);
+    persistVisibleColumnsForSurface(isMainBrowserPath, visibleColumns, activeLayoutMode);
+  }, [activeLayoutMode, isMainBrowserPath, visibleColumns]);
 
   useEffect(() => {
-    setColumnWidths(loadColumnWidthsForSurface(isMainBrowserPath));
-  }, [isMainBrowserPath]);
+    setColumnWidths(loadColumnWidthsForSurface(isMainBrowserPath, activeLayoutMode));
+  }, [activeLayoutMode, isMainBrowserPath]);
 
   useEffect(() => {
     if (activeColumnResize) return;
-    persistColumnWidthsForSurface(isMainBrowserPath, columnWidths);
-  }, [activeColumnResize, columnWidths, isMainBrowserPath]);
+    persistColumnWidthsForSurface(isMainBrowserPath, columnWidths, activeLayoutMode);
+  }, [activeColumnResize, activeLayoutMode, columnWidths, isMainBrowserPath]);
 
   useEffect(() => {
     if (!activeColumnResize) return;
@@ -1812,6 +1873,21 @@ export default function BrowserPage({
     if (!canUseInspectorPanel) return;
     setShowInspector((prev) => !prev);
   }, [canUseInspectorPanel]);
+
+  const changeLayoutMode = useCallback(
+    (nextMode: BrowserLayoutMode) => {
+      if (!isMainBrowserPath || resolvedFunctionalProfile !== "advanced") return;
+      const nextLayout = readBrowserRootUiState().layouts[nextMode];
+      setShowFolders(nextLayout.showFolders);
+      setShowInspector(nextLayout.showInspector);
+      setFoldersPanelWidthPx(nextLayout.foldersPanelWidthPx);
+      setInspectorPanelWidthPx(nextLayout.inspectorPanelWidthPx);
+      setVisibleColumns(loadVisibleColumnsForSurface(true, nextMode));
+      setColumnWidths(loadColumnWidthsForSurface(true, nextMode));
+      setActiveLayoutMode(nextMode);
+    },
+    [isMainBrowserPath, resolvedFunctionalProfile],
+  );
 
   const updateBucketAccessEntry = useCallback(
     (targetBucketName: string, nextEntry: BucketAccessEntry) => {
@@ -2343,7 +2419,7 @@ export default function BrowserPage({
     warningMessage,
   ]);
   const hasCorsAction = Boolean(
-    !isPortalBasicProfile && corsStatus && !corsStatus.enabled && uiOrigin,
+    !isPortalProfile && corsStatus && !corsStatus.enabled && uiOrigin,
   );
   const stsExpirationLabel = useMemo(() => {
     if (!stsCredentials?.expiration) return "";
@@ -2716,6 +2792,49 @@ export default function BrowserPage({
   }, [showToolbarMoreMenu]);
 
   useEffect(() => {
+    if (!showMobileActionsSheet) return;
+    const sheet = mobileActionsSheetRef.current;
+    const focusable = () =>
+      Array.from(
+        sheet?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    focusable()[0]?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setShowMobileActionsSheet(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const nodes = focusable();
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    const triggerButton = mobileMoreButtonRef.current;
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      triggerButton?.focus();
+    };
+  }, [showMobileActionsSheet]);
+
+  useEffect(() => {
+    if (!isMobileViewport || selectedIds.length === 0) {
+      setShowMobileActionsSheet(false);
+    }
+  }, [isMobileViewport, selectedIds.length]);
+
+  useEffect(() => {
     if (!showUploadQuickMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -2735,11 +2854,6 @@ export default function BrowserPage({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showUploadQuickMenu]);
-
-  useEffect(() => {
-    setShowToolbarMoreMenu(false);
-    setShowUploadQuickMenu(false);
-  }, [showActionBar]);
 
   useEffect(() => {
     if (!hasCorsAction) {
@@ -3212,7 +3326,7 @@ export default function BrowserPage({
         ? queryValue
         : queryValue.toLowerCase();
       const requestedVersionPrefix =
-        isPortalBasicProfile && queryValue
+        isPortalProfile && queryValue
           ? `${targetPrefix}${queryValue.replace(/^\/+/, "")}`
           : targetPrefix;
 
@@ -3339,7 +3453,7 @@ export default function BrowserPage({
       browserRequestOptions,
       bucketName,
       hasS3AccountContext,
-      isPortalBasicProfile,
+      isPortalProfile,
       isVersioningEnabled,
       showDeletedObjects,
       storageFilter,
@@ -3874,7 +3988,7 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    if (isPortalBasicProfile) {
+    if (isPortalProfile) {
       setShowSearchOptionsMenu(false);
       if (searchScope !== "prefix") {
         setSearchScope("prefix");
@@ -3911,7 +4025,7 @@ export default function BrowserPage({
     }
   }, [
     filter,
-    isPortalBasicProfile,
+    isPortalProfile,
     searchCaseSensitive,
     searchExactMatch,
     searchRecursive,
@@ -4434,7 +4548,7 @@ export default function BrowserPage({
     () => new Map(listItems.map((item) => [item.id, item])),
     [listItems],
   );
-  const effectiveVisibleColumns = isPortalBasicProfile
+  const effectiveVisibleColumns = isPortalProfile
     ? DEFAULT_VISIBLE_COLUMN_IDS
     : visibleColumns;
   const visibleColumnSet = useMemo(
@@ -4490,7 +4604,7 @@ export default function BrowserPage({
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
   const hasAdvancedSearchOptionsActive =
-    !isPortalBasicProfile &&
+      !isPortalProfile &&
     (searchScope !== "prefix" ||
       searchRecursive ||
       searchExactMatch ||
@@ -4499,7 +4613,7 @@ export default function BrowserPage({
       storageFilter !== "all");
   const hasActiveSearchFilters =
     hasSearchQuery ||
-    (!isPortalBasicProfile &&
+      (!isPortalProfile &&
       (searchScope === "bucket" ||
         searchRecursive ||
         searchExactMatch ||
@@ -4508,7 +4622,7 @@ export default function BrowserPage({
         storageFilter !== "all"));
   const canResetSearchFilters =
     hasSearchQuery ||
-    (!isPortalBasicProfile &&
+      (!isPortalProfile &&
       (searchScope !== "prefix" ||
         searchRecursive ||
         searchExactMatch ||
@@ -4954,13 +5068,6 @@ export default function BrowserPage({
   }, [activeItem, items]);
 
   useEffect(() => {
-    selectionStatsRequestIdRef.current += 1;
-    setSelectionStats(null);
-    setSelectionStatsError(null);
-    setSelectionStatsLoading(false);
-  }, [bucketName, inspectedItem?.id, prefix, selectedIds]);
-
-  useEffect(() => {
     inspectedItemRef.current = inspectedItem;
   }, [inspectedItem]);
 
@@ -5013,9 +5120,6 @@ export default function BrowserPage({
   const selectionFolders = selectionInfo.folders;
   const selectionIsSingle = selectionInfo.isSingle;
   const selectionPrimary = selectionInfo.primary;
-  const canSelectionDownloadFiles = selectionInfo.canDownloadFiles;
-  const canSelectionDownloadFolder = selectionInfo.canDownloadFolder;
-  const canSelectionOpen = selectionInfo.canOpen;
   const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
@@ -5062,9 +5166,6 @@ export default function BrowserPage({
   const rowActionButtonClasses = compactMode
     ? `${iconButtonClasses} !h-6 !w-6`
     : iconButtonClasses;
-  const rowActionDangerButtonClasses = compactMode
-    ? `${iconButtonDangerClasses} !h-6 !w-6`
-    : iconButtonDangerClasses;
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
     [prefixDeleteMarkers, prefixVersions],
@@ -5083,109 +5184,67 @@ export default function BrowserPage({
   const copyUrlDisabledReason = "Copy URL is disabled in SSE-C mode.";
   const pathActionStates = useMemo(
     () =>
-      hideBrowserActions(
-        applyBrowserActionProfile(
-          resolveBrowserActions({
-            scope: "path",
-            bucketName,
-            hasS3AccountContext,
-            versioningEnabled: isVersioningEnabled,
-            canPaste,
-            clipboardMode: clipboard?.mode ?? null,
-            currentPath,
-            showFolderItems,
-            showDeletedObjects,
-          }),
-          actionProfile,
-        ),
-        hiddenActionIds,
-      ),
+      resolveBrowserActions({
+        scope: "path",
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste: canPasteInFunctionalProfile,
+        clipboardMode: clipboard?.mode ?? null,
+        currentPath,
+        showFolderItems,
+        showDeletedObjects,
+        restoreAvailable: Boolean(deletedObjectsOptions?.onRestorePrefix),
+        refreshPending: objectsLoading,
+        functionalProfile: resolvedFunctionalProfile,
+        capabilityFacts: resolvedCapabilityFacts,
+        multipartUploadsAvailable: resolvedFunctionalProfile === "advanced",
+        bucketConfigurationAvailable: bucketConfigurationEnabled,
+      }),
     [
-      actionProfile,
       bucketName,
-      canPaste,
+      canPasteInFunctionalProfile,
       clipboard?.mode,
       currentPath,
       hasS3AccountContext,
-      hiddenActionIds,
       isVersioningEnabled,
+      deletedObjectsOptions?.onRestorePrefix,
+      objectsLoading,
+      resolvedCapabilityFacts,
+      resolvedFunctionalProfile,
+      bucketConfigurationEnabled,
       showDeletedObjects,
       showFolderItems,
     ],
   );
   const selectionActionStates = useMemo(
     () =>
-      hideBrowserActions(
-        applyBrowserActionProfile(
-          resolveBrowserActions({
-            scope: "selection",
-            items: selectionItems,
-            bucketName,
-            hasS3AccountContext,
-            versioningEnabled: isVersioningEnabled,
-            canPaste,
-            clipboardMode: clipboard?.mode ?? null,
-            copyUrlDisabled: sseActive,
-            copyUrlDisabledReason,
-          }),
-          actionProfile,
-          selectionItems,
-        ),
-        hiddenActionIds,
-      ),
+      resolveBrowserActions({
+        scope: "selection",
+        items: selectionItems,
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste: canPasteInFunctionalProfile,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled: sseActive,
+        copyUrlDisabledReason,
+        functionalProfile: resolvedFunctionalProfile,
+        capabilityFacts: resolvedCapabilityFacts,
+      }),
     [
-      actionProfile,
       bucketName,
-      canPaste,
+      canPasteInFunctionalProfile,
       clipboard?.mode,
       copyUrlDisabledReason,
       hasS3AccountContext,
-      hiddenActionIds,
       isVersioningEnabled,
+      resolvedCapabilityFacts,
+      resolvedFunctionalProfile,
       selectionItems,
       sseActive,
     ],
   );
-  const toolbarPreviewActionState = useMemo(() => {
-    if (!selectionIsSingle || !selectionPrimary) {
-      return null;
-    }
-    return hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "item",
-          items: [selectionPrimary],
-          bucketName,
-          hasS3AccountContext,
-          versioningEnabled: isVersioningEnabled,
-          canPaste,
-          clipboardMode: clipboard?.mode ?? null,
-          copyUrlDisabled: sseActive,
-          copyUrlDisabledReason,
-          publicLinkAvailable: canCreateRoutedPublicLink,
-          inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
-        }),
-        actionProfile,
-        [selectionPrimary],
-      ),
-      hiddenActionIds,
-    ).preview;
-  }, [
-    actionProfile,
-    bucketName,
-    canPaste,
-    canOpenRoutedObjectDetails,
-    canUseInspectorPanel,
-    clipboard?.mode,
-    copyUrlDisabledReason,
-    canCreateRoutedPublicLink,
-    hasS3AccountContext,
-    hiddenActionIds,
-    isVersioningEnabled,
-    selectionIsSingle,
-    selectionPrimary,
-    sseActive,
-  ]);
   const toolbarMorePathActions = useMemo(
     () =>
       getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
@@ -5207,27 +5266,6 @@ export default function BrowserPage({
       ),
     [selectionActionStates],
   );
-  const inspectorContextActions = useMemo(
-    () =>
-      getVisibleBrowserActions(pathActionStates, INSPECTOR_CONTEXT_ACTION_IDS),
-    [pathActionStates],
-  );
-  const inspectorSelectionActions = useMemo(
-    () =>
-      getVisibleBrowserActions(
-        selectionActionStates,
-        INSPECTOR_SELECTION_ACTION_IDS,
-      ),
-    [selectionActionStates],
-  );
-  const inspectorSelectionBulkActions = useMemo(
-    () =>
-      getVisibleBrowserActions(
-        selectionActionStates,
-        INSPECTOR_SELECTION_BULK_ACTION_IDS,
-      ),
-    [selectionActionStates],
-  );
   const inspectedPath = inspectedItem
     ? `${bucketName}/${inspectedItem.key}`
     : currentPath;
@@ -5237,11 +5275,21 @@ export default function BrowserPage({
     requestedTab: ObjectDetailsTabId,
   ) => {
     if (item.type !== "file") return;
-    if (onOpenObjectDetailsRoute && !item.isDeleted) {
+    if (onOpenObjectDetailsRoute) {
+      const routedInitialTab =
+        item.isDeleted
+          ? "versions"
+          : requestedTab === "preview" ||
+              requestedTab === "properties" ||
+              requestedTab === "versions"
+            ? requestedTab
+            : "properties";
       onOpenObjectDetailsRoute({
         bucketName,
         key: item.key,
         name: item.name || item.key,
+        initialTab: routedInitialTab,
+        isDeleted: Boolean(item.isDeleted),
       });
       return;
     }
@@ -5262,43 +5310,17 @@ export default function BrowserPage({
   };
 
   const openItemPrimaryAction = (item: BrowserItem) => {
-    if (item.type === "folder") {
+    const primaryAction = resolveItemPrimaryAction(item, {
+      versioningEnabled: isVersioningEnabled,
+      previewAvailable: isBrowserItemPreviewAvailable(item),
+    });
+    if (primaryAction.kind === "open-folder") {
       handleOpenItem(item);
-      return;
+    } else if (primaryAction.kind === "open-versions") {
+      openObjectDetails(item, "versions");
+    } else if (primaryAction.kind === "open-file") {
+      openObjectDetails(item, primaryAction.initialTab);
     }
-    if (item.isDeleted) {
-      if (deletedObjectsOptions) {
-        if (
-          deletedObjectsOptions.canRestore &&
-          deletedObjectsOptions.onRestoreObject
-        ) {
-          deletedObjectsOptions.onRestoreObject({
-            bucketName,
-            key: item.key,
-            name: item.name || item.key,
-            deletedAt:
-              item.modifiedAt != null
-                ? new Date(item.modifiedAt).toISOString()
-                : null,
-            deleteMarkerVersionId: item.deleteMarkerVersionId,
-          });
-        }
-        return;
-      }
-      if (isVersioningEnabled) {
-        openObjectDetails(item, "versions");
-      }
-      return;
-    }
-    if (onOpenObjectDetailsRoute) {
-      onOpenObjectDetailsRoute({
-        bucketName,
-        key: item.key,
-        name: item.name || item.key,
-      });
-      return;
-    }
-    openObjectDetails(item, "preview");
   };
 
   const createPublicLinkForItem = (item: BrowserItem) => {
@@ -5307,6 +5329,18 @@ export default function BrowserPage({
       bucketName,
       key: item.key,
       name: item.name || item.key,
+    });
+  };
+
+  const restoreDeletedItem = (item: BrowserItem) => {
+    if (!item.isDeleted || !deletedObjectsOptions?.onRestoreObject) return;
+    deletedObjectsOptions.onRestoreObject({
+      bucketName,
+      key: item.key,
+      name: item.name || item.key,
+      deletedAt:
+        item.modifiedAt != null ? new Date(item.modifiedAt).toISOString() : null,
+      deleteMarkerVersionId: item.deleteMarkerVersionId,
     });
   };
 
@@ -5357,11 +5391,13 @@ export default function BrowserPage({
   }, []);
 
   const openItemDetails = (item: BrowserItem) => {
-    if (onOpenObjectDetailsRoute && item.type === "file" && !item.isDeleted) {
+    if (onOpenObjectDetailsRoute && item.type === "file") {
       onOpenObjectDetailsRoute({
         bucketName,
         key: item.key,
         name: item.name || item.key,
+        initialTab: item.isDeleted ? "versions" : "properties",
+        isDeleted: Boolean(item.isDeleted),
       });
       return;
     }
@@ -6080,11 +6116,8 @@ export default function BrowserPage({
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => {
-    if (item.isDeleted) {
-      openItemPrimaryAction(item);
-      return;
-    }
-    handleItemSelectionClick(event, item.id);
+    if (event.detail > 1) return;
+    openItemPrimaryAction(item);
   };
 
   const toggleAllSelection = () => {
@@ -6110,7 +6143,7 @@ export default function BrowserPage({
     event.stopPropagation();
     const isSelected = selectedSet.has(item.id);
     const itemsForMenu = isSelected ? selectedItems : [item];
-    if (!isSelected) {
+    if (!isSelected && !item.isDeleted) {
       setSelectedIds([item.id]);
       setSelectionAnchorId(item.id);
       setActiveRowId(item.id);
@@ -6131,7 +6164,7 @@ export default function BrowserPage({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    if (selectedIds.length !== 1 || selectedIds[0] !== item.id) {
+    if (!item.isDeleted && (selectedIds.length !== 1 || selectedIds[0] !== item.id)) {
       selectSingleRow(item.id);
     } else {
       setSelectionAnchorId(item.id);
@@ -7042,60 +7075,6 @@ export default function BrowserPage({
     }
   };
 
-  const calculateSelectionStats = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    if (selectionItems.length === 0) return;
-    const requestId = selectionStatsRequestIdRef.current + 1;
-    selectionStatsRequestIdRef.current = requestId;
-    setSelectionStatsLoading(true);
-    setSelectionStatsError(null);
-    try {
-      const folderPrefixes = selectionItems
-        .filter((item) => item.type === "folder")
-        .map((item) => normalizePrefix(item.key));
-      const sortedFolders = [...folderPrefixes].sort(
-        (a, b) => a.length - b.length,
-      );
-      const uniqueFolders: string[] = [];
-      sortedFolders.forEach((prefixKey) => {
-        if (uniqueFolders.some((parent) => prefixKey.startsWith(parent)))
-          return;
-        uniqueFolders.push(prefixKey);
-      });
-
-      const isFileCoveredByFolder = (key: string) =>
-        uniqueFolders.some((prefixKey) => key.startsWith(prefixKey));
-      let objectCount = 0;
-      let totalBytes = 0;
-
-      const fileItems = selectionItems.filter(
-        (item) => item.type === "file" && !isFileCoveredByFolder(item.key),
-      );
-      for (const item of fileItems) {
-        const stats = await listVersionStats({ key: item.key });
-        if (selectionStatsRequestIdRef.current !== requestId) return;
-        objectCount += stats.objectCount;
-        totalBytes += stats.totalBytes;
-      }
-
-      for (const prefixKey of uniqueFolders) {
-        const stats = await listVersionStats({ prefix: prefixKey });
-        if (selectionStatsRequestIdRef.current !== requestId) return;
-        objectCount += stats.objectCount;
-        totalBytes += stats.totalBytes;
-      }
-
-      if (selectionStatsRequestIdRef.current !== requestId) return;
-      setSelectionStats({ objectCount, totalBytes });
-    } catch {
-      if (selectionStatsRequestIdRef.current !== requestId) return;
-      setSelectionStatsError("Unable to calculate selection stats.");
-    } finally {
-      if (selectionStatsRequestIdRef.current === requestId) {
-        setSelectionStatsLoading(false);
-      }
-    }
-  };
   const handleSortToggle = (key: BrowserSortKey) => {
     setSortId((prev) => {
       if (!prev.startsWith(key)) {
@@ -10520,6 +10499,12 @@ export default function BrowserPage({
 
   const handlePasteItems = useCallback(async () => {
     if (!clipboard || !bucketName || !hasS3AccountContext) return;
+    if (resolvedFunctionalProfile !== "advanced" && !clipboardMatchesContext) {
+      setWarningMessage(
+        "Cross-context copy and move require the Advanced Browser profile.",
+      );
+      return;
+    }
     setWarningMessage(null);
     const destinationBucket = bucketName;
     const destinationPrefix = normalizedPrefix;
@@ -10851,6 +10836,7 @@ export default function BrowserPage({
     showOperationsBar,
     refreshObjectsNow,
     resolveClipboardTransferMode,
+    resolvedFunctionalProfile,
     normalizeSelectorId,
     startOperation,
     uploadBlobForTransfer,
@@ -10873,8 +10859,8 @@ export default function BrowserPage({
       Boolean(confirmDialog) ||
       Boolean(copyDialog);
     const isEditableTarget = (target: EventTarget | null) => {
-      const element = target as HTMLElement | null;
-      if (!element) return false;
+      if (!(target instanceof Element)) return false;
+      const element = target as HTMLElement;
       if (element.isContentEditable) return true;
       return Boolean(
         element.closest(
@@ -10893,9 +10879,9 @@ export default function BrowserPage({
       const key = event.key.toLowerCase();
 
       if (key === "a") {
-        if (listItems.length === 0) return;
+        if (selectableListItems.length === 0) return;
         event.preventDefault();
-        const nextIds = listItems.map((item) => item.id);
+        const nextIds = selectableListItems.map((item) => item.id);
         setSelectedIds(nextIds);
         setSelectionAnchorId(nextIds[0] ?? null);
         setActiveRowId(nextIds[0] ?? null);
@@ -10910,6 +10896,7 @@ export default function BrowserPage({
       }
 
       if (key === "c") {
+        if (resolvedFunctionalProfile === "portal" || !resolvedCapabilityFacts.canWriteObjects) return;
         const targets = selectedItems;
         if (targets.length === 0) return;
         event.preventDefault();
@@ -10918,6 +10905,7 @@ export default function BrowserPage({
       }
 
       if (key === "x") {
+        if (resolvedFunctionalProfile === "portal" || !resolvedCapabilityFacts.canWriteObjects) return;
         const targets = selectedItems;
         if (targets.length === 0) return;
         event.preventDefault();
@@ -10926,7 +10914,7 @@ export default function BrowserPage({
       }
 
       if (key === "v") {
-        if (!canPaste) return;
+        if (!canPasteInFunctionalProfile) return;
         event.preventDefault();
         void handlePasteItems();
       }
@@ -10935,12 +10923,14 @@ export default function BrowserPage({
     return () => document.removeEventListener("keydown", handleShortcut);
   }, [
     bucketName,
-    canPaste,
+    canPasteInFunctionalProfile,
     handleCopyItems,
     handleCutItems,
     handlePasteItems,
     hasS3AccountContext,
-    listItems,
+    resolvedCapabilityFacts.canWriteObjects,
+    resolvedFunctionalProfile,
+    selectableListItems,
     selectedItems,
     setActiveRowId,
     setSelectionAnchorId,
@@ -11177,40 +11167,43 @@ export default function BrowserPage({
     }
   };
 
-  const runPathAction = (actionId: string) => {
-    switch (actionId) {
-      case "uploadFiles":
-        fileInputRef.current?.click();
-        return;
-      case "uploadFolder":
-        folderInputRef.current?.click();
-        return;
-      case "newFolder":
-        handleNewFolder();
-        return;
-      case "paste":
-        void handlePasteItems();
-        return;
-      case "versions":
-        setShowPrefixVersions(true);
-        return;
-      case "restoreToDate":
-        openBulkRestoreModal([]);
-        return;
-      case "cleanOldVersions":
-        openCleanupModal();
-        return;
-      case "copyPath":
-        void handleCopyPath(currentPath);
-        return;
-      default:
-        return;
-    }
+  const runPathAction = (actionId: BrowserActionId) => {
+    runBrowserAction(pathActionStates[actionId], {
+      uploadFiles: () => fileInputRef.current?.click(),
+      uploadFolder: () => folderInputRef.current?.click(),
+      newFolder: handleNewFolder,
+      paste: handlePasteItems,
+      versions: () => setShowPrefixVersions(true),
+      restoreToDate: () => openBulkRestoreModal([]),
+      cleanOldVersions: openCleanupModal,
+      multipartUploads: openMultipartUploadsModal,
+      configureBucket: () => openBucketConfigurationModal(bucketName),
+      copyPath: () => handleCopyPath(currentPath),
+      refresh: handleRefresh,
+      restore: () =>
+        deletedObjectsOptions?.onRestorePrefix?.({
+          bucketName,
+          key: normalizedPrefix,
+          name:
+            normalizedPrefix.split("/").filter(Boolean).at(-1) ??
+            normalizedPrefix,
+        }),
+      toggleShowFolders: () => setShowFolderItems((prev) => !prev),
+      toggleShowDeleted: () => setDeletedObjectsVisibility(!showDeletedObjects),
+    });
   };
 
-  const runSelectionAction = (actionId: string) => {
-    switch (actionId) {
-      case "download":
+  const runSelectionAction = (actionId: BrowserActionId) => {
+    runBrowserAction(selectionActionStates[actionId], {
+      details: () => {
+        if (selectionPrimary?.type === "file") {
+          openObjectDetails(
+            selectionPrimary,
+            selectionPrimary.isDeleted ? "versions" : "properties",
+          );
+        }
+      },
+      download: () => {
         if (
           selectionActionStates.download.label === "Download folder" &&
           selectionPrimary
@@ -11218,62 +11211,49 @@ export default function BrowserPage({
           handleDownloadFolder(selectionPrimary);
           return;
         }
-        void handleDownloadItems(selectionFiles);
-        return;
-      case "open":
+        return handleDownloadItems(selectionFiles);
+      },
+      open: () => {
         if (selectionPrimary) {
-          handleOpenItem(selectionPrimary);
+          openItemPrimaryAction(selectionPrimary);
         }
-        return;
-      case "copyUrl":
-        void handleCopyUrl(selectionPrimary);
-        return;
-      case "copy":
-        handleCopyItems(selectionItems);
-        return;
-      case "cut":
-        handleCutItems(selectionItems);
-        return;
-      case "bulkAttributes":
-        openBulkAttributesModal(selectionItems);
-        return;
-      case "advanced":
+      },
+      copyUrl: () => handleCopyUrl(selectionPrimary),
+      copy: () => handleCopyItems(selectionItems),
+      cut: () => handleCutItems(selectionItems),
+      bulkAttributes: () => openBulkAttributesModal(selectionItems),
+      advanced: () => {
         if (selectionPrimary) {
           openAdvancedForItem(selectionPrimary);
         }
-        return;
-      case "restoreToDate":
-        openBulkRestoreModal(selectionItems);
-        return;
-      case "delete":
-        void handleDeleteItems(selectionItems);
-        return;
-      default:
-        return;
-    }
+      },
+      restoreToDate: () => openBulkRestoreModal(selectionItems),
+      delete: () => handleDeleteItems(selectionItems),
+    });
   };
 
-  const resolveItemActionStates = (item: BrowserItem) =>
-    hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
-          scope: "item",
-          items: [item],
-          bucketName,
-          hasS3AccountContext,
-          versioningEnabled: isVersioningEnabled,
-          canPaste,
-          clipboardMode: clipboard?.mode ?? null,
-          copyUrlDisabled: sseActive,
-          copyUrlDisabledReason,
-          publicLinkAvailable: canCreateRoutedPublicLink,
-          inspectorAvailable: canUseInspectorPanel || canOpenRoutedObjectDetails,
-        }),
-        actionProfile,
-        [item],
-      ),
-      hiddenActionIds,
-    );
+  const runInspectedFullDetailsAction = () => {
+    if (!inspectedItem || inspectedItem.type !== "file") return;
+    const actionId: BrowserActionId = inspectedItem.isDeleted
+      ? "versions"
+      : "properties";
+    const itemActions = resolveBrowserActions({
+      scope: "item",
+      items: [inspectedItem],
+      bucketName,
+      hasS3AccountContext,
+      versioningEnabled: isVersioningEnabled,
+      canPaste: canPasteInFunctionalProfile,
+      clipboardMode: clipboard?.mode ?? null,
+      functionalProfile: resolvedFunctionalProfile,
+      capabilityFacts: resolvedCapabilityFacts,
+      previewAvailable: isBrowserItemPreviewAvailable(inspectedItem),
+    });
+    runBrowserAction(itemActions[actionId], {
+      properties: () => openObjectDetails(inspectedItem, "properties"),
+      versions: () => openObjectDetails(inspectedItem, "versions"),
+    });
+  };
 
   const activeOperations = useMemo(
     () => operations.filter((op) => !op.completedAt),
@@ -12132,8 +12112,7 @@ export default function BrowserPage({
   });
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
-  const isActionBarVisible =
-    isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled && showActionBar;
+  const isActionBarVisible = selectedCount > 0;
   const isCompactToolbarMode = !isActionBarVisible;
   const browserViewLabel = compactMode ? "Compact view" : "List view";
   const browserChromeShellClasses =
@@ -12151,12 +12130,6 @@ export default function BrowserPage({
     "px-1 py-1 ui-caption font-semibold text-slate-500 dark:text-slate-400";
   const toolbarSelectionSummary =
     selectedCount > 0 ? `${selectedCount} selected` : "No selection";
-  const toolbarPasteLabel = pathActionStates.paste.label || "Paste";
-  const toolbarCanPaste = pathActionStates.paste.enabled;
-  const toolbarCanPreview = Boolean(
-    toolbarPreviewActionState?.visible &&
-      toolbarPreviewActionState.enabled,
-  );
   const toolbarCanUploadFiles = pathActionStates.uploadFiles.enabled;
   const toolbarCanUploadFolder = pathActionStates.uploadFolder.enabled;
   const toolbarCanCreateFolder = pathActionStates.newFolder.enabled;
@@ -12170,14 +12143,19 @@ export default function BrowserPage({
   const toolbarCanDelete =
     selectionActionStates.delete.visible &&
     selectionActionStates.delete.enabled;
-  const toolbarPathActions = isActionBarVisible
-    ? toolbarMorePathActions.filter((action) => action.id !== "paste")
-    : toolbarMorePathActions;
+  const toolbarPathActions = toolbarMorePathActions;
   const hasToolbarPathActions =
-    !canSelectionActions && toolbarPathActions.length > 0;
-  const toolbarSelectionActions = isActionBarVisible
-    ? toolbarMoreSelectionOverflowActions
-    : toolbarMoreSelectionFullActions;
+    toolbarPathActions.length > 0;
+  const toolbarSelectionActions = (
+    isActionBarVisible
+      ? toolbarMoreSelectionOverflowActions
+      : toolbarMoreSelectionFullActions
+  ).filter(
+    (selectionAction) =>
+      !toolbarPathActions.some(
+        (pathAction) => pathAction.id === selectionAction.id,
+      ),
+  );
   const hasToolbarSelectionActions =
     canSelectionActions && toolbarSelectionActions.length > 0;
   const hasToolbarOperationsAction = hasOperationsPanelContent;
@@ -12186,12 +12164,10 @@ export default function BrowserPage({
     Boolean(accessBadge) ||
     hasToolbarOperationsAction;
   const hasToolbarLayoutSection =
-    showFolderToggle || showInspectorToggle || showActionBarToggle;
-  const hasToolbarColumnsSection = !isPortalBasicProfile;
-  const hasToolbarBucketConfigurationAction = bucketConfigurationEnabled;
+    showFolderToggle || showInspectorToggle || showLayoutModeToggle;
+  const hasToolbarColumnsSection = !isPortalProfile;
   const hasToolbarSecondaryActionsSection =
     hasToolbarPathActions ||
-    hasToolbarBucketConfigurationAction ||
     hasToolbarSelectionActions ||
     showSseControls;
   const hasToolbarMoreMenu =
@@ -12224,26 +12200,18 @@ export default function BrowserPage({
   };
   const toolbarColumnsSummary = `${effectiveVisibleColumns.length}/${COLUMN_DEFINITIONS.length} visible`;
   const handleToolbarDownload = () => {
-    if (canSelectionDownloadFolder && selectionPrimary) {
-      handleDownloadFolder(selectionPrimary);
-      return;
-    }
-    if (canSelectionDownloadFiles) {
-      handleDownloadItems(selectionFiles);
-    }
+    runSelectionAction("download");
   };
   const handleToolbarOpen = () => {
-    if (selectionPrimary && canSelectionOpen) {
-      handleOpenItem(selectionPrimary);
-    }
+    runSelectionAction("open");
   };
   const openQuickUploadFiles = () => {
     closeUploadQuickMenu();
-    fileInputRef.current?.click();
+    runPathAction("uploadFiles");
   };
   const openQuickUploadFolder = () => {
     closeUploadQuickMenu();
-    folderInputRef.current?.click();
+    runPathAction("uploadFolder");
   };
   const renderUploadQuickMenu = (placement: "bottom-end" | "bottom-start") => (
     <AnchoredPortalMenu
@@ -12293,6 +12261,8 @@ export default function BrowserPage({
     versions: <ListIcon className="h-3.5 w-3.5" />,
     restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
     cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
+    multipartUploads: <UploadIcon className="h-3.5 w-3.5" />,
+    configureBucket: <SettingsIcon className="h-3.5 w-3.5" />,
     copyPath: <CopyIcon className="h-3.5 w-3.5" />,
     details: <InfoIcon className="h-3.5 w-3.5" />,
     open: <OpenIcon className="h-3.5 w-3.5" />,
@@ -12325,26 +12295,6 @@ export default function BrowserPage({
       {action.label}
     </button>
   );
-  const renderInspectorActionButton = (
-    action: BrowserActionState,
-    onClick: () => void,
-    options?: { danger?: boolean },
-  ) => (
-    <button
-      key={action.id}
-      type="button"
-      className={
-        options?.danger ? chromeDangerActionClasses : chromeBulkActionClasses
-      }
-      onClick={onClick}
-      disabled={!action.enabled}
-      title={action.disabledReason}
-    >
-      {browserActionIconById[action.id]}
-      {action.label}
-    </button>
-  );
-
   useEffect(() => {
     if (!hasToolbarMoreMenu && showToolbarMoreMenu) {
       setShowToolbarMoreMenu(false);
@@ -12548,10 +12498,10 @@ export default function BrowserPage({
           placeholder={`Search ${workspaceObjectNounPlural}`}
           aria-label={`Search ${workspaceObjectNounPlural}`}
           className={`${browserSearchInputClasses} pl-9 ${
-            isPortalBasicProfile ? "pr-3" : "pr-9"
+            isPortalProfile ? "pr-3" : "pr-9"
           } normal-case`}
         />
-        {!isPortalBasicProfile && (
+        {!isPortalProfile && (
           <button
             ref={searchOptionsButtonRef}
             type="button"
@@ -12570,7 +12520,7 @@ export default function BrowserPage({
           </button>
         )}
         <AnchoredPortalMenu
-          open={!isPortalBasicProfile && showSearchOptionsMenu}
+          open={!isPortalProfile && showSearchOptionsMenu}
           anchorRef={searchOptionsButtonRef}
           placement="bottom-end"
           offset={8}
@@ -13085,9 +13035,7 @@ export default function BrowserPage({
                       type="button"
                       className={chromeToolbarButtonClasses}
                       aria-pressed={showDeletedObjects}
-                      onClick={() =>
-                        setDeletedObjectsVisibility(!showDeletedObjects)
-                      }
+                      onClick={() => runPathAction("toggleShowDeleted")}
                     >
                       <TrashIcon className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">
@@ -13101,7 +13049,7 @@ export default function BrowserPage({
                     </button>
                   )}
                 {deletedObjectsOptions?.onRestorePrefix &&
-                  deletedObjectsOptions.canRestore &&
+                  pathActionStates.restore.visible &&
                   showDeletedObjects &&
                   isVersioningEnabled &&
                   bucketName &&
@@ -13109,17 +13057,8 @@ export default function BrowserPage({
                     <button
                       type="button"
                       className={chromeToolbarButtonClasses}
-                      onClick={() =>
-                        deletedObjectsOptions.onRestorePrefix?.({
-                          bucketName,
-                          key: normalizedPrefix,
-                          name:
-                            normalizedPrefix
-                              .split("/")
-                              .filter(Boolean)
-                              .at(-1) ?? normalizedPrefix,
-                        })
-                      }
+                      onClick={() => runPathAction("restore")}
+                      disabled={!pathActionStates.restore.enabled}
                     >
                       <HistoryIcon className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">
@@ -13157,7 +13096,7 @@ export default function BrowserPage({
                     <button
                       type="button"
                       className={chromeToolbarIconButtonClasses}
-                      onClick={handleNewFolder}
+                      onClick={() => runPathAction("newFolder")}
                       disabled={!toolbarCanCreateFolder}
                       aria-label="New folder"
                       title="New folder"
@@ -13167,8 +13106,8 @@ export default function BrowserPage({
                     <button
                       type="button"
                       className={chromeToolbarIconButtonClasses}
-                      onClick={handleRefresh}
-                      disabled={!bucketName || objectsLoading}
+                      onClick={() => runPathAction("refresh")}
+                      disabled={!pathActionStates.refresh.enabled}
                       aria-label="Refresh"
                       title="Refresh"
                     >
@@ -13193,11 +13132,11 @@ export default function BrowserPage({
                 )}
               </div>
             </div>
-            {isActionBarVisible && (
+            {isActionBarVisible && !isMobileViewport && (
               <div
                 role="toolbar"
                 aria-label="Browser actions bar"
-                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between"
+                className="sticky top-0 z-20 hidden gap-3 rounded-xl border border-slate-200 bg-slate-50/95 px-3 py-2.5 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 md:flex md:items-center md:justify-between"
               >
                 <div className="min-w-0 flex items-center">
                   <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -13219,73 +13158,12 @@ export default function BrowserPage({
                   <button
                     type="button"
                     className={chromeToolbarButtonClasses}
-                    onClick={() => {
-                      if (selectionPrimary) {
-                        handlePreviewItem(selectionPrimary);
-                      }
-                    }}
-                    disabled={!toolbarCanPreview}
-                    title="Preview"
-                  >
-                    <EyeIcon className="h-3.5 w-3.5" />
-                    Preview
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={handleNewFolder}
-                    disabled={!toolbarCanCreateFolder}
-                    aria-label="New folder"
-                    title="New folder"
-                  >
-                    <FolderPlusIcon className="h-3.5 w-3.5" />
-                    New folder
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => handleCopyItems(selectionItems)}
+                    onClick={() => runSelectionAction("copy")}
                     disabled={!toolbarCanCopy}
                   >
                     <CopyIcon className="h-3.5 w-3.5" />
                     Copy
                   </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={() => {
-                      void handlePasteItems();
-                    }}
-                    disabled={!toolbarCanPaste}
-                    title={toolbarPasteLabel}
-                  >
-                    <PasteIcon className="h-3.5 w-3.5" />
-                    {toolbarPasteLabel}
-                  </button>
-                  <button
-                    ref={uploadQuickButtonRef}
-                    type="button"
-                    className={chromeToolbarPrimaryClasses}
-                    onClick={toggleUploadQuickMenu}
-                    disabled={!toolbarCanUploadFiles && !toolbarCanUploadFolder}
-                    aria-haspopup={
-                      toolbarCanUploadFiles || toolbarCanUploadFolder
-                        ? "menu"
-                        : undefined
-                    }
-                    aria-expanded={
-                      toolbarCanUploadFiles || toolbarCanUploadFolder
-                        ? showUploadQuickMenu
-                        : undefined
-                    }
-                    aria-label="Upload"
-                    title="Upload"
-                  >
-                    <UploadIcon className="h-3.5 w-3.5" />
-                    Upload
-                    <ChevronDownIcon className="h-3.5 w-3.5" />
-                  </button>
-                  {renderUploadQuickMenu("bottom-start")}
                   <button
                     type="button"
                     className={chromeToolbarPrimaryClasses}
@@ -13298,22 +13176,11 @@ export default function BrowserPage({
                   <button
                     type="button"
                     className={chromeDangerActionClasses}
-                    onClick={() => handleDeleteItems(selectionItems)}
+                    onClick={() => runSelectionAction("delete")}
                     disabled={!toolbarCanDelete}
                   >
                     <TrashIcon className="h-3.5 w-3.5" />
                     Delete
-                  </button>
-                  <button
-                    type="button"
-                    className={chromeToolbarButtonClasses}
-                    onClick={handleRefresh}
-                    disabled={!bucketName || objectsLoading}
-                    aria-label="Refresh"
-                    title="Refresh"
-                  >
-                    <RefreshIcon className="h-3.5 w-3.5" />
-                    Refresh
                   </button>
                   <button
                     ref={toolbarMoreButtonRef}
@@ -13446,12 +13313,16 @@ export default function BrowserPage({
                           onToggle={toggleInspectorPanel}
                         />
                       )}
-                      {showActionBarToggle && (
+                      {showLayoutModeToggle && (
                         <ToolbarToggleMenuItem
-                          label="Action bar"
+                          label="Workbench layout"
                           icon={<SlidersIcon className="h-3.5 w-3.5" />}
-                          checked={showActionBar}
-                          onToggle={() => setShowActionBar((prev) => !prev)}
+                          checked={activeLayoutMode === "workbench"}
+                          onToggle={() =>
+                            changeLayoutMode(
+                              activeLayoutMode === "workbench" ? "standard" : "workbench",
+                            )
+                          }
                         />
                       )}
                     </>
@@ -13496,49 +13367,21 @@ export default function BrowserPage({
                         hasToolbarColumnsSection) && (
                         <div className={contextMenuSeparatorClasses} />
                       )}
-                      {(hasToolbarPathActions ||
-                        hasToolbarBucketConfigurationAction) && (
+                      {hasToolbarPathActions && (
                         <>
                           <p className={toolbarOverflowSectionTitleClasses}>
                             Current path
                           </p>
-                          {hasToolbarBucketConfigurationAction && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className={`${contextMenuItemClasses} ${
-                                !bucketName || !hasS3AccountContext
-                                  ? contextMenuItemDisabledClasses
-                                  : ""
-                              }`}
-                              onClick={() =>
-                                runToolbarMoreAction(() =>
-                                  openBucketConfigurationModal(bucketName),
-                                )
-                              }
-                              disabled={!bucketName || !hasS3AccountContext}
-                              title={
-                                !bucketName
-                                  ? `Select a ${workspaceNoun} to configure it.`
-                                  : undefined
-                              }
-                            >
-                              <SettingsIcon className="h-3.5 w-3.5" />
-                              Configure bucket
-                            </button>
+                          {toolbarPathActions.map((action) =>
+                            renderToolbarMoreActionButton(action, () =>
+                              runPathAction(action.id),
+                            ),
                           )}
-                          {hasToolbarPathActions &&
-                            toolbarPathActions.map((action) =>
-                              renderToolbarMoreActionButton(action, () =>
-                                runPathAction(action.id),
-                              ),
-                            )}
                         </>
                       )}
                       {hasToolbarSelectionActions && (
                         <>
-                          {(hasToolbarPathActions ||
-                            hasToolbarBucketConfigurationAction) && (
+                          {hasToolbarPathActions && (
                             <div className={contextMenuSeparatorClasses} />
                           )}
                           <p className={toolbarOverflowSectionTitleClasses}>
@@ -13556,7 +13399,6 @@ export default function BrowserPage({
                       {showSseControls && (
                         <>
                           {(hasToolbarPathActions ||
-                            hasToolbarBucketConfigurationAction ||
                             hasToolbarSelectionActions) && (
                             <div className={contextMenuSeparatorClasses} />
                           )}
@@ -13779,7 +13621,7 @@ export default function BrowserPage({
                 )}
                 <div
                   ref={objectsListViewportRef}
-                  className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto bg-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent"
+                  className={`relative min-h-0 flex-1 overflow-y-auto bg-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:bg-transparent ${isMobileViewport ? "overflow-x-hidden pb-24" : "overflow-x-auto"}`}
                   onClick={handleListBackgroundClick}
                   onKeyDown={handleListKeyDown}
                   tabIndex={0}
@@ -13792,6 +13634,101 @@ export default function BrowserPage({
                       </span>
                     </div>
                   )}
+                  {isMobileViewport ? (
+                    <div role="list" aria-label="Objects" className="divide-y divide-slate-200/80 dark:divide-slate-800">
+                      {canGoUp && bucketName && showFolderItems && !isSearchingInWholeBucket && (
+                        <button
+                          type="button"
+                          onClick={handleGoUp}
+                          className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200"
+                        >
+                          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                            <UpIcon className="h-4 w-4" />
+                          </span>
+                          Parent folder
+                        </button>
+                      )}
+                      {!objectsLoading && !bucketName && (
+                        <p className="px-4 py-10 text-center ui-body text-slate-500">
+                          {`Select a ${workspaceNoun} to browse ${workspaceObjectNounPlural}.`}
+                        </p>
+                      )}
+                      {!objectsLoading && bucketName && listItems.length === 0 && (
+                        <p className="px-4 py-10 text-center ui-body text-slate-500">
+                          {objectsIssue?.title ?? (hasActiveSearchFilters ? "No objects matched this search." : "No objects found for this path.")}
+                        </p>
+                      )}
+                      {listItems.map((item) => {
+                        const isSelected = selectedSet.has(item.id);
+                        const isDeleted = Boolean(item.isDeleted);
+                        const isHistorical = Boolean(item.isHistorical);
+                        return (
+                          <div
+                            key={item.id}
+                            role="listitem"
+                            data-browser-item
+                            data-lazy-item-id={item.type === "file" && !isDeleted ? item.id : undefined}
+                            onClick={(event) => {
+                              if (isInteractiveTarget(event.target) || isDeleted) return;
+                              handleItemSelectionClick(event, item.id);
+                            }}
+                            onDoubleClick={(event) => handleItemDoubleClick(event, item)}
+                            onContextMenu={(event) => handleItemContextMenu(event, item)}
+                            className={`grid min-h-16 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-1 px-2 py-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${isSelected ? "bg-primary-100/90 dark:bg-primary-500/30" : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"}`}
+                          >
+                            <label className="flex h-11 w-11 items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={!isDeleted && isSelected}
+                                onChange={() => toggleSelection(item.id)}
+                                aria-label={`Select ${item.name}`}
+                                className={uiCheckboxClass}
+                                disabled={isDeleted}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={(event) => handleItemNameClick(event, item)}
+                              onDoubleClick={(event) => event.preventDefault()}
+                              aria-label={
+                                isDeleted
+                                  ? `Open versions for ${item.name}`
+                                  : item.type === "folder"
+                                    ? `Open folder ${item.name}`
+                                    : `Open file ${item.name}`
+                              }
+                              className="flex min-h-11 min-w-0 items-center gap-3 text-left"
+                            >
+                              <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border ${isDeleted ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200" : item.type === "folder" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200" : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"}`}>
+                                {item.type === "folder" ? <FolderIcon /> : isDeleted ? <TrashIcon /> : <FileIcon />}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
+                                <span className="mt-0.5 flex min-w-0 items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
+                                  <span className="truncate">{item.type === "folder" ? "Folder" : item.size}</span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="truncate">{item.modified}</span>
+                                  {(isDeleted || isHistorical) && (
+                                    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 font-semibold ${isDeleted ? "border-rose-200 text-rose-700 dark:border-rose-500/40 dark:text-rose-200" : "border-amber-200 text-amber-700 dark:border-amber-500/40 dark:text-amber-200"}`}>
+                                      {isDeleted ? "Deleted" : "History"}
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`${rowActionButtonClasses} min-h-11 min-w-11`}
+                              aria-label={`More actions for ${item.name}`}
+                              onClick={(event) => handleItemActionsButtonClick(event, item)}
+                            >
+                              <MoreIcon />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
                   <table
                     className="manager-table min-w-full border-separate border-spacing-0 divide-y divide-slate-200 dark:divide-slate-800"
                     style={{ minWidth: `${objectTableMinWidthPx}px` }}
@@ -13951,12 +13888,9 @@ export default function BrowserPage({
                           />
                         )}
                       {listItems.map((item) => {
-                        const isFocused = inspectedItem?.id === item.id;
                         const isSelected = selectedSet.has(item.id);
-                        const isActiveRow = activeRowId === item.id;
                         const isDeleted = Boolean(item.isDeleted);
                         const isHistorical = Boolean(item.isHistorical);
-                        const itemActionStates = resolveItemActionStates(item);
                         return (
                           <tr
                             key={item.id}
@@ -13979,24 +13913,12 @@ export default function BrowserPage({
                               handleItemDoubleClick(event, item)
                             }
                             onContextMenu={(event) => {
-                              if (deletedObjectsOptions && isDeleted) {
-                                event.preventDefault();
-                                return;
-                              }
                               handleItemContextMenu(event, item);
                             }}
-                            className={`${rowHeightClasses} transition-colors ${
+                            className={`${rowHeightClasses} transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-primary ${
                               isSelected
                                 ? "bg-primary-100/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
-                                : isActiveRow
-                                  ? "bg-sky-50/90 hover:bg-sky-100/80 dark:bg-sky-900/20 dark:hover:bg-sky-900/30"
-                                  : isHistorical
-                                    ? "bg-amber-50/50 hover:bg-amber-100/60 dark:bg-amber-900/10 dark:hover:bg-amber-900/20"
-                                  : isDeleted
-                                    ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
-                                    : isFocused
-                                      ? "bg-primary-50/70 hover:bg-primary-50 dark:bg-primary-500/15 dark:hover:bg-primary-500/20"
-                                      : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                                : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
                             }`}
                           >
                             <td
@@ -14021,8 +13943,19 @@ export default function BrowserPage({
                               }`}
                               style={{ maxWidth: `${nameColumnWidthPx}px` }}
                             >
-                              <div
-                                className={`flex min-w-0 items-center ${nameGapClasses}`}
+                              <button
+                                type="button"
+                                onClick={(event) => handleItemNameClick(event, item)}
+                                onDoubleClick={(event) => event.preventDefault()}
+                                aria-label={
+                                  item.isDeleted
+                                    ? `Open versions for ${item.name}`
+                                    : item.type === "folder"
+                                      ? `Open folder ${item.name}`
+                                      : `Open file ${item.name}`
+                                }
+                                className={`flex min-h-11 w-full min-w-0 items-center ${nameGapClasses} text-left`}
+                                title={item.name}
                               >
                                 <span
                                   className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-md border shadow-sm ${
@@ -14044,14 +13977,7 @@ export default function BrowserPage({
                                   )}
                                 </span>
                                 <div className="min-w-0 flex-1">
-                                  <button
-                                    type="button"
-                                    onClick={(event) =>
-                                      handleItemNameClick(event, item)
-                                    }
-                                    onDoubleClick={() =>
-                                      openItemPrimaryAction(item)
-                                    }
+                                  <span
                                     className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
                                       isHistorical
                                         ? "text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100"
@@ -14059,7 +13985,6 @@ export default function BrowserPage({
                                         ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
                                         : "text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
                                     }`}
-                                    title={item.name}
                                   >
                                     <span className="truncate">
                                       {item.name}
@@ -14075,7 +14000,7 @@ export default function BrowserPage({
                                         {isHistorical ? "(history)" : "(deleted)"}
                                       </span>
                                     )}
-                                  </button>
+                                  </span>
                                   {!compactMode && (
                                     <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
                                       <span className="rounded-md border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
@@ -14119,7 +14044,7 @@ export default function BrowserPage({
                                     </div>
                                   )}
                                 </div>
-                              </div>
+                              </button>
                             </td>
                             {visibleColumnDefinitions.map((column) => (
                               <td
@@ -14134,146 +14059,24 @@ export default function BrowserPage({
                             <td
                               className={`px-2 ${rowCellClasses} !align-middle text-right`}
                             >
-                              <div className="flex flex-nowrap justify-end gap-1.5">
-                                {item.type === "folder" && (
-                                  <button
-                                    type="button"
-                                    className={rowActionButtonClasses}
-                                    aria-label="Open"
-                                    title="Open"
-                                    onClick={() => handleOpenItem(item)}
-                                    disabled={!itemActionStates.open.enabled}
-                                  >
-                                    <OpenIcon />
-                                  </button>
-                                )}
-                                {item.type === "file" &&
-                                  !isDeleted &&
-                                  itemActionStates.preview.visible && (
-                                  <button
-                                    type="button"
-                                    className={rowActionButtonClasses}
-                                    aria-label="Preview"
-                                    title="Preview"
-                                    onClick={() => handlePreviewItem(item)}
-                                    disabled={!itemActionStates.preview.enabled}
-                                  >
-                                    <EyeIcon />
-                                  </button>
-                                )}
-                                {item.type === "file" &&
-                                  isDeleted &&
-                                  deletedObjectsOptions?.onRestoreObject &&
-                                  deletedObjectsOptions.canRestore && (
-                                    <button
-                                      type="button"
-                                      className={rowActionButtonClasses}
-                                      aria-label={`Restore ${item.name}`}
-                                      title="Restore file"
-                                      onClick={() =>
-                                        deletedObjectsOptions.onRestoreObject?.({
-                                          bucketName,
-                                          key: item.key,
-                                          name: item.name || item.key,
-                                          deletedAt:
-                                            item.modifiedAt != null
-                                              ? new Date(
-                                                  item.modifiedAt,
-                                                ).toISOString()
-                                              : null,
-                                          deleteMarkerVersionId:
-                                            item.deleteMarkerVersionId,
-                                        })
-                                      }
-                                    >
-                                      <HistoryIcon />
-                                    </button>
-                                  )}
-                                {item.type === "file" &&
-                                  isDeleted &&
-                                  !deletedObjectsOptions?.onRestoreObject &&
-                                  isVersioningEnabled && (
-                                    <button
-                                      type="button"
-                                      className={rowActionButtonClasses}
-                                      aria-label="Versions"
-                                      title="Versions"
-                                      onClick={() =>
-                                        openObjectVersionsModal(item)
-                                      }
-                                      disabled={
-                                        !itemActionStates.versions.enabled
-                                      }
-                                    >
-                                      <HistoryIcon />
-                                    </button>
-                                  )}
-                                {(!isDeleted || !deletedObjectsOptions) && (
-                                  <button
-                                    type="button"
-                                    className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
-                                    aria-label="Download"
-                                    title={
-                                      !itemActionStates.download.enabled
-                                        ? "Restore from versions before download"
-                                        : "Download"
-                                    }
-                                    onClick={() => handleDownloadTarget(item)}
-                                    disabled={!itemActionStates.download.enabled}
-                                  >
-                                    <DownloadIcon />
-                                  </button>
-                                )}
-                                {item.type === "file" &&
-                                  !isDeleted &&
-                                  itemActionStates.createPublicLink.visible && (
-                                    <button
-                                      type="button"
-                                      className={`${rowActionButtonClasses} ${!itemActionStates.createPublicLink.enabled ? "opacity-50" : ""}`}
-                                      aria-label="Create public link"
-                                      title="Create public link"
-                                      onClick={() => createPublicLinkForItem(item)}
-                                      disabled={!itemActionStates.createPublicLink.enabled}
-                                    >
-                                      <LinkIcon />
-                                    </button>
-                                  )}
-                                {(!isDeleted || !deletedObjectsOptions) && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
-                                      aria-label="Delete"
-                                      title={
-                                        !itemActionStates.delete.enabled
-                                          ? "Delete marker entries are managed in versions."
-                                          : "Delete"
-                                      }
-                                      onClick={() => handleDeleteItems([item])}
-                                      disabled={!itemActionStates.delete.enabled}
-                                    >
-                                      <TrashIcon />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={rowActionButtonClasses}
-                                      aria-label="More actions"
-                                      title="More"
-                                      onClick={(event) =>
-                                        handleItemActionsButtonClick(event, item)
-                                      }
-                                    >
-                                      <MoreIcon />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                              <button
+                                type="button"
+                                className={`${rowActionButtonClasses} min-h-11 min-w-11`}
+                                aria-label={`More actions for ${item.name}`}
+                                title="More"
+                                onClick={(event) =>
+                                  handleItemActionsButtonClick(event, item)
+                                }
+                              >
+                                <MoreIcon />
+                              </button>
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
+                  )}
                 </div>
                 {canLoadMoreObjectResults && (
                   <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-right dark:border-slate-700 dark:bg-slate-900/40">
@@ -14381,18 +14184,6 @@ export default function BrowserPage({
                           </p>
                         </div>
                         <div className="space-y-3">
-                          <div className={inspectorSectionCardClasses}>
-                            <p className={inspectorSectionTitleClasses}>
-                              Actions
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {inspectorContextActions.map((action) =>
-                                renderInspectorActionButton(action, () =>
-                                  runPathAction(action.id),
-                                ),
-                              )}
-                            </div>
-                          </div>
                           <div className={inspectorSectionCardClasses}>
                             <p className={inspectorSectionTitleClasses}>
                               Prefix summary
@@ -14555,55 +14346,6 @@ export default function BrowserPage({
                             <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                               {bucketName || `Select a ${workspaceNoun} to inspect.`}
                             </p>
-                          </div>
-
-                          <div className={inspectorSectionCardClasses}>
-                            <p className={inspectorSectionTitleClasses}>
-                              Actions
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {bucketConfigurationEnabled && (
-                                <button
-                                  type="button"
-                                  className={chromeBulkActionClasses}
-                                  onClick={() =>
-                                    openBucketConfigurationModal(bucketName)
-                                  }
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <SettingsIcon className="h-3.5 w-3.5" />
-                                  Configure
-                                </button>
-                              )}
-                              {!isPortalBasicProfile && (
-                                <button
-                                  type="button"
-                                  className={chromeBulkActionClasses}
-                                  onClick={openMultipartUploadsModal}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <UploadIcon className="h-3.5 w-3.5" />
-                                  Multipart uploads
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                className={chromeBulkActionClasses}
-                                onClick={() =>
-                                  void loadBucketInspectorData(true)
-                                }
-                                disabled={
-                                  !bucketName ||
-                                  !hasS3AccountContext ||
-                                  bucketInspectorLoading
-                                }
-                              >
-                                <RefreshIcon className="h-3.5 w-3.5" />
-                                {bucketInspectorLoading
-                                  ? "Loading..."
-                                  : "Refresh"}
-                              </button>
-                            </div>
                           </div>
 
                           {!bucketName || !hasS3AccountContext ? (
@@ -14805,107 +14547,16 @@ export default function BrowserPage({
                                   </p>
                                 )}
                               </div>
-                              {selectedCount > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedIds([]);
-                                    setSelectionAnchorId(null);
-                                    setActiveRowId(null);
-                                  }}
-                                  className={inspectorInlineActionClasses}
-                                >
-                                  Clear
-                                </button>
-                              )}
                             </div>
-                            <div className="space-y-3">
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>
-                                  Actions
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {inspectorSelectionActions.map((action) =>
-                                    renderInspectorActionButton(action, () =>
-                                      runSelectionAction(action.id),
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                              <div className={inspectorSectionCardClasses}>
-                                <p className={inspectorSectionTitleClasses}>
-                                  Bulk actions
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {inspectorSelectionBulkActions.map((action) =>
-                                    renderInspectorActionButton(
-                                      action,
-                                      () => runSelectionAction(action.id),
-                                      {
-                                        danger: action.id === "delete",
-                                      },
-                                    ),
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className={inspectorSectionCardClasses}>
-                              <div className="flex items-center justify-between gap-2">
-                                <p className={inspectorSectionTitleClasses}>
-                                  Selection stats
-                                </p>
-                                <button
-                                  type="button"
-                                  className={chromeBulkActionClasses}
-                                  onClick={calculateSelectionStats}
-                                  disabled={
-                                    !bucketName ||
-                                    !hasS3AccountContext ||
-                                    selectionStatsLoading
-                                  }
-                                >
-                                  <RefreshIcon className="h-3.5 w-3.5" />
-                                  {selectionStatsLoading
-                                    ? "Calculating..."
-                                    : selectionStats
-                                      ? "Recalculate"
-                                      : "Calculate"}
-                                </button>
-                              </div>
-                              {selectionStatsError && (
-                                <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                  {selectionStatsError}
-                                </p>
-                              )}
-                              {!selectionStats &&
-                                !selectionStatsLoading &&
-                                !selectionStatsError && (
-                                  <p className="mt-2 ui-caption text-slate-400">
-                                    Calculates object count and size, including
-                                    folder contents.
-                                  </p>
-                                )}
-                              {selectionStats && (
-                                <div className="mt-2 grid gap-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">
-                                      Objects
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {selectionStats.objectCount.toLocaleString()}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">
-                                      Total size
-                                    </span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {formatBytes(selectionStats.totalBytes)}
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                            {selectionIsSingle && selectionPrimary?.type === "file" && (
+                              <button
+                                type="button"
+                                className={chromeBulkActionClasses}
+                                onClick={() => runSelectionAction("details")}
+                              >
+                                Open full details
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <div className={inspectorEmptyStateClasses}>
@@ -14924,19 +14575,10 @@ export default function BrowserPage({
                       >
                         {inspectedItem ? (
                           <div className="space-y-3">
-                            <div
-                              className={`${inspectorSectionCardClasses} flex items-center justify-between gap-2`}
-                            >
+                            <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
                                 Object details
                               </p>
-                              <button
-                                type="button"
-                                onClick={() => setActiveItem(null)}
-                                className={inspectorInlineActionClasses}
-                              >
-                                Clear
-                              </button>
                             </div>
                             <div className="rounded-lg border border-[color:var(--ui-border-soft)] bg-[var(--ui-surface-muted)] px-3 py-2.5 shadow-[var(--ui-shadow-soft)]">
                               <div className="flex items-center gap-3">
@@ -14966,71 +14608,15 @@ export default function BrowserPage({
                                 </div>
                               </div>
                             </div>
-                            <div className={inspectorSectionCardClasses}>
-                              <p className={inspectorSectionTitleClasses}>
-                                Actions
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {inspectedItem.type === "folder" ? (
-                                  <button
-                                    type="button"
-                                    className={chromeBulkActionClasses}
-                                    onClick={() => handleOpenItem(inspectedItem)}
-                                  >
-                                    <OpenIcon className="h-3.5 w-3.5" />
-                                    Open
-                                  </button>
-                                ) : (
-                                  <>
-                                    {!inspectedItem.isDeleted && (
-                                      <button
-                                        type="button"
-                                        className={chromeBulkActionClasses}
-                                        onClick={() =>
-                                          openObjectDetails(
-                                            inspectedItem,
-                                            "preview",
-                                          )
-                                        }
-                                      >
-                                        <EyeIcon className="h-3.5 w-3.5" />
-                                        Preview
-                                      </button>
-                                    )}
-                                    {isVersioningEnabled && (
-                                      <button
-                                        type="button"
-                                        className={chromeBulkActionClasses}
-                                        onClick={() =>
-                                          openObjectDetails(
-                                            inspectedItem,
-                                            "versions",
-                                          )
-                                        }
-                                      >
-                                        <ListIcon className="h-3.5 w-3.5" />
-                                        Versions
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className={chromeBulkActionClasses}
-                                      onClick={() =>
-                                        openObjectDetails(
-                                          inspectedItem,
-                                          inspectedItem.isDeleted
-                                            ? "versions"
-                                            : "properties",
-                                        )
-                                      }
-                                    >
-                                      <SettingsIcon className="h-3.5 w-3.5" />
-                                      Open object details
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                            {inspectedItem.type === "file" && (
+                              <button
+                                type="button"
+                                className={chromeBulkActionClasses}
+                                onClick={runInspectedFullDetailsAction}
+                              >
+                                Open full details
+                              </button>
+                            )}
                             <div className={inspectorSectionCardClasses}>
                               <p className={inspectorSectionTitleClasses}>
                                 Summary
@@ -15168,6 +14754,104 @@ export default function BrowserPage({
         </div>
       </div>
       </div>
+      {isMobileViewport && selectedCount > 0 && (
+        <div
+          role="toolbar"
+          aria-label="Selected object actions"
+          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-700 dark:bg-slate-950/95"
+        >
+          <button
+            type="button"
+            className={`${chromeToolbarButtonClasses} min-h-11 justify-center`}
+            onClick={handleToolbarOpen}
+            disabled={!toolbarCanOpen}
+          >
+            <OpenIcon className="h-4 w-4" />
+            Open
+          </button>
+          <button
+            type="button"
+            className={`${chromeToolbarPrimaryClasses} min-h-11 justify-center`}
+            onClick={handleToolbarDownload}
+            disabled={!toolbarCanDownload}
+          >
+            <DownloadIcon className="h-4 w-4" />
+            Download
+          </button>
+          <button
+            ref={mobileMoreButtonRef}
+            type="button"
+            className={`${chromeToolbarButtonClasses} min-h-11 justify-center`}
+            onClick={() => setShowMobileActionsSheet(true)}
+            aria-haspopup="dialog"
+            aria-expanded={showMobileActionsSheet}
+          >
+            <MoreIcon className="h-4 w-4" />
+            More
+          </button>
+        </div>
+      )}
+      {showMobileActionsSheet && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-slate-950/45"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowMobileActionsSheet(false);
+            }
+          }}
+        >
+          <div
+            ref={mobileActionsSheetRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="browser-mobile-actions-title"
+            className="max-h-[75vh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl dark:bg-slate-900"
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="browser-mobile-actions-title" className="font-semibold text-slate-900 dark:text-slate-100">
+                  {toolbarSelectionSummary}
+                </h2>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Available actions for the current selection
+                </p>
+              </div>
+              <button
+                type="button"
+                className={`${chromeToolbarIconButtonClasses} min-h-11 min-w-11`}
+                onClick={() => setShowMobileActionsSheet(false)}
+                aria-label="Close actions"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid gap-2">
+              {toolbarMoreSelectionFullActions
+                .filter((action) => action.id !== "open" && action.id !== "download")
+                .map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className={`${action.id === "delete" ? chromeDangerActionClasses : chromeToolbarButtonClasses} min-h-11 w-full justify-start`}
+                    disabled={!action.enabled}
+                    title={action.disabledReason}
+                    onClick={() => {
+                      runSelectionAction(action.id);
+                      setShowMobileActionsSheet(false);
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 text-left">{action.label}</span>
+                    {!action.enabled && action.disabledReason && (
+                      <span className="ml-3 max-w-[55%] text-right ui-caption font-normal text-slate-500 dark:text-slate-400">
+                        {action.disabledReason}
+                      </span>
+                    )}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
       <BrowserContextMenu
         contextMenu={contextMenu}
         contextMenuRef={contextMenuRef}
@@ -15178,12 +14862,15 @@ export default function BrowserPage({
         showFolderItems={showFolderItems}
         showDeletedObjects={showDeletedObjects}
         allowInspectorPanel={canUseInspectorPanel || canOpenRoutedObjectDetails}
-        canPaste={canPaste}
+        canPaste={canPasteInFunctionalProfile}
         copyUrlDisabled={sseActive}
         copyUrlDisabledReason={copyUrlDisabledReason}
         publicLinkAvailable={canCreateRoutedPublicLink}
-        actionProfile={actionProfile}
-        hiddenActionIds={hiddenActionIds}
+        restoreAvailable={Boolean(deletedObjectsOptions?.onRestoreObject)}
+        multipartUploadsAvailable={resolvedFunctionalProfile === "advanced"}
+        bucketConfigurationAvailable={bucketConfigurationEnabled}
+        functionalProfile={resolvedFunctionalProfile}
+        capabilityFacts={resolvedCapabilityFacts}
         clipboard={clipboard}
         fileInputRef={fileInputRef}
         folderInputRef={folderInputRef}
@@ -15192,8 +14879,11 @@ export default function BrowserPage({
         onPasteItems={handlePasteItems}
         onOpenPrefixVersions={() => setShowPrefixVersions(true)}
         onOpenCleanupVersions={openCleanupModal}
+        onOpenMultipartUploads={openMultipartUploadsModal}
+        onConfigureBucket={() => openBucketConfigurationModal(bucketName)}
         onDownloadTarget={handleDownloadTarget}
         onCreatePublicLink={createPublicLinkForItem}
+        onRestoreDeletedItem={restoreDeletedItem}
         onPreviewItem={handlePreviewItem}
         onCopyUrl={handleCopyUrl}
         onCopyPath={(path) => {
@@ -15252,6 +14942,7 @@ export default function BrowserPage({
           onRefreshBrowserObjects={refreshObjectListing}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
+          readOnly={resolvedFunctionalProfile !== "advanced"}
         />
       )}
       {configBucketName && bucketConfigurationEnabled && (

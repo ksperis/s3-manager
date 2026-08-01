@@ -91,6 +91,7 @@ const portalRoutes = [
 
 const viewports = [
   { name: "desktop", width: 1728, height: 972 },
+  { name: "tablet", width: 1024, height: 768 },
   { name: "mobile", width: 390, height: 844 },
 ];
 

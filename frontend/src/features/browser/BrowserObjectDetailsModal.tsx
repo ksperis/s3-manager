@@ -86,6 +86,7 @@ type BrowserObjectDetailsModalProps = {
   onRefreshBrowserObjects: (targetKey: string) => Promise<void>;
   onRestoreVersion: (version: BrowserObjectVersion) => Promise<void> | void;
   onDeleteVersion: (version: BrowserObjectVersion) => Promise<void> | void;
+  readOnly?: boolean;
 };
 
 type MetadataDraft = {
@@ -123,6 +124,7 @@ export default function BrowserObjectDetailsModal({
   onRefreshBrowserObjects,
   onRestoreVersion,
   onDeleteVersion,
+  readOnly = false,
 }: BrowserObjectDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<ObjectDetailsTabId>(initialTab);
   const [itemSnapshot, setItemSnapshot] = useState(item);
@@ -888,18 +890,18 @@ export default function BrowserObjectDetailsModal({
       return versioningEnabled ? [{ id: "versions", label: "Versions" }] : [];
     }
     const nextTabs: TabButton[] = [{ id: "preview", label: "Preview" }];
-    if (versioningEnabled) {
+    if (versioningEnabled && !readOnly) {
       nextTabs.push({ id: "versions", label: "Versions" });
     }
-    nextTabs.push(
-      { id: "properties", label: "Properties" },
-      { id: "protection", label: "Access & Protection" },
-    );
-    if (hasArchiveTab) {
+    nextTabs.push({ id: "properties", label: "Properties" });
+    if (!readOnly) {
+      nextTabs.push({ id: "protection", label: "Access & Protection" });
+    }
+    if (hasArchiveTab && !readOnly) {
       nextTabs.push({ id: "archive", label: "Archive" });
     }
     return nextTabs;
-  }, [hasArchiveTab, isDeletedCurrent, versioningEnabled]);
+  }, [hasArchiveTab, isDeletedCurrent, readOnly, versioningEnabled]);
 
   const renderPreviewContent = () => {
     if (isDeletedCurrent) {
@@ -955,12 +957,19 @@ export default function BrowserObjectDetailsModal({
         }
         onRestoreVersion={(version) => void handleVersionAction("restore", version)}
         onDeleteVersion={(version) => void handleVersionAction("delete", version)}
+        readOnly={readOnly}
       />
     </div>
   );
 
   const renderPropertiesContent = () => (
-    <div className="space-y-4">
+    <>
+    {readOnly && (
+      <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+        Properties are read-only in the Standard Browser profile.
+      </p>
+    )}
+    <fieldset disabled={readOnly} className="space-y-4">
       {metadataLoading && !metadataLoaded && (
         <p className="ui-caption text-slate-500 dark:text-slate-400">
           Loading object details...
@@ -1289,7 +1298,8 @@ export default function BrowserObjectDetailsModal({
           </div>
         </div>
       </div>
-    </div>
+    </fieldset>
+    </>
   );
 
   const renderProtectionContent = () => (

@@ -52,6 +52,16 @@ export default function CephAdminBrowserPage() {
           <BrowserEmbed
             accountIdForApi={browserSelector}
             hasContext={Boolean(browserSelector)}
+            workspaceSurface="ceph-admin"
+            functionalProfile="advanced"
+            layoutMode="standard"
+            density="compact"
+            capabilityFacts={{
+              canWriteObjects: true,
+              canDeleteObjects: true,
+              canRestoreObjects: true,
+              canCreatePublicLinks: false,
+            }}
             storageEndpointCapabilities={selectedEndpoint?.capabilities ?? null}
             endpointProvider="ceph"
             onSelectedBucketNameChange={setSelectedBrowserBucketName}

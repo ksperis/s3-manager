@@ -1,192 +1,77 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  BROWSER_ROOT_UI_STATE_STORAGE_KEY,
   BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
-  DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-  DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  MAX_FOLDERS_PANEL_WIDTH_PX,
-  MAX_INSPECTOR_PANEL_WIDTH_PX,
-  MIN_FOLDERS_PANEL_WIDTH_PX,
-  MIN_INSPECTOR_PANEL_WIDTH_PX,
-  readBrowserRootObjectColumnWidths,
+  BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+  BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
   readBrowserRootContextSelection,
+  readBrowserRootObjectColumns,
+  readBrowserRootUiState,
   readStoredBrowserRootUiState,
-  writeBrowserRootObjectColumnWidths,
+  writeBrowserRootActiveLayout,
   writeBrowserRootContextSelection,
+  writeBrowserRootDensity,
+  writeBrowserRootObjectColumns,
   writeBrowserRootUiLayout,
-  writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
 
-describe("browserRootUiState", () => {
+describe("browserRootUiState v2", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
 
-  it("persists panel widths alongside layout state", () => {
-    writeBrowserRootUiLayout({
-      showFolders: true,
-      showInspector: false,
-      showActionBar: true,
-    });
-    writeBrowserRootUiPanelWidths({
-      foldersPanelWidthPx: 360,
-      inspectorPanelWidthPx: 440,
-    });
+  it("migrates v1 to Workbench, copies columns to both layouts, and leaves v1 intact", () => {
+    const v1 = {
+      layout: { showFolders: true, showInspector: false, showActionBar: true },
+      objectColumns: ["size", "modified"],
+      objectColumnWidths: { size: 140 },
+    };
+    window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(v1));
 
-    expect(readStoredBrowserRootUiState()).toEqual({
-      layout: {
-        showFolders: true,
-        showInspector: false,
-        showActionBar: true,
-        foldersPanelWidthPx: 360,
-        inspectorPanelWidthPx: 440,
-      },
-      contextSelections: {},
-      objectColumns: [],
-      objectColumnWidths: {},
-    });
+    const migrated = readStoredBrowserRootUiState();
+
+    expect(migrated?.activeLayout).toBe("workbench");
+    expect(migrated?.density).toBe("compact");
+    expect(migrated?.layouts.standard.objectColumns).toEqual(["size", "modified"]);
+    expect(migrated?.layouts.workbench.objectColumns).toEqual(["size", "modified"]);
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBe(JSON.stringify(v1));
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).not.toBeNull();
   });
 
-  it("clamps stored panel widths to supported bounds", () => {
-    window.localStorage.setItem(
-      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
-      JSON.stringify({
-        layout: {
-          showFolders: true,
-          showInspector: true,
-          showActionBar: false,
-          foldersPanelWidthPx: MAX_FOLDERS_PANEL_WIDTH_PX + 200,
-          inspectorPanelWidthPx: MIN_INSPECTOR_PANEL_WIDTH_PX - 200,
-        },
-      }),
-    );
+  it("isolates Standard and Workbench panels and columns", () => {
+    writeBrowserRootUiLayout({ showFolders: false, showInspector: false }, "standard");
+    writeBrowserRootUiLayout({ showFolders: true, showInspector: true }, "workbench");
+    writeBrowserRootObjectColumns(["size"], "standard");
+    writeBrowserRootObjectColumns(["modified", "owner"], "workbench");
 
-    expect(readStoredBrowserRootUiState()?.layout).toEqual({
-      showFolders: true,
-      showInspector: true,
-      showActionBar: false,
-      foldersPanelWidthPx: MAX_FOLDERS_PANEL_WIDTH_PX,
-      inspectorPanelWidthPx: MIN_INSPECTOR_PANEL_WIDTH_PX,
-    });
+    const state = readBrowserRootUiState();
+    expect(state.layouts.standard.showFolders).toBe(false);
+    expect(state.layouts.workbench.showFolders).toBe(true);
+    expect(readBrowserRootObjectColumns("standard")).toEqual(["size"]);
+    expect(readBrowserRootObjectColumns("workbench")).toEqual(["modified", "owner"]);
   });
 
-  it("falls back to default widths when stored values are invalid", () => {
-    window.localStorage.setItem(
-      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
-      JSON.stringify({
-        layout: {
-          showFolders: false,
-          showInspector: true,
-          showActionBar: false,
-          foldersPanelWidthPx: "wide",
-          inspectorPanelWidthPx: null,
-        },
-      }),
-    );
+  it("persists active layout and density only in v2", () => {
+    writeBrowserRootActiveLayout("workbench");
+    writeBrowserRootDensity("compact");
 
-    expect(readStoredBrowserRootUiState()?.layout).toEqual({
-      showFolders: false,
-      showInspector: true,
-      showActionBar: false,
-      foldersPanelWidthPx: DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-      inspectorPanelWidthPx: DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-    });
-  });
-
-  it("clamps persisted widths when writing through helpers", () => {
-    writeBrowserRootUiPanelWidths({
-      foldersPanelWidthPx: MIN_FOLDERS_PANEL_WIDTH_PX - 40,
-      inspectorPanelWidthPx: MAX_INSPECTOR_PANEL_WIDTH_PX + 40,
-    });
-
-    expect(readStoredBrowserRootUiState()?.layout).toEqual({
-      showFolders: false,
-      showInspector: false,
-      showActionBar: false,
-      foldersPanelWidthPx: MIN_FOLDERS_PANEL_WIDTH_PX,
-      inspectorPanelWidthPx: MAX_INSPECTOR_PANEL_WIDTH_PX,
-    });
-  });
-
-  it("persists object column widths separately from layout", () => {
-    writeBrowserRootUiLayout({
-      showFolders: false,
-      showInspector: true,
-      showActionBar: false,
-    });
-    writeBrowserRootObjectColumnWidths({
-      name: 420,
-      modified: 190,
-    });
-
-    expect(readStoredBrowserRootUiState()).toEqual({
-      layout: {
-        showFolders: false,
-        showInspector: true,
-        showActionBar: false,
-        foldersPanelWidthPx: DEFAULT_FOLDERS_PANEL_WIDTH_PX,
-        inspectorPanelWidthPx: DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-      },
-      contextSelections: {},
-      objectColumns: [],
-      objectColumnWidths: {
-        name: 420,
-        modified: 190,
-      },
-    });
-  });
-
-  it("normalizes invalid stored object column widths", () => {
-    window.localStorage.setItem(
-      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
-      JSON.stringify({
-        objectColumnWidths: {
-          name: 360.4,
-          modified: 0,
-          size: -20,
-          invalid: "wide",
-        },
-      }),
-    );
-
-    expect(readBrowserRootObjectColumnWidths()).toEqual({
-      name: 360,
-    });
-  });
-
-  it("falls back to empty object column widths when absent", () => {
-    window.localStorage.setItem(
-      BROWSER_ROOT_UI_STATE_STORAGE_KEY,
-      JSON.stringify({
-        layout: {
-          showFolders: true,
-          showInspector: false,
-          showActionBar: false,
-        },
-      }),
-    );
-
-    expect(readBrowserRootObjectColumnWidths()).toEqual({});
-    expect(readStoredBrowserRootUiState()?.objectColumnWidths).toEqual({});
+    const state = readBrowserRootUiState();
+    expect(state.activeLayout).toBe("workbench");
+    expect(state.density).toBe("compact");
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBeNull();
   });
 
   it("keeps bucket and prefix selections in the current tab only", () => {
     writeBrowserRootContextSelection("conn-1", { bucketName: "bucket-a", prefix: "docs/" });
 
-    expect(readBrowserRootContextSelection("conn-1")).toEqual({
-      bucketName: "bucket-a",
-      prefix: "docs/",
-    });
+    expect(readBrowserRootContextSelection("conn-1")).toEqual({ bucketName: "bucket-a", prefix: "docs/" });
     expect(window.sessionStorage.getItem(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY)).toContain("bucket-a");
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBeNull();
   });
 
-  it("ignores context selections from the former shared snapshot", () => {
+  it("ignores context selections embedded in the old local snapshot", () => {
     window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify({
-      contextSelections: {
-        "conn-1": { bucketName: "other-tab", prefix: "stale/" },
-      },
+      contextSelections: { "conn-1": { bucketName: "other-tab", prefix: "stale/" } },
     }));
 
     expect(readBrowserRootContextSelection("conn-1")).toBeNull();

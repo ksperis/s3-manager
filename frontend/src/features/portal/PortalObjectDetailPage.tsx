@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpaceObject,
@@ -144,7 +144,15 @@ function QuickAction({
 export default function PortalObjectDetailPage() {
   const { locale, t } = useI18n();
   const params = useParams();
-  const [activeTab, setActiveTab] = useState<ObjectTab>("preview");
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedObjectTab: ObjectTab =
+    requestedTab === "history" || requestedTab === "versions"
+      ? "history"
+      : requestedTab === "properties" || requestedTab === "details"
+        ? "details"
+        : "preview";
+  const [activeTab, setActiveTab] = useState<ObjectTab>(requestedObjectTab);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [objectDetail, setObjectDetail] = useState<PortalStorageObjectDetail | null>(null);
@@ -164,6 +172,10 @@ export default function PortalObjectDetailPage() {
   const decodedSpaceId = decodeRouteValue(params.spaceId);
   const objectPath = decodeObjectPath(params["*"]);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
+
+  useEffect(() => {
+    setActiveTab(requestedObjectTab);
+  }, [requestedObjectTab]);
 
   useEffect(() => {
     let cancelled = false;

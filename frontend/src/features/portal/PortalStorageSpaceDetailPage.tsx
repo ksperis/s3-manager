@@ -60,7 +60,6 @@ import type {
   BrowserDeletedObjectTarget,
   BrowserObjectDetailsRouteTarget,
 } from "../browser/BrowserPage";
-import type { BrowserActionId } from "../browser/browserActions";
 import {
   PortalAccessModeFields,
   PortalRoleBadge,
@@ -97,13 +96,6 @@ function decodeRouteValue(value?: string): string {
     return value;
   }
 }
-
-const VIEWER_HIDDEN_BROWSER_ACTION_IDS: readonly BrowserActionId[] = [
-  "uploadFiles",
-  "uploadFolder",
-  "newFolder",
-  "delete",
-];
 
 type PendingAccessChange = {
   mode: PortalAccessMode;
@@ -1094,8 +1086,15 @@ export default function PortalStorageSpaceDetailPage() {
             accountIdForApi={accountIdForApi}
             hasContext={hasAccountContext}
             workspaceSurface="portal"
-            actionProfile="portal-basic"
-            hiddenActionIds={canModifyObjects ? undefined : VIEWER_HIDDEN_BROWSER_ACTION_IDS}
+            functionalProfile="portal"
+            layoutMode="standard"
+            density="compact"
+            capabilityFacts={{
+              canWriteObjects: canModifyObjects,
+              canDeleteObjects: canModifyObjects,
+              canRestoreObjects: canModifyObjects,
+              canCreatePublicLinks,
+            }}
             lockedBucketName={lockedBucketName}
             lockedBucketLabel={space.name}
             storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
@@ -1103,7 +1102,15 @@ export default function PortalStorageSpaceDetailPage() {
             quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
             onOpenObjectDetailsRoute={(target) => {
               if (target.bucketName !== lockedBucketName) return;
-              navigate(storageSpaceObjectPath(space, target.key));
+              const params = new URLSearchParams();
+              if (target.isDeleted || target.initialTab === "versions") {
+                params.set("tab", "history");
+                params.set("deleted", "1");
+              } else if (target.initialTab) {
+                params.set("tab", target.initialTab);
+              }
+              const query = params.toString();
+              navigate(`${storageSpaceObjectPath(space, target.key)}${query ? `?${query}` : ""}`);
             }}
             onCreatePublicLinkForObject={canCreatePublicLinks ? openPublicLinkDialog : undefined}
             refreshToken={browserRefreshToken}

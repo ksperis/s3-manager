@@ -74,6 +74,16 @@ function ManagerBrowserContent() {
           <BrowserEmbed
             accountIdForApi={selectorForApi}
             hasContext
+            workspaceSurface="manager"
+            functionalProfile="advanced"
+            layoutMode="standard"
+            density="compact"
+            capabilityFacts={{
+              canWriteObjects: true,
+              canDeleteObjects: true,
+              canRestoreObjects: true,
+              canCreatePublicLinks: false,
+            }}
             storageEndpointCapabilities={selectedContext?.storage_endpoint_capabilities ?? null}
             endpointProvider={selectedContext?.endpoint_provider ?? null}
             quotaMaxSizeGb={selectedContext?.quota_max_size_gb ?? null}

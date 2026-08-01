@@ -4,6 +4,10 @@
  */
 import { getSelectionInfo } from "./browserUtils";
 import type { BrowserItem, ClipboardState } from "./browserTypes";
+import {
+  OBJECT_PREVIEW_MAX_BYTES,
+  objectPreviewKind,
+} from "../shared/ObjectPreview";
 
 export type BrowserActionId =
   | "uploadFiles"
@@ -13,7 +17,10 @@ export type BrowserActionId =
   | "versions"
   | "restoreToDate"
   | "cleanOldVersions"
+  | "multipartUploads"
+  | "configureBucket"
   | "copyPath"
+  | "refresh"
   | "toggleShowFolders"
   | "toggleShowDeleted"
   | "details"
@@ -22,6 +29,7 @@ export type BrowserActionId =
   | "preview"
   | "download"
   | "createPublicLink"
+  | "restore"
   | "copyUrl"
   | "copy"
   | "cut"
@@ -42,7 +50,33 @@ export type BrowserActionState = {
 };
 
 export type BrowserActionMap = Record<BrowserActionId, BrowserActionState>;
-export type BrowserActionProfile = "full" | "portal-basic";
+export type BrowserActionHandler = () => void | Promise<void>;
+export type BrowserActionDispatcherResult =
+  | { executed: true }
+  | { executed: false; reason: string };
+export type BrowserFunctionalProfile = "standard" | "advanced" | "portal";
+export type BrowserLayoutMode = "standard" | "workbench";
+export type BrowserDensity = "comfortable" | "compact";
+
+export type BrowserCapabilityFacts = {
+  canWriteObjects: boolean;
+  canDeleteObjects: boolean;
+  canRestoreObjects: boolean;
+  canCreatePublicLinks: boolean;
+};
+
+export const FULL_BROWSER_CAPABILITY_FACTS: BrowserCapabilityFacts = {
+  canWriteObjects: true,
+  canDeleteObjects: true,
+  canRestoreObjects: true,
+  canCreatePublicLinks: false,
+};
+
+export type BrowserItemPrimaryAction =
+  | { kind: "open-folder" }
+  | { kind: "open-file"; initialTab: "preview" | "properties" }
+  | { kind: "open-versions" }
+  | { kind: "none" };
 
 export type ResolveBrowserActionsInput = {
   scope: BrowserActionScope;
@@ -55,10 +89,18 @@ export type ResolveBrowserActionsInput = {
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
   publicLinkAvailable?: boolean;
+  restoreAvailable?: boolean;
   inspectorAvailable?: boolean;
   currentPath?: string;
   showFolderItems?: boolean;
   showDeletedObjects?: boolean;
+  functionalProfile?: BrowserFunctionalProfile;
+  capabilityFacts?: BrowserCapabilityFacts;
+  previewAvailable?: boolean;
+  operationPending?: boolean;
+  refreshPending?: boolean;
+  multipartUploadsAvailable?: boolean;
+  bucketConfigurationAvailable?: boolean;
 };
 
 export const CONTEXT_MENU_PATH_ACTION_IDS: BrowserActionId[] = [
@@ -69,6 +111,8 @@ export const CONTEXT_MENU_PATH_ACTION_IDS: BrowserActionId[] = [
   "versions",
   "restoreToDate",
   "cleanOldVersions",
+  "multipartUploads",
+  "configureBucket",
   "copyPath",
 ];
 
@@ -85,6 +129,7 @@ export const CONTEXT_MENU_ITEM_ACTION_IDS: BrowserActionId[] = [
   "open",
   "download",
   "createPublicLink",
+  "restore",
   "copyUrl",
   "copy",
   "cut",
@@ -106,10 +151,15 @@ export const CONTEXT_MENU_SELECTION_ACTION_IDS: BrowserActionId[] = [
 ];
 
 export const TOOLBAR_MORE_PATH_ACTION_IDS: BrowserActionId[] = [
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
   "paste",
   "versions",
   "restoreToDate",
   "cleanOldVersions",
+  "multipartUploads",
+  "configureBucket",
   "copyPath",
 ];
 
@@ -133,32 +183,6 @@ export const TOOLBAR_MORE_SELECTION_OVERFLOW_ACTION_IDS: BrowserActionId[] = [
   "restoreToDate",
 ];
 
-export const INSPECTOR_CONTEXT_ACTION_IDS: BrowserActionId[] = [
-  "uploadFiles",
-  "uploadFolder",
-  "newFolder",
-  "paste",
-  "versions",
-  "restoreToDate",
-  "cleanOldVersions",
-  "copyPath",
-];
-
-export const INSPECTOR_SELECTION_ACTION_IDS: BrowserActionId[] = [
-  "download",
-  "open",
-  "copyUrl",
-  "advanced",
-];
-
-export const INSPECTOR_SELECTION_BULK_ACTION_IDS: BrowserActionId[] = [
-  "copy",
-  "cut",
-  "bulkAttributes",
-  "restoreToDate",
-  "delete",
-];
-
 const ALL_ACTION_IDS: BrowserActionId[] = [
   "uploadFiles",
   "uploadFolder",
@@ -167,7 +191,10 @@ const ALL_ACTION_IDS: BrowserActionId[] = [
   "versions",
   "restoreToDate",
   "cleanOldVersions",
+  "multipartUploads",
+  "configureBucket",
   "copyPath",
+  "refresh",
   "toggleShowFolders",
   "toggleShowDeleted",
   "details",
@@ -176,6 +203,7 @@ const ALL_ACTION_IDS: BrowserActionId[] = [
   "preview",
   "download",
   "createPublicLink",
+  "restore",
   "copyUrl",
   "copy",
   "cut",
@@ -192,7 +220,10 @@ const defaultSectionByActionId: Record<BrowserActionId, BrowserActionSection> = 
   versions: "path",
   restoreToDate: "path",
   cleanOldVersions: "path",
+  multipartUploads: "path",
+  configureBucket: "path",
   copyPath: "path",
+  refresh: "path",
   toggleShowFolders: "layout",
   toggleShowDeleted: "layout",
   details: "selection",
@@ -201,6 +232,7 @@ const defaultSectionByActionId: Record<BrowserActionId, BrowserActionSection> = 
   preview: "selection",
   download: "selection",
   createPublicLink: "selection",
+  restore: "selection",
   copyUrl: "selection",
   copy: "selection",
   cut: "selection",
@@ -220,36 +252,104 @@ const createHiddenState = (id: BrowserActionId): BrowserActionState => ({
 export const getVisibleBrowserActions = (actions: BrowserActionMap, ids: readonly BrowserActionId[]) =>
   ids.map((id) => actions[id]).filter((action) => action.visible);
 
-const PORTAL_BASIC_PATH_ACTION_IDS = new Set<BrowserActionId>([
+export function runBrowserAction(
+  action: BrowserActionState,
+  handlers: Partial<Record<BrowserActionId, BrowserActionHandler>>,
+): BrowserActionDispatcherResult {
+  if (!action.visible) {
+    return { executed: false, reason: "This action is not available in the current Browser profile." };
+  }
+  if (!action.enabled) {
+    return {
+      executed: false,
+      reason: action.disabledReason ?? "This action is temporarily unavailable.",
+    };
+  }
+  const handler = handlers[action.id];
+  if (!handler) {
+    return { executed: false, reason: "This action is not supported from this surface." };
+  }
+  void handler();
+  return { executed: true };
+}
+
+const STANDARD_PATH_ACTION_IDS = new Set<BrowserActionId>([
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
+  "paste",
+  "copyPath",
+  "toggleShowDeleted",
+  "refresh",
+]);
+
+const STANDARD_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
+  "details",
+  "properties",
+  "open",
+  "preview",
+  "download",
+  "copy",
+  "cut",
+  "delete",
+]);
+
+const PORTAL_PATH_ACTION_IDS = new Set<BrowserActionId>([
   "uploadFiles",
   "uploadFolder",
   "newFolder",
   "copyPath",
+  "toggleShowDeleted",
+  "restore",
+  "refresh",
 ]);
 
-const PORTAL_BASIC_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
+const PORTAL_SELECTION_ACTION_IDS = new Set<BrowserActionId>([
   "details",
+  "open",
+  "preview",
   "download",
   "createPublicLink",
+  "restore",
   "delete",
 ]);
 
-export function applyBrowserActionProfile(
+const WRITE_ACTION_IDS = new Set<BrowserActionId>([
+  "uploadFiles",
+  "uploadFolder",
+  "newFolder",
+  "paste",
+  "copy",
+  "cut",
+  "bulkAttributes",
+]);
+
+export function applyBrowserFunctionalPolicy(
   actions: BrowserActionMap,
-  profile: BrowserActionProfile,
+  profile: BrowserFunctionalProfile,
+  capabilityFacts: BrowserCapabilityFacts,
   items: BrowserItem[] = [],
 ): BrowserActionMap {
-  if (profile !== "portal-basic") {
-    return actions;
-  }
   const canOpenSingleFolder = items.length === 1 && items[0]?.type === "folder";
   return Object.fromEntries(
     Object.entries(actions).map(([id, action]) => {
       const actionId = id as BrowserActionId;
-      const allowed =
-        PORTAL_BASIC_PATH_ACTION_IDS.has(actionId) ||
-        PORTAL_BASIC_SELECTION_ACTION_IDS.has(actionId) ||
-        (actionId === "open" && canOpenSingleFolder);
+      const profileAllows =
+        profile === "advanced" ||
+        (profile === "standard" &&
+          (STANDARD_PATH_ACTION_IDS.has(actionId) ||
+            STANDARD_SELECTION_ACTION_IDS.has(actionId))) ||
+        (profile === "portal" &&
+          (PORTAL_PATH_ACTION_IDS.has(actionId) ||
+            PORTAL_SELECTION_ACTION_IDS.has(actionId) ||
+            (actionId === "open" && canOpenSingleFolder)));
+      const capabilityAllows =
+        (!WRITE_ACTION_IDS.has(actionId) || capabilityFacts.canWriteObjects) &&
+        (actionId !== "delete" || capabilityFacts.canDeleteObjects) &&
+        ((actionId !== "restoreToDate" && actionId !== "restore") ||
+          capabilityFacts.canRestoreObjects) &&
+        (actionId !== "createPublicLink" || capabilityFacts.canCreatePublicLinks);
+      const allowed = profileAllows && capabilityAllows;
       return [
         actionId,
         allowed ? action : { ...action, visible: false, enabled: false },
@@ -258,23 +358,30 @@ export function applyBrowserActionProfile(
   ) as BrowserActionMap;
 }
 
-export function hideBrowserActions(
-  actions: BrowserActionMap,
-  hiddenIds: readonly BrowserActionId[] = [],
-): BrowserActionMap {
-  if (hiddenIds.length === 0) {
-    return actions;
+export const isBrowserItemPreviewAvailable = (item: BrowserItem): boolean =>
+  item.type === "file" &&
+  !item.isDeleted &&
+  typeof item.sizeBytes === "number" &&
+  item.sizeBytes >= 0 &&
+  item.sizeBytes <= OBJECT_PREVIEW_MAX_BYTES &&
+  objectPreviewKind(item.name) !== "generic";
+
+export function resolveItemPrimaryAction(
+  item: BrowserItem,
+  options: { versioningEnabled: boolean; previewAvailable?: boolean },
+): BrowserItemPrimaryAction {
+  if (item.type === "folder") {
+    return { kind: "open-folder" };
   }
-  const hidden = new Set(hiddenIds);
-  return Object.fromEntries(
-    Object.entries(actions).map(([id, action]) => {
-      const actionId = id as BrowserActionId;
-      return [
-        actionId,
-        hidden.has(actionId) ? { ...action, visible: false, enabled: false } : action,
-      ];
-    }),
-  ) as BrowserActionMap;
+  if (item.isDeleted) {
+    return options.versioningEnabled ? { kind: "open-versions" } : { kind: "none" };
+  }
+  const previewAvailable =
+    options.previewAvailable ?? isBrowserItemPreviewAvailable(item);
+  return {
+    kind: "open-file",
+    initialTab: previewAvailable ? "preview" : "properties",
+  };
 }
 
 export const resolveBrowserActions = ({
@@ -288,10 +395,18 @@ export const resolveBrowserActions = ({
   copyUrlDisabled = false,
   copyUrlDisabledReason,
   publicLinkAvailable = false,
+  restoreAvailable = false,
   inspectorAvailable = false,
   currentPath = "",
   showFolderItems = true,
   showDeletedObjects = false,
+  functionalProfile = "advanced",
+  capabilityFacts = FULL_BROWSER_CAPABILITY_FACTS,
+  previewAvailable = false,
+  operationPending = false,
+  refreshPending = false,
+  multipartUploadsAvailable = false,
+  bucketConfigurationAvailable = false,
 }: ResolveBrowserActionsInput): BrowserActionMap => {
   const states = ALL_ACTION_IDS.reduce<BrowserActionMap>((acc, id) => {
     acc[id] = createHiddenState(id);
@@ -314,6 +429,28 @@ export const resolveBrowserActions = ({
       : selectionInfo.canDownloadFolder
         ? "Download folder"
         : "Download";
+
+  const finalize = () => {
+    const resolved = applyBrowserFunctionalPolicy(
+      states,
+      functionalProfile,
+      capabilityFacts,
+      items,
+    );
+    if (!operationPending) return resolved;
+    return Object.fromEntries(
+      Object.entries(resolved).map(([id, action]) => [
+        id,
+        action.visible && action.enabled
+          ? {
+              ...action,
+              enabled: false,
+              disabledReason: "Wait for the current operation to finish.",
+            }
+          : action,
+      ]),
+    ) as BrowserActionMap;
+  };
 
   const setState = (id: BrowserActionId, next: Partial<BrowserActionState>) => {
     states[id] = { ...states[id], ...next };
@@ -339,11 +476,38 @@ export const resolveBrowserActions = ({
       label: pasteLabel,
       visible: true,
       enabled: canPaste,
+      disabledReason: canPaste
+        ? undefined
+        : "Clipboard is empty or unavailable in this context.",
     });
     setState("copyPath", {
       label: "Copy path",
       visible: true,
       enabled: Boolean(currentPath),
+    });
+    setState("refresh", {
+      label: "Refresh",
+      visible: true,
+      enabled: canUseContextActions && !refreshPending,
+      disabledReason: refreshPending
+        ? "Objects are already loading."
+        : undefined,
+    });
+    setState("multipartUploads", {
+      label: "Multipart uploads",
+      visible: multipartUploadsAvailable,
+      enabled: multipartUploadsAvailable && canUseContextActions,
+      disabledReason: canUseContextActions
+        ? undefined
+        : "Select a bucket to inspect multipart uploads.",
+    });
+    setState("configureBucket", {
+      label: "Configure bucket",
+      visible: bucketConfigurationAvailable,
+      enabled: bucketConfigurationAvailable && canUseContextActions,
+      disabledReason: canUseContextActions
+        ? undefined
+        : "Select a bucket to configure it.",
     });
     setState("toggleShowFolders", {
       label: showFolderItems ? "Hide folders" : "Show folders",
@@ -371,8 +535,15 @@ export const resolveBrowserActions = ({
         visible: true,
         enabled: true,
       });
+      if (restoreAvailable && currentPath) {
+        setState("restore", {
+          label: "Restore deleted files in this folder",
+          visible: true,
+          enabled: canUseContextActions,
+        });
+      }
     }
-    return states;
+    return finalize();
   }
 
   if (scope === "item") {
@@ -404,7 +575,7 @@ export const resolveBrowserActions = ({
     if (isPrimaryFile) {
       setState("preview", {
         label: "Preview",
-        visible: true,
+        visible: previewAvailable,
         enabled: canUseContextActions && !isPrimaryDeleted,
       });
       setState("properties", {
@@ -433,6 +604,13 @@ export const resolveBrowserActions = ({
         visible: true,
         enabled: canUseContextActions && !copyUrlDisabled,
         disabledReason: copyUrlDisabled ? copyUrlDisabledReason : undefined,
+      });
+    }
+    if (isPrimaryFile && isPrimaryDeleted && versioningEnabled && restoreAvailable) {
+      setState("restore", {
+        label: "Restore",
+        visible: true,
+        enabled: canUseContextActions,
       });
     }
     if (selectionInfo.items.length > 0) {
@@ -464,7 +642,7 @@ export const resolveBrowserActions = ({
         enabled: canUseContextActions,
       });
     }
-    return states;
+    return finalize();
   }
 
   if (selectionInfo.items.length > 0) {
@@ -475,11 +653,19 @@ export const resolveBrowserActions = ({
         enabled: canUseContextActions,
       });
     }
-    if (selectionInfo.canOpen) {
+    if (isSingle && selectionInfo.primary) {
+      setState("details", {
+        label: "Open full details",
+        visible: true,
+        enabled: canUseContextActions,
+      });
       setState("open", {
         label: "Open",
         visible: true,
-        enabled: hasBucket && selectionInfo.canOpen,
+        enabled:
+          hasBucket &&
+          canUseContextActions &&
+          (!isPrimaryDeleted || versioningEnabled),
       });
     }
     if (selectionInfo.canCopyUrl && selectionInfo.primary) {
@@ -525,5 +711,5 @@ export const resolveBrowserActions = ({
       });
     }
   }
-  return states;
+  return finalize();
 };

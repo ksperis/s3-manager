@@ -21,13 +21,21 @@ Use **Browser** for direct bucket/object operations.
    - Use the workspace sidebar to search and switch buckets directly from the workspace.
    - Use the folders panel to browse folders for the active bucket.
 4. Perform object actions from the most appropriate surface:
-   - Right-click for the full context menu on the current path, item, or selection.
-   - Use the action bar on `/browser` for the main shortcuts in this order: `Open`, `Preview`, `New folder`, `Copy`, `Paste`, `Upload`, `Download`, `Delete`, then `Refresh` and `More`.
-   - Use the toolbar `More` menu as the non-context fallback, especially in compact layouts.
-   - Use the inspector on `/browser` for the same context and selection actions without leaving the current view. The `Details` tab is a lightweight summary and quick-launch surface for file object details.
+   - Activate the icon and name once to open the primary destination: folders
+     navigate, previewable files up to 50 MiB open on `Preview`, other files
+     open read-only or editable `Properties` according to the profile, and
+     deleted objects open `Versions`/`History`.
+   - Click the rest of a row or mobile card to select it. Desktop shows a
+     sticky selection bar only while a selection exists; mobile shows a
+     safe-area action bar with `Open`, `Download`, and `More` when applicable.
+   - Right-click or use `More` for all secondary actions. On mobile, `More`
+     opens an accessible bottom sheet and explains temporarily disabled actions.
+   - The inspector is informative and may provide `Open full details`; it no
+     longer duplicates the action toolbars.
 5. Perform uploads, downloads, previews, deletes, restores, and metadata/tag actions from those surfaces.
    - File actions such as `Preview`, `Versions`, and advanced object operations open the same `Object details` modal on the relevant tab.
-   - Copy and cut selections can be pasted into another Browser context.
+   - Standard users can copy, cut, and paste inside the current connection.
+     Transfers to another Browser context require the Advanced profile.
    - Cross-context moves remove the source only after the destination copy is verified.
 6. Use bucket dialogs for bucket creation or configuration if your effective permissions allow it.
 7. Open **Usage & Metrics** from the sidebar when a read-only metrics page is available. The sidebar usage gauge appears only when reliable usage data is available for the selected connection.
@@ -37,6 +45,14 @@ Use **Browser** for direct bucket/object operations.
 - `/manager/browser` uses its own standard Browser selector and the same private
   connection policy. It is independent of the active Manager context.
 - `/ceph-admin/browser` remains a separate endpoint-wide Ceph Admin surface.
+- `/browser` uses the Standard profile when advanced features are disabled.
+  Enabling **Advanced Browser actions and Workbench** adds technical S3 actions
+  and allows either the Standard or Workbench layout; it does not force
+  Workbench. Manager and Ceph Admin embeds use Advanced actions in a compact
+  Standard layout, while Portal uses its dedicated compact Portal profile.
+- Layout, density, panels, and column preferences belong only to `/browser`.
+  Embedded Browser surfaces receive these settings explicitly and never read or
+  write the root Browser preferences.
 - On `/browser`, buckets that cannot be listed are dimmed in the left panel and remain selectable so the backend error can be inspected explicitly.
 - Accounts, assigned RGW users, shared connections, and Portal accounts are not
   standard Browser contexts. Use Portal Storage Spaces for Portal file access.

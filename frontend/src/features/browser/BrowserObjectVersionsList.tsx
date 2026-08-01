@@ -21,6 +21,7 @@ type BrowserObjectVersionsListProps = {
   onLoadMore?: () => void;
   onRestoreVersion: (version: BrowserObjectVersion) => void;
   onDeleteVersion: (version: BrowserObjectVersion) => void;
+  readOnly?: boolean;
 };
 
 export default function BrowserObjectVersionsList({
@@ -36,6 +37,7 @@ export default function BrowserObjectVersionsList({
   onLoadMore,
   onRestoreVersion,
   onDeleteVersion,
+  readOnly = false,
 }: BrowserObjectVersionsListProps) {
   return (
     <div className={containerClassName}>
@@ -54,7 +56,7 @@ export default function BrowserObjectVersionsList({
             className="rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
+              {!readOnly && <div className="flex flex-wrap items-center gap-2">
                 {ver.is_delete_marker && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
                     delete marker
@@ -65,7 +67,7 @@ export default function BrowserObjectVersionsList({
                     latest
                   </span>
                 )}
-              </div>
+              </div>}
               <div className="flex flex-wrap items-center gap-2">
                 {!ver.is_delete_marker && (
                   <button type="button" className={bulkActionClasses} onClick={() => onRestoreVersion(ver)}>

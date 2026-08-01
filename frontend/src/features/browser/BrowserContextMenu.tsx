@@ -23,22 +23,24 @@ import {
   ListIcon,
   OpenIcon,
   PasteIcon,
+  RefreshIcon,
   SettingsIcon,
   SlidersIcon,
   TrashIcon,
   UploadIcon,
 } from "./browserIcons";
 import {
-  applyBrowserActionProfile,
   CONTEXT_MENU_ITEM_ACTION_IDS,
   CONTEXT_MENU_PATH_ACTION_IDS,
   CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS,
   CONTEXT_MENU_SELECTION_ACTION_IDS,
   getVisibleBrowserActions,
-  hideBrowserActions,
+  isBrowserItemPreviewAvailable,
   resolveBrowserActions,
+  runBrowserAction,
   type BrowserActionId,
-  type BrowserActionProfile,
+  type BrowserCapabilityFacts,
+  type BrowserFunctionalProfile,
 } from "./browserActions";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
 
@@ -61,8 +63,11 @@ type BrowserContextMenuProps = {
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
   publicLinkAvailable?: boolean;
-  actionProfile?: BrowserActionProfile;
-  hiddenActionIds?: readonly BrowserActionId[];
+  restoreAvailable?: boolean;
+  multipartUploadsAvailable?: boolean;
+  bucketConfigurationAvailable?: boolean;
+  functionalProfile: BrowserFunctionalProfile;
+  capabilityFacts: BrowserCapabilityFacts;
   clipboard: ClipboardState | null;
   fileInputRef: RefObject<HTMLInputElement>;
   folderInputRef: RefObject<HTMLInputElement>;
@@ -71,8 +76,11 @@ type BrowserContextMenuProps = {
   onPasteItems: () => void;
   onOpenPrefixVersions: () => void;
   onOpenCleanupVersions: () => void;
+  onOpenMultipartUploads: () => void;
+  onConfigureBucket: () => void;
   onDownloadTarget: (item: BrowserItem) => void;
   onCreatePublicLink: (item: BrowserItem) => void;
+  onRestoreDeletedItem?: (item: BrowserItem) => void;
   onPreviewItem: (item: BrowserItem) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
   onCopyPath: (path: string) => void;
@@ -113,8 +121,11 @@ export default function BrowserContextMenu({
   copyUrlDisabled = false,
   copyUrlDisabledReason,
   publicLinkAvailable = false,
-  actionProfile = "full",
-  hiddenActionIds = [],
+  restoreAvailable = false,
+  multipartUploadsAvailable = false,
+  bucketConfigurationAvailable = false,
+  functionalProfile,
+  capabilityFacts,
   clipboard,
   fileInputRef,
   folderInputRef,
@@ -123,8 +134,11 @@ export default function BrowserContextMenu({
   onPasteItems,
   onOpenPrefixVersions,
   onOpenCleanupVersions,
+  onOpenMultipartUploads,
+  onConfigureBucket,
   onDownloadTarget,
   onCreatePublicLink,
+  onRestoreDeletedItem,
   onPreviewItem,
   onCopyUrl,
   onCopyPath,
@@ -153,27 +167,23 @@ export default function BrowserContextMenu({
   if (!contextMenu) return null;
 
   const contextItem = contextMenu.kind === "item" ? contextMenu.item ?? null : null;
-  const pathActionStates = hideBrowserActions(
-    applyBrowserActionProfile(
-      resolveBrowserActions({
-        scope: "path",
-        bucketName,
-        hasS3AccountContext,
-        versioningEnabled,
-        canPaste,
-        clipboardMode: clipboard?.mode ?? null,
-        currentPath,
-        showFolderItems,
-        showDeletedObjects,
-      }),
-      actionProfile,
-    ),
-    hiddenActionIds,
-  );
+  const pathActionStates = resolveBrowserActions({
+    scope: "path",
+    bucketName,
+    hasS3AccountContext,
+    versioningEnabled,
+    canPaste,
+    clipboardMode: clipboard?.mode ?? null,
+    currentPath,
+    showFolderItems,
+    showDeletedObjects,
+    functionalProfile,
+    capabilityFacts,
+    multipartUploadsAvailable,
+    bucketConfigurationAvailable,
+  });
   const itemActionStates = contextItem
-    ? hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
+    ? resolveBrowserActions({
           scope: "item",
           items: [contextItem],
           bucketName,
@@ -184,19 +194,16 @@ export default function BrowserContextMenu({
           copyUrlDisabled,
           copyUrlDisabledReason,
           publicLinkAvailable,
+          restoreAvailable,
           inspectorAvailable: allowInspectorPanel,
-        }),
-        actionProfile,
-        [contextItem],
-      ),
-      hiddenActionIds,
-    )
+          functionalProfile,
+          capabilityFacts,
+          previewAvailable: isBrowserItemPreviewAvailable(contextItem),
+        })
     : null;
   const selectionItems = contextMenu.kind === "selection" ? contextMenu.items ?? [] : [];
   const selectionActionStates = contextMenu.kind === "selection"
-    ? hideBrowserActions(
-      applyBrowserActionProfile(
-        resolveBrowserActions({
+    ? resolveBrowserActions({
           scope: "selection",
           items: selectionItems,
           bucketName,
@@ -206,12 +213,9 @@ export default function BrowserContextMenu({
           clipboardMode: clipboard?.mode ?? null,
           copyUrlDisabled,
           copyUrlDisabledReason,
-        }),
-        actionProfile,
-        selectionItems,
-      ),
-      hiddenActionIds,
-    )
+          functionalProfile,
+          capabilityFacts,
+        })
     : null;
   const visiblePathActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_ACTION_IDS);
   const visiblePathLayoutActions = getVisibleBrowserActions(pathActionStates, CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS);
@@ -220,142 +224,78 @@ export default function BrowserContextMenu({
     ? getVisibleBrowserActions(selectionActionStates, CONTEXT_MENU_SELECTION_ACTION_IDS)
     : [];
 
-  const runPathAction = (actionId: string) => {
+  const runPathAction = (actionId: BrowserActionId) => {
     onClose();
-    switch (actionId) {
-      case "newFolder":
-        onNewFolder();
-        return;
-      case "uploadFiles":
-        fileInputRef.current?.click();
-        return;
-      case "uploadFolder":
-        folderInputRef.current?.click();
-        return;
-      case "paste":
-        onPasteItems();
-        return;
-      case "versions":
-        onOpenPrefixVersions();
-        return;
-      case "restoreToDate":
-        onOpenBulkRestore([]);
-        return;
-      case "cleanOldVersions":
-        onOpenCleanupVersions();
-        return;
-      case "copyPath":
-        onCopyPath(pathActionStates.copyPath.enabled ? currentPath : "");
-        return;
-      case "toggleShowFolders":
-        onToggleShowFolders();
-        return;
-      case "toggleShowDeleted":
-        onToggleShowDeleted();
-        return;
-      default:
-        return;
-    }
+    runBrowserAction(pathActionStates[actionId], {
+      newFolder: onNewFolder,
+      uploadFiles: () => fileInputRef.current?.click(),
+      uploadFolder: () => folderInputRef.current?.click(),
+      paste: onPasteItems,
+      versions: onOpenPrefixVersions,
+      restoreToDate: () => onOpenBulkRestore([]),
+      cleanOldVersions: onOpenCleanupVersions,
+      multipartUploads: onOpenMultipartUploads,
+      configureBucket: onConfigureBucket,
+      copyPath: () => onCopyPath(currentPath),
+      toggleShowFolders: onToggleShowFolders,
+      toggleShowDeleted: onToggleShowDeleted,
+    });
   };
 
-  const runItemAction = (actionId: string) => {
-    if (!contextItem) return;
+  const runItemAction = (actionId: BrowserActionId) => {
+    if (!contextItem || !itemActionStates) return;
     onClose();
-    switch (actionId) {
-      case "details":
-        onOpenDetails(contextItem);
-        return;
-      case "versions":
-        onOpenObjectVersions(contextItem);
-        return;
-      case "properties":
-        onOpenProperties(contextItem);
-        return;
-      case "open":
-        onOpenItem(contextItem);
-        return;
-      case "preview":
-        onPreviewItem(contextItem);
-        return;
-      case "download":
-        onDownloadTarget(contextItem);
-        return;
-      case "createPublicLink":
-        onCreatePublicLink(contextItem);
-        return;
-      case "copyUrl":
-        onCopyUrl(contextItem);
-        return;
-      case "copy":
-        onCopyItems([contextItem]);
-        return;
-      case "cut":
-        onCutItems([contextItem]);
-        return;
-      case "bulkAttributes":
-        onOpenBulkAttributes([contextItem]);
-        return;
-      case "restoreToDate":
-        onOpenBulkRestore([contextItem]);
-        return;
-      case "advanced":
-        onOpenAdvanced(contextItem);
-        return;
-      case "delete":
-        onDeleteItems([contextItem]);
-        return;
-      default:
-        return;
-    }
+    runBrowserAction(itemActionStates[actionId], {
+      details: () => onOpenDetails(contextItem),
+      versions: () => onOpenObjectVersions(contextItem),
+      properties: () => onOpenProperties(contextItem),
+      open: () => onOpenItem(contextItem),
+      preview: () => onPreviewItem(contextItem),
+      download: () => onDownloadTarget(contextItem),
+      createPublicLink: () => onCreatePublicLink(contextItem),
+      restore: () => onRestoreDeletedItem?.(contextItem),
+      copyUrl: () => onCopyUrl(contextItem),
+      copy: () => onCopyItems([contextItem]),
+      cut: () => onCutItems([contextItem]),
+      bulkAttributes: () => onOpenBulkAttributes([contextItem]),
+      restoreToDate: () => onOpenBulkRestore([contextItem]),
+      advanced: () => onOpenAdvanced(contextItem),
+      delete: () => onDeleteItems([contextItem]),
+    });
   };
 
-  const runSelectionAction = (actionId: string) => {
+  const runSelectionAction = (actionId: BrowserActionId) => {
     if (!selectionActionStates) return;
     onClose();
-    switch (actionId) {
-      case "download": {
+    runBrowserAction(selectionActionStates[actionId], {
+      download: () => {
         const info = selectionItems;
         const summary = selectionActionStates.download.label === "Download folder"
           ? selectionItems[0] ?? null
           : null;
         if (summary) {
           onDownloadFolder(summary);
-          return;
+          return onDownloadFolder(summary);
         }
-        onDownloadItems(info.filter((item) => item.type === "file" && !item.isDeleted));
-        return;
-      }
-      case "open":
+        return onDownloadItems(info.filter((item) => item.type === "file" && !item.isDeleted));
+      },
+      open: () => {
         if (selectionItems[0]) {
           onOpenItem(selectionItems[0]);
         }
-        return;
-      case "copyUrl":
-        onCopyUrl(selectionItems[0] ?? null);
-        return;
-      case "copy":
-        onCopyItems(selectionItems);
-        return;
-      case "cut":
-        onCutItems(selectionItems);
-        return;
-      case "bulkAttributes":
-        onOpenBulkAttributes(selectionItems);
-        return;
-      case "restoreToDate":
-        onOpenBulkRestore(selectionItems);
-        return;
-      case "advanced":
+      },
+      copyUrl: () => onCopyUrl(selectionItems[0] ?? null),
+      copy: () => onCopyItems(selectionItems),
+      cut: () => onCutItems(selectionItems),
+      bulkAttributes: () => onOpenBulkAttributes(selectionItems),
+      restoreToDate: () => onOpenBulkRestore(selectionItems),
+      advanced: () => {
         if (selectionItems[0]) {
           onOpenAdvanced(selectionItems[0]);
         }
-        return;
-      case "delete":
-        onDeleteItems(selectionItems);
-        return;
-      default:
-        return;
-    }
+      },
+      delete: () => onDeleteItems(selectionItems),
+    });
   };
 
   const iconByActionId = {
@@ -366,7 +306,10 @@ export default function BrowserContextMenu({
     versions: <ListIcon className="h-3.5 w-3.5" />,
     restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
     cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
+    multipartUploads: <UploadIcon className="h-3.5 w-3.5" />,
+    configureBucket: <SettingsIcon className="h-3.5 w-3.5" />,
     copyPath: <CopyIcon className="h-3.5 w-3.5" />,
+    refresh: <RefreshIcon className="h-3.5 w-3.5" />,
     toggleShowFolders: <FolderIcon className="h-3.5 w-3.5" />,
     toggleShowDeleted: <TrashIcon className="h-3.5 w-3.5" />,
     details: <InfoIcon className="h-3.5 w-3.5" />,
@@ -375,6 +318,7 @@ export default function BrowserContextMenu({
     preview: <EyeIcon className="h-3.5 w-3.5" />,
     download: <DownloadIcon className="h-3.5 w-3.5" />,
     createPublicLink: <LinkIcon className="h-3.5 w-3.5" />,
+    restore: <HistoryIcon className="h-3.5 w-3.5" />,
     copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
     copy: <CopyIcon className="h-3.5 w-3.5" />,
     cut: <CutIcon className="h-3.5 w-3.5" />,

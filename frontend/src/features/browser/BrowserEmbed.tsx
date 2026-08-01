@@ -4,7 +4,12 @@
  */
 import type { S3AccountSelector } from "../../api/accountParams";
 import type { BrowserWorkspaceSurface } from "../../api/browser";
-import type { BrowserActionId } from "./browserActions";
+import type {
+  BrowserCapabilityFacts,
+  BrowserDensity,
+  BrowserFunctionalProfile,
+  BrowserLayoutMode,
+} from "./browserActions";
 import BrowserPage, {
   type BrowserDeletedObjectsOptions,
   type BrowserObjectDetailsRouteTarget,
@@ -14,15 +19,17 @@ import BrowserPage, {
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
   hasContext: boolean;
-  workspaceSurface?: BrowserWorkspaceSurface;
-  actionProfile?: "full" | "portal-basic";
+  workspaceSurface: BrowserWorkspaceSurface;
+  functionalProfile: BrowserFunctionalProfile;
+  layoutMode: BrowserLayoutMode;
+  density: BrowserDensity;
+  capabilityFacts: BrowserCapabilityFacts;
   lockedBucketName?: string;
   lockedBucketLabel?: string;
   storageEndpointCapabilities?: Record<string, boolean> | null;
   endpointProvider?: "ceph" | "aws" | "other" | null;
   quotaMaxSizeGb?: number | null;
   quotaMaxObjects?: number | null;
-  hiddenActionIds?: readonly BrowserActionId[];
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
   onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
@@ -35,14 +42,16 @@ export default function BrowserEmbed({
   accountIdForApi,
   hasContext,
   workspaceSurface,
-  actionProfile,
+  functionalProfile,
+  layoutMode,
+  density,
+  capabilityFacts,
   lockedBucketName,
   lockedBucketLabel,
   storageEndpointCapabilities,
   endpointProvider,
   quotaMaxSizeGb,
   quotaMaxObjects,
-  hiddenActionIds,
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
@@ -55,14 +64,16 @@ export default function BrowserEmbed({
       accountIdForApi={accountIdForApi}
       hasContext={hasContext}
       workspaceSurface={workspaceSurface}
-      actionProfile={actionProfile}
+      functionalProfile={functionalProfile}
+      layoutMode={layoutMode}
+      density={density}
+      capabilityFacts={capabilityFacts}
       lockedBucketName={lockedBucketName}
       lockedBucketLabel={lockedBucketLabel}
       storageEndpointCapabilities={storageEndpointCapabilities}
       contextEndpointProvider={endpointProvider}
       contextQuotaMaxSizeGb={quotaMaxSizeGb}
       contextQuotaMaxObjects={quotaMaxObjects}
-      hiddenActionIds={hiddenActionIds}
       allowFoldersPanel={false}
       allowInspectorPanel={false}
       showPanelToggles={false}
