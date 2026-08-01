@@ -28,6 +28,7 @@ from app.utils.time import utcnow
 PORTAL_ACCOUNT_ROLES = {
     AccountRole.PORTAL_USER.value,
     AccountRole.PORTAL_MANAGER.value,
+    AccountRole.ACCOUNT_ADMINISTRATOR.value,
 }
 
 
@@ -157,7 +158,7 @@ class UserAvatarService:
             self.db.query(UserS3Account.account_id)
             .filter(
                 UserS3Account.user_id == user_id,
-                UserS3Account.account_role.in_(PORTAL_ACCOUNT_ROLES),
+                UserS3Account.role.in_(PORTAL_ACCOUNT_ROLES),
             )
             .all()
         )
@@ -166,7 +167,7 @@ class UserAvatarService:
             .join(UserUiGroup, UserUiGroup.group_id == UiGroupS3Account.group_id)
             .filter(
                 UserUiGroup.user_id == user_id,
-                UiGroupS3Account.account_role.in_(PORTAL_ACCOUNT_ROLES),
+                UiGroupS3Account.role.in_(PORTAL_ACCOUNT_ROLES),
             )
             .all()
         )

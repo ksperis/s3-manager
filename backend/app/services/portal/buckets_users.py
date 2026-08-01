@@ -144,7 +144,12 @@ class PortalBucketsUsersMixin:
         self._sync_portal_server_access_log_bucket_policy_if_present(account)
         self.db.commit()
 
-    def sync_existing_portal_user_access(self, target: User, account: S3Account, account_role: str) -> None:
+    def sync_existing_portal_user_access(
+        self,
+        target: User,
+        account: S3Account,
+        account_role: Optional[str],
+    ) -> None:
         """Synchronize an existing IAM identity without creating credentials.
 
         Administrative role changes use this path so revocations happen before

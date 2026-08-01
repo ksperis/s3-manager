@@ -94,8 +94,7 @@ describe("GroupsPage", () => {
     ]);
     listMinimalS3UsersMock.mockResolvedValue([{ id: 11, name: "s3-user-1" }]);
     listMinimalS3ConnectionsMock.mockResolvedValue([
-      { id: 21, name: "shared-conn", is_shared: true },
-      { id: 22, name: "private-conn", is_shared: false },
+      { id: 21, name: "shared-conn" },
     ]);
     createGroupMock.mockResolvedValue({ id: 50, name: "ops-group" });
     updateGroupMock.mockResolvedValue({ id: 50, name: "ops-group-updated" });
@@ -159,14 +158,12 @@ describe("GroupsPage", () => {
           user_ids: [2],
           user_details: [{ id: 2, email: "alice@example.com" }],
           accounts: [99],
-          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_links: [{ account_id: 99, role: "account_administrator" }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
           s3_users: [88],
           s3_user_details: [{ id: 88, name: "archive-rgw-user" }],
           s3_connections: [77],
-          s3_connection_details: [
-            { id: 77, name: "archive-shared-connection", access_manager: true, access_browser: true },
-          ],
+          s3_connection_details: [{ id: 77, name: "archive-shared-connection" }],
         },
       ],
       total: 1,
@@ -179,7 +176,7 @@ describe("GroupsPage", () => {
 
     const associations = await screen.findByLabelText("3 linked associations");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (3)\nRGW account: production-account — Roles: Account admin, Portal manager\nRGW user: archive-rgw-user — Roles: Direct access\nS3 connection: archive-shared-connection — Roles: Manager, Browser",
+      "Linked associations (3)\nRGW account: production-account — Roles: Account administrator\nRGW user: archive-rgw-user — Roles: Direct access\nS3 connection: archive-shared-connection — Roles: Direct access",
     );
     expect(screen.getByLabelText("Search")).toHaveAttribute("type", "search");
     expect(screen.getByLabelText("Search")).toHaveAttribute(
@@ -274,7 +271,7 @@ describe("GroupsPage", () => {
           user_ids: [],
           user_details: [],
           accounts: [99],
-          account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+          account_links: [{ account_id: 99, role: "account_administrator" }],
           account_details: [{ id: 99, name: "production-account", rgw_account_id: "RGW-PROD" }],
           s3_users: [],
           s3_connections: [],
@@ -290,7 +287,7 @@ describe("GroupsPage", () => {
 
     const associations = await screen.findByLabelText("1 linked association");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (1)\nRGW account: production-account — Roles: Account admin",
+      "Linked associations (1)\nRGW account: production-account — Roles: Account administrator",
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -306,7 +303,7 @@ describe("GroupsPage", () => {
     expect(updateGroupMock).toHaveBeenCalledWith(
       50,
       expect.objectContaining({
-        account_links: [{ account_id: 99, account_admin: true, account_role: "portal_manager" }],
+        account_links: [{ account_id: 99, role: "account_administrator" }],
       })
     );
   });
@@ -335,7 +332,9 @@ describe("GroupsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Associations" }));
     fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "acc-1" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
+    expect(screen.getByRole("combobox", { name: "Access role for acc-1" })).toHaveValue(
+      "account_administrator",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
     fireEvent.click(screen.getByRole("button", { name: /S3 Users \(0\)/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add RGW users" }));
@@ -380,7 +379,7 @@ describe("GroupsPage", () => {
         ceph_s3_user_keys: false,
       },
       user_ids: [2],
-      account_links: [{ account_id: 1, account_admin: true, account_role: "portal_none" }],
+      account_links: [{ account_id: 1, role: "account_administrator" }],
       s3_user_ids: [11],
       s3_connection_ids: [21],
     });
@@ -394,7 +393,7 @@ describe("GroupsPage", () => {
           name: "ops-group",
           description: null,
           user_ids: [],
-          account_links: [{ account_id: 1, account_admin: false, account_role: "portal_none" }],
+          account_links: [{ account_id: 1, role: "portal_user" }],
           account_details: [{ id: 1, name: "acc-1" }],
           s3_users: [],
           s3_connections: [],

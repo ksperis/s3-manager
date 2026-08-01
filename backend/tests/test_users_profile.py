@@ -144,8 +144,8 @@ def test_user_avatar_requires_a_shared_portal_account(client, db_session):
     db_session.flush()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
         ]
     )
     db_session.commit()

@@ -243,8 +243,7 @@ describe("AccountsPage modal tabs", () => {
             {
               user_id: 7,
               user_email: "ui7@example.com",
-              account_admin: false,
-              account_role: "portal_user",
+              role: "portal_user",
             },
           ],
           group_ids: [31],
@@ -252,8 +251,7 @@ describe("AccountsPage modal tabs", () => {
             {
               group_id: 31,
               group_name: "Research Group",
-              account_admin: true,
-              account_role: "portal_manager",
+              role: "account_administrator",
             },
           ],
         },
@@ -275,7 +273,7 @@ describe("AccountsPage modal tabs", () => {
     expect(within(table).getByText("ceph-main").closest("td")).toHaveAttribute("data-label", "Endpoint");
     const associations = screen.getByLabelText("2 linked principals");
     expect(associations).toHaveAccessibleDescription(
-      "Linked principals (2)\nui7@example.com — Roles: Portal user, UI user\nResearch Group — Roles: Account admin, Portal manager, UI group",
+      "Linked principals (2)\nui7@example.com — Roles: Portal user, UI user\nResearch Group — Roles: Account administrator, UI group",
     );
     expect(associations).toBeInTheDocument();
     expect(associations.querySelector(".rounded-lg")).toBeInTheDocument();
@@ -308,7 +306,9 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
     expect(screen.getByRole("textbox", { name: "Search UI users" })).toHaveClass("ui-caption");
-    expect(screen.queryByRole("combobox", { name: "Portal role for ui7@example.com" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Access role for ui7@example.com" })).toHaveValue(
+      "account_administrator",
+    );
     fireEvent.click(await screen.findByRole("checkbox", { name: "ui7@example.com" }));
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
@@ -326,7 +326,7 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            account_role: "portal_none",
+            role: "account_administrator",
           }),
         ]),
       })
@@ -362,8 +362,7 @@ describe("AccountsPage modal tabs", () => {
           expect.objectContaining({
             group_id: 31,
             group_name: "Research Group",
-            account_admin: false,
-            account_role: "portal_none",
+            role: "account_administrator",
           }),
         ],
       })
@@ -379,7 +378,7 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: "Linked UI users" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for ui7@example.com" }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: "Access role for ui7@example.com" }), {
       target: { value: "portal_manager" },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "ui7@example.com" }));
@@ -387,7 +386,7 @@ describe("AccountsPage modal tabs", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Linked UI groups" }));
     fireEvent.click(screen.getByRole("button", { name: "Add UI groups" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: "Portal role for Research Group" }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: "Access role for Research Group" }), {
       target: { value: "portal_user" },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: "Research Group" }));
@@ -405,15 +404,13 @@ describe("AccountsPage modal tabs", () => {
         user_links: [
           expect.objectContaining({
             user_id: 7,
-            account_admin: false,
-            account_role: "portal_manager",
+            role: "portal_manager",
           }),
         ],
         group_links: [
           expect.objectContaining({
             group_id: 31,
-            account_admin: false,
-            account_role: "portal_user",
+            role: "portal_user",
           }),
         ],
       })
@@ -433,7 +430,7 @@ describe("AccountsPage modal tabs", () => {
           storage_endpoint_name: "ceph-main",
           storage_endpoint_url: "https://ceph.example.test",
           user_ids: [7],
-          user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+          user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
         },
       ],
       total: 1,
@@ -458,13 +455,13 @@ describe("AccountsPage modal tabs", () => {
       quota_max_size_gb: null,
       quota_max_objects: null,
       user_ids: [7],
-      user_links: [{ user_id: 7, user_email: "ui7@example.com", account_admin: true, account_role: "portal_manager" }],
+      user_links: [{ user_id: 7, user_email: "ui7@example.com", role: "account_administrator" }],
     });
 
     render(<AccountsPage />);
 
     expect(await screen.findByLabelText("1 linked principal")).toHaveAccessibleDescription(
-      "Linked principals (1)\nui7@example.com — Roles: Account admin, UI user",
+      "Linked principals (1)\nui7@example.com — Roles: Account administrator, UI user",
     );
     expect(screen.queryByText("Portal manager")).not.toBeInTheDocument();
 
@@ -486,8 +483,7 @@ describe("AccountsPage modal tabs", () => {
         user_links: [
           expect.objectContaining({
             user_id: 7,
-            account_admin: true,
-            account_role: "portal_manager",
+            role: "account_administrator",
           }),
         ],
       })
@@ -660,7 +656,7 @@ describe("AccountsPage modal tabs", () => {
     expect(screen.getByRole("group", { name: "Tag settings for gold" })).toBeInTheDocument();
   });
 
-  it("does not auto-enable admin when adding a linked user", async () => {
+  it("defaults a new link to account administrator when Portal is unavailable", async () => {
     render(<AccountsPage />);
 
     await screen.findByText("acc-1");
@@ -674,7 +670,9 @@ describe("AccountsPage modal tabs", () => {
     if (!userRow) {
       throw new Error("User row not found");
     }
-    expect(within(userRow).getByRole("checkbox", { name: "Admin" })).not.toBeChecked();
+    expect(within(userRow).getByRole("combobox", { name: "Access role for ui7@example.com" })).toHaveValue(
+      "account_administrator",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -690,7 +688,7 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
-            account_admin: false,
+            role: "account_administrator",
           }),
         ]),
       })

@@ -14,10 +14,9 @@ export type S3ConnectionAdminItem = {
   tags: TagDefinitionSummary[];
   storage_endpoint_id?: number | null;
   endpoint_url: string;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
-  access_manager?: boolean | null;
-  access_browser?: boolean | null;
+  execution_status: "ready" | "remediation_required";
+  remediation_reason?: string | null;
   capabilities?: Record<string, unknown> | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
@@ -45,8 +44,8 @@ export type S3ConnectionSummary = {
   id: number;
   name: string;
   created_by_user_id: number;
-  is_shared?: boolean | null;
   is_active?: boolean | null;
+  execution_status: "ready" | "remediation_required";
 };
 
 export type ListS3ConnectionsParams = {
@@ -61,9 +60,6 @@ export type CreateS3ConnectionPayload = {
   name: string;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  is_active?: boolean | null;
-  access_manager?: boolean | null;
-  access_browser?: boolean | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
@@ -81,8 +77,6 @@ export type UpdateS3ConnectionPayload = {
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
-  access_manager?: boolean | null;
-  access_browser?: boolean | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
@@ -143,6 +137,13 @@ export async function createAdminS3Connection(payload: CreateS3ConnectionPayload
 
 export async function updateAdminS3Connection(connectionId: number, payload: UpdateS3ConnectionPayload): Promise<S3ConnectionAdminItem> {
   const { data } = await client.put<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}`, payload);
+  return data;
+}
+
+export async function remediateAdminS3Connection(connectionId: number): Promise<S3ConnectionAdminItem> {
+  const { data } = await client.post<S3ConnectionAdminItem>(`/admin/s3-connections/${connectionId}/remediation`, {
+    action: "activate_manager",
+  });
   return data;
 }
 

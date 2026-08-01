@@ -62,6 +62,23 @@ class S3ConnectionsService:
         )
         return [self._to_model(r) for r in rows]
 
+    @staticmethod
+    def admin_shared_predicates():
+        """Return the single scope used by every Admin/automation selector."""
+        return (
+            DBS3Connection.is_shared.is_(True),
+            DBS3Connection.is_temporary.is_(False),
+        )
+
+    def admin_shared_query(self):
+        return self.db.query(DBS3Connection).filter(*self.admin_shared_predicates())
+
+    def get_admin_shared(self, connection_id: int) -> DBS3Connection:
+        row = self.admin_shared_query().filter(DBS3Connection.id == connection_id).first()
+        if row is None:
+            raise KeyError("S3Connection not found")
+        return row
+
     def touch_last_used(self, user_id: int, connection_id: int) -> None:
         """Update last_used_at for UX/audit purposes."""
         try:

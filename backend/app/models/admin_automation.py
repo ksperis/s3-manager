@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db import StorageProvider
 from app.models.user import ManagerToolAccess
@@ -160,6 +160,8 @@ class S3ConnectionMatch(BaseModel):
 
 
 class S3ConnectionSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
@@ -167,9 +169,7 @@ class S3ConnectionSpec(BaseModel):
     provider_hint: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
-    is_shared: Optional[bool] = None
-    access_manager: Optional[bool] = None
-    access_browser: Optional[bool] = None
+    remediation_action: Optional[Literal["activate_manager"]] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     access_key_id: Optional[str] = None
@@ -210,7 +210,17 @@ class AccountLinkApply(BaseModel):
     state: ApplyState = "present"
     user: AccountLinkUserRef
     account: AccountLinkAccountRef
-    account_admin: Optional[bool] = None
+    role: Optional[str] = None
+    account_admin: Optional[bool] = Field(default=None, deprecated=True)
+    account_role: Optional[str] = Field(default=None, deprecated=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def adapt_legacy_role(cls, value):
+        from app.utils.account_roles import adapt_legacy_role_payload
+
+        require_explicit = not isinstance(value, dict) or value.get("state", "present") != "absent"
+        return adapt_legacy_role_payload(value, require_explicit=require_explicit)
 
 
 class AdminAutomationApplyRequest(BaseModel):

@@ -208,9 +208,7 @@ def assign_account(
         user = users_service.assign_user_to_account(
             user_id,
             payload.account_id,
-            account_root=payload.account_root or False,
-            account_admin=payload.account_admin,
-            account_role=payload.account_role,
+            role=payload.role,
         )
         audit_service.record_action(
             user=current_user,
@@ -220,8 +218,7 @@ def assign_account(
             entity_id=str(user_id),
             account_id=payload.account_id,
             metadata={
-                "account_root": bool(payload.account_root),
-                "account_role": payload.account_role,
+                "role": payload.role,
                 "assigned_user_id": user_id,
             },
         )

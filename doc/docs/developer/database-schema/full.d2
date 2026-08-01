@@ -249,8 +249,7 @@ Legend: {
     "user_id": "INTEGER [FK, NN]"
     "account_id": "INTEGER [FK, NN]"
     "is_root": "BOOLEAN [NN]"
-    "account_admin": "BOOLEAN [NN]"
-    "account_role": "VARCHAR [NN]"
+    "role": "VARCHAR [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
   }
@@ -299,6 +298,8 @@ Legend: {
     "is_active": "BOOLEAN [NN]"
     "access_manager": "BOOLEAN [NN]"
     "access_browser": "BOOLEAN [NN]"
+    "remediation_required": "BOOLEAN [NN]"
+    "remediation_reason": "VARCHAR"
     "credential_owner_type": "VARCHAR"
     "credential_owner_identifier": "VARCHAR"
     "storage_endpoint_id": "INTEGER [FK]"
@@ -331,8 +332,7 @@ Legend: {
     "id": "INTEGER [PK, NN]"
     "group_id": "INTEGER [FK, NN]"
     "account_id": "INTEGER [FK, NN]"
-    "account_admin": "BOOLEAN [NN]"
-    "account_role": "VARCHAR [NN]"
+    "role": "VARCHAR [NN]"
     "created_at": "DATETIME [NN]"
     "updated_at": "DATETIME [NN]"
   }

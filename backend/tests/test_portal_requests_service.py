@@ -131,7 +131,7 @@ def test_approve_user_access_creates_placeholder_and_portal_link(db_session):
     assert approved.result["created_user"] is True
     assert target.hashed_password is None
     assert target.role == UserRole.UI_USER.value
-    assert link.account_role == AccountRole.PORTAL_USER.value
+    assert link.role == AccountRole.PORTAL_USER.value
     assert message.message == "Done"
 
 
@@ -144,8 +144,7 @@ def test_approve_user_access_preserves_existing_portal_manager_role(db_session):
         UserS3Account(
             user_id=target.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         )
     )
     db_session.commit()
@@ -158,8 +157,7 @@ def test_approve_user_access_preserves_existing_portal_manager_role(db_session):
     assert approved.status == "approved"
     assert approved.result is not None
     assert approved.result["created_user"] is False
-    assert link.account_role == AccountRole.PORTAL_MANAGER.value
-    assert link.account_admin is True
+    assert link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
 
 
 def test_approve_user_removal_deletes_portal_user_link_only(db_session):
@@ -171,8 +169,7 @@ def test_approve_user_removal_deletes_portal_user_link_only(db_session):
         UserS3Account(
             user_id=target.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_USER.value,
-            account_admin=False,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -205,8 +202,7 @@ def test_approve_user_removal_refuses_portal_manager_link(db_session):
         UserS3Account(
             user_id=target.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         )
     )
     db_session.commit()

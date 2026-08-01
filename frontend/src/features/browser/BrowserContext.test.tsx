@@ -29,13 +29,14 @@ const CONTEXTS: ExecutionContext[] = [
 ];
 
 function Probe() {
-  const { selectedContextId } = useBrowserContext();
+  const { selectedContextId, accessError } = useBrowserContext();
   const location = useLocation();
   const navigate = useNavigate();
   return (
     <>
       <div data-testid="selected">{selectedContextId ?? "null"}</div>
       <div data-testid="location">{`${location.pathname}${location.search}`}</div>
+      <div data-testid="access-error">{accessError ?? "none"}</div>
       <button type="button" onClick={() => navigate("/browser/next")}>Navigate without context</button>
     </>
   );
@@ -65,15 +66,16 @@ describe("BrowserContextProvider", () => {
     listExecutionContextsMock.mockResolvedValue(CONTEXTS);
   });
 
-  it("ignores legacy localStorage keys and falls back to the first context", async () => {
+  it("ignores legacy localStorage keys and requires an explicit selection", async () => {
     localStorage.setItem("selectedS3AccountId", "conn-legacy");
     localStorage.setItem("selectedBrowserContextId", "s3u-legacy");
     localStorage.setItem("selectedExecutionContextId", "s3u-2");
 
     renderProvider("/browser");
 
-    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
-    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
+    await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("selected")).toHaveTextContent("null");
+    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
   });
 
   it("uses the Browser-specific preference when present", async () => {
@@ -92,6 +94,17 @@ describe("BrowserContextProvider", () => {
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
     expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
+  });
+
+  it("clears a forbidden remembered selection without falling back", async () => {
+    localStorage.setItem("selectedBrowserExecutionContextId", "conn-forbidden");
+
+    renderProvider("/browser?ctx=conn-forbidden");
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("null"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/browser");
+    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBeNull();
+    expect(screen.getByTestId("access-error")).toHaveTextContent("no longer authorized");
   });
 
   it("keeps the mounted tab context when another tab changes the preference", async () => {
@@ -121,7 +134,8 @@ describe("BrowserContextProvider", () => {
 
     renderProvider("/browser");
 
-    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
+    await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("selected")).toHaveTextContent("null");
     expect(listExecutionContextsMock).toHaveBeenCalledTimes(1);
 
     act(() => {

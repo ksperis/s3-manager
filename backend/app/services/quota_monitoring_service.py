@@ -779,9 +779,11 @@ class QuotaMonitoringService:
             .filter(User.quota_alerts_enabled.is_(True))
             .filter(
                 or_(
-                    UserS3Account.account_admin.is_(True),
                     UserS3Account.is_root.is_(True),
-                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+                    UserS3Account.role.in_([
+                        AccountRole.PORTAL_MANAGER.value,
+                        AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    ]),
                 )
             )
             .all()
@@ -800,10 +802,10 @@ class QuotaMonitoringService:
             .filter(User.is_active.is_(True))
             .filter(User.quota_alerts_enabled.is_(True))
             .filter(
-                or_(
-                    UiGroupS3Account.account_admin.is_(True),
-                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
+                UiGroupS3Account.role.in_([
+                    AccountRole.PORTAL_MANAGER.value,
+                    AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                ])
             )
             .all()
         )
@@ -887,9 +889,11 @@ class QuotaMonitoringService:
             .filter(User.is_active.is_(True))
             .filter(
                 or_(
-                    UserS3Account.account_admin.is_(True),
                     UserS3Account.is_root.is_(True),
-                    UserS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
+                    UserS3Account.role.in_([
+                        AccountRole.PORTAL_MANAGER.value,
+                        AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                    ]),
                 )
             )
             .all()
@@ -904,10 +908,10 @@ class QuotaMonitoringService:
             .join(User, User.id == UserUiGroup.user_id)
             .filter(User.is_active.is_(True))
             .filter(
-                or_(
-                    UiGroupS3Account.account_admin.is_(True),
-                    UiGroupS3Account.account_role == AccountRole.PORTAL_MANAGER.value,
-                )
+                UiGroupS3Account.role.in_([
+                    AccountRole.PORTAL_MANAGER.value,
+                    AccountRole.ACCOUNT_ADMINISTRATOR.value,
+                ])
             )
             .all()
         )

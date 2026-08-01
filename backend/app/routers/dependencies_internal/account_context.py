@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies_internal.settings_loader import load_app_settings
-from app.services.effective_access_service import EffectiveAccountLink
+from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
@@ -131,7 +131,9 @@ def _build_s3_user_account(s3_user: S3User) -> S3Account:
     return account
 
 
-def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Account:
+def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int, *, surface: str) -> S3Account:
+    if surface != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 users are not available in Browser")
     effective = get_effective_access_service(db).resolve_user(user)
     if not effective.has_s3_user(s3_user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this S3 user")
@@ -158,37 +160,25 @@ def _resolve_connection_context(
     surface: str,
     touch_usage: bool = True,
 ) -> S3Account:
-    """Resolve an S3Connection context.
-
-    Access is granted if:
-    - user is the creator for private connections, or
-    - the user is explicitly linked for shared connections.
-    """
+    """Resolve a connection through the same policy used by the catalogue."""
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    if not bool(conn.is_active):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection is disabled")
-    if conn.is_temporary and conn.expires_at and conn.expires_at <= utcnow():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection expired")
-    if surface == "manager" and not bool(conn.access_manager):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in manager workspace")
-    if surface == "browser" and not bool(conn.access_browser):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in browser workspace")
-    if not conn.is_shared and conn.created_by_user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
-    if conn.is_shared:
-        effective = get_effective_access_service(db).resolve_user(user)
-        if not effective.has_s3_connection(conn.id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
+    service = get_effective_access_service(db)
+    effective = service.resolve_user(user)
+    if not service.connection_is_allowed(user, conn, workspace=surface, resolved=effective):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Connection is not authorized in this workspace")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
     if touch_usage:
         try:
             now = utcnow()
-            conn.last_used_at = now
-            conn.updated_at = now
+            db.query(S3Connection).filter(S3Connection.id == conn.id).update(
+                {S3Connection.last_used_at: now, S3Connection.updated_at: now},
+                synchronize_session=False,
+            )
             db.commit()
+            db.refresh(conn)
         except Exception:
             db.rollback()
     account = _build_s3_connection_account(conn)
@@ -247,7 +237,7 @@ def _resolve_user_account_link(
 def _manager_membership_capabilities(
     link: UserS3Account | EffectiveAccountLink,
 ) -> AccountCapabilities:
-    is_account_admin = bool(link.account_admin or link.is_root)
+    is_account_admin = EffectiveAccessService.manager_account_allowed(link.role)
     if not is_account_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return AccountCapabilities(
@@ -351,7 +341,12 @@ def get_account_context(
                 touch_usage=not is_storage_ops_surface,
             )
         if s3_user_id is not None:
-            return _resolve_s3_user_context(db, actor, s3_user_id)
+            return _resolve_s3_user_context(db, actor, s3_user_id, surface=surface)
+        if surface == "browser" and not _is_portal_browser_request(request, surface):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Accounts are not available in standard Browser",
+            )
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         if _is_portal_browser_request(request, surface):
             return _resolve_portal_browser_context(db, actor, account, link, request=request)
@@ -383,7 +378,7 @@ def get_account_context(
 
 def _membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink], actor: ManagerActor) -> AccountCapabilities:
     if link:
-        is_account_admin = bool(link.account_admin or link.is_root)
+        is_account_admin = EffectiveAccessService.manager_account_allowed(link.role)
         if not is_account_admin:
             return AccountCapabilities()
         return AccountCapabilities(

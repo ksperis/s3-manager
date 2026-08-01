@@ -44,6 +44,7 @@ from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.users_service import UsersService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.services.s3_connections_service import S3ConnectionsService
 from app.utils.normalize import normalize_storage_provider
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
@@ -60,6 +61,7 @@ class AdminAutomationService:
         self.users = UsersService(db)
         self.s3_accounts = S3AccountsService(db)
         self.s3_users = S3UsersService(db)
+        self.s3_connections = S3ConnectionsService(db)
 
     def apply(
         self,
@@ -631,20 +633,20 @@ class AdminAutomationService:
                 )
                 return self._deleted("account_link", key, link.id, dry_run=dry_run)
 
-            desired_admin = item.account_admin
+            desired_role = item.role
             if link:
-                if link.is_root and desired_admin is not None:
+                if link.is_root and desired_role not in {None, "account_administrator"}:
                     raise ValueError("Cannot modify the root account link")
-                if desired_admin is None:
-                    desired_admin = link.account_admin
+                if desired_role is None:
+                    desired_role = link.role
             else:
-                if desired_admin is None:
-                    desired_admin = False
+                if desired_role is None:
+                    raise ValueError("role is required when creating an account link")
 
             if link:
                 diff: dict[str, dict[str, Any]] = {}
-                if bool(desired_admin) != bool(link.account_admin):
-                    diff["account_admin"] = {"from": bool(link.account_admin), "to": bool(desired_admin)}
+                if desired_role != link.role:
+                    diff["role"] = {"from": link.role, "to": desired_role}
                 if not diff:
                     return self._skipped("account_link", key, dry_run=dry_run)
                 if dry_run:
@@ -653,7 +655,7 @@ class AdminAutomationService:
                     user.id,
                     account.id,
                     account_root=link.is_root,
-                    account_admin=desired_admin,
+                    role=desired_role,
                 )
                 audit_service.record_action(
                     user=current_user,
@@ -675,7 +677,7 @@ class AdminAutomationService:
                 user.id,
                 account.id,
                 account_root=False,
-                account_admin=desired_admin,
+                role=desired_role,
             )
             audit_service.record_action(
                 user=current_user,
@@ -920,11 +922,6 @@ class AdminAutomationService:
         fields_set = spec.model_fields_set
         if "name" in fields_set and spec.name and spec.name != conn.name:
             diff["name"] = {"from": conn.name, "to": spec.name}
-        if "is_shared" in fields_set and spec.is_shared is not None:
-            desired_shared = bool(spec.is_shared)
-            current_shared = bool(conn.is_shared)
-            if desired_shared != current_shared:
-                diff["is_shared"] = {"from": current_shared, "to": desired_shared}
         if "storage_endpoint_id" in fields_set:
             desired = spec.storage_endpoint_id
             if desired != conn.storage_endpoint_id:
@@ -946,12 +943,8 @@ class AdminAutomationService:
                     diff["verify_tls"] = {"from": bool(details.verify_tls), "to": bool(spec.verify_tls)}
             if "provider_hint" in fields_set and spec.provider_hint is not None and spec.provider_hint != details.provider:
                 diff["provider_hint"] = {"from": details.provider, "to": spec.provider_hint}
-        if "access_manager" in fields_set and spec.access_manager is not None:
-            if bool(spec.access_manager) != bool(conn.access_manager):
-                diff["access_manager"] = {"from": bool(conn.access_manager), "to": bool(spec.access_manager)}
-        if "access_browser" in fields_set and spec.access_browser is not None:
-            if bool(spec.access_browser) != bool(conn.access_browser):
-                diff["access_browser"] = {"from": bool(conn.access_browser), "to": bool(spec.access_browser)}
+        if spec.remediation_action == "activate_manager" and conn.remediation_required:
+            diff["execution_status"] = {"from": "remediation_required", "to": "ready"}
         if "credential_owner_type" in fields_set and spec.credential_owner_type != conn.credential_owner_type:
             diff["credential_owner_type"] = {"from": conn.credential_owner_type, "to": spec.credential_owner_type}
         if "credential_owner_identifier" in fields_set and spec.credential_owner_identifier != conn.credential_owner_identifier:
@@ -1243,19 +1236,16 @@ class AdminAutomationService:
                 bool(spec.verify_tls if spec.verify_tls is not None else True),
                 spec.provider_hint,
             )
-        is_shared = bool(spec.is_shared) if spec.is_shared is not None else False
-        access_manager = bool(spec.access_manager) if spec.access_manager is not None else False
-        access_browser = bool(spec.access_browser) if spec.access_browser is not None else True
-        if not access_manager and not access_browser:
-            raise ValueError("At least one access flag must be enabled")
         conn = S3Connection(
             created_by_user_id=current_user.id,
             name=spec.name,
             storage_endpoint_id=storage_endpoint_id,
             custom_endpoint_config=custom_endpoint_config,
-            is_shared=is_shared,
-            access_manager=access_manager,
-            access_browser=access_browser,
+            is_shared=True,
+            access_manager=True,
+            access_browser=False,
+            remediation_required=False,
+            remediation_reason=None,
             credential_owner_type=spec.credential_owner_type,
             credential_owner_identifier=spec.credential_owner_identifier,
             access_key_id=spec.access_key_id,
@@ -1278,14 +1268,6 @@ class AdminAutomationService:
         should_probe_iam = False
         if "name" in payload_data and spec.name is not None:
             conn.name = spec.name
-        if "is_shared" in payload_data and spec.is_shared is not None:
-            conn.is_shared = bool(spec.is_shared)
-            if not conn.is_shared:
-                (
-                    self.db.query(UserS3Connection)
-                    .filter(UserS3Connection.s3_connection_id == conn.id)
-                    .delete(synchronize_session=False)
-                )
         if "storage_endpoint_id" in payload_data:
             if spec.storage_endpoint_id is not None:
                 storage_endpoint = (
@@ -1330,13 +1312,12 @@ class AdminAutomationService:
                 verify_tls,
                 provider,
             )
-        if "access_manager" in payload_data or "access_browser" in payload_data:
-            access_manager = bool(spec.access_manager) if "access_manager" in payload_data else bool(conn.access_manager)
-            access_browser = bool(spec.access_browser) if "access_browser" in payload_data else bool(conn.access_browser)
-            if not access_manager and not access_browser:
-                raise ValueError("At least one access flag must be enabled")
-            conn.access_manager = access_manager
-            conn.access_browser = access_browser
+        conn.access_browser = False
+        if spec.remediation_action == "activate_manager":
+            conn.access_manager = True
+            conn.remediation_required = False
+            conn.remediation_reason = None
+            conn.is_active = True
         if "credential_owner_type" in payload_data:
             conn.credential_owner_type = spec.credential_owner_type
         if "credential_owner_identifier" in payload_data:
@@ -1396,22 +1377,13 @@ class AdminAutomationService:
         return None
 
     def _find_s3_connection(self, item: S3ConnectionApply, current_user: User) -> Optional[S3Connection]:
+        _ = current_user
         match = item.match
+        query = self.s3_connections.admin_shared_query()
         if match.id is not None:
-            return self.db.query(S3Connection).filter(S3Connection.id == match.id).first()
+            return query.filter(S3Connection.id == match.id).first()
         if match.name:
-            desired_shared = bool(item.spec.is_shared) if item.spec and item.spec.is_shared is not None else False
-            if desired_shared:
-                return self.db.query(S3Connection).filter(S3Connection.name == match.name, S3Connection.is_shared.is_(True)).first()
-            return (
-                self.db.query(S3Connection)
-                .filter(
-                    S3Connection.name == match.name,
-                    S3Connection.is_shared.is_(False),
-                    S3Connection.created_by_user_id == current_user.id,
-                )
-                .first()
-            )
+            return query.filter(S3Connection.name == match.name).first()
         return None
 
     def _resolve_user_ref(self, item: AccountLinkApply) -> User:

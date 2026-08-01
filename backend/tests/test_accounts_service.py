@@ -498,7 +498,14 @@ def test_unlink_account_deletes_root_and_interface_links(db_session, monkeypatch
     user = User(email="unlink@example.com", hashed_password="hash", role=UserRole.UI_USER.value)
     db_session.add(user)
     db_session.flush()
-    db_session.add(UserS3Account(user_id=user.id, account_id=account.id, is_root=False))
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            is_root=False,
+            role="account_administrator",
+        )
+    )
     db_session.commit()
 
     fake_admin = FakeRGWDeleteAdmin()

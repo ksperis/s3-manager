@@ -192,7 +192,14 @@ def _setup_account(db_session) -> S3Account:
         .first()
     )
     if not link:
-        db_session.add(UserS3Account(user_id=manager.id, account_id=account.id, is_root=True))
+        db_session.add(
+            UserS3Account(
+                user_id=manager.id,
+                account_id=account.id,
+                is_root=True,
+                role="account_administrator",
+            )
+        )
         db_session.commit()
     return account
 

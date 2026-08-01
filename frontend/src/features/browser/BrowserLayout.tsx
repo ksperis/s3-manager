@@ -5,6 +5,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
+import PageBanner from "../../components/PageBanner";
+import PageEmptyState from "../../components/PageEmptyState";
 import type { SidebarBodyRenderArgs } from "../../components/Sidebar";
 import TopbarContextAccountSelector, {
   type ContextAccessMode,
@@ -37,17 +39,19 @@ export function useBrowserSidebarSlot(): BrowserSidebarSlotContextValue {
 function BrowserShell() {
   const {
     contexts,
+    contextsLoaded,
     selectedContextId,
     setSelectedContextId,
     requiresContextSelection,
     sessionAccountName,
+    accessError,
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
   const [sidebarBody, setSidebarBodyState] = useState<BrowserSidebarBodyRenderer | null>(null);
   const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
-  const showSelector = requiresContextSelection && visibleContexts.length > 1;
+  const showSelector = requiresContextSelection && visibleContexts.length > 0;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
@@ -172,7 +176,25 @@ function BrowserShell() {
         disableMainScroll
         fullHeight
       >
-        <Outlet key={`${selectedContextId ?? "none"}`} />
+        {accessError ? <PageBanner tone="warning">{accessError}</PageBanner> : null}
+        {requiresContextSelection && contextsLoaded && !selectedContextId ? (
+          <PageEmptyState
+            title={contexts.length > 0 ? "Select a private Browser connection" : "No private Browser connection"}
+            description={
+              contexts.length > 0
+                ? "Choose a private connection explicitly to start browsing."
+                : "Accounts, RGW users and shared connections are unavailable in Browser. Create a private connection with a dedicated access key."
+            }
+            primaryAction={{
+              label: "Manage private connections",
+              to: "/browser/profile?tab=connections",
+            }}
+            tone="warning"
+            className="h-full"
+          />
+        ) : (
+          <Outlet key={`${selectedContextId ?? "session"}`} />
+        )}
       </Layout>
     </BrowserSidebarSlotContext.Provider>
   );

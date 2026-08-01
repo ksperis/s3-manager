@@ -14,7 +14,20 @@ from botocore.parsers import ResponseParserError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Base, BucketMigration, BucketMigrationEvent, BucketMigrationItem, S3Account, S3User, StorageEndpoint, User, UserRole
+from app.db import (
+    AccountRole,
+    Base,
+    BucketMigration,
+    BucketMigrationEvent,
+    BucketMigrationItem,
+    S3Account,
+    S3User,
+    StorageEndpoint,
+    User,
+    UserRole,
+    UserS3Account,
+    UserS3User,
+)
 from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigrationCreateRequest
 from app.services.bucket_migration_service import (
     BucketMigrationService,
@@ -62,6 +75,15 @@ def _create_account(db_session, *, name: str, endpoint_url: str, account_id: str
     account.storage_endpoint = endpoint
     db_session.add(account)
     db_session.flush()
+    creator = db_session.query(User).filter(User.email == "admin@example.com").first()
+    if creator is not None:
+        db_session.add(
+            UserS3Account(
+                user_id=creator.id,
+                account_id=account.id,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            )
+        )
     return account
 
 
@@ -77,6 +99,9 @@ def _create_s3_user(db_session, *, name: str, endpoint: StorageEndpoint, uid: st
     s3_user.storage_endpoint = endpoint
     db_session.add(s3_user)
     db_session.flush()
+    creator = db_session.query(User).filter(User.email == "admin@example.com").first()
+    if creator is not None:
+        db_session.add(UserS3User(user_id=creator.id, s3_user_id=s3_user.id))
     return s3_user
 
 

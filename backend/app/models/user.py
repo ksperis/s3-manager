@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from app.models.pagination import PaginatedResponse
+from app.utils.account_roles import adapt_legacy_role_payload, legacy_fields_for_role
 
 UiLanguage = Literal["en", "fr", "de"]
 UiThemePreference = Literal["light", "dark"]
@@ -28,8 +29,6 @@ class LinkedS3User(BaseModel):
 class LinkedS3Connection(BaseModel):
     id: int
     name: str
-    access_manager: Optional[bool] = None
-    access_browser: Optional[bool] = None
 
 
 class LinkedUiGroup(BaseModel):
@@ -39,8 +38,37 @@ class LinkedUiGroup(BaseModel):
 
 class AccountMembership(BaseModel):
     account_id: int
-    account_admin: Optional[bool] = None
-    account_role: Optional[str] = None
+    role: str
+    account_admin: Optional[bool] = Field(default=None, deprecated=True)
+    account_role: Optional[str] = Field(default=None, deprecated=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def adapt_legacy_role(cls, value):
+        return adapt_legacy_role_payload(value, require_explicit=True)
+
+    @model_validator(mode="after")
+    def derive_legacy_fields(self) -> "AccountMembership":
+        if self.role:
+            self.account_admin, self.account_role = legacy_fields_for_role(self.role)
+        return self
+
+
+class EffectiveAccountGroupSource(BaseModel):
+    group_id: int
+    group_name: str
+    role: str
+    determines_effective_role: bool = False
+
+
+class EffectiveAccountRoleProvenance(BaseModel):
+    direct_role: Optional[str] = None
+    direct_determines_effective_role: bool = False
+    groups: list[EffectiveAccountGroupSource] = Field(default_factory=list)
+
+
+class EffectiveAccountMembership(AccountMembership):
+    provenance: EffectiveAccountRoleProvenance
 
 
 class ManagerToolAccess(BaseModel):
@@ -156,9 +184,16 @@ class UserSelfUpdate(BaseModel):
 
 class UserAssignS3Account(BaseModel):
     account_id: int
-    account_root: Optional[bool] = None
-    account_admin: Optional[bool] = None
-    account_role: Optional[str] = None
+    role: str
+    account_admin: Optional[bool] = Field(default=None, deprecated=True)
+    account_role: Optional[str] = Field(default=None, deprecated=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def adapt_legacy_role(cls, value):
+        if isinstance(value, dict) and "account_root" in value:
+            raise ValueError("account_root is internal and cannot be changed through this API")
+        return adapt_legacy_role_payload(value, require_explicit=True)
 
 
 class EffectiveUserAccess(BaseModel):
@@ -167,7 +202,7 @@ class EffectiveUserAccess(BaseModel):
     manager_tool_access: ManagerToolAccess = Field(default_factory=ManagerToolAccess)
     browser_advanced_features_enabled: bool = False
     accounts: list[int] = []
-    account_links: list[AccountMembership] = []
+    account_links: list[EffectiveAccountMembership] = []
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []

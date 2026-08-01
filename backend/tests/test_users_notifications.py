@@ -129,7 +129,7 @@ def test_list_notifications_filters_by_current_account_access(client, db_session
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
+            role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()

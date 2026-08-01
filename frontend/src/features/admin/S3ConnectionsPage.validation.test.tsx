@@ -5,6 +5,7 @@ import S3ConnectionsPage from "./S3ConnectionsPage";
 const listAdminS3ConnectionsMock = vi.fn();
 const createAdminS3ConnectionMock = vi.fn();
 const updateAdminS3ConnectionMock = vi.fn();
+const remediateAdminS3ConnectionMock = vi.fn();
 const rotateAdminS3ConnectionCredentialsMock = vi.fn();
 const deleteAdminS3ConnectionMock = vi.fn();
 const validateAdminS3ConnectionCredentialsMock = vi.fn();
@@ -19,6 +20,7 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
   listAdminS3Connections: (params?: unknown) => listAdminS3ConnectionsMock(params),
   createAdminS3Connection: (payload: unknown) => createAdminS3ConnectionMock(payload),
   updateAdminS3Connection: (id: number, payload: unknown) => updateAdminS3ConnectionMock(id, payload),
+  remediateAdminS3Connection: (id: number) => remediateAdminS3ConnectionMock(id),
   rotateAdminS3ConnectionCredentials: (id: number, payload: unknown) => rotateAdminS3ConnectionCredentialsMock(id, payload),
   deleteAdminS3Connection: (id: number) => deleteAdminS3ConnectionMock(id),
   validateAdminS3ConnectionCredentials: (payload: unknown) => validateAdminS3ConnectionCredentialsMock(payload),
@@ -44,10 +46,8 @@ const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>
   name: `connection-${id}`,
   tags: [],
   endpoint_url: `https://endpoint-${id}.example.test`,
-  is_shared: true,
   is_active: true,
-  access_manager: true,
-  access_browser: true,
+  execution_status: "ready",
   created_by_user_id: 1,
   created_by_email: "owner@example.test",
   user_count: 0,
@@ -77,6 +77,7 @@ describe("S3ConnectionsPage live validation", () => {
     upsertS3ConnectionUserMock.mockResolvedValue(undefined);
     removeS3ConnectionUserMock.mockResolvedValue(undefined);
     updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
+    remediateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
     deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
     localStorage.setItem("user", JSON.stringify({ id: 1 }));
   });

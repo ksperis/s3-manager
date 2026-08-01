@@ -215,7 +215,7 @@ def test_manager_migration_precheck_and_start_reject_cross_account_non_admin_sco
         app.dependency_overrides.pop(dependencies.get_current_bucket_migration_scope, None)
 
 
-def test_bucket_migration_scope_allows_superadmin_for_all_account_contexts(db_session):
+def test_bucket_migration_scope_does_not_grant_superadmin_implicit_contexts(db_session):
     user = User(
         email="super-migration@example.com",
         hashed_password="x",
@@ -230,7 +230,5 @@ def test_bucket_migration_scope_allows_superadmin_for_all_account_contexts(db_se
     allowed = _build_bucket_migration_allowed_context_ids(db_session, user)
     admin_contexts = _build_bucket_migration_admin_account_context_ids(db_session, user)
 
-    assert str(account_a.id) in allowed
-    assert str(account_b.id) in allowed
-    assert str(account_a.id) in admin_contexts
-    assert str(account_b.id) in admin_contexts
+    assert allowed == set()
+    assert admin_contexts == set()

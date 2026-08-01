@@ -52,7 +52,6 @@ import {
   WorkspaceAccessSection,
 } from "./AdminAccessSections";
 import {
-  AdminAssociationAdminCheckbox,
   AdminAssociationLinkedTable,
   AdminAssociationPickerPanel,
   adminAssociationAccountOptionRowClass,
@@ -166,7 +165,6 @@ export default function GroupsPage() {
   const [accountSelections, setAccountSelections] = useState<number[]>([]);
   const [s3UserSelections, setS3UserSelections] = useState<number[]>([]);
   const [connectionSelections, setConnectionSelections] = useState<number[]>([]);
-  const [accountAdminChoice, setAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [accountPortalRoleChoice, setAccountPortalRoleChoice] = useState<Record<number, string>>({});
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [removeAvatarImage, setRemoveAvatarImage] = useState(false);
@@ -261,7 +259,7 @@ export default function GroupsPage() {
       setUsers(nextUsers);
       setAccounts(nextAccounts);
       setS3Users(nextS3Users);
-      setConnections(nextConnections.filter((connection) => connection.is_shared !== false));
+      setConnections(nextConnections);
     } catch (err) {
       setActionError(extractApiError(err, "Unable to load selectable resources."));
     } finally {
@@ -317,7 +315,6 @@ export default function GroupsPage() {
     setAccountSelections([]);
     setS3UserSelections([]);
     setConnectionSelections([]);
-    setAccountAdminChoice({});
     setAccountPortalRoleChoice({});
     setAvatarFile(null);
     setRemoveAvatarImage(false);
@@ -347,8 +344,7 @@ export default function GroupsPage() {
       account_links:
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
+          role: normalizePortalRole(link.role),
         })) ?? [],
       s3_user_ids: group.s3_users ?? [],
       s3_connection_ids: group.s3_connections ?? [],
@@ -407,8 +403,7 @@ export default function GroupsPage() {
       account_links:
         form.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          account_admin: Boolean(link.account_admin),
-          account_role: normalizePortalRole(link.account_role),
+          role: normalizePortalRole(link.role),
         })) ?? [],
       s3_user_ids: form.s3_user_ids ?? [],
       s3_connection_ids: form.s3_connection_ids ?? [],
@@ -579,8 +574,7 @@ export default function GroupsPage() {
               onAction={() => setShowAccountPicker((current) => !current)}
               headers={[
                 { label: "Account" },
-                { label: "Admin" },
-                ...(showPortalRole ? [{ label: "Portal role" }] : []),
+                { label: "Access role" },
                 { label: "Actions", align: "right" as const },
               ]}
               hasItems={selectedAccountIds.size > 0}
@@ -593,30 +587,20 @@ export default function GroupsPage() {
                       {accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}
                     </td>
                     <td className={adminAssociationTableControlCellClass}>
-                      <AdminAssociationAdminCheckbox
-                        checked={Boolean(link.account_admin)}
-                        onCheckedChange={(checked) => updateAccountSelection(accountId, { account_admin: checked })}
-                      />
+                      <UiSelect
+                        aria-label={`Access role for ${accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}`}
+                        size="compact"
+                        fieldClassName="w-52"
+                        value={normalizePortalRole(link.role)}
+                        onChange={(event) =>
+                          updateAccountSelection(accountId, { role: normalizePortalRole(event.target.value) })
+                        }
+                      >
+                        {PORTAL_ROLE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </UiSelect>
                     </td>
-                    {showPortalRole ? (
-                      <td className={adminAssociationTableControlCellClass}>
-                        <UiSelect
-                          aria-label={`Portal role for ${accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}`}
-                          size="compact"
-                          fieldClassName="w-44"
-                          value={normalizePortalRole(link.account_role)}
-                          onChange={(event) =>
-                            updateAccountSelection(accountId, { account_role: normalizePortalRole(event.target.value) })
-                          }
-                        >
-                          {PORTAL_ROLE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </UiSelect>
-                      </td>
-                    ) : null}
                     <td className={adminAssociationTableActionCellClass}>
                       <button
                         type="button"
@@ -663,8 +647,11 @@ export default function GroupsPage() {
                           ...(current.account_links ?? []),
                           ...accountSelections.map((accountId) => ({
                             account_id: accountId,
-                            account_admin: accountAdminChoice[accountId] ?? false,
-                            account_role: normalizePortalRole(accountPortalRoleChoice[accountId]),
+                            role: accountPortalRoleChoice[accountId]
+                              ? normalizePortalRole(accountPortalRoleChoice[accountId])
+                              : showPortalRole
+                                ? "portal_user" as const
+                                : "account_administrator" as const,
                           })),
                         ].sort((left, right) => Number(left.account_id) - Number(right.account_id)),
                       }));
@@ -688,32 +675,22 @@ export default function GroupsPage() {
                             <span>{account.name}</span>
                           </label>
                           <div className="flex flex-wrap items-center gap-2">
-                            <AdminAssociationAdminCheckbox
-                              checked={accountAdminChoice[accountId] ?? false}
-                              onCheckedChange={(checked) =>
-                                setAccountAdminChoice((current) => ({ ...current, [accountId]: checked }))
+                            <UiSelect
+                              aria-label={`Access role for ${account.name}`}
+                              size="compact"
+                              fieldClassName="w-52"
+                              value={accountPortalRoleChoice[accountId] || (showPortalRole ? "portal_user" : "account_administrator")}
+                              onChange={(event) =>
+                                setAccountPortalRoleChoice((current) => ({
+                                  ...current,
+                                  [accountId]: normalizePortalRole(event.target.value),
+                                }))
                               }
-                            />
-                            {showPortalRole ? (
-                              <UiSelect
-                                aria-label={`Portal role for ${account.name}`}
-                                size="compact"
-                                fieldClassName="w-44"
-                                value={normalizePortalRole(accountPortalRoleChoice[accountId])}
-                                onChange={(event) =>
-                                  setAccountPortalRoleChoice((current) => ({
-                                    ...current,
-                                    [accountId]: normalizePortalRole(event.target.value),
-                                  }))
-                                }
-                              >
-                                {PORTAL_ROLE_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </UiSelect>
-                            ) : null}
+                            >
+                              {PORTAL_ROLE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </UiSelect>
                           </div>
                         </div>
                       );
@@ -919,8 +896,7 @@ export default function GroupsPage() {
           accountDetailsById.get(accountId)?.name ??
           accountOptionsById.get(accountId)?.name ??
           `Account #${link.account_id}`,
-        account_admin: Boolean(link.account_admin),
-        account_role: link.account_role,
+        role: link.role,
       };
     });
     const s3UserItems = (group.s3_users ?? []).map((id) => {

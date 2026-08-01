@@ -41,7 +41,6 @@ type TopbarProps = {
 
 type StoredAccountLink = {
   account_id: number;
-  account_admin?: boolean | null;
 };
 
 type StoredTopbarUser = {

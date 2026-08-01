@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 
 from app.db import (
@@ -14,9 +15,12 @@ from app.db import (
     User,
     UserRole,
     UserS3Account,
+    UserS3Connection,
     UserS3User,
 )
 from app.routers import execution_contexts
+from app.models.app_settings import AppSettings, GeneralSettings
+from app.utils.time import utcnow
 
 
 def _create_user(db_session) -> User:
@@ -62,6 +66,8 @@ def _create_connection(
     access_manager: bool = False,
     access_browser: bool = True,
     is_active: bool = True,
+    is_shared: bool = False,
+    expires_at=None,
     storage_endpoint: StorageEndpoint | None = None,
 ) -> S3Connection:
     connection = S3Connection(
@@ -70,6 +76,8 @@ def _create_connection(
         is_active=is_active,
         access_manager=access_manager,
         access_browser=access_browser,
+        is_shared=is_shared,
+        expires_at=expires_at,
         storage_endpoint=storage_endpoint,
         storage_endpoint_id=storage_endpoint.id if storage_endpoint else None,
         capabilities_json=json.dumps({"can_manage_iam": bool(can_manage_iam)}),
@@ -143,13 +151,13 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
             UserS3Account(
                 user_id=user.id,
                 account_id=admin_account.id,
-                account_admin=True,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
             UserS3Account(
                 user_id=user.id,
                 account_id=portal_manager_account.id,
-                account_admin=False,
+                role=AccountRole.PORTAL_MANAGER.value,
                 is_root=False,
             ),
             UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
@@ -185,7 +193,7 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                account_admin=True,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
             UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
@@ -218,7 +226,7 @@ def test_manager_workspace_catalog_omits_dynamic_quota_limits(db_session):
     assert connection_context.max_groups is None
 
 
-def test_browser_workspace_returns_connections_and_s3_users(db_session):
+def test_browser_workspace_returns_only_owned_private_connections(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")
     legacy_user = _create_legacy_user(db_session, name="browser-legacy", uid="legacy-uid-2")
@@ -230,7 +238,7 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
             UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                account_admin=True,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
             UserS3User(user_id=user.id, s3_user_id=legacy_user.id),
@@ -241,11 +249,46 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
     context_ids = {context.id for context in contexts}
 
-    assert context_ids == {f"s3u-{legacy_user.id}", f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
-    assert {context.kind for context in contexts} == {"legacy_user", "connection"}
+    assert context_ids == {f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
+    assert {context.kind for context in contexts} == {"connection"}
 
 
-def test_browser_workspace_returns_portal_account_context_when_portal_browser_enabled(db_session, monkeypatch):
+def test_browser_workspace_rejects_shared_and_expired_connections(db_session):
+    user = _create_user(db_session)
+    shared = _create_connection(
+        db_session,
+        created_by_user_id=user.id,
+        name="legacy-shared-browser",
+        can_manage_iam=False,
+        access_manager=True,
+        access_browser=True,
+        is_shared=True,
+    )
+    expired = _create_connection(
+        db_session,
+        created_by_user_id=user.id,
+        name="expired-private-browser",
+        can_manage_iam=False,
+        access_browser=True,
+        expires_at=utcnow() - timedelta(minutes=1),
+    )
+    db_session.add(UserS3Connection(user_id=user.id, s3_connection_id=shared.id))
+    db_session.commit()
+
+    context_ids = {
+        context.id
+        for context in execution_contexts.list_execution_contexts(
+            workspace="browser",
+            user=user,
+            db=db_session,
+        )
+    }
+
+    assert f"conn-{shared.id}" not in context_ids
+    assert f"conn-{expired.id}" not in context_ids
+
+
+def test_browser_workspace_never_returns_portal_account_context(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-browser-endpoint")
     account = _create_account(
@@ -258,9 +301,8 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=False,
             is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -279,21 +321,10 @@ def test_browser_workspace_returns_portal_account_context_when_portal_browser_en
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
-    assert len(contexts) == 1
-    context = contexts[0]
-    assert context.kind == "portal_account"
-    assert context.id == str(account.id)
-    assert context.display_name == account.name
-    assert context.account_role == AccountRole.PORTAL_USER.value
-    assert context.manager_account_is_admin is False
-    assert context.quota_max_size_gb is None
-    assert context.quota_max_objects is None
-    assert context.max_buckets is None
-    assert context.capabilities.can_manage_iam is False
-    assert context.capabilities.admin_api_capable is False
+    assert contexts == []
 
 
-def test_browser_workspace_marks_portal_context_when_account_is_available_in_manager(db_session, monkeypatch):
+def test_browser_workspace_never_reuses_manager_account_context(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-manager-endpoint")
     account = _create_account(
@@ -306,9 +337,8 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=True,
             is_root=False,
-            account_role=AccountRole.PORTAL_MANAGER.value,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         )
     )
     db_session.commit()
@@ -327,11 +357,7 @@ def test_browser_workspace_marks_portal_context_when_account_is_available_in_man
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
-    assert len(contexts) == 1
-    context = contexts[0]
-    assert context.kind == "portal_account"
-    assert context.id == str(account.id)
-    assert context.manager_account_is_admin is True
+    assert contexts == []
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):
@@ -387,3 +413,71 @@ def test_execution_contexts_exclude_inactive_connections(db_session):
     manager_ids = {context.id for context in manager_contexts}
     assert f"conn-{active_connection.id}" in manager_ids
     assert f"conn-{inactive_connection.id}" not in manager_ids
+
+
+def test_workspace_access_defaults_to_browser_for_private_connection_only(db_session, monkeypatch):
+    user = _create_user(db_session)
+    _create_connection(
+        db_session,
+        created_by_user_id=user.id,
+        name="private-browser-only",
+        can_manage_iam=False,
+        access_manager=False,
+        access_browser=True,
+    )
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                manager_enabled=True,
+                browser_enabled=True,
+                browser_root_enabled=True,
+                portal_enabled=True,
+            )
+        ),
+    )
+
+    access = execution_contexts.get_workspace_access(user=user, db=db_session)
+
+    assert access.manager.available is False
+    assert access.browser.available is True
+    assert access.browser.context_count == 1
+    assert access.portal.available is False
+    assert access.default_workspace == "browser"
+
+
+def test_workspace_access_excludes_portal_role_on_incompatible_account(db_session, monkeypatch):
+    user = _create_user(db_session)
+    account = _create_account(
+        db_session,
+        name="portal-without-endpoint",
+        rgw_account_id="RGWINCOMPATIBLEPORTAL0001",
+    )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            is_root=False,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        execution_contexts,
+        "load_app_settings",
+        lambda: AppSettings(
+            general=GeneralSettings(
+                manager_enabled=False,
+                browser_enabled=True,
+                browser_root_enabled=True,
+                portal_enabled=True,
+            )
+        ),
+    )
+
+    access = execution_contexts.get_workspace_access(user=user, db=db_session)
+
+    assert access.portal.available is False
+    assert access.portal.context_count == 0
+    assert access.default_workspace is None

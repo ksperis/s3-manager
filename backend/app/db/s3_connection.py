@@ -46,6 +46,8 @@ class S3Connection(Base):
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     access_manager = Column(Boolean, nullable=False, default=False, server_default="0")
     access_browser = Column(Boolean, nullable=False, default=True, server_default="1")
+    remediation_required = Column(Boolean, nullable=False, default=False, server_default="0")
+    remediation_reason = Column(String, nullable=True)
     credential_owner_type = Column(String, nullable=True)
     credential_owner_identifier = Column(String, nullable=True)
 

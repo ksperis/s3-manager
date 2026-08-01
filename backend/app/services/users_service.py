@@ -6,7 +6,7 @@ import json
 from typing import Optional
 import logging
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import DetachedInstanceError
 from pydantic import ValidationError
@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from app.core.security import get_password_hash, verify_password
 from app.db import (
     AccountIAMUser,
-    AccountRole,
     ApiToken,
     AuditLog,
     BucketMigration,
@@ -55,6 +54,7 @@ from app.services.portal_role_sync import (
     sync_portal_role_promotions,
 )
 from app.services.user_avatar_service import UserAvatarService
+from app.utils.account_roles import require_account_role
 logger = logging.getLogger(__name__)
 
 
@@ -63,9 +63,6 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
-
-
 def _parse_ui_preferences(raw: object) -> UiPreferences:
     if not raw:
         return UiPreferences()
@@ -357,7 +354,7 @@ class UsersService:
             portal_service.sync_existing_portal_user_access(
                 user,
                 account,
-                AccountRole.PORTAL_NONE.value,
+                None,
             )
         # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
         (
@@ -459,27 +456,19 @@ class UsersService:
         rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
         return {row[0]: row[1] for row in rows}
 
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool, bool]]:
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
             return {}
         rows = (
-            self.db.query(
-                S3Connection.id,
-                S3Connection.name,
-                S3Connection.access_manager,
-                S3Connection.access_browser,
+            self.db.query(S3Connection.id, S3Connection.name)
+            .filter(
+                S3Connection.id.in_(ids),
+                S3Connection.is_shared.is_(True),
+                S3Connection.is_temporary.is_(False),
             )
-            .filter(S3Connection.id.in_(ids))
             .all()
         )
-        return {
-            row[0]: (
-                row[1],
-                bool(row[2]),
-                bool(row[3]),
-            )
-            for row in rows
-        }
+        return {row[0]: row[1] for row in rows}
 
     def _load_group_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
@@ -499,7 +488,6 @@ class UsersService:
         search_value = search.strip() if isinstance(search, str) else ""
         if search_value:
             linked_connection = aliased(S3Connection)
-            owned_connection = aliased(S3Connection)
             pattern = f"%{search_value}%"
             query = (
                 query.outerjoin(UserS3Account, User.id == UserS3Account.user_id)
@@ -507,8 +495,14 @@ class UsersService:
                 .outerjoin(UserS3User, User.id == UserS3User.user_id)
                 .outerjoin(S3User, UserS3User.s3_user_id == S3User.id)
                 .outerjoin(UserS3Connection, User.id == UserS3Connection.user_id)
-                .outerjoin(linked_connection, UserS3Connection.s3_connection_id == linked_connection.id)
-                .outerjoin(owned_connection, owned_connection.created_by_user_id == User.id)
+                .outerjoin(
+                    linked_connection,
+                    and_(
+                        UserS3Connection.s3_connection_id == linked_connection.id,
+                        linked_connection.is_shared.is_(True),
+                        linked_connection.is_temporary.is_(False),
+                    ),
+                )
                 .outerjoin(UserUiGroup, User.id == UserUiGroup.user_id)
                 .outerjoin(UiGroup, UserUiGroup.group_id == UiGroup.id)
             )
@@ -521,7 +515,6 @@ class UsersService:
                     func.coalesce(S3User.name, "").ilike(pattern),
                     func.coalesce(S3User.rgw_user_uid, "").ilike(pattern),
                     func.coalesce(linked_connection.name, "").ilike(pattern),
-                    func.coalesce(owned_connection.name, "").ilike(pattern),
                     func.coalesce(UiGroup.name, "").ilike(pattern),
                 )
             )
@@ -556,7 +549,12 @@ class UsersService:
         s3_labels = self._load_s3_user_names(sorted(s3_ids))
         connection_links_rows = (
             self.db.query(UserS3Connection.user_id, UserS3Connection.s3_connection_id)
-            .filter(UserS3Connection.user_id.in_(user_ids))
+            .join(S3Connection, S3Connection.id == UserS3Connection.s3_connection_id)
+            .filter(
+                UserS3Connection.user_id.in_(user_ids),
+                S3Connection.is_shared.is_(True),
+                S3Connection.is_temporary.is_(False),
+            )
             .all()
         )
         connection_links: dict[int, list[int]] = {}
@@ -581,11 +579,9 @@ class UsersService:
         self,
         user_id: int,
         account_id: int,
-        account_root: bool = False,
+        account_root: Optional[bool] = None,
         *,
         role: Optional[str] = None,
-        account_admin: Optional[bool] = None,
-        account_role: Optional[str] = None,
     ) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -603,28 +599,28 @@ class UsersService:
             .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
             .first()
         )
-        # Keep platform role untouched unless explicitly overridden
-        if role and not is_admin_ui_role(user.role):
-            user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
-        if account_role is not None and account_role not in ACCOUNT_ROLE_VALUES:
-            raise ValueError("Invalid account role")
-        next_account_role = (
-            account_role
-            if account_role is not None
-            else (link.account_role if link else AccountRole.PORTAL_NONE.value)
+        resolved_account_root = (
+            bool(link.is_root)
+            if account_root is None and link is not None
+            else bool(account_root)
         )
+        canonical_role = role
+        if resolved_account_root:
+            canonical_role = "account_administrator"
+        elif canonical_role is None and link is not None:
+            canonical_role = link.role
+        canonical_role = require_account_role(canonical_role)
         if not link:
             link = UserS3Account(
                 user_id=user.id,
                 account_id=account.id,
-                is_root=bool(account_root),
-                account_role=next_account_role,
+                is_root=resolved_account_root,
+                role=canonical_role,
             )
-        link.is_root = bool(account_root)
-        link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
-        link.account_role = next_account_role
+        link.is_root = resolved_account_root
+        link.role = canonical_role
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
@@ -659,7 +655,7 @@ class UsersService:
         *,
         s3_user_labels: Optional[dict[int, str]] = None,
         preloaded_s3_links: Optional[dict[int, list[int]]] = None,
-        s3_connection_labels: Optional[dict[int, tuple[str, bool, bool]]] = None,
+        s3_connection_labels: Optional[dict[int, str]] = None,
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
         account_ids: list[int] = []
@@ -672,20 +668,19 @@ class UsersService:
                 account_links = [
                     AccountMembership(
                         account_id=link.account_id,
-                        account_admin=link.account_admin,
-                        account_role=link.account_role,
+                        role=link.role,
                     )
                     for link in user.account_links
                 ]
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.account_admin, UserS3Account.account_role)
+                self.db.query(UserS3Account.account_id, UserS3Account.role)
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], account_admin=row[1], account_role=row[2]) for row in account_rows
+                AccountMembership(account_id=row[0], role=row[1]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
         try:
@@ -721,7 +716,7 @@ class UsersService:
             s3_user_names = s3_user_labels
         else:
             s3_user_names = self._load_s3_user_names(s3_user_ids)
-        s3_connection_names: dict[int, tuple[str, bool, bool]]
+        s3_connection_names: dict[int, str]
         if s3_connection_labels is not None:
             s3_connection_names = s3_connection_labels
         else:
@@ -730,28 +725,13 @@ class UsersService:
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
             for s3_id in s3_user_ids
         ]
-        s3_connection_details = []
-        for conn_id in s3_connection_ids:
-            connection_details = s3_connection_names.get(conn_id)
-            if connection_details is None:
-                s3_connection_details.append(
-                    LinkedS3Connection(
-                        id=conn_id,
-                        name=f"Connection #{conn_id}",
-                        access_manager=None,
-                        access_browser=None,
-                    )
-                )
-                continue
-            label, access_manager, access_browser = connection_details
-            s3_connection_details.append(
-                LinkedS3Connection(
-                    id=conn_id,
-                    name=label or f"Connection #{conn_id}",
-                    access_manager=access_manager,
-                    access_browser=access_browser,
-                )
-            )
+        s3_connection_ids = [
+            conn_id for conn_id in s3_connection_ids if conn_id in s3_connection_names
+        ]
+        s3_connection_details = [
+            LinkedS3Connection(id=conn_id, name=s3_connection_names[conn_id])
+            for conn_id in s3_connection_ids
+        ]
         group_names = self._load_group_names(group_ids)
         group_details = [
             LinkedUiGroup(id=group_id, name=group_names.get(group_id) or f"Group #{group_id}")
@@ -877,12 +857,9 @@ class UsersService:
         cleaned: dict[int, AccountMembership] = {}
         for link in links:
             account_id = int(link.account_id)
-            if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                raise ValueError("Invalid account role")
             cleaned[account_id] = AccountMembership(
                 account_id=account_id,
-                account_admin=bool(link.account_admin),
-                account_role=link.account_role or AccountRole.PORTAL_NONE.value,
+                role=require_account_role(link.role),
             )
         if cleaned:
             found_ids = {
@@ -919,9 +896,9 @@ class UsersService:
                     user_id=user.id,
                     account_id=account_id,
                     is_root=False,
+                    role=link.role,
                 )
-            row.account_admin = bool(link.account_admin)
-            row.account_role = link.account_role or AccountRole.PORTAL_NONE.value
+            row.role = require_account_role(link.role)
             row.updated_at = utcnow()
             self.db.add(row)
         if desired_ids and user.role == UserRole.UI_NONE.value:

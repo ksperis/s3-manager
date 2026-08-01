@@ -54,8 +54,6 @@ export type UiGroup = {
   s3_connection_details?: {
     id: number;
     name: string;
-    access_manager?: boolean | null;
-    access_browser?: boolean | null;
   }[];
   created_at?: string | null;
   updated_at?: string | null;

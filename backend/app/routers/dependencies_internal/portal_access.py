@@ -14,16 +14,19 @@ from app.routers.http_errors import raise_http_exception_from_exception
 from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.effective_access_service import EffectiveAccountLink
 from app.utils.storage_endpoint_features import resolve_feature_flags
+from app.utils.account_roles import portal_role_for
 
 from .account_context import _parse_account_selector, _resolve_user_account_link, _resolve_workspace_surface
 from .auth_session import get_current_account_user, settings
 from .types import AccountAccess, AccountCapabilities
 
-def _portal_membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink]) -> tuple[str, AccountCapabilities]:
+def _portal_membership_capabilities(
+    link: Optional[UserS3Account | EffectiveAccountLink],
+) -> tuple[Optional[str], AccountCapabilities]:
     if not link:
-        return AccountRole.PORTAL_NONE.value, AccountCapabilities()
-    role = link.account_role or AccountRole.PORTAL_NONE.value
-    if role == AccountRole.PORTAL_NONE.value:
+        return None, AccountCapabilities()
+    role = portal_role_for(link.role)
+    if role is None:
         return role, AccountCapabilities()
     can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
     can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
@@ -140,7 +143,7 @@ def _resolve_portal_browser_context(
 
     _validate_portal_account_surface(account)
     role, portal_capabilities = _portal_membership_capabilities(link)
-    if role == AccountRole.PORTAL_NONE.value:
+    if role is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
 
     from app.services.portal_service import PortalService
@@ -199,7 +202,7 @@ def get_portal_account_access(
     _validate_portal_account_surface(account)
 
     role, capabilities = _portal_membership_capabilities(link)
-    if role == AccountRole.PORTAL_NONE.value:
+    if role is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return AccountAccess(account=account, actor=user, membership=link, capabilities=capabilities, role=role)
 

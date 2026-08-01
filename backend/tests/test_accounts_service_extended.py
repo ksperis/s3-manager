@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.s3_account import AccountUserLink, S3AccountUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_accounts_service import S3AccountsService
@@ -183,7 +183,7 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
         UserS3Account(
             user_id=user_existing.id,
             account_id=account.id,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
             is_root=False,
         )
     )
@@ -196,7 +196,12 @@ def test_update_account_user_links_missing_user(db_session, monkeypatch):
         service.update_account(
             account.id,
             S3AccountUpdate(
-                user_links=[AccountUserLink(user_id=99999)],
+                user_links=[
+                    AccountUserLink(
+                        user_id=99999,
+                        role=AccountRole.PORTAL_USER.value,
+                    )
+                ],
             ),
         )
 
@@ -214,13 +219,13 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             UserS3Account(
                 user_id=keep_user.id,
                 account_id=account.id,
-                account_admin=True,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 is_root=False,
             ),
             UserS3Account(
                 user_id=remove_user.id,
                 account_id=account.id,
-                account_admin=False,
+                role=AccountRole.PORTAL_USER.value,
                 is_root=False,
             ),
         ]
@@ -239,8 +244,8 @@ def test_update_account_adds_and_removes_links_with_quota_request(db_session, mo
             quota_max_size_gb=1.0,
             quota_max_objects=100,
             user_links=[
-                AccountUserLink(user_id=keep_user.id, account_admin=True),
-                AccountUserLink(user_id=add_user.id, account_admin=False),
+                AccountUserLink(user_id=keep_user.id, role=AccountRole.ACCOUNT_ADMINISTRATOR.value),
+                AccountUserLink(user_id=add_user.id, role=AccountRole.PORTAL_USER.value),
             ],
         ),
     )

@@ -9,11 +9,11 @@ import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";
 import type { UserAvatarDescriptor } from "./users";
+import type { AccountAccessRole } from "./accountRoles";
 
 export type AccountUserLink = {
   user_id: number;
-  account_admin?: boolean | null;
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+  role: AccountAccessRole;
   user_email?: string | null;
   user_full_name?: string | null;
   user_avatar?: UserAvatarDescriptor | null;
@@ -23,8 +23,7 @@ export type AccountGroupLink = {
   group_id: number;
   group_name?: string | null;
   group_avatar?: UiGroupAvatarDescriptor | null;
-  account_admin?: boolean | null;
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+  role: AccountAccessRole;
 };
 
 export type S3Account = {
@@ -32,7 +31,8 @@ export type S3Account = {
   db_id?: number | null;
   name: string;
   tags: TagDefinitionSummary[];
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+  /** Portal-only projected role; Admin account associations use user_links/group_links.role. */
+  account_role?: "portal_user" | "portal_manager" | null;
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   rgw_account_id?: string;
@@ -64,7 +64,6 @@ export type S3AccountSummary = {
   db_id?: number | null;
   name: string;
   tags: TagDefinitionSummary[];
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
   rgw_account_id?: string | null;
   is_s3_user?: boolean | null;
   user_ids?: number[] | null;

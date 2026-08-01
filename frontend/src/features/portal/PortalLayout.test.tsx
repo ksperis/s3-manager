@@ -9,6 +9,15 @@ import PortalLayout from "./PortalLayout";
 
 const mocks = vi.hoisted(() => ({
   setSelectedAccountId: vi.fn(),
+  getWorkspaceAccess: vi.fn().mockResolvedValue({
+    admin: { available: true, context_count: 1 },
+    ceph_admin: { available: false, context_count: 0 },
+    storage_ops: { available: false, context_count: 0 },
+    manager: { available: false, context_count: 0 },
+    browser: { available: false, context_count: 0 },
+    portal: { available: true, context_count: 1 },
+    default_workspace: "admin",
+  }),
   generalSettings: {
     manager_enabled: true,
     ceph_admin_enabled: false,
@@ -33,6 +42,10 @@ const mocks = vi.hoisted(() => ({
     allow_login_custom_endpoint: false,
     allow_user_private_connections: false,
   },
+}));
+
+vi.mock("../../api/executionContexts", () => ({
+  getWorkspaceAccess: mocks.getWorkspaceAccess,
 }));
 
 vi.mock("./PortalAccountContext", () => ({
@@ -89,8 +102,7 @@ describe("PortalLayout", () => {
         account_links: [
           {
             account_id: 101,
-            account_admin: true,
-            account_role: "portal_manager",
+            role: "account_administrator",
           },
         ],
       }),
@@ -164,7 +176,7 @@ describe("PortalLayout", () => {
     expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
   });
 
-  it("renders portal navigation in French when the session language is French", () => {
+  it("renders portal navigation in French when the session language is French", async () => {
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -177,8 +189,7 @@ describe("PortalLayout", () => {
         account_links: [
           {
             account_id: 101,
-            account_admin: true,
-            account_role: "portal_manager",
+            role: "account_administrator",
           },
         ],
       }),
@@ -207,5 +218,8 @@ describe("PortalLayout", () => {
       "Demandes d'aide",
       "Paramètres",
     ]);
+    expect(
+      await screen.findByRole("button", { name: "Switch workspace" }),
+    ).toBeInTheDocument();
   });
 });

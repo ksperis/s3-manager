@@ -82,7 +82,9 @@ function buildBrowserContext(overrides?: Record<string, unknown>) {
     selectedContextId: "ctx-1",
     setSelectedContextId: vi.fn(),
     requiresContextSelection: true,
+    contextsLoaded: true,
     sessionAccountName: null,
+    accessError: null,
     ...overrides,
   };
 }

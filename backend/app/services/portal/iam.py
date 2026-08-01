@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._shared import *
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
+from app.utils.account_roles import portal_role_for
 
 
 class PortalIamMixin:
@@ -211,7 +212,6 @@ class PortalIamMixin:
 
     def _portal_account_member_map(self, account: S3Account) -> dict[int, tuple[User, str, set[str]]]:
         role_rank = {
-            AccountRole.PORTAL_NONE.value: 0,
             AccountRole.PORTAL_USER.value: 1,
             AccountRole.PORTAL_MANAGER.value: 2,
         }
@@ -228,31 +228,29 @@ class PortalIamMixin:
                 return
             current = rows_by_user.get(user.id)
             current_rank = role_rank.get(current[1], 0) if current else 0
-            next_rank = max(current_rank, role_rank.get(role or AccountRole.PORTAL_NONE.value, 0))
+            next_rank = max(current_rank, role_rank.get(role or "", 0))
             sources = set(current[2]) if current else set()
             sources.add(source)
             rows_by_user[user.id] = (user, rank_role.get(next_rank, AccountRole.PORTAL_USER.value), sources)
 
         direct_rows = (
-            self.db.query(User, UserS3Account.account_role)
+            self.db.query(User, UserS3Account.role)
             .join(UserS3Account, UserS3Account.user_id == User.id)
             .filter(UserS3Account.account_id == account.id)
-            .filter(UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
             .all()
         )
         for user, role in direct_rows:
-            merge(user, role, "direct")
+            merge(user, portal_role_for(role), "direct")
 
         group_rows = (
-            self.db.query(User, UiGroupS3Account.account_role)
+            self.db.query(User, UiGroupS3Account.role)
             .join(UserUiGroup, UserUiGroup.user_id == User.id)
             .join(UiGroupS3Account, UiGroupS3Account.group_id == UserUiGroup.group_id)
             .filter(UiGroupS3Account.account_id == account.id)
-            .filter(UiGroupS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]))
             .all()
         )
         for user, role in group_rows:
-            merge(user, role, "group")
+            merge(user, portal_role_for(role), "group")
 
         return rows_by_user
 
@@ -674,12 +672,12 @@ class PortalIamMixin:
                 access_by_bucket[metadata.bucket_name] = role
         return access_by_bucket
 
-    def _user_s3_account_role(self, user_id: int, account_id: int) -> str:
+    def _user_s3_account_role(self, user_id: int, account_id: int) -> Optional[str]:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if account is None:
-            return AccountRole.PORTAL_NONE.value
+            return None
         row = self._portal_account_member_map(account).get(user_id)
-        return row[1] if row else AccountRole.PORTAL_NONE.value
+        return row[1] if row else None
 
     def _sync_user_storage_space_policy_projection(
         self,

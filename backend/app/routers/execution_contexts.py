@@ -7,12 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, S3Account, S3Connection, S3User, User, UserS3Account
-from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
+from app.db import S3Account, S3Connection, S3User, User, is_admin_ui_role
+from app.models.execution_context import (
+    ExecutionContext,
+    ExecutionContextCapabilities,
+    WorkspaceAccess,
+    WorkspaceAvailability,
+)
 from app.routers.dependencies import get_current_account_user
-from app.routers.dependencies_internal.portal_access import _validate_portal_account_surface
 from app.routers.dependencies_internal.settings_loader import load_app_settings
-from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -43,6 +47,7 @@ def _build_account_context(
     max_groups: Optional[int],
     *,
     tags_service: TagsService,
+    role: Optional[str] = None,
     manager_account_is_admin: Optional[bool] = None,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
@@ -56,6 +61,7 @@ def _build_account_context(
         kind="account",
         id=str(account.id),
         display_name=account.name,
+        role=role,
         manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
         max_buckets=max_buckets,
@@ -76,48 +82,6 @@ def _build_account_context(
             can_manage_iam=True,
             sts_capable=sts_capable,
             admin_api_capable=True,
-        ),
-    )
-
-
-def _build_portal_account_context(
-    account: S3Account,
-    quota_max_size_gb: Optional[float],
-    quota_max_objects: Optional[int],
-    max_buckets: Optional[int],
-    *,
-    tags_service: TagsService,
-    account_role: str,
-    manager_account_is_admin: Optional[bool] = None,
-) -> ExecutionContext:
-    endpoint = account.storage_endpoint
-    endpoint_caps = (
-        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-        if endpoint
-        else None
-    )
-    return ExecutionContext(
-        kind="portal_account",
-        id=str(account.id),
-        display_name=account.name,
-        account_role=account_role,
-        manager_account_is_admin=manager_account_is_admin,
-        rgw_account_id=account.rgw_account_id,
-        max_buckets=max_buckets,
-        quota_max_size_gb=quota_max_size_gb,
-        quota_max_objects=quota_max_objects,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=endpoint.name if endpoint else None,
-        endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=endpoint.endpoint_url if endpoint else None,
-        storage_endpoint_capabilities=endpoint_caps,
-        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
-        capabilities=ExecutionContextCapabilities(
-            can_manage_iam=False,
-            sts_capable=False,
-            admin_api_capable=False,
         ),
     )
 
@@ -208,17 +172,6 @@ def _build_connection_context(
     )
 
 
-def _manager_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
-    return bool(link.account_admin or link.is_root)
-
-
-def _portal_account_allowed(link: UserS3Account | EffectiveAccountLink) -> bool:
-    return link.account_role in {
-        AccountRole.PORTAL_USER.value,
-        AccountRole.PORTAL_MANAGER.value,
-    }
-
-
 @router.get("/execution-contexts", response_model=list[ExecutionContext])
 def list_execution_contexts(
     workspace: Optional[str] = Query(default=None, pattern="^(manager|browser)$"),
@@ -226,7 +179,8 @@ def list_execution_contexts(
     db: Session = Depends(get_db),
 ) -> list[ExecutionContext]:
     tags_service = TagsService(db)
-    effective = EffectiveAccessService(db).resolve_user(user)
+    access_service = EffectiveAccessService(db)
+    effective = access_service.resolve_user(user)
     links = effective.account_links
     account_ids = {link.account_id for link in links}
     accounts = (
@@ -242,28 +196,18 @@ def list_execution_contexts(
         else []
     )
 
-    user_connection_ids = effective.s3_connection_ids
-    now = utcnow()
-    connections = (
-        db.query(S3Connection)
-        .filter(
-            ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
-            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
-        )
-        .filter(S3Connection.is_active.is_(True))
-        .filter(
-            (S3Connection.is_temporary.is_(False))
-            | (S3Connection.expires_at.is_(None))
-            | (S3Connection.expires_at > now)
-        )
-        .all()
+    connection_workspace = workspace or "manager"
+    connections = access_service.list_workspace_connections(
+        user,
+        workspace=connection_workspace,
+        resolved=effective,
     )
 
     results: list[ExecutionContext] = []
     account_by_id = {account.id: account for account in accounts}
     if workspace == "manager":
         for link in links:
-            if not _manager_account_allowed(link):
+            if not access_service.manager_account_allowed(link.role):
                 continue
             account = account_by_id.get(link.account_id)
             if account is not None:
@@ -277,7 +221,8 @@ def list_execution_contexts(
                         None,
                         None,
                         tags_service=tags_service,
-                        manager_account_is_admin=bool(link.account_admin or link.is_root),
+                        role=link.role,
+                        manager_account_is_admin=True,
                     )
                 )
     elif workspace is None:
@@ -294,36 +239,7 @@ def list_execution_contexts(
                     tags_service=tags_service,
                 )
             )
-    elif workspace == "browser":
-        app_settings = load_app_settings()
-        if (
-            app_settings.general.browser_enabled
-            and app_settings.general.portal_enabled
-            and app_settings.general.browser_portal_enabled
-        ):
-            for link in links:
-                if not _portal_account_allowed(link):
-                    continue
-                account = account_by_id.get(link.account_id)
-                if account is None:
-                    continue
-                try:
-                    _validate_portal_account_surface(account)
-                except (HTTPException, ValueError):
-                    continue
-                results.append(
-                    _build_portal_account_context(
-                        account,
-                        None,
-                        None,
-                        None,
-                        tags_service=tags_service,
-                        account_role=link.account_role or AccountRole.PORTAL_USER.value,
-                        manager_account_is_admin=bool(link.account_admin or link.is_root),
-                    )
-                )
-
-    if workspace in {None, "manager", "browser"}:
+    if workspace in {None, "manager"}:
         for s3_user in s3_users:
             results.append(
                 _build_legacy_user_context(
@@ -348,3 +264,57 @@ def list_execution_contexts(
             )
         )
     return results
+
+
+@router.get("/workspace-access", response_model=WorkspaceAccess)
+def get_workspace_access(
+    user: User = Depends(get_current_account_user),
+    db: Session = Depends(get_db),
+) -> WorkspaceAccess:
+    settings = load_app_settings().general
+    service = EffectiveAccessService(db)
+    effective = service.resolve_user(user)
+    manager_count = sum(
+        1 for link in effective.account_links if service.manager_account_allowed(link.role)
+    ) + len(effective.s3_user_ids) + len(
+        service.list_workspace_connections(user, workspace="manager", resolved=effective)
+    )
+    browser_count = len(service.list_workspace_connections(user, workspace="browser", resolved=effective))
+    portal_count = len(service.list_portal_accounts(user, resolved=effective))
+    admin_available = is_admin_ui_role(user.role)
+    ceph_admin_available = bool(settings.ceph_admin_enabled and effective.can_access_ceph_admin)
+    storage_ops_available = bool(
+        settings.storage_ops_enabled and effective.can_access_storage_ops and manager_count
+    )
+    manager_available = bool(settings.manager_enabled and manager_count)
+    browser_available = bool(settings.browser_enabled and settings.browser_root_enabled and browser_count)
+    portal_available = bool(settings.portal_enabled and portal_count)
+    if admin_available:
+        default_workspace = "admin"
+    elif manager_available:
+        default_workspace = "manager"
+    elif storage_ops_available:
+        default_workspace = "storage-ops"
+    elif portal_available:
+        default_workspace = "portal"
+    elif browser_available:
+        default_workspace = "browser"
+    elif ceph_admin_available:
+        default_workspace = "ceph-admin"
+    else:
+        default_workspace = None
+    return WorkspaceAccess(
+        admin=WorkspaceAvailability(available=admin_available, context_count=1 if admin_available else 0),
+        ceph_admin=WorkspaceAvailability(
+            available=ceph_admin_available,
+            context_count=1 if ceph_admin_available else 0,
+        ),
+        storage_ops=WorkspaceAvailability(
+            available=storage_ops_available,
+            context_count=manager_count if storage_ops_available else 0,
+        ),
+        manager=WorkspaceAvailability(available=manager_available, context_count=manager_count),
+        browser=WorkspaceAvailability(available=browser_available, context_count=browser_count),
+        portal=WorkspaceAvailability(available=portal_available, context_count=portal_count),
+        default_workspace=default_workspace,
+    )

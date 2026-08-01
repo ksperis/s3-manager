@@ -55,7 +55,7 @@ describe("PortalSettingsPage", () => {
     mocks.fetchCurrentUserMock.mockResolvedValue({
       id: 7,
       email: "portal@example.com",
-      account_links: [{ account_id: 101, account_role: "portal_user" }],
+      account_links: [{ account_id: 101, role: "portal_user" }],
     });
   });
 
@@ -87,12 +87,12 @@ describe("PortalSettingsPage", () => {
 
   it.each([
     ["portal_manager", "Manager"],
-    ["portal_none", "Limited access"],
+    ["account_administrator", "Manager"],
   ])("renders %s project access as %s", async (accountRole, expectedLabel) => {
     mocks.fetchCurrentUserMock.mockResolvedValue({
       id: 7,
       email: "portal@example.com",
-      account_links: [{ account_id: 101, account_role: accountRole }],
+      account_links: [{ account_id: 101, role: accountRole }],
     });
 
     render(<PortalSettingsPage />);

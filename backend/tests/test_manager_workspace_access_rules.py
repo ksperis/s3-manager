@@ -8,7 +8,18 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
+from app.db import (
+    AccountRole,
+    S3Account,
+    S3Connection,
+    S3User,
+    StorageEndpoint,
+    User,
+    UserRole,
+    UserS3Account,
+    UserS3Connection,
+    UserS3User,
+)
 from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
@@ -113,7 +124,7 @@ def test_manager_membership_without_admin_is_forbidden():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        account_admin=False,
+        role=AccountRole.PORTAL_MANAGER.value,
         is_root=False,
     )
     with pytest.raises(HTTPException) as exc:
@@ -142,9 +153,8 @@ def test_manager_workspace_rejects_portal_role_without_account_admin(db_session)
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=False,
             is_root=False,
-            account_role=AccountRole.PORTAL_MANAGER.value,
+            role=AccountRole.PORTAL_MANAGER.value,
         )
     )
     db_session.commit()
@@ -188,9 +198,8 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=False,
             is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -255,7 +264,7 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -347,7 +356,7 @@ def test_manager_membership_account_admin_uses_root_key_capabilities():
     link = UserS3Account(
         user_id=1,
         account_id=1,
-        account_admin=True,
+        role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         is_root=False,
     )
     caps = dependencies._manager_membership_capabilities(link)
@@ -379,7 +388,7 @@ def test_manager_context_ignores_legacy_access_mode_header(db_session):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
             is_root=False,
         )
     )
@@ -521,7 +530,7 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
             db=db_session,
         )
     assert exc.value.status_code == 403
-    assert "cannot be used in manager workspace" in str(exc.value.detail)
+    assert "not authorized" in str(exc.value.detail)
 
 
 @pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
@@ -555,7 +564,7 @@ def test_manager_and_browser_workspace_reject_inactive_connection(db_session, pa
             db=db_session,
         )
     assert exc.value.status_code == 403
-    assert "disabled" in str(exc.value.detail).lower()
+    assert "not authorized" in str(exc.value.detail).lower()
 
 
 @pytest.mark.parametrize("account_ref", ["-1", "null", "-42", "0"])
@@ -741,8 +750,7 @@ def test_manager_context_connection_reports_reason_for_non_ceph_endpoint(db_sess
     assert "not a ceph provider" in payload.manager_stats_message.lower()
 
 
-@pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
-def test_manager_and_browser_workspace_accept_s3_user_context(db_session, path):
+def test_manager_workspace_accepts_s3_user_context(db_session):
     user = User(
         email="s3-user-context-ok@example.com",
         hashed_password="x",
@@ -764,7 +772,7 @@ def test_manager_and_browser_workspace_accept_s3_user_context(db_session, path):
     db_session.commit()
 
     account = dependencies.get_account_context(
-        request=_request(path),
+        request=_request("/api/manager/buckets"),
         account_ref=f"s3u-{s3_user.id}",
         actor=user,
         db=db_session,
@@ -776,6 +784,82 @@ def test_manager_and_browser_workspace_accept_s3_user_context(db_session, path):
     assert caps is not None
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is False
+
+
+def test_browser_workspace_rejects_forged_s3_user_context(db_session):
+    user = User(
+        email="browser-forged-s3-user@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    s3_user = S3User(
+        name="browser-forged-s3-user",
+        rgw_user_uid="browser-forged-s3-user",
+        rgw_access_key="AK-FORGED-S3U",
+        rgw_secret_key="SK-FORGED-S3U",
+    )
+    db_session.add_all([user, s3_user])
+    db_session.commit()
+    db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/browser/buckets"),
+            account_ref=f"s3u-{s3_user.id}",
+            actor=user,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 403
+
+
+def test_browser_workspace_rejects_forged_account_and_shared_connection(db_session):
+    user = User(
+        email="browser-forged-manager-contexts@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    account = S3Account(
+        name="browser-forged-admin-account",
+        rgw_account_id="RGWFORGEDBROWSER",
+        rgw_access_key="AK-FORGED-ACCOUNT",
+        rgw_secret_key="SK-FORGED-ACCOUNT",
+    )
+    shared_connection = S3Connection(
+        created_by=user,
+        name="browser-forged-shared-connection",
+        is_shared=True,
+        access_manager=True,
+        access_browser=True,
+        access_key_id="AK-FORGED-SHARED",
+        secret_access_key="SK-FORGED-SHARED",
+    )
+    db_session.add_all([user, account, shared_connection])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(
+                user_id=user.id,
+                account_id=account.id,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            ),
+            UserS3Connection(user_id=user.id, s3_connection_id=shared_connection.id),
+        ]
+    )
+    db_session.commit()
+
+    for account_ref in (str(account.id), f"conn-{shared_connection.id}"):
+        with pytest.raises(HTTPException) as exc:
+            dependencies.get_account_context(
+                request=_request("/api/browser/buckets"),
+                account_ref=account_ref,
+                actor=user,
+                db=db_session,
+            )
+        assert exc.value.status_code == 403
 
 
 def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_session, monkeypatch):

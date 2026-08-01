@@ -6,13 +6,18 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { completeOidcLogin } from "../../api/auth";
 import { fetchGeneralSettings } from "../../api/appSettings";
+import { getWorkspaceAccess } from "../../api/executionContexts";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { CLIENT_STORAGE_KEYS, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
-import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
+import {
+  resolvePostLoginPath,
+  resolvePostLoginPathWithWorkspaceAccess,
+  type SessionUser,
+} from "../../utils/workspaces";
 
 export default function OidcCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
@@ -61,8 +66,18 @@ export default function OidcCallbackPage() {
         } catch (loadError) {
           console.error(loadError);
         }
-        const baseDestination = resolvePostLoginPath(sessionUser, settings);
-        const destination = baseDestination === "/unauthorized" ? baseDestination : res.redirect_path || baseDestination;
+        let baseDestination = resolvePostLoginPath(sessionUser, settings);
+        try {
+          const workspaceAccess = await getWorkspaceAccess();
+          baseDestination = resolvePostLoginPathWithWorkspaceAccess(
+            sessionUser,
+            settings,
+            workspaceAccess
+          );
+        } catch (workspaceError) {
+          console.error(workspaceError);
+        }
+        const destination = baseDestination;
         prefetchWorkspaceBranch(destination);
         navigate(destination, { replace: true });
       } catch (err) {

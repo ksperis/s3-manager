@@ -1,5 +1,52 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical access model migration
+
+Migration `0069_canonical_account_access_roles` is a breaking, DB-only
+migration. It replaces the two account-association dimensions with one ordered
+`role`, removes the legacy columns in the same release, and makes shared S3
+connections Manager-only.
+
+### Required deployment sequence
+
+Rolling upgrade is prohibited because old backend instances and workers still
+expect the removed columns.
+
+1. Stop old application instances and every background worker.
+2. Create and verify a restorable database backup. For SQLite, include the
+   database, `-wal`, and `-shm` files as one consistent set. For PostgreSQL,
+   validate the dump by restoring it to a separate database.
+3. If the migration reports associations without useful rights, set
+   `S3_MANAGER_DB_BACKUP_VERIFIED=true` only after that restore verification.
+4. Run Alembic through revision `0069` while the old processes remain stopped.
+5. Deploy the new backend and frontend together, then start new workers.
+6. Run `python -m app.scripts.reconcile_portal_iam` first in its default dry-run
+   mode. Review the per-account summary and then rerun with `--apply`.
+7. Smoke-test Admin associations, shared-connection remediation, empty/private
+   Browser, Manager Browser, Portal, direct S3 sessions, and Ceph Admin Browser.
+
+Alembic never contacts RGW. Portal IAM reconciliation is intentionally a
+separate, resumable command; a partial IAM failure must not alter the canonical
+database role.
+
+### Data transformation
+
+- `portal_user`, `portal_manager`, and `account_administrator` are the only
+  stored account roles.
+- Root account links always become `account_administrator`.
+- A legacy admin flag outranks a legacy Portal role.
+- Associations that previously granted no useful right are **deleted**, not
+  retained with `role = NULL`. No tombstone or compatibility row is written.
+- Shared connections have Browser access disabled. Those with Manager access
+  stay ready; the others receive the stable remediation reason
+  `shared_connection_manager_access_disabled`.
+- Private connection owners, credentials, activity flags, and access flags are
+  unchanged.
+
+The downgrade reconstructs the legacy schema and fields for surviving rows. It
+cannot recreate deleted no-right associations; restoring the verified backup is
+the only recovery path for that explicitly non-reversible data.
+
 ## 2026-07 Portal Storage Space access migration
 
 Migration `0066_portal_storage_space_access_model` clears the database state of

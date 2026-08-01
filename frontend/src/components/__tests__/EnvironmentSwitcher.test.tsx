@@ -8,7 +8,7 @@ import { useWorkspaceSwitcherModel } from "../EnvironmentSwitcher";
 const mocks = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(),
   generalSettings: {} as GeneralSettings,
-  listExecutionContexts: vi.fn(),
+  getWorkspaceAccess: vi.fn(),
 }));
 
 vi.mock("../GeneralSettingsContext", () => ({
@@ -18,7 +18,7 @@ vi.mock("../GeneralSettingsContext", () => ({
 }));
 
 vi.mock("../../api/executionContexts", () => ({
-  listExecutionContexts: mocks.listExecutionContexts,
+  getWorkspaceAccess: mocks.getWorkspaceAccess,
 }));
 
 vi.mock("../../api/users", () => ({
@@ -104,7 +104,7 @@ function storePortalAdminUser() {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, role: "account_administrator" }],
     })
   );
 }
@@ -117,7 +117,7 @@ function storePlainAdminUser() {
       email: "plain-admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_none" }],
+      account_links: [],
     })
   );
 }
@@ -130,9 +130,17 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, role: "account_administrator" }],
     });
-    mocks.listExecutionContexts.mockResolvedValue([]);
+    mocks.getWorkspaceAccess.mockResolvedValue({
+      admin: { available: true, context_count: 1 },
+      ceph_admin: { available: false, context_count: 0 },
+      storage_ops: { available: false, context_count: 0 },
+      manager: { available: false, context_count: 0 },
+      browser: { available: false, context_count: 0 },
+      portal: { available: true, context_count: 1 },
+      default_workspace: "admin",
+    });
     storePortalAdminUser();
   });
 
@@ -169,10 +177,19 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
 
   it("omits Portal from the model for admins without an explicit portal account role", async () => {
     storePlainAdminUser();
+    mocks.getWorkspaceAccess.mockResolvedValue({
+      admin: { available: true, context_count: 1 },
+      ceph_admin: { available: false, context_count: 0 },
+      storage_ops: { available: false, context_count: 0 },
+      manager: { available: false, context_count: 0 },
+      browser: { available: false, context_count: 0 },
+      portal: { available: false, context_count: 0 },
+      default_workspace: "admin",
+    });
     renderSwitcherModel("/admin");
 
     await waitFor(() => {
-      expect(mocks.listExecutionContexts).toHaveBeenCalledTimes(2);
+      expect(mocks.getWorkspaceAccess).toHaveBeenCalledTimes(1);
     });
     expect(screen.queryByText("Portal (self-service)")).not.toBeInTheDocument();
     expect(screen.getByText("No workspace switcher")).toBeInTheDocument();
@@ -186,7 +203,7 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       email: "plain-admin@example.com",
       role: "ui_superadmin",
       authType: "password",
-      account_links: [{ account_id: 101, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 101, role: "account_administrator" }],
     });
 
     renderSwitcherModel("/admin");
@@ -195,8 +212,8 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
       const options = within(screen.getByRole("list", { name: "Workspace options" }));
       expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
     });
-    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].account_role).toBe(
-      "portal_manager"
+    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].role).toBe(
+      "account_administrator"
     );
   });
 
@@ -213,23 +230,27 @@ describe("useWorkspaceSwitcherModel Portal workspace", () => {
         role: "ui_user",
         authType: "password",
         can_access_storage_ops: true,
-        account_links: [{ account_id: 101, account_admin: false, account_role: "portal_user" }],
+        account_links: [{ account_id: 101, role: "portal_user" }],
       })
     );
-    mocks.listExecutionContexts.mockImplementation(async (workspace: string) =>
-      workspace === "browser" ? [{ id: "101", kind: "portal_account" }] : []
-    );
+    mocks.getWorkspaceAccess.mockResolvedValue({
+      admin: { available: false, context_count: 0 },
+      ceph_admin: { available: false, context_count: 0 },
+      storage_ops: { available: false, context_count: 0 },
+      manager: { available: false, context_count: 0 },
+      browser: { available: false, context_count: 0 },
+      portal: { available: true, context_count: 1 },
+      default_workspace: "portal",
+    });
 
     renderSwitcherModel("/portal");
 
     await waitFor(() => {
-      expect(mocks.listExecutionContexts).toHaveBeenCalledWith("manager");
-      expect(mocks.listExecutionContexts).toHaveBeenCalledWith("browser");
+      expect(mocks.getWorkspaceAccess).toHaveBeenCalledTimes(1);
     });
-    const options = within(screen.getByRole("list", { name: "Workspace options" }));
-    expect(options.queryByText("Storage Ops")).not.toBeInTheDocument();
-    expect(options.queryByText("Manager (admin tenant)")).not.toBeInTheDocument();
-    expect(options.getByText("Portal (self-service)")).toBeInTheDocument();
-    expect(options.getByText("Browser (objects)")).toBeInTheDocument();
+    expect(screen.getByText("No workspace switcher")).toBeInTheDocument();
+    expect(screen.queryByText("Storage Ops")).not.toBeInTheDocument();
+    expect(screen.queryByText("Manager (admin tenant)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Browser (objects)")).not.toBeInTheDocument();
   });
 });

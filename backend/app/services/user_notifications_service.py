@@ -121,7 +121,7 @@ class UserNotificationsService:
         alert_account_ids = {
             int(link.account_id)
             for link in access.account_links
-            if bool(link.account_admin or link.is_root or link.account_role == AccountRole.PORTAL_MANAGER.value)
+            if link.role in {AccountRole.PORTAL_MANAGER.value, AccountRole.ACCOUNT_ADMINISTRATOR.value}
         }
         alert_s3_user_ids = {int(item) for item in access.s3_user_ids}
         global_watch = bool(

@@ -43,12 +43,12 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
     db_session.flush()
 
     db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            is_root=False,
-            account_admin=True,
-        )
+            UserS3Account(
+                user_id=user.id,
+                account_id=account.id,
+                is_root=False,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            )
     )
     db_session.commit()
 
@@ -75,12 +75,11 @@ def test_accounts_expose_direct_group_links(db_session):
     db_session.add_all([account, group])
     db_session.flush()
     db_session.add(
-        UiGroupS3Account(
-            account_id=account.id,
-            group_id=group.id,
-            account_admin=True,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-        )
+            UiGroupS3Account(
+                account_id=account.id,
+                group_id=group.id,
+                role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
+            )
     )
     db_session.commit()
 
@@ -98,5 +97,4 @@ def test_accounts_expose_direct_group_links(db_session):
         assert item.group_links is not None and len(item.group_links) == 1
         assert item.group_links[0].group_id == group.id
         assert item.group_links[0].group_name == "Platform Operators"
-        assert item.group_links[0].account_admin is True
-        assert item.group_links[0].account_role == AccountRole.PORTAL_MANAGER.value
+    assert item.group_links[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value

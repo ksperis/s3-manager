@@ -46,6 +46,7 @@ from app.services.bucket_migration_runtime import (
     BucketMigrationVerifier,
 )
 from app.services.object_diff_common import compare_object_entries
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_client import _delete_objects_count, get_s3_client, purge_bucket_contents
 from app.utils.rgw import resolve_admin_uid
 from app.utils.network_targets import validate_outbound_url

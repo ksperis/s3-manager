@@ -1,6 +1,6 @@
 import type { ManagerToolAccess } from "../../api/users";
 
-export type PortalAccountRole = "portal_none" | "portal_user" | "portal_manager";
+export type PortalAccountRole = "portal_user" | "portal_manager" | "account_administrator";
 export type ManagerToolKey = keyof ManagerToolAccess;
 
 export type ManagerToolDefinition = {
@@ -21,14 +21,14 @@ export const DEFAULT_MANAGER_TOOL_ACCESS: ManagerToolAccess = {
 };
 
 export const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_none", label: "No portal access" },
   { value: "portal_user", label: "Portal user" },
   { value: "portal_manager", label: "Portal manager" },
+  { value: "account_administrator", label: "Account administrator" },
 ];
 
 export function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager") return value;
-  return "portal_none";
+  if (value === "portal_user" || value === "portal_manager" || value === "account_administrator") return value;
+  return "portal_user";
 }
 
 export function normalizeManagerToolAccess(access?: ManagerToolAccess | null): ManagerToolAccess {

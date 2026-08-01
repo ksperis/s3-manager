@@ -23,6 +23,20 @@ Single-resource endpoints also exist for targeted automation calls.
 - `continue_on_error` for batch behavior.
 - Response returns `changed`, `success`, summaries, and per-item details.
 
+## S3 connection boundary
+
+Automation can create, find, modify, remediate, or delete shared connections
+only. ID and name selectors always include the shared scope, so a private
+connection is indistinguishable from a missing resource. Connection specs do
+not accept `is_shared`, `access_manager`, or `access_browser`; new connections
+are shared, Browser-disabled, and Manager-enabled. A migrated connection in
+remediation is enabled only through the explicit `activate_manager` action.
+
+Account-link creation requires canonical `role`, except for a convertible
+legacy payload during the compatibility release. Conflicting canonical and
+legacy roles are rejected. Removing a link deletes the association instead of
+retaining an empty-role row.
+
 ## Authentication
 
 Use admin session token or admin API token.

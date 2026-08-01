@@ -11,6 +11,7 @@ from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
 from app.services.s3_accounts_service import get_s3_accounts_service
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_users_service import get_s3_users_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -65,24 +66,18 @@ def list_manager_accounts(
             )
         return accounts
 
-    links = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id)
-        .all()
-    )
-    manager_account_links = [link for link in links if bool(link.account_admin or link.is_root)]
+    access_service = EffectiveAccessService(db)
+    effective = access_service.resolve_user(user)
+    manager_account_links = [
+        link for link in effective.account_links if access_service.manager_account_allowed(link.role)
+    ]
     account_ids = {link.account_id for link in manager_account_links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).all()
         if account_ids
         else []
     )
-    s3_links = (
-        db.query(UserS3User)
-        .filter(UserS3User.user_id == user.id)
-        .all()
-    )
-    s3_ids = {link.s3_user_id for link in s3_links}
+    s3_ids = set(effective.s3_user_ids)
     s3_users = (
         db.query(S3User).filter(S3User.id.in_(s3_ids)).all()
         if s3_ids
@@ -92,20 +87,7 @@ def list_manager_accounts(
     # User-scoped S3 connections (credential-first) used for the daily /manager S3 configuration console.
     # These are intentionally not part of the platform account model; we expose them here only so the
     # manager can switch context.
-    user_connection_ids = (
-        db.query(UserS3Connection.s3_connection_id)
-        .filter(UserS3Connection.user_id == user.id)
-    )
-    connections = (
-        db.query(S3Connection)
-        .filter(
-            ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
-            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
-        )
-        .filter(S3Connection.is_active.is_(True))
-        .filter(S3Connection.is_temporary.is_(False))
-        .all()
-    )
+    connections = access_service.list_workspace_connections(user, workspace="manager", resolved=effective)
 
     results: list[S3AccountSchema] = []
     for acc in accounts:

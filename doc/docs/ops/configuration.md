@@ -156,7 +156,11 @@ Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
 `AppSettings.general` and are persisted in the database; UI-managed OIDC and
 LDAP providers are persisted separately in their own database tables.
 
-`FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. When Portal is enabled, account access remains explicit: admins assign `portal_user` or `portal_manager` on each UI user/account link, while existing links stay `portal_none` until changed.
+`FEATURE_PORTAL_ENABLED` can force the Portal surface on or off. Account access
+always uses one explicit canonical role: `portal_user`, `portal_manager`, or
+`account_administrator`. Disabling Portal does not rewrite that role. Migration
+`0069` deletes legacy associations that granted no useful right; it does not
+retain a `portal_none` association.
 
 The code-owned `portal-user` IAM group policy grants only
 `s3:ListAllMyBuckets` and `sts:GetSessionToken`. The code-owned

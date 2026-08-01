@@ -16,6 +16,7 @@ from app.db import (
     User,
     UserRole,
     UserS3Account,
+    UiGroupS3Connection,
 )
 from app.main import app
 from app.routers import dependencies, execution_contexts
@@ -143,8 +144,6 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
         {
             "id": shared_connection.id,
             "name": "group-connection",
-            "access_manager": True,
-            "access_browser": True,
         }
     ]
 
@@ -154,6 +153,48 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
     )
     assert reject_resp.status_code == 400
     assert "Only shared S3 connections can be linked" in reject_resp.json()["detail"]
+
+
+def test_ui_group_projection_and_search_hide_private_connection_links(
+    client: TestClient,
+    db_session,
+):
+    user = _user(db_session, email="private-group-link@example.com")
+    private_connection = _connection(
+        db_session,
+        creator_id=user.id,
+        name="private-group-secret-name",
+        shared=False,
+    )
+    created = client.post(
+        "/api/admin/groups",
+        json={"name": "Private legacy link holder"},
+    )
+    assert created.status_code == 201, created.text
+    group_id = created.json()["id"]
+    db_session.add(
+        UiGroupS3Connection(
+            group_id=group_id,
+            s3_connection_id=private_connection.id,
+        )
+    )
+    db_session.commit()
+
+    listed = client.get(
+        "/api/admin/groups",
+        params={"search": "Private legacy link holder"},
+    )
+    assert listed.status_code == 200, listed.text
+    group_payload = listed.json()["items"][0]
+    assert group_payload["s3_connections"] == []
+    assert group_payload["s3_connection_details"] == []
+
+    hidden_search = client.get(
+        "/api/admin/groups",
+        params={"search": "private-group-secret-name"},
+    )
+    assert hidden_search.status_code == 200, hidden_search.text
+    assert hidden_search.json()["total"] == 0
 
 
 def test_ui_group_avatar_supports_presets_upload_and_initials_fallback(client: TestClient, db_session):
@@ -212,13 +253,12 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     s3_user = _s3_user(db_session)
     connection = _connection(db_session, creator_id=user.id, shared=True, access_manager=True)
     db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=account.id,
-            account_admin=False,
-            is_root=False,
-            account_role=AccountRole.PORTAL_USER.value,
-        )
+            UserS3Account(
+                user_id=user.id,
+                account_id=account.id,
+                is_root=False,
+                role=AccountRole.PORTAL_USER.value,
+            )
     )
     db_session.commit()
 
@@ -264,8 +304,13 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
     assert out.effective_access.manager_tool_access.feature_rules is True
     assert out.effective_access.manager_tool_access.bucket_quota is True
     assert out.effective_access.accounts == [account.id]
-    assert out.effective_access.account_links[0].account_admin is True
-    assert out.effective_access.account_links[0].account_role == AccountRole.PORTAL_MANAGER.value
+    effective_account = out.effective_access.account_links[0]
+    assert effective_account.role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert effective_account.provenance.direct_role == AccountRole.PORTAL_USER.value
+    assert effective_account.provenance.direct_determines_effective_role is False
+    assert len(effective_account.provenance.groups) == 1
+    assert effective_account.provenance.groups[0].role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    assert effective_account.provenance.groups[0].determines_effective_role is True
     assert out.effective_access.s3_users == [s3_user.id]
     assert out.effective_access.s3_connections == [connection.id]
 

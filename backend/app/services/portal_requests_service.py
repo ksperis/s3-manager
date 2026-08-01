@@ -396,15 +396,16 @@ class PortalRequestsService:
             .first()
         )
         next_account_role = AccountRole.PORTAL_USER.value
-        if existing_link and existing_link.account_role == AccountRole.PORTAL_MANAGER.value:
-            next_account_role = AccountRole.PORTAL_MANAGER.value
-        account_admin = bool(existing_link.account_admin) if existing_link else False
+        if existing_link and existing_link.role in {
+            AccountRole.PORTAL_MANAGER.value,
+            AccountRole.ACCOUNT_ADMINISTRATOR.value,
+        }:
+            next_account_role = existing_link.role
         self.users_service.assign_user_to_account(
             int(target.id),
             int(row.account_id),
             account_root=False,
-            account_admin=account_admin,
-            account_role=next_account_role,
+            role=next_account_role,
         )
         return {
             "target_user_id": int(target.id),
@@ -430,12 +431,12 @@ class PortalRequestsService:
         )
         if not link:
             raise ValueError("Target user is not linked to this Portal project")
-        if link.is_root or link.account_admin:
+        if link.is_root or link.role == AccountRole.ACCOUNT_ADMINISTRATOR.value:
             raise ValueError("Admin account links cannot be removed through Portal requests")
-        if link.account_role != AccountRole.PORTAL_USER.value:
+        if link.role != AccountRole.PORTAL_USER.value:
             raise ValueError("Only Portal user links can be removed through this request")
 
-        removed_role = link.account_role
+        removed_role = link.role
         # Revoke the dedicated Portal IAM identity first when one exists, then
         # remove the UI account link. The UI user itself is intentionally kept.
         PortalService(self.db).remove_portal_user(target, row.account)

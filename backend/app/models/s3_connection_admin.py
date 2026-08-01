@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -26,10 +26,9 @@ class S3ConnectionAdminItem(BaseModel):
     name: str
     storage_endpoint_id: Optional[int] = None
     endpoint_url: str
-    is_shared: bool = False
     is_active: bool = True
-    access_manager: bool = False
-    access_browser: bool = True
+    execution_status: Literal["ready", "remediation_required"] = "ready"
+    remediation_reason: Optional[str] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     provider_hint: Optional[str] = None
@@ -56,8 +55,8 @@ class S3ConnectionSummary(BaseModel):
     id: int
     name: str
     created_by_user_id: int
-    is_shared: bool = False
     is_active: bool = True
+    execution_status: Literal["ready", "remediation_required"] = "ready"
 
 
 class S3ConnectionAdminCreate(BaseModel):
@@ -66,8 +65,6 @@ class S3ConnectionAdminCreate(BaseModel):
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    access_manager: bool = False
-    access_browser: bool = True
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -92,8 +89,6 @@ class S3ConnectionAdminUpdate(BaseModel):
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_active: Optional[bool] = None
-    access_manager: Optional[bool] = None
-    access_browser: Optional[bool] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -126,3 +121,7 @@ class S3ConnectionUserLink(BaseModel):
 
 class S3ConnectionUserLinkUpsert(BaseModel):
     user_id: int
+
+
+class S3ConnectionRemediationAction(BaseModel):
+    action: Literal["activate_manager"]

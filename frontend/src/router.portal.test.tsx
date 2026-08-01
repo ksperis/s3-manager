@@ -61,7 +61,7 @@ describe("portal routes", () => {
       email: "admin@example.com",
       role: "ui_admin",
       authType: "password",
-      account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+      account_links: [],
     });
     window.localStorage.clear();
   });
@@ -123,7 +123,7 @@ describe("portal routes", () => {
         email: "admin@example.com",
         role: "ui_admin",
         authType: "password",
-        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+        account_links: [],
       })
     );
 
@@ -147,7 +147,7 @@ describe("portal routes", () => {
       email: "admin@example.com",
       role: "ui_superadmin",
       authType: "password",
-      account_links: [{ account_id: 24, account_admin: true, account_role: "portal_manager" }],
+      account_links: [{ account_id: 24, role: "portal_manager" }],
     });
     window.localStorage.setItem("token", "test-token");
     window.localStorage.setItem(
@@ -157,7 +157,7 @@ describe("portal routes", () => {
         email: "admin@example.com",
         role: "ui_superadmin",
         authType: "password",
-        account_links: [{ account_id: 24, account_admin: true, account_role: "portal_none" }],
+        account_links: [],
       })
     );
 
@@ -173,7 +173,7 @@ describe("portal routes", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Portal workspace" })).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].account_role).toBe(
+    expect(JSON.parse(window.localStorage.getItem("user") ?? "{}").account_links[0].role).toBe(
       "portal_manager"
     );
   });

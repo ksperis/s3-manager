@@ -5,6 +5,7 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CreateUserPayload,
+  type EffectiveAccountMembership,
   UpdateUserPayload,
   User,
   assignUserToS3Account,
@@ -31,7 +32,6 @@ import {
   CompactAssociationSummary,
   accountAssociationRoleLabels,
   connectionAssociationRoleLabels,
-  type AssociationAccountItem,
   type CompactAssociationCategory,
 } from "./AssociationSummary";
 import {
@@ -71,7 +71,6 @@ import {
   AdminAssociationPickerPanel,
   AdminAssociationLinkedTable,
   AdminAssociationSectionHeader,
-  AdminAssociationAdminCheckbox,
   adminAssociationAccountOptionRowClass,
   adminAssociationCheckboxClass,
   adminAssociationOptionLabelClass,
@@ -94,8 +93,7 @@ type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
   id: number;
-  account_admin?: boolean;
-  account_role?: PortalAccountRole;
+  role: PortalAccountRole;
 };
 
 type Option = {
@@ -266,14 +264,7 @@ const AssociationsTabs = ({
                         <th className={adminAssociationTableHeaderClass}>
                           Account
                         </th>
-                        <th className={adminAssociationTableHeaderClass}>
-                          Admin
-                        </th>
-                        {showPortalRole && (
-                          <th className={adminAssociationTableHeaderClass}>
-                            Portal role
-                          </th>
-                        )}
+                        <th className={adminAssociationTableHeaderClass}>Access role</th>
                         <th className={adminAssociationTableHeaderRightClass}>
                           Actions
                         </th>
@@ -282,7 +273,7 @@ const AssociationsTabs = ({
                     <tbody className={adminAssociationTableBodyClass}>
                       {accounts.selected.length === 0 ? (
                         <tr>
-                          <td colSpan={showPortalRole ? 4 : 3} className={adminAssociationTableEmptyCellClass}>
+                          <td colSpan={3} className={adminAssociationTableEmptyCellClass}>
                             No account linked yet.
                           </td>
                         </tr>
@@ -294,42 +285,24 @@ const AssociationsTabs = ({
                             <tr key={entry.id}>
                               <td className={adminAssociationTableLabelCellClass}>{label}</td>
                               <td className={adminAssociationTableControlCellClass}>
-                                <AdminAssociationAdminCheckbox
-                                  checked={Boolean(entry.account_admin)}
-                                  onCheckedChange={(checked) =>
+                                <UiSelect
+                                  aria-label={`Access role for ${label}`}
+                                  size="compact"
+                                  fieldClassName="w-52"
+                                  value={normalizePortalRole(entry.role)}
+                                  onChange={(e) =>
                                     accounts.setSelected((prev) =>
                                       prev.map((item) =>
-                                        item.id === entry.id ? { ...item, account_admin: checked } : item
+                                        item.id === entry.id ? { ...item, role: normalizePortalRole(e.target.value) } : item
                                       )
                                     )
                                   }
-                                />
+                                >
+                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </UiSelect>
                               </td>
-                              {showPortalRole && (
-                                <td className={adminAssociationTableControlCellClass}>
-                                  <UiSelect
-                                    aria-label={`Portal role for ${label}`}
-                                    size="compact"
-                                    fieldClassName="w-44"
-                                    value={normalizePortalRole(entry.account_role)}
-                                    onChange={(e) =>
-                                      accounts.setSelected((prev) =>
-                                        prev.map((item) =>
-                                          item.id === entry.id
-                                            ? { ...item, account_role: normalizePortalRole(e.target.value) }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                  >
-                                    {PORTAL_ROLE_OPTIONS.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </UiSelect>
-                                </td>
-                              )}
                               <td className={adminAssociationTableActionCellClass}>
                                 <button
                                   type="button"
@@ -368,9 +341,10 @@ const AssociationsTabs = ({
                     onAdd={() => {
                       if (accounts.selections.length === 0) return;
                       const next = accounts.selections.map((accountId) => {
-                        const account_admin = accounts.adminChoice[accountId] ?? false;
-                        const account_role = accounts.portalRoleChoice[accountId] ?? "portal_none";
-                        return { id: accountId, account_admin, account_role };
+                        const role = accounts.portalRoleChoice[accountId] ?? (
+                          showPortalRole ? "portal_user" : "account_administrator"
+                        );
+                        return { id: accountId, role };
                       });
                       accounts.setSelected((prev) => [...prev, ...next]);
                       accounts.setSelections([]);
@@ -381,8 +355,9 @@ const AssociationsTabs = ({
                       {accounts.visible.map((opt) => {
                         const accountId = Number(opt.id);
                         const isSelected = accounts.selections.includes(accountId);
-                        const adminChecked = accounts.adminChoice[accountId] ?? false;
-                        const portalRole = accounts.portalRoleChoice[accountId] ?? "portal_none";
+                        const portalRole = accounts.portalRoleChoice[accountId] ?? (
+                          showPortalRole ? "portal_user" : "account_administrator"
+                        );
                         return (
                           <div
                             key={opt.id}
@@ -398,35 +373,22 @@ const AssociationsTabs = ({
                               <span>{opt.label}</span>
                             </label>
                             <div className="flex flex-wrap items-center gap-2">
-                              <AdminAssociationAdminCheckbox
-                                checked={Boolean(adminChecked)}
-                                onCheckedChange={(checked) =>
-                                  accounts.setAdminChoice((prev) => ({
+                              <UiSelect
+                                aria-label={`Access role for ${opt.label}`}
+                                size="compact"
+                                fieldClassName="w-52"
+                                value={portalRole}
+                                onChange={(event) =>
+                                  accounts.setPortalRoleChoice((prev) => ({
                                     ...prev,
-                                    [accountId]: checked,
+                                    [accountId]: normalizePortalRole(event.target.value),
                                   }))
                                 }
-                              />
-                              {showPortalRole ? (
-                                <UiSelect
-                                  aria-label={`Portal role for ${opt.label}`}
-                                  size="compact"
-                                  fieldClassName="w-44"
-                                  value={portalRole}
-                                  onChange={(event) =>
-                                    accounts.setPortalRoleChoice((prev) => ({
-                                      ...prev,
-                                      [accountId]: normalizePortalRole(event.target.value),
-                                    }))
-                                  }
-                                >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </UiSelect>
-                              ) : null}
+                              >
+                                {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </UiSelect>
                             </div>
                           </div>
                         );
@@ -813,7 +775,7 @@ export default function UsersPage() {
     return map;
   }, [s3Users]);
   const s3ConnectionOptions = useMemo(
-    () => s3Connections.filter((conn) => conn.is_shared !== false).map((conn) => ({ id: conn.id, label: conn.name })),
+    () => s3Connections.map((conn) => ({ id: conn.id, label: conn.name })),
     [s3Connections]
   );
   const s3SharedConnectionOptions = s3ConnectionOptions;
@@ -925,24 +887,48 @@ export default function UsersPage() {
   };
 
   const renderAssociationSummary = (user: User) => {
-    const accountIds =
-      user.accounts && user.accounts.length > 0
-        ? user.accounts.map((id) => Number(id))
-        : (user.account_links ?? []).map((link) => Number(link.account_id));
-    const adminByAccountId = new Map<number, boolean>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
-    );
-    const portalRoleByAccountId = new Map<number, PortalAccountRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
-    );
-    const accountItems: AssociationAccountItem[] = accountIds.map((id) => ({
-      id,
-      label: accountOptionsById.get(id)?.name ?? `Account #${id}`,
-      account_admin: adminByAccountId.get(id) === true,
-      account_role: portalRoleByAccountId.get(id) ?? "portal_none",
-    }));
+    const effectiveAccountLinks = user.effective_access?.account_links ?? [];
+    const displayedAccountLinks = effectiveAccountLinks.length > 0
+      ? effectiveAccountLinks
+      : (user.account_links ?? []);
+    const accountItems = displayedAccountLinks.map((link) => {
+      const id = Number(link.account_id);
+      const label = accountOptionsById.get(id)?.name ?? `Account #${id}`;
+      const role = normalizePortalRole(link.role);
+      const effectiveRoleLabel = accountAssociationRoleLabels({ id, label, role }, showPortalRole)[0];
+      const provenance = effectiveAccountLinks.length > 0
+        ? (link as EffectiveAccountMembership).provenance
+        : null;
+      const roleLabels = [effectiveRoleLabel];
+      if (provenance?.direct_role) {
+        const directRoleLabel = accountAssociationRoleLabels(
+          { id, label, role: provenance.direct_role },
+          showPortalRole,
+        )[0];
+        roleLabels.push(
+          `Direct: ${directRoleLabel}${provenance.direct_determines_effective_role ? " (maximum)" : ""}`,
+        );
+      }
+      for (const group of provenance?.groups ?? []) {
+        const groupRoleLabel = accountAssociationRoleLabels(
+          { id, label, role: group.role },
+          showPortalRole,
+        )[0];
+        roleLabels.push(
+          `Group ${group.group_name}: ${groupRoleLabel}${group.determines_effective_role ? " (maximum)" : ""}`,
+        );
+      }
+      return { id, label, role, role_labels: roleLabels };
+    });
+    const effectiveS3UserDetails = user.effective_access?.s3_user_details ?? [];
     const s3UserItems =
-      user.s3_user_details && user.s3_user_details.length > 0
+      effectiveS3UserDetails.length > 0
+        ? effectiveS3UserDetails.map((entry) => ({
+            id: entry.id,
+            label: entry.name || `User #${entry.id}`,
+            role_labels: ["Direct or group access"],
+          }))
+        : user.s3_user_details && user.s3_user_details.length > 0
         ? user.s3_user_details.map((entry) => ({
             id: entry.id,
             label: entry.name || `User #${entry.id}`,
@@ -953,8 +939,15 @@ export default function UsersPage() {
             label: s3UserLabelById.get(Number(id)) ?? `User #${id}`,
             role_labels: ["Direct access"],
           }));
+    const effectiveConnectionDetails = user.effective_access?.s3_connection_details ?? [];
     const connectionItems =
-      user.s3_connection_details && user.s3_connection_details.length > 0
+      effectiveConnectionDetails.length > 0
+        ? effectiveConnectionDetails.map((entry) => ({
+            id: entry.id,
+            label: entry.name || `Connection #${entry.id}`,
+            role_labels: ["Direct or group access"],
+          }))
+        : user.s3_connection_details && user.s3_connection_details.length > 0
         ? user.s3_connection_details.map((entry) => ({
             id: entry.id,
             label: entry.name || `Connection #${entry.id}`,
@@ -973,7 +966,7 @@ export default function UsersPage() {
         items: accountItems.map((account) => ({
           id: account.id,
           label: account.label,
-          role_labels: accountAssociationRoleLabels(account, showPortalRole),
+          role_labels: account.role_labels,
         })),
       },
       { id: "s3_users", label: "RGW users", itemLabel: "RGW user", items: s3UserItems },
@@ -1496,8 +1489,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              entry.account_admin ?? false,
-              normalizePortalRole(entry.account_role)
+              normalizePortalRole(entry.role)
             )
           )
         );
@@ -1545,17 +1537,13 @@ export default function UsersPage() {
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
-    const accountAdmins = new Map<number, boolean>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), Boolean(link.account_admin)])
-    );
     const accountRoles = new Map<number, PortalAccountRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.account_role)])
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.role)])
     );
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
-        account_admin: accountAdmins.get(Number(id)) ?? false,
-        account_role: accountRoles.get(Number(id)) ?? "portal_none",
+        role: accountRoles.get(Number(id)) ?? "portal_user",
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     const nextSelectedS3Users = user.s3_users ? user.s3_users.map((id) => Number(id)) : [];
@@ -1659,8 +1647,7 @@ export default function UsersPage() {
       );
       payload.account_links = editSelectedS3Accounts.map((entry) => ({
         account_id: Number(entry.id),
-        account_admin: Boolean(entry.account_admin),
-        account_role: normalizePortalRole(entry.account_role),
+        role: normalizePortalRole(entry.role),
       }));
       payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;

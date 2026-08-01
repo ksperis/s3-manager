@@ -8,14 +8,13 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account, is_superadmin_ui_role
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
-from app.services.effective_access_service import EffectiveAccountLink
+from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
-from app.utils.time import utcnow
 
 from .account_context import get_account_context
 from .auth_session import get_current_actor, get_current_storage_ops_admin, get_current_user
@@ -197,31 +196,14 @@ def _ensure_bucket_migration_allowed(user: User, db: Session | None = None) -> N
 def _manager_link_allows_bucket_migration(
     link: UserS3Account | EffectiveAccountLink,
 ) -> bool:
-    return bool(link.account_admin or link.is_root)
+    return EffectiveAccessService.manager_account_allowed(link.role)
 
 
 def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
     allowed_context_ids: set[str] = set()
 
-    if is_superadmin_ui_role(user.role):
-        allowed_context_ids.update(str(row[0]) for row in db.query(S3Account.id).all())
-        allowed_context_ids.update(f"s3u-{row[0]}" for row in db.query(S3User.id).all())
-        now = utcnow()
-        connections = (
-            db.query(S3Connection.id)
-            .filter(S3Connection.is_active.is_(True))
-            .filter(S3Connection.access_manager.is_(True))
-            .filter(
-                (S3Connection.is_temporary.is_(False))
-                | (S3Connection.expires_at.is_(None))
-                | (S3Connection.expires_at > now)
-            )
-            .all()
-        )
-        allowed_context_ids.update(f"conn-{row[0]}" for row in connections)
-        return allowed_context_ids
-
-    effective = get_effective_access_service(db).resolve_user(user)
+    service = get_effective_access_service(db)
+    effective = service.resolve_user(user)
     for link in effective.account_links:
         if _manager_link_allows_bucket_migration(link):
             allowed_context_ids.add(str(link.account_id))
@@ -229,23 +211,7 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
     for s3_user_id in effective.s3_user_ids:
         allowed_context_ids.add(f"s3u-{s3_user_id}")
 
-    effective_connection_ids = effective.s3_connection_ids
-    now = utcnow()
-    connections = (
-        db.query(S3Connection)
-        .filter(
-            ((S3Connection.is_shared.is_(False)) & (S3Connection.created_by_user_id == user.id))
-            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(effective_connection_ids)))
-        )
-        .filter(S3Connection.is_active.is_(True))
-        .filter(S3Connection.access_manager.is_(True))
-        .filter(
-            (S3Connection.is_temporary.is_(False))
-            | (S3Connection.expires_at.is_(None))
-            | (S3Connection.expires_at > now)
-        )
-        .all()
-    )
+    connections = service.list_workspace_connections(user, workspace="manager", resolved=effective)
     for connection in connections:
         allowed_context_ids.add(f"conn-{connection.id}")
 
@@ -253,12 +219,10 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
 
 
 def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
-    if is_superadmin_ui_role(user.role):
-        return {str(row[0]) for row in db.query(S3Account.id).all()}
     admin_account_context_ids: set[str] = set()
     account_links = get_effective_access_service(db).resolve_user(user).account_links
     for link in account_links:
-        if bool(link.account_admin or link.is_root):
+        if _manager_link_allows_bucket_migration(link):
             admin_account_context_ids.add(str(link.account_id))
     return admin_account_context_ids
 

@@ -20,7 +20,9 @@ Use this page when you are responsible for platform setup, tenant operations, or
    - Use tools such as Bucket Compare and Bucket Migration when enabled.
 3. For delegated tenant self-service, configure **Portal**:
    - Assign explicit `portal_user` or `portal_manager` account roles.
-   - Keep `/manager` access separate with `account_admin` or `is_root`.
+   - Assign `account_administrator` only when the user also needs the Account
+     in Manager. The internal root link is protected and always yields that
+     same effective role.
 4. For Ceph cluster-level actions, use **Ceph Admin** (if enabled):
    - RGW accounts, RGW users, buckets, endpoint metrics.
 5. For cross-account and cross-connection bucket campaigns, use **Storage Ops** (if enabled):

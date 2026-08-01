@@ -35,10 +35,12 @@ from app.models.s3_connection_admin import (
     S3ConnectionUserLink,
     S3ConnectionUserLinkUpsert,
     S3ConnectionSummary,
+    S3ConnectionRemediationAction,
 )
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.services.s3_connections_service import S3ConnectionsService
 from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.services.tags_service import TagsService, serialize_tag_summaries
 from app.services.ui_group_avatar_service import UiGroupAvatarService
@@ -68,10 +70,11 @@ def _mask_access_key(value: str) -> str:
     return f"{trimmed[:4]}***{trimmed[-4:]}"
 
 
-def _ensure_editable(conn: S3Connection, current_user: User) -> None:
-    _ = current_user
-    if conn.is_temporary or not conn.is_shared:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+def _get_admin_shared_connection(db: Session, connection_id: int) -> S3Connection:
+    try:
+        return S3ConnectionsService(db).get_admin_shared(connection_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found") from exc
 
 
 def _linked_user_details_by_connection(
@@ -170,17 +173,6 @@ def _parse_capabilities(value: Optional[str]) -> dict:
     return parse_s3_connection_capabilities(value)
 
 
-def _resolve_access_flags(*, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:
-    manager = bool(access_manager)
-    browser = bool(access_browser)
-    if not manager and not browser:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one access flag must be enabled",
-        )
-    return manager, browser
-
-
 def _refresh_detected_capabilities(conn: S3Connection) -> None:
     refresh_connection_detected_capabilities(conn)
 
@@ -209,10 +201,9 @@ def _to_admin_item(
         name=conn.name,
         storage_endpoint_id=conn.storage_endpoint_id,
         endpoint_url=details.endpoint_url or "",
-        is_shared=True,
         is_active=bool(conn.is_active),
-        access_manager=bool(conn.access_manager),
-        access_browser=bool(conn.access_browser),
+        execution_status="remediation_required" if conn.remediation_required else "ready",
+        remediation_reason=conn.remediation_reason,
         credential_owner_type=conn.credential_owner_type,
         credential_owner_identifier=conn.credential_owner_identifier,
         provider_hint=details.provider,
@@ -261,10 +252,7 @@ def list_s3_connections(
         .outerjoin(linked_user, linked_user.id == UserS3Connection.user_id)
         .group_by(S3Connection.id)
     )
-    q = q.filter(
-        S3Connection.is_temporary.is_(False),
-        S3Connection.is_shared.is_(True),
-    )
+    q = q.filter(*S3ConnectionsService.admin_shared_predicates())
     if search:
         term = f"%{search.strip()}%"
         tag_match = (
@@ -355,13 +343,10 @@ def list_s3_connections_minimal(
             S3Connection.id,
             S3Connection.name,
             S3Connection.created_by_user_id,
-            S3Connection.is_shared,
             S3Connection.is_active,
+            S3Connection.remediation_required,
         )
-        .filter(
-            S3Connection.is_temporary.is_(False),
-            S3Connection.is_shared.is_(True),
-        )
+        .filter(*S3ConnectionsService.admin_shared_predicates())
         .order_by(*s3_connection_name_order_by(S3Connection))
         .all()
     )
@@ -370,8 +355,8 @@ def list_s3_connections_minimal(
             id=row[0],
             name=row[1],
             created_by_user_id=row[2],
-            is_shared=True,
-            is_active=bool(row[4]),
+            is_active=bool(row[3]),
+            execution_status="remediation_required" if row[4] else "ready",
         )
         for row in rows
     ]
@@ -422,10 +407,6 @@ def create_s3_connection(
             verify_tls,
             payload.provider_hint,
         )
-    access_manager, access_browser = _resolve_access_flags(
-        access_manager=payload.access_manager,
-        access_browser=payload.access_browser,
-    )
     conn = S3Connection(
         created_by_user_id=current_user.id,
         name=payload.name,
@@ -433,8 +414,10 @@ def create_s3_connection(
         custom_endpoint_config=custom_endpoint_config,
         is_shared=True,
         is_active=True,
-        access_manager=access_manager,
-        access_browser=access_browser,
+        access_manager=True,
+        access_browser=False,
+        remediation_required=False,
+        remediation_reason=None,
         credential_owner_type=payload.credential_owner_type,
         credential_owner_identifier=payload.credential_owner_identifier,
         access_key_id=payload.access_key_id,
@@ -496,10 +479,7 @@ def update_s3_connection(
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     if payload.name is not None:
         conn.name = payload.name
     payload_data = payload.model_dump(exclude_unset=True)
@@ -545,13 +525,7 @@ def update_s3_connection(
             verify_tls,
             provider,
         )
-    if "access_manager" in payload_data or "access_browser" in payload_data:
-        access_manager, access_browser = _resolve_access_flags(
-            access_manager=payload.access_manager if "access_manager" in payload_data else bool(conn.access_manager),
-            access_browser=payload.access_browser if "access_browser" in payload_data else bool(conn.access_browser),
-        )
-        conn.access_manager = access_manager
-        conn.access_browser = access_browser
+    conn.access_browser = False
     if "credential_owner_type" in payload_data:
         conn.credential_owner_type = payload.credential_owner_type
     if "credential_owner_identifier" in payload_data:
@@ -591,6 +565,49 @@ def update_s3_connection(
     )
 
 
+@router.post("/{connection_id}/remediation", response_model=S3ConnectionAdminItem)
+def remediate_s3_connection(
+    connection_id: int,
+    payload: S3ConnectionRemediationAction,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+    audit: AuditService = Depends(get_audit_logger),
+) -> S3ConnectionAdminItem:
+    conn = _get_admin_shared_connection(db, connection_id)
+    if payload.action != "activate_manager":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported remediation action")
+    conn.access_manager = True
+    conn.access_browser = False
+    conn.remediation_required = False
+    conn.remediation_reason = None
+    conn.is_active = True
+    conn.updated_at = utcnow()
+    db.commit()
+    db.refresh(conn)
+    audit.record_action(
+        user=current_user,
+        scope="admin",
+        action="connection.remediate",
+        entity_type="s3_connection",
+        entity_id=str(conn.id),
+        metadata={"action": payload.action},
+    )
+    created_by_user = db.query(User).filter(User.id == conn.created_by_user_id).first()
+    user_ids, user_details = _linked_user_details(db, conn.id)
+    group_ids, group_details = _linked_group_details(db, conn.id)
+    return _to_admin_item(
+        conn,
+        created_by_email=created_by_user.email if created_by_user else None,
+        created_by_user=created_by_user,
+        user_count=len(user_ids),
+        user_ids=user_ids,
+        user_details=user_details,
+        group_ids=group_ids,
+        group_details=group_details,
+        tags_service=TagsService(db),
+    )
+
+
 @router.put("/{connection_id}/credentials", response_model=S3ConnectionAdminItem)
 def rotate_s3_connection_credentials(
     connection_id: int,
@@ -600,10 +617,7 @@ def rotate_s3_connection_credentials(
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     conn.access_key_id = payload.access_key_id
     conn.secret_access_key = payload.secret_access_key
     _refresh_detected_capabilities(conn)
@@ -644,10 +658,7 @@ def delete_s3_connection(
     audit: AuditService = Depends(get_audit_logger),
 ):
     tags_service = TagsService(db)
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     details = resolve_connection_details(conn)
     meta = {"name": conn.name, "endpoint_url": details.endpoint_url, "provider_hint": details.provider}
     db.query(UserS3Connection).filter(UserS3Connection.s3_connection_id == conn.id).delete()
@@ -672,10 +683,7 @@ def list_connection_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ) -> list[S3ConnectionUserLink]:
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     links = (
         db.query(UserS3Connection, User)
         .join(User, User.id == UserS3Connection.user_id)
@@ -703,10 +711,7 @@ def add_connection_user(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ) -> S3ConnectionUserLink:
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     user = db.query(User).filter(User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -759,10 +764,7 @@ def update_connection_user(
 ) -> S3ConnectionUserLink:
     if payload.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id mismatch")
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -800,10 +802,7 @@ def remove_connection_user(
     current_user: User = Depends(get_current_super_admin),
     audit: AuditService = Depends(get_audit_logger),
 ):
-    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
-    if not conn:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    _ensure_editable(conn, current_user)
+    conn = _get_admin_shared_connection(db, connection_id)
     link = (
         db.query(UserS3Connection)
         .filter(UserS3Connection.user_id == user_id, UserS3Connection.s3_connection_id == connection_id)

@@ -7,7 +7,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.db import AccountRole, S3Account, S3Connection, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.services.tags_service import TagsService
@@ -85,8 +85,6 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
             "endpoint_url": "https://contract-admin.example.test",
             "access_key_id": "AKIAADMINCONTRACT",
             "secret_access_key": "SECRETADMINCONTRACT",
-            "access_manager": True,
-            "access_browser": True,
         },
     )
 
@@ -95,7 +93,10 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
     assert "iam_capable" not in payload
     assert payload["is_active"] is True
     assert payload["capabilities"]["can_manage_iam"] is True
-    assert payload["is_shared"] is True
+    assert payload["execution_status"] == "ready"
+    assert "is_shared" not in payload
+    assert "access_manager" not in payload
+    assert "access_browser" not in payload
 
 
 def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_client):
@@ -112,8 +113,6 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
             "endpoint_url": "https://contract-admin-active.example.test",
             "access_key_id": "AKIAADMINACTIVECONTRACT",
             "secret_access_key": "SECRETADMINACTIVECONTRACT",
-            "access_manager": True,
-            "access_browser": True,
         },
     )
     assert create_response.status_code == 201
@@ -127,7 +126,16 @@ def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_c
     assert update_response.json()["is_active"] is False
 
 
-def test_admin_connections_api_rejects_visibility_fields(contract_client):
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("visibility", "shared"),
+        ("is_shared", True),
+        ("access_manager", True),
+        ("access_browser", True),
+    ],
+)
+def test_admin_connections_api_rejects_visibility_and_access_fields(contract_client, field, value):
     client, _, _ = contract_client
 
     create_with_visibility = client.post(
@@ -137,9 +145,7 @@ def test_admin_connections_api_rejects_visibility_fields(contract_client):
             "endpoint_url": "https://contract-admin-invalid-create.example.test",
             "access_key_id": "AKIAADMININVALIDCREATE",
             "secret_access_key": "SECRETADMININVALIDCREATE",
-            "access_manager": True,
-            "access_browser": True,
-            "visibility": "shared",
+            field: value,
         },
     )
     assert create_with_visibility.status_code == 422
@@ -151,8 +157,6 @@ def test_admin_connections_api_rejects_visibility_fields(contract_client):
             "endpoint_url": "https://contract-admin-valid.example.test",
             "access_key_id": "AKIAADMINVALID",
             "secret_access_key": "SECRETADMINVALID",
-            "access_manager": True,
-            "access_browser": True,
         },
     )
     assert create_response.status_code == 201
@@ -160,7 +164,7 @@ def test_admin_connections_api_rejects_visibility_fields(contract_client):
 
     update_with_visibility = client.put(
         f"/api/admin/s3-connections/{connection_id}",
-        json={"visibility": "private"},
+        json={field: value},
     )
     assert update_with_visibility.status_code == 422
 
@@ -229,7 +233,7 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
             is_root=False,
         )
     )

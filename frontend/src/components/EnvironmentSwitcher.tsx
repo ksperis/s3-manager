@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import type { TopbarDropdownOption } from "./TopbarDropdownSelect";
-import { listExecutionContexts } from "../api/executionContexts";
+import { getWorkspaceAccess } from "../api/executionContexts";
 import { fetchCurrentUser } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientStorage, writeClientJson, writeClientStorage } from "../utils/clientStorage";
 import {
@@ -37,7 +37,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     availability: WorkspaceContextAvailability;
   }>({
     userKey: null,
-    availability: { manager: false, browser: false },
+    availability: { manager: false, browser: false, portal: false },
   });
   const { generalSettings } = useGeneralSettings();
 
@@ -80,23 +80,28 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
     if (!contextUserKey) {
       setResolvedContextAvailability({
         userKey: null,
-        availability: { manager: false, browser: false },
+        availability: { manager: false, browser: false, portal: false },
       });
       return;
     }
     let cancelled = false;
-    Promise.allSettled([
-      listExecutionContexts("manager"),
-      listExecutionContexts("browser"),
-    ]).then(([managerResult, browserResult]) => {
+    getWorkspaceAccess().then((access) => {
       if (cancelled) return;
       setResolvedContextAvailability({
         userKey: contextUserKey,
         availability: {
-          manager: managerResult.status === "fulfilled" && managerResult.value.length > 0,
-          browser: browserResult.status === "fulfilled" && browserResult.value.length > 0,
+          manager: access.manager.available,
+          browser: access.browser.available,
+          portal: access.portal.available,
         },
       });
+    }).catch(() => {
+      if (!cancelled) {
+        setResolvedContextAvailability({
+          userKey: contextUserKey,
+          availability: { manager: false, browser: false, portal: false },
+        });
+      }
     });
     return () => {
       cancelled = true;

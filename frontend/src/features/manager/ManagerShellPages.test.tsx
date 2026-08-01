@@ -17,6 +17,7 @@ const fetchManagerTrafficMock = vi.fn();
 const fetchManagerUsageTrendsMock = vi.fn();
 const getManagerUsageStatsAggregateMock = vi.fn();
 const fetchManagerContextMock = vi.fn();
+const listExecutionContextsMock = vi.fn();
 let bucketUsageStatsEnabled = false;
 let bucketPurgeEnabled = false;
 const MANAGER_BUCKET_COLUMNS_SESSION_STORAGE_KEY = "manager.bucket_list.columns.session.v1";
@@ -111,6 +112,10 @@ vi.mock("../../api/managerActivity", () => ({
 
 vi.mock("../../api/managerContext", () => ({
   fetchManagerContext: (...args: unknown[]) => fetchManagerContextMock(...args),
+}));
+
+vi.mock("../../api/executionContexts", () => ({
+  listExecutionContexts: (...args: unknown[]) => listExecutionContextsMock(...args),
 }));
 
 vi.mock("../../api/stats", async () => {
@@ -289,6 +294,7 @@ describe("manager shell pages", () => {
       access_mode: "admin",
       manager_stats_enabled: true,
     });
+    listExecutionContextsMock.mockResolvedValue([]);
     bucketUsageStatsEnabled = false;
     bucketPurgeEnabled = false;
     window.localStorage.clear();
@@ -1110,20 +1116,20 @@ describe("manager shell pages", () => {
     expect(screen.getByText(trendText("2 vs last week"))).toBeInTheDocument();
   });
 
-  it("renders the manager browser page without a page-level context strip", () => {
+  it("renders the manager browser page with an independent private-context empty state", async () => {
     render(
       <MemoryRouter>
         <ManagerBrowserPage />
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Select a manager context first")).toBeInTheDocument();
+    expect(await screen.findByText("No private Browser connection")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation")).getByText("Manager")).toBeInTheDocument();
     expect(within(screen.getByRole("navigation")).getByText("Browser")).toBeInTheDocument();
     expect(screen.queryByText("Execution context")).not.toBeInTheDocument();
   });
 
-  it("adds the selected bucket to the manager browser breadcrumb", () => {
+  it("adds the selected bucket to the manager browser breadcrumb", async () => {
     useS3AccountContextMock.mockReturnValue({
       accounts: [
         {
@@ -1145,13 +1151,22 @@ describe("manager shell pages", () => {
       managerBrowserEnabled: true,
     });
 
+    listExecutionContextsMock.mockResolvedValue([
+      {
+        id: "conn-1",
+        kind: "connection",
+        display_name: "Private connection",
+        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
+      },
+    ]);
+
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/manager/browser?ctx=conn-1"]}>
         <ManagerBrowserPage />
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByTestId("browser-embed"));
+    fireEvent.click(await screen.findByTestId("browser-embed"));
 
     expect(within(screen.getByRole("navigation")).getByText("bucket-a")).toBeInTheDocument();
   });

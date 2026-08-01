@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.db import (
-    AccountRole,
     S3Account,
     S3Connection,
     S3User,
@@ -35,10 +34,7 @@ from app.services.portal_role_sync import (
     sync_portal_role_promotions,
 )
 from app.utils.time import utcnow
-
-
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
-
+from app.utils.account_roles import require_account_role
 
 class UiGroupsService:
     def __init__(self, db: Session) -> None:
@@ -229,7 +225,14 @@ class UiGroupsService:
                 .outerjoin(UiGroupS3User, UiGroup.id == UiGroupS3User.group_id)
                 .outerjoin(s3_user, UiGroupS3User.s3_user_id == s3_user.id)
                 .outerjoin(UiGroupS3Connection, UiGroup.id == UiGroupS3Connection.group_id)
-                .outerjoin(connection, UiGroupS3Connection.s3_connection_id == connection.id)
+                .outerjoin(
+                    connection,
+                    and_(
+                        UiGroupS3Connection.s3_connection_id == connection.id,
+                        connection.is_shared.is_(True),
+                        connection.is_temporary.is_(False),
+                    ),
+                )
                 .filter(
                     or_(
                         UiGroup.name.ilike(pattern),
@@ -278,7 +281,12 @@ class UiGroupsService:
         )
         s3_connection_rows = (
             self.db.query(UiGroupS3Connection.s3_connection_id)
-            .filter(UiGroupS3Connection.group_id == group.id)
+            .join(S3Connection, S3Connection.id == UiGroupS3Connection.s3_connection_id)
+            .filter(
+                UiGroupS3Connection.group_id == group.id,
+                S3Connection.is_shared.is_(True),
+                S3Connection.is_temporary.is_(False),
+            )
             .all()
         )
         s3_user_ids = sorted(row[0] for row in s3_user_rows)
@@ -329,8 +337,7 @@ class UiGroupsService:
             account_links=[
                 AccountMembership(
                     account_id=link.account_id,
-                    account_admin=link.account_admin,
-                    account_role=link.account_role,
+                    role=link.role,
                 )
                 for link in account_rows
             ],
@@ -343,9 +350,7 @@ class UiGroupsService:
             s3_connection_details=[
                 LinkedS3Connection(
                     id=conn_id,
-                    name=(details[0] if details else f"Connection #{conn_id}"),
-                    access_manager=(details[1] if details else None),
-                    access_browser=(details[2] if details else None),
+                    name=(details if details else f"Connection #{conn_id}"),
                 )
                 for conn_id in s3_connection_ids
                 for details in [s3_connection_names.get(conn_id)]
@@ -378,12 +383,9 @@ class UiGroupsService:
         cleaned: dict[int, AccountMembership] = {}
         for link in links:
             account_id = int(link.account_id)
-            if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                raise ValueError("Invalid account role")
             cleaned[account_id] = AccountMembership(
                 account_id=account_id,
-                account_admin=bool(link.account_admin),
-                account_role=link.account_role or AccountRole.PORTAL_NONE.value,
+                role=require_account_role(link.role),
             )
         self._ensure_accounts_exist(sorted(cleaned))
         existing = self.db.query(UiGroupS3Account).filter(UiGroupS3Account.group_id == group.id).all()
@@ -394,9 +396,8 @@ class UiGroupsService:
         for account_id, payload in cleaned.items():
             row = existing_by_id.get(account_id)
             if row is None:
-                row = UiGroupS3Account(group_id=group.id, account_id=account_id)
-            row.account_admin = bool(payload.account_admin)
-            row.account_role = payload.account_role or AccountRole.PORTAL_NONE.value
+                row = UiGroupS3Account(group_id=group.id, account_id=account_id, role=payload.role)
+            row.role = require_account_role(payload.role)
             row.updated_at = utcnow()
             self.db.add(row)
 
@@ -504,20 +505,19 @@ class UiGroupsService:
         rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
         return {row[0]: row[1] for row in rows}
 
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool, bool]]:
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
             return {}
         rows = (
-            self.db.query(
-                S3Connection.id,
-                S3Connection.name,
-                S3Connection.access_manager,
-                S3Connection.access_browser,
+            self.db.query(S3Connection.id, S3Connection.name)
+            .filter(
+                S3Connection.id.in_(ids),
+                S3Connection.is_shared.is_(True),
+                S3Connection.is_temporary.is_(False),
             )
-            .filter(S3Connection.id.in_(ids))
             .all()
         )
-        return {row[0]: (row[1], bool(row[2]), bool(row[3])) for row in rows}
+        return {row[0]: row[1] for row in rows}
 
 
 def get_ui_groups_service(db: Session) -> UiGroupsService:

@@ -15,6 +15,7 @@ class BucketMigrationExecutionControlMixin:
     ) -> None:
         effective_lease_seconds = max(15, int(lease_seconds or settings.bucket_migration_worker_lease_seconds))
         migration = self.get_migration(migration_id)
+        self._assert_migration_creator_access(migration)
 
         if worker_id:
             if migration.worker_lease_owner != worker_id:
@@ -40,14 +41,18 @@ class BucketMigrationExecutionControlMixin:
 
         source_ctx = self._resolve_context(migration.source_context_id)
         target_ctx = self._resolve_context(migration.target_context_id)
-        control_check = lambda: self._control_state(
-            migration.id,
-            worker_id=worker_id,
-            lease_seconds=effective_lease_seconds,
-        )
+        def control_check():
+            current = self.get_migration(migration.id)
+            self._assert_migration_creator_access(current)
+            return self._control_state(
+                migration.id,
+                worker_id=worker_id,
+                lease_seconds=effective_lease_seconds,
+            )
 
         for item in migration.items:
             self.db.refresh(migration)
+            self._assert_migration_creator_access(migration)
             state = control_check()
             if state == "lost_lease":
                 return

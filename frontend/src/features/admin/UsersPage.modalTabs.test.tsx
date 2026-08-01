@@ -50,8 +50,8 @@ vi.mock("../../api/users", () => ({
   listUsers: (params?: unknown) => listUsersMock(params),
   createUser: (payload: unknown) => createUserMock(payload),
   updateUser: (userId: number, payload: unknown) => updateUserMock(userId, payload),
-  assignUserToS3Account: (userId: number, accountId: number, accountAdmin?: boolean, accountRole?: string) =>
-    assignUserToS3AccountMock(userId, accountId, accountAdmin, accountRole),
+  assignUserToS3Account: (userId: number, accountId: number, role: string) =>
+    assignUserToS3AccountMock(userId, accountId, role),
   deleteUser: (userId: number) => deleteUserMock(userId),
 }));
 
@@ -178,7 +178,27 @@ describe("UsersPage modal tabs", () => {
           email: "assoc.summary@example.com",
           role: "ui_user",
           accounts: [1],
-          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          account_links: [{ account_id: 1, role: "account_administrator" }],
+          effective_access: {
+            account_links: [
+              {
+                account_id: 1,
+                role: "account_administrator",
+                provenance: {
+                  direct_role: "portal_user",
+                  direct_determines_effective_role: false,
+                  groups: [
+                    {
+                      group_id: 31,
+                      group_name: "storage-operators",
+                      role: "account_administrator",
+                      determines_effective_role: true,
+                    },
+                  ],
+                },
+              },
+            ],
+          },
           s3_users: [11],
           s3_user_details: [{ id: 11, name: "s3-user-1" }],
           s3_connections: [21],
@@ -197,7 +217,7 @@ describe("UsersPage modal tabs", () => {
 
     const associations = await screen.findByLabelText("3 linked associations");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (3)\nRGW account: acc-1 — Roles: Account admin, Portal user\nRGW user: s3-user-1 — Roles: Direct access\nS3 connection: conn-1 — Roles: Direct access",
+      "Linked associations (3)\nRGW account: acc-1 — Roles: Account administrator, Direct: Portal user, Group storage-operators: Account administrator (maximum)\nRGW user: s3-user-1 — Roles: Direct access\nS3 connection: conn-1 — Roles: Direct access",
     );
     expect(screen.getByLabelText("1 accounts")).toBeInTheDocument();
     expect(screen.getByLabelText("1 rgw users")).toBeInTheDocument();
@@ -256,7 +276,7 @@ describe("UsersPage modal tabs", () => {
           email: "assoc.summary@example.com",
           role: "ui_user",
           accounts: [1],
-          account_links: [{ account_id: 1, account_admin: true, account_role: "portal_user" }],
+          account_links: [{ account_id: 1, role: "account_administrator" }],
           s3_users: [],
           s3_connections: [],
           group_ids: [],
@@ -272,7 +292,7 @@ describe("UsersPage modal tabs", () => {
 
     const associations = await screen.findByLabelText("1 linked association");
     expect(associations).toHaveAccessibleDescription(
-      "Linked associations (1)\nRGW account: acc-1 — Roles: Account admin",
+      "Linked associations (1)\nRGW account: acc-1 — Roles: Account administrator",
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
@@ -281,7 +301,6 @@ describe("UsersPage modal tabs", () => {
     expect(screen.queryByText("Portal role")).not.toBeInTheDocument();
     expect(screen.queryByText("No portal access")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Admin" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -291,8 +310,7 @@ describe("UsersPage modal tabs", () => {
           account_links: [
             {
               account_id: 1,
-              account_admin: false,
-              account_role: "portal_user",
+              role: "account_administrator",
             },
           ],
         })
@@ -339,7 +357,7 @@ describe("UsersPage modal tabs", () => {
       expect(createUserMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, false, "portal_none");
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "account_administrator");
     expect(updateUserMock).toHaveBeenCalledWith(
       100,
       expect.objectContaining({
@@ -701,7 +719,7 @@ describe("UsersPage modal tabs", () => {
     );
   });
 
-  it("allows choosing account admin and Portal role while linking an account", async () => {
+  it("allows choosing the canonical role while linking an account", async () => {
     generalSettingsState.portal_enabled = true;
     render(<UsersPage />);
 
@@ -717,8 +735,7 @@ describe("UsersPage modal tabs", () => {
     if (!accountRow) {
       throw new Error("Account row not found");
     }
-    fireEvent.click(within(accountRow).getByRole("checkbox", { name: "Admin" }));
-    fireEvent.change(within(accountRow).getByRole("combobox", { name: "Portal role for acc-1" }), {
+    fireEvent.change(within(accountRow).getByRole("combobox", { name: "Access role for acc-1" }), {
       target: { value: "portal_manager" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
@@ -728,6 +745,6 @@ describe("UsersPage modal tabs", () => {
     await waitFor(() => {
       expect(assignUserToS3AccountMock).toHaveBeenCalled();
     });
-    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, true, "portal_manager");
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "portal_manager");
   });
 });

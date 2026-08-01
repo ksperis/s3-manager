@@ -109,7 +109,10 @@ def test_admin_s3_connections_lists_shared_only(client, db_session):
 
     names = [item["name"] for item in payload["items"]]
     assert names == ["shared-visible"]
-    assert payload["items"][0]["is_shared"] is True
+    assert "is_shared" not in payload["items"][0]
+    assert "access_manager" not in payload["items"][0]
+    assert "access_browser" not in payload["items"][0]
+    assert payload["items"][0]["execution_status"] == "ready"
     assert payload["items"][0]["created_by_avatar"]["source"] == "gravatar"
     assert payload["items"][0]["created_by_avatar"]["url"].startswith("https://gravatar.com/avatar/")
 

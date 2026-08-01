@@ -4,11 +4,24 @@
  */
 import client, { timeoutForRequestProfile } from "./client";
 import { PaginatedResponse } from "./types";
+import type { AccountAccessRole } from "./accountRoles";
 
 export type AccountMembership = {
   account_id: number;
-  account_admin?: boolean | null;
-  account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+  role: AccountAccessRole;
+};
+
+export type EffectiveAccountMembership = AccountMembership & {
+  provenance: {
+    direct_role?: AccountAccessRole | null;
+    direct_determines_effective_role: boolean;
+    groups: Array<{
+      group_id: number;
+      group_name: string;
+      role: AccountAccessRole;
+      determines_effective_role: boolean;
+    }>;
+  };
 };
 
 export type ManagerToolAccess = {
@@ -43,15 +56,13 @@ export type EffectiveUserAccess = {
   manager_tool_access: ManagerToolAccess;
   browser_advanced_features_enabled: boolean;
   accounts: number[];
-  account_links: AccountMembership[];
+  account_links: EffectiveAccountMembership[];
   s3_users: number[];
   s3_user_details: { id: number; name: string }[];
   s3_connections: number[];
   s3_connection_details: {
     id: number;
     name: string;
-    access_manager?: boolean | null;
-    access_browser?: boolean | null;
   }[];
 };
 
@@ -81,8 +92,6 @@ export type User = {
   s3_connection_details?: {
     id: number;
     name: string;
-    access_manager?: boolean | null;
-    access_browser?: boolean | null;
   }[];
   effective_access?: EffectiveUserAccess | null;
   is_active?: boolean;
@@ -199,13 +208,11 @@ export async function deleteCurrentUserAvatar(): Promise<User> {
 export async function assignUserToS3Account(
   userId: number,
   accountId: number,
-  accountAdmin?: boolean | null,
-  accountRole?: AccountMembership["account_role"],
+  role: AccountAccessRole,
 ): Promise<User> {
   const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
     account_id: accountId,
-    account_admin: accountAdmin,
-    account_role: accountRole,
+    role,
   });
   return data;
 }

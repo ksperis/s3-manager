@@ -14,8 +14,7 @@ export type AssociationChipItem = {
 };
 
 export type AssociationAccountItem = AssociationChipItem & {
-  account_admin?: boolean | null;
-  account_role?: string | null;
+  role?: string | null;
 };
 
 export type AssociationPrincipalItem = {
@@ -24,8 +23,7 @@ export type AssociationPrincipalItem = {
   label: string;
   email?: string | null;
   avatar?: UserAvatarDescriptor | UiGroupAvatarDescriptor | null;
-  account_admin?: boolean | null;
-  account_role?: string | null;
+  role?: string | null;
   role_labels?: string[];
 };
 
@@ -204,29 +202,23 @@ export function AssociationRoleTooltip({
 
 export function accountAssociationRoleLabels(
   account: AssociationAccountItem,
-  showPortalRole = true,
+  _showPortalRole = true,
 ): string[] {
   const roles: string[] = [];
-  if (account.account_admin) roles.push("Account admin");
-  const portalRole = normalizePortalRole(account.account_role);
-  if (showPortalRole && portalRole !== "portal_none") {
-    roles.push(portalRole === "portal_manager" ? "Portal manager" : "Portal user");
-  }
+  const portalRole = normalizePortalRole(account.role);
+  roles.push(
+    portalRole === "account_administrator"
+      ? "Account administrator"
+      : portalRole === "portal_manager"
+        ? "Portal manager"
+        : "Portal user"
+  );
   if (roles.length === 0) roles.push("Member");
   return roles;
 }
 
-export function connectionAssociationRoleLabels({
-  access_manager,
-  access_browser,
-}: {
-  access_manager?: boolean | null;
-  access_browser?: boolean | null;
-}): string[] {
-  const roles: string[] = [];
-  if (access_manager) roles.push("Manager");
-  if (access_browser) roles.push("Browser");
-  return roles.length > 0 ? roles : ["Direct access"];
+export function connectionAssociationRoleLabels(_connection: object): string[] {
+  return ["Direct access"];
 }
 
 export function uiPrincipalRoleLabel(role?: string | null): string {
@@ -282,13 +274,18 @@ export function CompactAssociationSummary({
   );
 }
 
-function principalTooltipEntry(item: AssociationPrincipalItem, showPortalRole: boolean): AssociationRoleTooltipEntry {
+function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: boolean): AssociationRoleTooltipEntry {
   const identity = item.email && item.email !== item.label ? `${item.label} · ${item.email}` : item.label;
   const roles: string[] = [...(item.role_labels ?? [])];
-  if (item.account_admin) roles.push("Account admin");
-  const portalRole = normalizePortalRole(item.account_role);
-  if (showPortalRole && portalRole !== "portal_none") {
-    roles.push(portalRole === "portal_manager" ? "Portal manager" : "Portal user");
+  if (item.role) {
+    const portalRole = normalizePortalRole(item.role);
+    roles.push(
+      portalRole === "account_administrator"
+        ? "Account administrator"
+        : portalRole === "portal_manager"
+          ? "Portal manager"
+          : "Portal user"
+    );
   }
   roles.push(item.kind === "group" ? "UI group" : "UI user");
   return {

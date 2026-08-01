@@ -24,6 +24,50 @@ class BucketMigrationPersistenceMixin:
             return
         raise PermissionError("Not authorized for this context")
 
+    def _creator_allowed_context_ids(self, migration: BucketMigration) -> set[str]:
+        user = self.db.query(User).filter(
+            User.id == migration.created_by_user_id,
+            User.is_active.is_(True),
+        ).first()
+        if user is None:
+            return set()
+        service = EffectiveAccessService(self.db)
+        effective = service.resolve_user(user)
+        allowed = {
+            str(link.account_id)
+            for link in effective.account_links
+            if service.manager_account_allowed(link.role)
+        }
+        allowed.update(f"s3u-{item}" for item in effective.s3_user_ids)
+        allowed.update(
+            f"conn-{connection.id}"
+            for connection in service.list_workspace_connections(
+                user,
+                workspace="manager",
+                resolved=effective,
+            )
+        )
+        return allowed
+
+    def _assert_migration_creator_access(self, migration: BucketMigration) -> None:
+        allowed = self._creator_allowed_context_ids(migration)
+        required = {str(migration.source_context_id), str(migration.target_context_id)}
+        if required <= allowed:
+            return
+        missing = sorted(required - allowed)
+        migration.status = "failed"
+        migration.error_message = "Migration access revoked for context(s): " + ", ".join(missing)
+        migration.finished_at = utcnow()
+        migration.updated_at = utcnow()
+        self._add_event(
+            migration,
+            level="error",
+            message="Migration stopped because creator access was revoked.",
+            metadata={"revoked_context_ids": missing},
+        )
+        self._commit()
+        raise PermissionError("Migration creator access has been revoked")
+
     def _is_account_context_id(self, context_id: str) -> bool:
         return str(context_id or "").strip().isdigit()
 

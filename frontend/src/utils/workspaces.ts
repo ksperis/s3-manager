@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
+import type { WorkspaceAccess } from "../api/executionContexts";
 import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
@@ -24,6 +25,7 @@ export type WorkspaceOption = {
 export type WorkspaceContextAvailability = {
   manager: boolean;
   browser: boolean;
+  portal?: boolean;
 };
 
 export type SessionUser = {
@@ -46,8 +48,7 @@ export type SessionUser = {
   accountName?: string | null;
   account_links?: {
     account_id: number;
-    account_admin?: boolean | null;
-    account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+    role: "portal_user" | "portal_manager" | "account_administrator";
   }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
@@ -55,8 +56,6 @@ export type SessionUser = {
   s3_connection_details?: {
     id: number;
     name?: string | null;
-    access_manager?: boolean | null;
-    access_browser?: boolean | null;
   }[] | null;
   capabilities?: {
     can_manage_buckets?: boolean;
@@ -115,7 +114,7 @@ export function hasPortalWorkspaceAccess(user: SessionUser | null): boolean {
   const links = getAccountLinks(user);
   return Boolean(
     links.some(
-      (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+      (link) => ["portal_user", "portal_manager", "account_administrator"].includes(link.role)
     )
   );
 }
@@ -173,33 +172,23 @@ function resolveAvailableWorkspaces(
   const s3UserIds = getS3UserIds(user);
   const connectionDetails = getConnectionDetails(user);
   const connectionIds = getConnectionIds(user);
-  const canUseManagerConnection = (connection: { access_manager?: boolean | null }) =>
-    connection.access_manager === true;
-  const canUseBrowserConnection = (connection: { access_browser?: boolean | null }) =>
-    connection.access_browser !== false;
-  const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
+  const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
-  const hasBrowserConnectionAccess =
-    connectionDetails.length > 0
-      ? connectionDetails.some((connection) => canUseBrowserConnection(connection))
-      : connectionIds.length > 0;
-  const hasManagerConnectionAccess =
-    connectionDetails.length > 0
-      ? connectionDetails.some((connection) => canUseManagerConnection(connection))
-      : connectionIds.length > 0;
+  const hasManagerConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
   const hasManagerAccess =
     contextAvailability?.manager ??
     (hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess);
   const hasBrowserAccess =
     contextAvailability?.browser ??
-    (hasBrowserConnectionAccess || hasS3UserAccess || hasPortalAccess);
+    false;
+  const resolvedPortalAccess = contextAvailability?.portal ?? hasPortalAccess;
 
   if (isAdminLikeRole(user.role)) {
     return ALL_WORKSPACES.filter((workspace) => {
       if (workspace.id === "ceph-admin") return canAccessCephAdmin(user);
       if (workspace.id === "storage-ops") return canAccessStorageOps(user) && hasManagerAccess;
       if (workspace.id === "manager") return hasManagerAccess;
-      if (workspace.id === "portal") return hasPortalAccess;
+      if (workspace.id === "portal") return resolvedPortalAccess;
       if (workspace.id === "browser") return hasBrowserAccess;
       return workspace.id === "admin";
     });
@@ -209,7 +198,7 @@ function resolveAvailableWorkspaces(
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "storage-ops") return canAccessStorageOps(user) && hasManagerAccess;
     if (workspace.id === "manager") return hasManagerAccess;
-    if (workspace.id === "portal") return hasPortalAccess;
+    if (workspace.id === "portal") return resolvedPortalAccess;
     if (workspace.id === "browser") return hasBrowserAccess;
     return false;
   });
@@ -225,13 +214,7 @@ export function resolveAvailableWorkspacesWithFlags(
     if (workspace.id === "storage-ops") return generalSettings.storage_ops_enabled;
     if (workspace.id === "portal") return generalSettings.portal_enabled;
     if (workspace.id === "manager") return generalSettings.manager_enabled;
-    if (workspace.id === "browser") {
-      const portalBrowserEnabled =
-        generalSettings.portal_enabled &&
-        generalSettings.browser_portal_enabled &&
-        hasPortalWorkspaceAccess(user);
-      return generalSettings.browser_enabled && (generalSettings.browser_root_enabled || portalBrowserEnabled);
-    }
+    if (workspace.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
     return true;
   });
   return filtered;
@@ -262,21 +245,10 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   const s3UserIds = getS3UserIds(user);
   const connectionDetails = getConnectionDetails(user);
   const connectionIds = getConnectionIds(user);
-  const canUseManagerConnection = (connection: { access_manager?: boolean | null }) =>
-    connection.access_manager === true;
-  const canUseBrowserConnection = (connection: { access_browser?: boolean | null }) =>
-    connection.access_browser !== false;
-  const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
+  const hasAccountAdmin = links.some((link) => link.role === "account_administrator");
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
-  const hasBrowserConnectionAccess =
-    connectionDetails.length > 0
-      ? connectionDetails.some((connection) => canUseBrowserConnection(connection))
-      : connectionIds.length > 0;
-  const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess;
-  const hasManagerConnectionAccess =
-    connectionDetails.length > 0
-      ? connectionDetails.some((connection) => canUseManagerConnection(connection))
-      : connectionIds.length > 0;
+  const hasBrowserAccess = false;
+  const hasManagerConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
   const hasManagerAccess =
     hasAccountAdmin ||
     hasManagerConnectionAccess ||
@@ -288,8 +260,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   if (
     generalSettings.browser_enabled &&
     (
-      (generalSettings.browser_root_enabled && hasBrowserAccess) ||
-      (generalSettings.portal_enabled && generalSettings.browser_portal_enabled && hasPortalAccess)
+      generalSettings.browser_root_enabled && hasBrowserAccess
     )
   ) {
     return "/browser";
@@ -311,4 +282,33 @@ export function resolvePostLoginPath(user: SessionUser | null, generalSettings: 
     }
   }
   return fallbackPath;
+}
+
+export function resolvePostLoginPathWithWorkspaceAccess(
+  user: SessionUser | null,
+  generalSettings: GeneralSettings,
+  access: WorkspaceAccess
+): string {
+  if (user?.authType === "s3_session") {
+    return resolvePostLoginPath(user, generalSettings);
+  }
+  const available = resolveAvailableWorkspacesWithFlags(user, generalSettings, {
+    manager: access.manager.available,
+    browser: access.browser.available,
+    portal: access.portal.available,
+  }).filter((workspace) => {
+    if (workspace.id === "admin") return access.admin.available;
+    if (workspace.id === "ceph-admin") return access.ceph_admin.available;
+    if (workspace.id === "storage-ops") return access.storage_ops.available;
+    return true;
+  });
+  const preferredWorkspaceId = readStoredWorkspaceId();
+  const preferred = preferredWorkspaceId
+    ? available.find((workspace) => workspace.id === preferredWorkspaceId)
+    : null;
+  if (preferred) return preferred.path;
+  const backendDefault = access.default_workspace
+    ? available.find((workspace) => workspace.id === access.default_workspace)
+    : null;
+  return backendDefault?.path ?? "/unauthorized";
 }

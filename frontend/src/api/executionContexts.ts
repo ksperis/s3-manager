@@ -20,7 +20,7 @@ export type ExecutionContext = {
   tags: TagDefinitionSummary[];
   endpoint_tags: TagDefinitionSummary[];
   hidden?: boolean;
-  account_role?: "portal_user" | "portal_manager" | "portal_none" | string | null;
+  role?: "portal_user" | "portal_manager" | "account_administrator" | null;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
   max_buckets?: number | null;
@@ -48,6 +48,23 @@ export async function listExecutionContexts(
       params: workspace ? { workspace } : undefined,
       signal: options?.signal,
       timeout: timeoutForRequestProfile("interactive"),
+  });
+  return data;
+}
+
+export type WorkspaceAccess = {
+  admin: { available: boolean; context_count: number };
+  ceph_admin: { available: boolean; context_count: number };
+  storage_ops: { available: boolean; context_count: number };
+  manager: { available: boolean; context_count: number };
+  browser: { available: boolean; context_count: number };
+  portal: { available: boolean; context_count: number };
+  default_workspace?: "admin" | "ceph-admin" | "storage-ops" | "manager" | "portal" | "browser" | null;
+};
+
+export async function getWorkspaceAccess(): Promise<WorkspaceAccess> {
+  const { data } = await client.get<WorkspaceAccess>("/me/workspace-access", {
+    timeout: timeoutForRequestProfile("interactive"),
   });
   return data;
 }

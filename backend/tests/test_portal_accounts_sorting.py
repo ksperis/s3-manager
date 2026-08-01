@@ -61,8 +61,7 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
             UserS3Account(
                 user_id=actor.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
-                account_admin=False,
+                role=AccountRole.PORTAL_USER.value,
                 is_root=False,
             )
         )

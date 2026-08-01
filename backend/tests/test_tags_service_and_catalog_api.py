@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from app.db import S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, TagDefinition, User, UserRole, UserS3Account
+from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, TagDefinition, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.services.tags_service import TagsService
@@ -211,7 +211,7 @@ def test_execution_contexts_selector_hides_administrative_tags(client: TestClien
         UserS3Account(
             user_id=user.id,
             account_id=account.id,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
             is_root=False,
         )
     )

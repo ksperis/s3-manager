@@ -6,7 +6,6 @@ import logging
 
 from app.db import (
     AccountIAMUser,
-    AccountRole,
     AuditLog,
     S3Account,
     StorageEndpoint,
@@ -53,12 +52,10 @@ from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_account_ordering import s3_account_name_order_by
+from app.utils.account_roles import require_account_role
 
 
 logger = logging.getLogger(__name__)
-ACCOUNT_ROLE_VALUES = {entry.value for entry in AccountRole}
-
-
 def _parse_positive_limit(value: Any) -> Optional[int]:
     if value is None:
         return None
@@ -534,8 +531,7 @@ class S3AccountsService:
             self.db.query(
                 UserS3Account.account_id,
                 User,
-                UserS3Account.account_admin,
-                UserS3Account.account_role,
+                UserS3Account.role,
             )
             .join(User, User.id == UserS3Account.user_id)
             .filter(
@@ -548,15 +544,14 @@ class S3AccountsService:
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
         avatar_service = UserAvatarService(self.db)
-        for account_id, user, account_admin, account_role in rows:
+        for account_id, user, role in rows:
             normalized_account_id = int(account_id)
             normalized_user_id = int(user.id)
             user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
             user_links_by_account.setdefault(normalized_account_id, []).append(
                 AccountUserLink(
                     user_id=normalized_user_id,
-                    account_admin=account_admin,
-                    account_role=account_role,
+                    role=role,
                     user_email=user.email,
                     user_full_name=user.display_name or user.full_name,
                     user_avatar=avatar_service.descriptor(user),
@@ -574,8 +569,7 @@ class S3AccountsService:
             self.db.query(
                 UiGroupS3Account.account_id,
                 UiGroup,
-                UiGroupS3Account.account_admin,
-                UiGroupS3Account.account_role,
+                UiGroupS3Account.role,
             )
             .join(UiGroup, UiGroup.id == UiGroupS3Account.group_id)
             .filter(UiGroupS3Account.account_id.in_(account_ids))
@@ -585,7 +579,7 @@ class S3AccountsService:
         group_ids_by_account: dict[int, list[int]] = {}
         group_links_by_account: dict[int, list[AccountGroupLink]] = {}
         avatar_service = UiGroupAvatarService(self.db)
-        for account_id, group, account_admin, account_role in rows:
+        for account_id, group, role in rows:
             normalized_account_id = int(account_id)
             normalized_group_id = int(group.id)
             group_ids_by_account.setdefault(normalized_account_id, []).append(normalized_group_id)
@@ -594,8 +588,7 @@ class S3AccountsService:
                     group_id=normalized_group_id,
                     group_name=group.name,
                     group_avatar=avatar_service.descriptor(group),
-                    account_admin=account_admin,
-                    account_role=account_role,
+                    role=role,
                 )
             )
         return group_ids_by_account, group_links_by_account
@@ -1016,7 +1009,8 @@ class S3AccountsService:
             if payload.user_links is not None:
                 desired_links = payload.user_links
             elif payload.user_ids is not None:
-                desired_links = [AccountUserLink(user_id=uid) for uid in payload.user_ids]
+                if payload.user_ids:
+                    raise ValueError("A role is required for each S3 account user association")
 
             existing_links = (
                 self.db.query(UserS3Account)
@@ -1041,17 +1035,7 @@ class S3AccountsService:
             for link in desired_links:
                 user_id = int(link.user_id)
                 db_link = existing_by_user.get(user_id)
-                if link.account_admin is None:
-                    account_admin = db_link.account_admin if db_link else False
-                else:
-                    account_admin = bool(link.account_admin)
-                if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                    raise ValueError("Invalid account role")
-                account_role = (
-                    link.account_role
-                    if link.account_role is not None
-                    else (db_link.account_role if db_link else AccountRole.PORTAL_NONE.value)
-                )
+                role = require_account_role(link.role)
                 if not db_link:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
@@ -1063,10 +1047,9 @@ class S3AccountsService:
                         user_id=user_id,
                         account_id=account.id,
                         is_root=False,
-                        account_role=account_role,
+                        role=role,
                     )
-                db_link.account_admin = account_admin
-                db_link.account_role = account_role
+                db_link.role = role
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
@@ -1075,19 +1058,13 @@ class S3AccountsService:
             if payload.group_links is not None:
                 for link in payload.group_links:
                     group_id = int(link.group_id)
-                    if link.account_role is not None and link.account_role not in ACCOUNT_ROLE_VALUES:
-                        raise ValueError("Invalid account role")
                     desired_links[group_id] = AccountGroupLink(
                         group_id=group_id,
-                        account_admin=bool(link.account_admin),
-                        account_role=link.account_role or AccountRole.PORTAL_NONE.value,
+                        role=require_account_role(link.role),
                     )
             elif payload.group_ids is not None:
-                desired_links = {
-                    int(group_id): AccountGroupLink(group_id=int(group_id))
-                    for group_id in payload.group_ids
-                    if group_id is not None
-                }
+                if payload.group_ids:
+                    raise ValueError("A role is required for each S3 account group association")
 
             desired_ids = set(desired_links)
             if desired_ids:
@@ -1104,9 +1081,8 @@ class S3AccountsService:
             for group_id, link in desired_links.items():
                 db_link = existing_by_group.get(group_id)
                 if db_link is None:
-                    db_link = UiGroupS3Account(group_id=group_id, account_id=account.id)
-                db_link.account_admin = bool(link.account_admin)
-                db_link.account_role = link.account_role or AccountRole.PORTAL_NONE.value
+                    db_link = UiGroupS3Account(group_id=group_id, account_id=account.id, role=link.role)
+                db_link.role = require_account_role(link.role)
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 

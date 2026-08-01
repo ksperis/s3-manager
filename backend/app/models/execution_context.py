@@ -13,11 +13,12 @@ class ExecutionContextCapabilities(BaseModel):
 
 
 class ExecutionContext(BaseModel):
-    kind: Literal["account", "connection", "legacy_user", "portal_account"]
+    kind: Literal["account", "connection", "legacy_user"]
     id: str
     display_name: str
     hidden: bool = False
-    account_role: Optional[str] = None
+    role: Optional[str] = None
+    account_role: Optional[str] = Field(default=None, deprecated=True)
     manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None
     max_buckets: Optional[int] = None
@@ -35,3 +36,18 @@ class ExecutionContext(BaseModel):
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
     endpoint_tags: list[TagDefinitionSummary] = Field(default_factory=list)
     capabilities: ExecutionContextCapabilities
+
+
+class WorkspaceAvailability(BaseModel):
+    available: bool = False
+    context_count: int = 0
+
+
+class WorkspaceAccess(BaseModel):
+    admin: WorkspaceAvailability
+    ceph_admin: WorkspaceAvailability
+    storage_ops: WorkspaceAvailability
+    manager: WorkspaceAvailability
+    browser: WorkspaceAvailability
+    portal: WorkspaceAvailability
+    default_workspace: Optional[Literal["admin", "ceph-admin", "storage-ops", "manager", "portal", "browser"]] = None

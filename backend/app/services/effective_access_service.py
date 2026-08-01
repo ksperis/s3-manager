@@ -1,13 +1,16 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+"""Central authorization policy for UI-user storage execution contexts."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db import (
     AccountRole,
+    S3Account,
     S3Connection,
     S3User,
     UiGroup,
@@ -23,13 +26,18 @@ from app.db import (
     is_admin_ui_role,
 )
 from app.models.user import (
-    AccountMembership,
+    EffectiveAccountGroupSource,
+    EffectiveAccountMembership,
+    EffectiveAccountRoleProvenance,
     EffectiveUserAccess,
     LinkedS3Connection,
     LinkedS3User,
     LinkedUiGroup,
     ManagerToolAccess,
 )
+from app.utils.account_roles import max_account_role, portal_role_for
+from app.utils.storage_endpoint_features import resolve_feature_flags
+from app.utils.time import utcnow
 
 
 MANAGER_TOOL_ROLES = {
@@ -38,23 +46,64 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_USER.value,
 }
 
-_PORTAL_ROLE_RANK = {
-    AccountRole.PORTAL_NONE.value: 0,
-    AccountRole.PORTAL_USER.value: 1,
-    AccountRole.PORTAL_MANAGER.value: 2,
-}
-_PORTAL_ROLE_BY_RANK = {
-    rank: role
-    for role, rank in _PORTAL_ROLE_RANK.items()
-}
+
+@dataclass(frozen=True)
+class EffectiveAccountGroupRole:
+    group_id: int
+    group_name: str
+    role: str
+    determines_effective_role: bool = False
 
 
 @dataclass(frozen=True)
 class EffectiveAccountLink:
     account_id: int
-    account_admin: bool = False
+    role: str
     is_root: bool = False
-    account_role: str = AccountRole.PORTAL_NONE.value
+    direct_role: str | None = None
+    direct_determines_effective_role: bool = False
+    group_sources: tuple[EffectiveAccountGroupRole, ...] = ()
+
+    @property
+    def portal_role(self) -> str | None:
+        return portal_role_for(self.role)
+
+
+@dataclass
+class _AccountRoleAccumulator:
+    account_id: int
+    is_root: bool = False
+    direct_role: str | None = None
+    group_roles: list[tuple[int, str, str]] = field(default_factory=list)
+
+    def build(self) -> EffectiveAccountLink:
+        direct_role = (
+            AccountRole.ACCOUNT_ADMINISTRATOR.value
+            if self.is_root
+            else self.direct_role
+        )
+        role = max_account_role(direct_role, *(source[2] for source in self.group_roles))
+        if role is None:
+            raise ValueError("Account association has no canonical role")
+        return EffectiveAccountLink(
+            account_id=self.account_id,
+            role=role,
+            is_root=self.is_root,
+            direct_role=direct_role,
+            direct_determines_effective_role=direct_role == role,
+            group_sources=tuple(
+                EffectiveAccountGroupRole(
+                    group_id=group_id,
+                    group_name=group_name,
+                    role=group_role,
+                    determines_effective_role=group_role == role,
+                )
+                for group_id, group_name, group_role in sorted(
+                    self.group_roles,
+                    key=lambda source: (source[1].lower(), source[0]),
+                )
+            ),
+        )
 
 
 @dataclass
@@ -74,10 +123,7 @@ class ResolvedUserAccess:
         return [link.account_id for link in self.account_links]
 
     def account_link_for(self, account_id: int) -> EffectiveAccountLink | None:
-        for link in self.account_links:
-            if link.account_id == account_id:
-                return link
-        return None
+        return next((link for link in self.account_links if link.account_id == account_id), None)
 
     def has_s3_user(self, s3_user_id: int) -> bool:
         return s3_user_id in set(self.s3_user_ids)
@@ -87,6 +133,8 @@ class ResolvedUserAccess:
 
 
 class EffectiveAccessService:
+    """Single source for role aggregation and executable UI-user contexts."""
+
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -98,132 +146,217 @@ class EffectiveAccessService:
             .order_by(UiGroup.name.asc(), UiGroup.id.asc())
             .all()
         )
-        group_ids = [row[0] for row in group_rows]
+        group_ids = [int(row[0]) for row in group_rows]
+        group_names = {int(row[0]): str(row[1]) for row in group_rows}
         group_details = [LinkedUiGroup(id=row[0], name=row[1]) for row in group_rows]
         groups = self.db.query(UiGroup).filter(UiGroup.id.in_(group_ids)).all() if group_ids else []
 
-        account_by_id: dict[int, EffectiveAccountLink] = {}
-        direct_account_links = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.user_id == user.id)
-            .all()
-        )
-        for link in direct_account_links:
-            self._merge_account_link(
-                account_by_id,
-                account_id=link.account_id,
-                account_admin=bool(link.account_admin or link.is_root),
-                is_root=bool(link.is_root),
-                account_role=link.account_role,
+        account_by_id: dict[int, _AccountRoleAccumulator] = {}
+        direct_links = self.db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+        for link in direct_links:
+            accumulator = account_by_id.setdefault(
+                int(link.account_id),
+                _AccountRoleAccumulator(account_id=int(link.account_id)),
+            )
+            accumulator.is_root = bool(accumulator.is_root or link.is_root)
+            accumulator.direct_role = (
+                AccountRole.ACCOUNT_ADMINISTRATOR.value
+                if link.is_root
+                else str(link.role)
             )
 
         if group_ids:
-            group_account_links = (
+            group_links = (
                 self.db.query(UiGroupS3Account)
                 .filter(UiGroupS3Account.group_id.in_(group_ids))
                 .all()
             )
-            for link in group_account_links:
-                self._merge_account_link(
-                    account_by_id,
-                    account_id=link.account_id,
-                    account_admin=bool(link.account_admin),
-                    is_root=False,
-                    account_role=link.account_role,
+            for link in group_links:
+                accumulator = account_by_id.setdefault(
+                    int(link.account_id),
+                    _AccountRoleAccumulator(account_id=int(link.account_id)),
+                )
+                accumulator.group_roles.append(
+                    (
+                        int(link.group_id),
+                        group_names.get(int(link.group_id), f"Group #{link.group_id}"),
+                        str(link.role),
+                    )
                 )
 
         s3_user_ids = {
-            row[0]
+            int(row[0])
             for row in self.db.query(UserS3User.s3_user_id)
             .filter(UserS3User.user_id == user.id)
             .all()
         }
         if group_ids:
             s3_user_ids.update(
-                row[0]
+                int(row[0])
                 for row in self.db.query(UiGroupS3User.s3_user_id)
                 .filter(UiGroupS3User.group_id.in_(group_ids))
                 .all()
             )
 
-        s3_connection_ids = {
-            row[0]
+        shared_connection_ids = {
+            int(row[0])
             for row in self.db.query(UserS3Connection.s3_connection_id)
+            .join(S3Connection, S3Connection.id == UserS3Connection.s3_connection_id)
             .filter(UserS3Connection.user_id == user.id)
+            .filter(
+                S3Connection.is_shared.is_(True),
+                S3Connection.is_temporary.is_(False),
+            )
             .all()
         }
         if group_ids:
-            s3_connection_ids.update(
-                row[0]
+            shared_connection_ids.update(
+                int(row[0])
                 for row in self.db.query(UiGroupS3Connection.s3_connection_id)
+                .join(S3Connection, S3Connection.id == UiGroupS3Connection.s3_connection_id)
                 .filter(UiGroupS3Connection.group_id.in_(group_ids))
+                .filter(
+                    S3Connection.is_shared.is_(True),
+                    S3Connection.is_temporary.is_(False),
+                )
                 .all()
             )
 
-        role_supports_manager_tools = user.role in MANAGER_TOOL_ROLES
+        role_supports_tools = user.role in MANAGER_TOOL_ROLES
         can_access_ceph_admin = (
-            bool(user.can_access_ceph_admin) or any(bool(group.can_access_ceph_admin) for group in groups)
+            bool(user.can_access_ceph_admin)
+            or any(bool(group.can_access_ceph_admin) for group in groups)
         ) and is_admin_ui_role(user.role)
         can_access_storage_ops = (
-            bool(user.can_access_storage_ops) or any(bool(group.can_access_storage_ops) for group in groups)
-        ) and role_supports_manager_tools
+            bool(user.can_access_storage_ops)
+            or any(bool(group.can_access_storage_ops) for group in groups)
+        ) and role_supports_tools
         manager_tool_access = ManagerToolAccess(
-            bucket_compare=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_bucket_compare)
-                or any(bool(group.can_access_manager_bucket_compare) for group in groups)
-            ),
-            bucket_integrity_check=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_bucket_integrity_check)
-                or any(bool(group.can_access_manager_bucket_integrity_check) for group in groups)
-            ),
-            bucket_migration=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_bucket_migration)
-                or any(bool(group.can_access_manager_bucket_migration) for group in groups)
-            ),
-            feature_rules=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_feature_rules)
-                or any(bool(group.can_access_manager_feature_rules) for group in groups)
-            ),
-            bucket_quota=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_bucket_quota)
-                or any(bool(group.can_access_manager_bucket_quota) for group in groups)
-            ),
-            bucket_purge=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_bucket_purge)
-                or any(bool(group.can_access_manager_bucket_purge) for group in groups)
-            ),
-            ceph_s3_user_keys=role_supports_manager_tools
-            and (
-                bool(user.can_access_manager_ceph_s3_user_keys)
-                or any(bool(group.can_access_manager_ceph_s3_user_keys) for group in groups)
-            ),
+            **{
+                output_name: role_supports_tools
+                and (
+                    bool(getattr(user, user_field))
+                    or any(bool(getattr(group, user_field)) for group in groups)
+                )
+                for output_name, user_field in {
+                    "bucket_compare": "can_access_manager_bucket_compare",
+                    "bucket_integrity_check": "can_access_manager_bucket_integrity_check",
+                    "bucket_migration": "can_access_manager_bucket_migration",
+                    "feature_rules": "can_access_manager_feature_rules",
+                    "bucket_quota": "can_access_manager_bucket_quota",
+                    "bucket_purge": "can_access_manager_bucket_purge",
+                    "ceph_s3_user_keys": "can_access_manager_ceph_s3_user_keys",
+                }.items()
+            }
         )
-        browser_advanced_features_enabled = bool(user.browser_advanced_features_enabled) or any(
+        browser_advanced = bool(user.browser_advanced_features_enabled) or any(
             bool(group.browser_advanced_features_enabled) for group in groups
         )
 
         return ResolvedUserAccess(
             group_ids=group_ids,
             group_details=group_details,
-            account_links=sorted(account_by_id.values(), key=lambda link: link.account_id),
+            account_links=sorted(
+                (accumulator.build() for accumulator in account_by_id.values()),
+                key=lambda link: link.account_id,
+            ),
             s3_user_ids=sorted(s3_user_ids),
-            s3_connection_ids=sorted(s3_connection_ids),
+            s3_connection_ids=sorted(shared_connection_ids),
             can_access_ceph_admin=can_access_ceph_admin,
             can_access_storage_ops=can_access_storage_ops,
             manager_tool_access=manager_tool_access,
-            browser_advanced_features_enabled=browser_advanced_features_enabled,
+            browser_advanced_features_enabled=browser_advanced,
         )
+
+    def list_workspace_connections(
+        self,
+        user: User,
+        *,
+        workspace: str,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> list[S3Connection]:
+        if workspace not in {"manager", "browser"}:
+            raise ValueError("Unsupported workspace")
+        effective = resolved or self.resolve_user(user)
+        now = utcnow()
+        query = self.db.query(S3Connection).filter(
+            S3Connection.is_active.is_(True),
+            S3Connection.is_temporary.is_(False),
+            (S3Connection.expires_at.is_(None)) | (S3Connection.expires_at > now),
+        )
+        if workspace == "browser":
+            return query.filter(
+                S3Connection.is_shared.is_(False),
+                S3Connection.created_by_user_id == user.id,
+                S3Connection.access_browser.is_(True),
+            ).all()
+        return query.filter(
+            S3Connection.access_manager.is_(True),
+            S3Connection.remediation_required.is_(False),
+            (
+                (S3Connection.is_shared.is_(False))
+                & (S3Connection.created_by_user_id == user.id)
+            )
+            | (
+                (S3Connection.is_shared.is_(True))
+                & (S3Connection.id.in_(effective.s3_connection_ids))
+            ),
+        ).all()
+
+    def connection_is_allowed(
+        self,
+        user: User,
+        connection: S3Connection,
+        *,
+        workspace: str,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> bool:
+        return any(
+            candidate.id == connection.id
+            for candidate in self.list_workspace_connections(user, workspace=workspace, resolved=resolved)
+        )
+
+    @staticmethod
+    def portal_account_is_compatible(account: object) -> bool:
+        endpoint = getattr(account, "storage_endpoint", None)
+        return bool(
+            getattr(account, "rgw_account_id", None)
+            and endpoint is not None
+            and str(getattr(endpoint, "provider", "")).strip().lower() == "ceph"
+            and resolve_feature_flags(endpoint).iam_enabled
+        )
+
+    def list_portal_accounts(
+        self,
+        user: User,
+        *,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> list[S3Account]:
+        effective = resolved or self.resolve_user(user)
+        account_ids = [
+            link.account_id
+            for link in effective.account_links
+            if link.portal_role is not None
+        ]
+        if not account_ids:
+            return []
+        accounts = (
+            self.db.query(S3Account)
+            .options(joinedload(S3Account.storage_endpoint))
+            .filter(S3Account.id.in_(account_ids))
+            .all()
+        )
+        return [account for account in accounts if self.portal_account_is_compatible(account)]
+
+    @staticmethod
+    def manager_account_allowed(role_or_link: object) -> bool:
+        role = getattr(role_or_link, "role", role_or_link)
+        return role == AccountRole.ACCOUNT_ADMINISTRATOR.value
 
     def to_user_effective_access(self, user: User) -> EffectiveUserAccess:
         resolved = self.resolve_user(user)
         s3_user_names = self._load_s3_user_names(resolved.s3_user_ids)
-        s3_connection_names = self._load_s3_connection_names(resolved.s3_connection_ids)
+        shared_connection_names = self._load_s3_connection_names(resolved.s3_connection_ids)
         return EffectiveUserAccess(
             can_access_ceph_admin=resolved.can_access_ceph_admin,
             can_access_storage_ops=resolved.can_access_storage_ops,
@@ -231,10 +364,22 @@ class EffectiveAccessService:
             browser_advanced_features_enabled=resolved.browser_advanced_features_enabled,
             accounts=resolved.account_ids,
             account_links=[
-                AccountMembership(
+                EffectiveAccountMembership(
                     account_id=link.account_id,
-                    account_admin=link.account_admin,
-                    account_role=link.account_role,
+                    role=link.role,
+                    provenance=EffectiveAccountRoleProvenance(
+                        direct_role=link.direct_role,
+                        direct_determines_effective_role=link.direct_determines_effective_role,
+                        groups=[
+                            EffectiveAccountGroupSource(
+                                group_id=source.group_id,
+                                group_name=source.group_name,
+                                role=source.role,
+                                determines_effective_role=source.determines_effective_role,
+                            )
+                            for source in link.group_sources
+                        ],
+                    ),
                 )
                 for link in resolved.account_links
             ],
@@ -247,55 +392,27 @@ class EffectiveAccessService:
             s3_connection_details=[
                 LinkedS3Connection(
                     id=conn_id,
-                    name=(details[0] if details else f"Connection #{conn_id}"),
-                    access_manager=(details[1] if details else None),
-                    access_browser=(details[2] if details else None),
+                    name=(details if details else f"Connection #{conn_id}"),
                 )
                 for conn_id in resolved.s3_connection_ids
-                for details in [s3_connection_names.get(conn_id)]
+                for details in [shared_connection_names.get(conn_id)]
             ],
         )
-
-    def _merge_account_link(
-        self,
-        account_by_id: dict[int, EffectiveAccountLink],
-        *,
-        account_id: int,
-        account_admin: bool,
-        is_root: bool,
-        account_role: str | None,
-    ) -> None:
-        current = account_by_id.get(account_id)
-        next_role = self._max_portal_role(current.account_role if current else None, account_role)
-        account_by_id[account_id] = EffectiveAccountLink(
-            account_id=account_id,
-            account_admin=bool(account_admin or (current.account_admin if current else False)),
-            is_root=bool(is_root or (current.is_root if current else False)),
-            account_role=next_role,
-        )
-
-    def _max_portal_role(self, left: str | None, right: str | None) -> str:
-        left_rank = _PORTAL_ROLE_RANK.get(left or AccountRole.PORTAL_NONE.value, 0)
-        right_rank = _PORTAL_ROLE_RANK.get(right or AccountRole.PORTAL_NONE.value, 0)
-        return _PORTAL_ROLE_BY_RANK.get(max(left_rank, right_rank), AccountRole.PORTAL_NONE.value)
 
     def _load_s3_user_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
             return {}
-        rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
-        return {row[0]: row[1] for row in rows}
+        return {
+            int(row[0]): str(row[1])
+            for row in self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
+        }
 
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool, bool]]:
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
         if not ids:
             return {}
         rows = (
-            self.db.query(
-                S3Connection.id,
-                S3Connection.name,
-                S3Connection.access_manager,
-                S3Connection.access_browser,
-            )
-            .filter(S3Connection.id.in_(ids))
+            self.db.query(S3Connection.id, S3Connection.name)
+            .filter(S3Connection.id.in_(ids), S3Connection.is_shared.is_(True))
             .all()
         )
-        return {row[0]: (row[1], bool(row[2]), bool(row[3])) for row in rows}
+        return {int(row[0]): str(row[1]) for row in rows}

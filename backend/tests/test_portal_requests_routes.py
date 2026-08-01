@@ -166,7 +166,7 @@ def test_admin_request_routes_approve_and_conflict(client: TestClient, db_sessio
     assert approved["messages"][0]["message"] == "Approved"
     target = db_session.query(User).filter(User.email == "jane@example.org").one()
     link = db_session.query(UserS3Account).filter_by(user_id=target.id, account_id=account.id).one()
-    assert link.account_role == AccountRole.PORTAL_USER.value
+    assert link.role == AccountRole.PORTAL_USER.value
 
     conflict = client.post(f"/api/admin/portal-requests/{request_id}/approve", json={})
     assert conflict.status_code == 409
@@ -181,8 +181,7 @@ def test_admin_request_routes_approve_user_removal(client: TestClient, db_sessio
         UserS3Account(
             user_id=target.id,
             account_id=account.id,
-            account_role=AccountRole.PORTAL_USER.value,
-            account_admin=False,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()

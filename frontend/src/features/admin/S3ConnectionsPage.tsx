@@ -36,6 +36,7 @@ import {
   listAdminS3Connections,
   listS3ConnectionUsers,
   removeS3ConnectionUser,
+  remediateAdminS3Connection,
   rotateAdminS3ConnectionCredentials,
   upsertS3ConnectionUser,
   updateAdminS3Connection,
@@ -66,7 +67,6 @@ import {
   adminAssociationTableLabelCellClass,
 } from "./AdminAssociationPicker";
 import S3ConnectionEndpointFields, { type S3ConnectionEndpointMode } from "../shared/S3ConnectionEndpointFields";
-import S3ConnectionAccessFields from "../shared/S3ConnectionAccessFields";
 import S3ConnectionCredentialFields from "../shared/S3ConnectionCredentialFields";
 import S3CredentialsValidationMessage from "../shared/S3CredentialsValidationMessage";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
@@ -96,8 +96,6 @@ const createEmptyConnectionForm = () => ({
   name: "",
   tags: [] as UiTagDefinition[],
   provider_hint: "",
-  access_manager: false,
-  access_browser: true,
   endpoint_url: "",
   region: "",
   access_key_id: "",
@@ -139,8 +137,6 @@ export default function S3ConnectionsPage() {
     name: "",
     tags: [] as UiTagDefinition[],
     provider_hint: "",
-    access_manager: false,
-    access_browser: true,
     credential_owner_type: "",
     credential_owner_identifier: "",
     endpoint_url: "",
@@ -673,8 +669,6 @@ export default function S3ConnectionsPage() {
       name: conn.name,
       tags: normalizeUiTags(conn.tags),
       provider_hint: conn.provider_hint || "",
-      access_manager: conn.access_manager === true,
-      access_browser: conn.access_browser !== false,
       credential_owner_type: conn.credential_owner_type || "",
       credential_owner_identifier: conn.credential_owner_identifier || "",
       endpoint_url: conn.endpoint_url,
@@ -739,10 +733,6 @@ export default function S3ConnectionsPage() {
       setCreateError("Endpoint URL is required.");
       return;
     }
-    if (!createForm.access_manager && !createForm.access_browser) {
-      setCreateError("Enable access to manager and/or browser.");
-      return;
-    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -761,8 +751,6 @@ export default function S3ConnectionsPage() {
       await createAdminS3Connection({
         name: createForm.name,
         tags: normalizeUiTags(createForm.tags),
-        access_manager: createForm.access_manager,
-        access_browser: createForm.access_browser,
         access_key_id: createForm.access_key_id,
         secret_access_key: createForm.secret_access_key,
         ...endpointPayload,
@@ -787,10 +775,6 @@ export default function S3ConnectionsPage() {
     }
     if (!editHasPreset && !editForm.endpoint_url.trim()) {
       setEditError("Endpoint URL is required.");
-      return;
-    }
-    if (!editForm.access_manager && !editForm.access_browser) {
-      setEditError("Enable access to manager and/or browser.");
       return;
     }
     const accessKeyId = editCredentials.access_key_id.trim();
@@ -826,8 +810,6 @@ export default function S3ConnectionsPage() {
         name: editForm.name || undefined,
         group_ids: targetGroupIds,
         tags: normalizeUiTags(editForm.tags),
-        access_manager: editForm.access_manager,
-        access_browser: editForm.access_browser,
         credential_owner_type: editForm.credential_owner_type || null,
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
@@ -879,6 +861,20 @@ export default function S3ConnectionsPage() {
   };
 
   const submitToggleConnectionStatus = async (conn: S3ConnectionAdminItem) => {
+    if (conn.execution_status === "remediation_required") {
+      setStatusBusyId(conn.id);
+      setError(null);
+      try {
+        await remediateAdminS3Connection(conn.id);
+        setActionMessage("Connection remediated and activated for Manager.");
+        await fetchItems();
+      } catch (err) {
+        setError(extractError(err));
+      } finally {
+        setStatusBusyId(null);
+      }
+      return;
+    }
     const nextIsActive = conn.is_active !== false ? false : true;
     setStatusBusyId(conn.id);
     setError(null);
@@ -924,7 +920,12 @@ export default function S3ConnectionsPage() {
     setError(null);
     setActionMessage(null);
     const results = await Promise.allSettled(
-      selectedIds.map((connectionId) => updateAdminS3Connection(connectionId, { is_active: true }))
+      selectedIds.map((connectionId) => {
+        const connection = items.find((item) => item.id === connectionId);
+        return connection?.execution_status === "remediation_required"
+          ? remediateAdminS3Connection(connectionId)
+          : updateAdminS3Connection(connectionId, { is_active: true });
+      })
     );
     const failedIds = selectedIds.filter((_, index) => results[index].status === "rejected");
     const successCount = selectedIds.length - failedIds.length;
@@ -1038,16 +1039,19 @@ export default function S3ConnectionsPage() {
       id: "status",
       label: "Status",
       render: (connection) => {
-        const isActive = connection.is_active !== false;
+        const remediationRequired = connection.execution_status === "remediation_required";
+        const isActive = connection.is_active !== false && !remediationRequired;
         return (
           <span
             className={`rounded-full px-2 py-1 ui-caption font-semibold ${
-              isActive
+              remediationRequired
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                : isActive
                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
                 : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
             }`}
           >
-            {isActive ? "Active" : "Inactive"}
+            {remediationRequired ? "Remediation required" : isActive ? "Active" : "Inactive"}
           </span>
         );
       },
@@ -1078,6 +1082,7 @@ export default function S3ConnectionsPage() {
       mobileRole: "actions",
       cellClassName: "min-w-[260px]",
       render: (connection) => {
+        const remediationRequired = connection.execution_status === "remediation_required";
         const isActive = connection.is_active !== false;
         return (
           <div className="flex flex-wrap justify-end gap-2">
@@ -1093,7 +1098,13 @@ export default function S3ConnectionsPage() {
                 selectAllFilteredBusy
               }
             >
-              {statusBusyId === connection.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
+              {statusBusyId === connection.id
+                ? "Saving..."
+                : remediationRequired
+                  ? "Activate in Manager"
+                  : isActive
+                    ? "Deactivate"
+                    : "Activate"}
             </button>
             <button
               type="button"
@@ -1284,13 +1295,12 @@ export default function S3ConnectionsPage() {
                   Admin connections are always shared with linked UI users.
                 </p>
               </div>
-              <S3ConnectionAccessFields
-                accessManager={createForm.access_manager}
-                accessBrowser={createForm.access_browser}
-                onAccessManagerChange={(checked) => setCreateForm((p) => ({ ...p, access_manager: checked }))}
-                onAccessBrowserChange={(checked) => setCreateForm((p) => ({ ...p, access_browser: checked }))}
-                className="sm:col-span-2"
-              />
+              <div className={cx("px-3 py-2 sm:col-span-2", uiPanelMutedClass)}>
+                <div className="ui-body font-semibold text-[var(--ui-text)]">Manager-only execution</div>
+                <p className={cx("ui-caption", uiMutedTextClass)}>
+                  Shared connections are never exposed to Browser. Browser users must create a private connection.
+                </p>
+              </div>
             </div>
             <S3ConnectionCredentialFields
               accessKeyId={createForm.access_key_id}
@@ -1417,12 +1427,12 @@ export default function S3ConnectionsPage() {
                       Store owner context for keys imported from manager/ceph-admin flows.
                     </div>
                   </div>
-                  <S3ConnectionAccessFields
-                    accessManager={editForm.access_manager}
-                    accessBrowser={editForm.access_browser}
-                    onAccessManagerChange={(checked) => setEditForm((p) => ({ ...p, access_manager: checked }))}
-                    onAccessBrowserChange={(checked) => setEditForm((p) => ({ ...p, access_browser: checked }))}
-                  />
+                  <div className={cx("rounded-md px-3 py-2", uiPanelMutedClass)}>
+                    <div className="ui-body font-semibold text-[var(--ui-text)]">Manager-only execution</div>
+                    <div className={cx("ui-caption", uiMutedTextClass)}>
+                      Browser access is disabled for all shared connections.
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <UiSelect
                       label="Owner type"

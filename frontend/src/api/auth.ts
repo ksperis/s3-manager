@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "./users";
+import type { AccountAccessRole } from "./accountRoles";
 
 export type LoginResponse = {
   access_token: string;
@@ -27,8 +28,7 @@ export type LoginResponse = {
     accounts?: number[];
     account_links?: {
       account_id: number;
-      account_admin?: boolean | null;
-      account_role?: "portal_none" | "portal_user" | "portal_manager" | string | null;
+      role: AccountAccessRole;
     }[] | null;
     group_ids?: number[] | null;
     group_details?: { id: number; name: string }[] | null;
@@ -38,8 +38,6 @@ export type LoginResponse = {
     s3_connection_details?: {
       id: number;
       name: string;
-      access_manager?: boolean | null;
-      access_browser?: boolean | null;
     }[] | null;
     effective_access?: EffectiveUserAccess | null;
     auth_provider?: string | null;

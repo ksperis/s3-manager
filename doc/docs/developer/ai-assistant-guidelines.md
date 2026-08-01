@@ -176,6 +176,32 @@ flows unless the pathway is explicit, authorized, and audited.
   action, target entity, and account context.
 - Include executor or workflow identifiers in audit metadata when available.
 
+## Access-model invariants
+
+- Use `EffectiveAccessService` for account-role aggregation, context catalogues,
+  exact-context authorization, workspace availability, and long-running
+  workflow revalidation. Catalogue and execution must not implement separate
+  policies.
+- Account links store one required canonical `role`: `portal_user`,
+  `portal_manager`, or `account_administrator`. Legacy association fields may
+  exist only in the release-boundary API adapter; business services must not
+  read them.
+- Delete associations that grant no right. Do not preserve them as nullable
+  roles, sentinels, or hidden compatibility rows.
+- Standard Browser and embedded Manager Browser accept only active, unexpired,
+  owned private connections with Browser access. Reject Accounts, RGW users,
+  shared connections, Portal contexts, and forged IDs before resolving
+  credentials.
+- Portal, direct S3 sessions, and Ceph Admin Browser remain explicit separate
+  authorization branches. Portal always executes with the user's personal IAM
+  identity, including when an account administrator projects to Portal manager.
+- Admin and automation selectors for S3 connections must use the shared-only
+  service scope and return `404` for private targets. Never expose private
+  connection identifiers through Admin search, bulk actions, tags, or exports.
+- Revalidate the creator and source/target contexts before starting or resuming
+  a bucket migration and before every meaningful item. Revocation must stop the
+  workflow explicitly without reusing cached credentials.
+
 ## Local UI validation for AI agents
 
 When a frontend change affects a real workspace route, do a browser-level smoke

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
-from app.db import AccountRole, S3Account, User, UserS3Account
+from app.db import S3Account, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.services.effective_access_service import EffectiveAccountLink
 
@@ -27,7 +27,7 @@ class AccountAccess:
     actor: ManagerActor
     membership: Optional[UserS3Account | EffectiveAccountLink]
     capabilities: AccountCapabilities
-    role: str = AccountRole.PORTAL_NONE.value
+    role: Optional[str] = None
 
 
 @dataclass

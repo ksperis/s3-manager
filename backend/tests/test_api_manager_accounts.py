@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.db import (
+    AccountRole,
     S3Account,
     S3User,
     User,
@@ -29,7 +30,7 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         UserS3Account(
             user_id=super_admin.id,
             account_id=linked_account.id,
-            account_admin=True,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
             is_root=False,
         )
     )

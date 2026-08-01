@@ -110,7 +110,6 @@ class PortalSharingMixin:
             .filter(
                 UserS3Account.account_id == account.id,
                 UserS3Account.user_id.in_(user_ids),
-                UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
             )
             .all()
         )
@@ -125,7 +124,6 @@ class PortalSharingMixin:
             .filter(
                 User.id.in_(user_ids),
                 UiGroupS3Account.account_id == account.id,
-                UiGroupS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
             )
             .all()
         )

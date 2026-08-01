@@ -15,13 +15,18 @@ import {
   type OidcProviderInfo,
 } from "../../api/auth";
 import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
+import { getWorkspaceAccess } from "../../api/executionContexts";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { useTheme } from "../../components/theme";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
 import { CLIENT_STORAGE_KEYS, removeClientStorage, writeClientJson, writeClientStorage } from "../../utils/clientStorage";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
-import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
+import {
+  resolvePostLoginPath,
+  resolvePostLoginPathWithWorkspaceAccess,
+  type SessionUser,
+} from "../../utils/workspaces";
 
 type LoginMode = "password" | "keys" | "ldap";
 
@@ -59,6 +64,19 @@ export default function LoginPage() {
     } catch (err) {
       console.error(err);
       return DEFAULT_GENERAL_SETTINGS;
+    }
+  };
+
+  const resolveInteractiveDestination = async (
+    sessionUser: SessionUser,
+    settings: GeneralSettings
+  ): Promise<string> => {
+    try {
+      const workspaceAccess = await getWorkspaceAccess();
+      return resolvePostLoginPathWithWorkspaceAccess(sessionUser, settings, workspaceAccess);
+    } catch (workspaceError) {
+      console.error(workspaceError);
+      return resolvePostLoginPath(sessionUser, settings);
     }
   };
 
@@ -156,7 +174,7 @@ export default function LoginPage() {
       }
       removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       const settings = await loadGeneralSettings();
-      const destination = resolvePostLoginPath(sessionUser, settings);
+      const destination = await resolveInteractiveDestination(sessionUser, settings);
       prefetchWorkspaceBranch(destination);
       navigate(destination, { replace: true });
     } catch (err) {
@@ -188,7 +206,7 @@ export default function LoginPage() {
       }
       removeClientStorage(CLIENT_STORAGE_KEYS.s3SessionEndpoint);
       const settings = await loadGeneralSettings();
-      const destination = resolvePostLoginPath(sessionUser, settings);
+      const destination = await resolveInteractiveDestination(sessionUser, settings);
       prefetchWorkspaceBranch(destination);
       navigate(destination, { replace: true });
     } catch (err) {

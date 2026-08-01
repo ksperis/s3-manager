@@ -6,20 +6,21 @@ import { useState } from "react";
 import PageEmptyState from "../../components/PageEmptyState";
 import PageHeader from "../../components/PageHeader";
 import BrowserEmbed from "../browser/BrowserEmbed";
-import { useS3AccountContext } from "./S3AccountContext";
+import { BrowserContextProvider, useBrowserContext } from "../browser/BrowserContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
-export default function ManagerBrowserPage() {
+function ManagerBrowserContent() {
   const {
-    accountIdForApi,
-    hasS3AccountContext,
-    accounts,
-    selectedS3AccountId,
-    managerBrowserEnabled,
-  } = useS3AccountContext();
+    contexts,
+    contextsLoaded,
+    selectedContext,
+    selectedContextId,
+    setSelectedContextId,
+    hasContext,
+    selectorForApi,
+    accessError,
+  } = useBrowserContext();
   const [selectedBrowserBucketName, setSelectedBrowserBucketName] = useState("");
-  const selected = accounts.find((account) => account.id === selectedS3AccountId) ?? null;
-  const browserBlockedForContext = managerBrowserEnabled === false;
   const breadcrumbs = selectedBrowserBucketName
     ? managerPageBreadcrumbs("browser", { label: selectedBrowserBucketName })
     : managerPageBreadcrumbs("browser");
@@ -28,41 +29,67 @@ export default function ManagerBrowserPage() {
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Browser"
-        description="Object navigation for the active manager execution context."
+        description="Object navigation with a private Browser connection, independent from the active Manager context."
         breadcrumbs={breadcrumbs}
+        rightContent={
+          contexts.length > 0 ? (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Private connection</span>
+              <select
+                className="h-9 rounded-md border bg-background px-3"
+                value={selectedContextId ?? ""}
+                onChange={(event) => setSelectedContextId(event.target.value || null)}
+                aria-label="Private Browser connection"
+              >
+                <option value="">Select a connection</option>
+                {contexts.map((context) => (
+                  <option key={context.id} value={context.id}>{context.display_name}</option>
+                ))}
+              </select>
+            </label>
+          ) : undefined
+        }
       />
       <div className="min-h-0 flex-1">
-        {!hasS3AccountContext ? (
+        {!hasContext ? (
           <PageEmptyState
-            title="Select a manager context first"
-            description="Choose an account, connection, or S3 user before loading the Browser in the manager workspace."
-            primaryAction={{ label: "Open dashboard", to: "/manager" }}
-            secondaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
+            title={
+              !contextsLoaded
+                ? "Loading private Browser connections"
+                : contexts.length
+                  ? "Select a private Browser connection"
+                  : "No private Browser connection"
+            }
+            description={
+              !contextsLoaded
+                ? "Checking the Browser contexts available to you."
+                : accessError ?? "Accounts, RGW users and shared connections cannot be used in Browser. Create a private connection with a dedicated access key."
+            }
+            primaryAction={{ label: "Manage private connections", to: "/browser/profile?tab=connections" }}
+            secondaryAction={{ label: "Open Manager dashboard", to: "/manager" }}
             tone="warning"
             className="h-full"
           />
-        ) : browserBlockedForContext ? (
-          <PageEmptyState
-            title="Browser access is disabled for this context"
-            description="Enable browser access in the S3 connection settings before opening the manager browser for this context."
-            primaryAction={{ label: "Open dashboard", to: "/manager" }}
-            secondaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
-            tone="warning"
-            className="h-full"
-          />
-        ) : null}
-        {!browserBlockedForContext && hasS3AccountContext && (
+        ) : (
           <BrowserEmbed
-            accountIdForApi={accountIdForApi}
-            hasContext={hasS3AccountContext}
-            storageEndpointCapabilities={selected?.storage_endpoint_capabilities ?? null}
-            endpointProvider={selected?.endpoint_provider ?? null}
-            quotaMaxSizeGb={selected?.quota_max_size_gb ?? null}
-            quotaMaxObjects={selected?.quota_max_objects ?? null}
+            accountIdForApi={selectorForApi}
+            hasContext
+            storageEndpointCapabilities={selectedContext?.storage_endpoint_capabilities ?? null}
+            endpointProvider={selectedContext?.endpoint_provider ?? null}
+            quotaMaxSizeGb={selectedContext?.quota_max_size_gb ?? null}
+            quotaMaxObjects={selectedContext?.quota_max_objects ?? null}
             onSelectedBucketNameChange={setSelectedBrowserBucketName}
           />
         )}
       </div>
     </div>
+  );
+}
+
+export default function ManagerBrowserPage() {
+  return (
+    <BrowserContextProvider>
+      <ManagerBrowserContent />
+    </BrowserContextProvider>
   );
 }

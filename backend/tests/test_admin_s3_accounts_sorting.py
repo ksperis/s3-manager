@@ -99,8 +99,7 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
         UiGroupS3Account(
             account_id=linked.id,
             group_id=group.id,
-            account_admin=True,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         )
     )
     db_session.commit()
@@ -114,8 +113,9 @@ def test_admin_accounts_search_matches_direct_group_links(client, db_session):
     group_link = payload["items"][0]["group_links"][0]
     assert group_link["group_id"] == group.id
     assert group_link["group_name"] == "Analytics Team"
+    assert group_link["role"] == AccountRole.ACCOUNT_ADMINISTRATOR.value
     assert group_link["account_admin"] is True
-    assert group_link["account_role"] == AccountRole.PORTAL_USER.value
+    assert group_link["account_role"] == AccountRole.PORTAL_MANAGER.value
     assert group_link["group_avatar"]["initials"] == "AT"
 
 
@@ -136,8 +136,7 @@ def test_admin_accounts_search_matches_linked_user_email_and_exposes_avatar(clie
             account_id=linked.id,
             user_id=user.id,
             is_root=False,
-            account_admin=False,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.PORTAL_USER.value,
         )
     )
     db_session.commit()
@@ -162,8 +161,7 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
         UiGroupS3Account(
             account_id=account.id,
             group_id=old_group.id,
-            account_admin=True,
-            account_role=AccountRole.PORTAL_USER.value,
+            role=AccountRole.ACCOUNT_ADMINISTRATOR.value,
         )
     )
     db_session.commit()
@@ -187,10 +185,11 @@ def test_admin_accounts_update_replaces_direct_group_links(client, db_session):
     group_link = payload["group_links"][0]
     assert group_link["group_id"] == new_group.id
     assert group_link["group_name"] == "New Account Group"
+    assert group_link["role"] == AccountRole.PORTAL_MANAGER.value
     assert group_link["account_admin"] is False
     assert group_link["account_role"] == AccountRole.PORTAL_MANAGER.value
     assert group_link["group_avatar"]["initials"] == "NG"
     rows = db_session.query(UiGroupS3Account).filter(UiGroupS3Account.account_id == account.id).all()
-    assert [(row.group_id, row.account_admin, row.account_role) for row in rows] == [
-        (new_group.id, False, AccountRole.PORTAL_MANAGER.value)
+    assert [(row.group_id, row.role) for row in rows] == [
+        (new_group.id, AccountRole.PORTAL_MANAGER.value)
     ]

@@ -8,13 +8,13 @@ import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { EXECUTION_CONTEXTS_REFRESH_EVENT } from "../../utils/executionContextRefresh";
-import { resolveUrlScopedSelection } from "../../utils/urlScopedSelection";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedBrowserExecutionContext;
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
 
 type BrowserContextState = {
   contexts: ExecutionContext[];
+  contextsLoaded: boolean;
   selectedContextId: string | null;
   selectedContext: ExecutionContext | null;
   setSelectedContextId: (id: string | null) => void;
@@ -28,6 +28,7 @@ type BrowserContextState = {
 
 const Ctx = createContext<BrowserContextState>({
   contexts: [],
+  contextsLoaded: false,
   selectedContextId: null,
   selectedContext: null,
   setSelectedContextId: () => {},
@@ -66,6 +67,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
   const [contextsRefreshToken, setContextsRefreshToken] = useState(0);
   const [selectedContextId, setSelectedContextIdState] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [contextsLoaded, setContextsLoaded] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -85,8 +87,10 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       try {
         const data = await listExecutionContexts("browser");
         setContexts(data);
+        setContextsLoaded(true);
       } catch {
         setContexts([]);
+        setContextsLoaded(true);
         setAccessError("Access to /browser is denied for this user.");
       }
     };
@@ -102,15 +106,20 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       setSearchParams(nextParams, { replace: true });
       return;
     }
-    if (contexts.length === 0) return;
+    if (!contextsLoaded) return;
     const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const nextId = resolveUrlScopedSelection({
-      availableIds: contexts.map((context) => context.id),
-      urlValue: urlContext,
-      currentValue: selectedContextId,
-      fallbackValues: [readClientStorage(EXECUTION_CONTEXT_STORAGE_KEY)],
-    });
+    const storedContext = readClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
+    const nextId = urlContext || selectedContextId || storedContext;
     if (!nextId) return;
+    if (!contexts.some((context) => context.id === nextId)) {
+      setSelectedContextIdState(null);
+      removeClientStorage(EXECUTION_CONTEXT_STORAGE_KEY);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
+      setSearchParams(nextParams, { replace: true });
+      setAccessError("The previously selected Browser connection is no longer authorized. Select a private connection.");
+      return;
+    }
     if (nextId !== selectedContextId) {
       setSelectedContextIdState(nextId);
     }
@@ -120,7 +129,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
       setSearchParams(nextParams, { replace: true });
     }
-  }, [contexts, requiresContextSelection, searchParams, selectedContextId, setSearchParams]);
+  }, [contexts, contextsLoaded, requiresContextSelection, searchParams, selectedContextId, setSearchParams]);
 
   const setSelectedContextId = (id: string | null) => {
     if (!requiresContextSelection) {
@@ -149,6 +158,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         contexts,
+        contextsLoaded,
         selectedContextId,
         selectedContext: selected ?? null,
         setSelectedContextId,

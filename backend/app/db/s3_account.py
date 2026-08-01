@@ -3,7 +3,7 @@
 from app.utils.time import utcnow
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -79,19 +79,17 @@ class UserS3Account(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "account_id", name="uq_user_s3_account"),
         Index("ix_user_s3_accounts_account_user", "account_id", "user_id"),
+        CheckConstraint(
+            "role IN ('portal_user', 'portal_manager', 'account_administrator')",
+            name="ck_user_s3_accounts_role",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
-    account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
-    account_role = Column(
-        String,
-        nullable=False,
-        default=AccountRole.PORTAL_NONE.value,
-        server_default=AccountRole.PORTAL_NONE.value,
-    )
+    role = Column(String, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
 

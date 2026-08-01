@@ -1279,7 +1279,7 @@ def test_private_owner_cannot_lose_final_portal_role(db_session):
     db_session.commit()
 
     before = {(owner.id, account.id): AccountRole.PORTAL_USER.value}
-    after = {(owner.id, account.id): AccountRole.PORTAL_NONE.value}
+    after = {}
 
     with pytest.raises(ValueError, match="take ownership"):
         sync_portal_role_downgrades(db_session, before=before, after=after)
@@ -1294,9 +1294,9 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -1439,7 +1439,7 @@ def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_se
     participant = User(email=f"{role.lower()}-delete@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, participant])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=participant.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=participant.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
     metadata = PortalStorageSpaceMetadata(
         account_id=account.id,
         bucket_name=f"shared-delete-{role.lower()}",
@@ -1704,9 +1704,9 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -1843,7 +1843,7 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     user = User(email="portal-browser-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    link = UserS3Account(user_id=user.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value)
+    link = UserS3Account(user_id=user.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value)
 
     app_settings = AppSettings()
     app_settings.general.portal_enabled = True
@@ -1922,7 +1922,7 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=manager.id, account_id=account.id, iam_user_id="manager-iam-id", iam_username="manager-iam"),
         ]
@@ -1998,10 +1998,10 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=inactive.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=direct.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=inactive.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=direct.id, account_id=account.id, iam_user_id="direct-iam-id", iam_username="direct-iam"),
@@ -2051,10 +2051,10 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=delegated_owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=member_without_grant.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=delegated_owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member_without_grant.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=owner.id, account_id=account.id, iam_user_id="owner-iam-id", iam_username="owner-iam"),
             AccountIAMUser(user_id=viewer.id, account_id=account.id, iam_user_id="viewer-iam-id", iam_username="viewer-iam"),
             AccountIAMUser(user_id=editor.id, account_id=account.id, iam_user_id="editor-iam-id", iam_username="editor-iam"),
@@ -2491,8 +2491,8 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=editor.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=editor.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
         ]
     )
     db_session.commit()
@@ -2552,7 +2552,7 @@ def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_b
     outsider = User(email=f"outsider-invalid-{message}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer, outsider])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -2585,7 +2585,7 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
     viewer = User(email="viewer-initial-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -2755,7 +2755,7 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
     viewer = User(email="viewer-import-restricted@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
     db_session.commit()
-    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value))
+    db_session.add(UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value))
     db_session.commit()
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
@@ -3010,7 +3010,7 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
             UserS3Account(
                 user_id=manager.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
+                role=AccountRole.PORTAL_MANAGER.value,
             ),
             AccountIAMUser(
                 user_id=manager.id,
@@ -3546,7 +3546,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="iam-target", iam_username=f"iam-{target.id}"),
         ]
     )
@@ -4184,8 +4184,8 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=viewer.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=viewer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -4242,8 +4242,8 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
         ]
     )
     metadata = PortalStorageSpaceMetadata(
@@ -4298,9 +4298,9 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=owner.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
-            UserS3Account(user_id=direct.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UiGroupS3Account(group_id=group.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=owner.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=direct.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UiGroupS3Account(group_id=group.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
             UserUiGroup(user_id=grouped.id, group_id=group.id),
         ]
     )
@@ -4362,37 +4362,37 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
             UserS3Account(
                 user_id=actor.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
+                role=AccountRole.PORTAL_MANAGER.value,
                 created_at=now - timedelta(days=40),
             ),
             UserS3Account(
                 user_id=direct.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
+                role=AccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UserS3Account(
                 user_id=promoted.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
+                role=AccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UserS3Account(
                 user_id=inactive.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
+                role=AccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=35),
             ),
             UiGroupS3Account(
                 group_id=group.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_USER.value,
+                role=AccountRole.PORTAL_USER.value,
                 created_at=now - timedelta(days=20),
             ),
             UiGroupS3Account(
                 group_id=manager_group.id,
                 account_id=account.id,
-                account_role=AccountRole.PORTAL_MANAGER.value,
+                role=AccountRole.PORTAL_MANAGER.value,
                 created_at=now - timedelta(days=40),
             ),
             UserUiGroup(user_id=grouped.id, group_id=group.id, created_at=now - timedelta(days=10)),
@@ -4507,8 +4507,8 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=member.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
-            UserS3Account(user_id=manager.id, account_id=account.id, account_role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
         ]
     )
     private_metadata = PortalStorageSpaceMetadata(
@@ -4659,7 +4659,7 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )
@@ -4714,7 +4714,7 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
     db_session.commit()
     db_session.add_all(
         [
-            UserS3Account(user_id=target.id, account_id=account.id, account_role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=target.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
             AccountIAMUser(user_id=target.id, account_id=account.id, iam_user_id="target-iam", iam_username="target-iam"),
         ]
     )

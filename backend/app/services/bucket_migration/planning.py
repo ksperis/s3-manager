@@ -372,6 +372,7 @@ class BucketMigrationPlanningMixin:
 
     def run_precheck(self, migration_id: int) -> BucketMigration:
         migration = self.get_migration(migration_id)
+        self._assert_migration_creator_access(migration)
         self._assert_cross_account_admin_contexts(migration.source_context_id, migration.target_context_id)
         if migration.status in {"running", "queued", "pause_requested", "cancel_requested"}:
             raise ValueError("Precheck cannot run while migration is active")
@@ -405,6 +406,7 @@ class BucketMigrationPlanningMixin:
 
     def start_migration(self, migration_id: int) -> BucketMigration:
         migration = self.get_migration(migration_id)
+        self._assert_migration_creator_access(migration)
         self._assert_cross_account_admin_contexts(migration.source_context_id, migration.target_context_id)
         if migration.status not in {"draft", "paused"}:
             raise ValueError("Migration cannot be started from current status")

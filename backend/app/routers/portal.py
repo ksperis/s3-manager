@@ -96,7 +96,6 @@ from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_R
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
-from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.services.billing_service import BillingService
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.bucket_usage_stats_service import BucketUsageStatsAggregateTarget, BucketUsageStatsService
@@ -482,30 +481,20 @@ def list_portal_accounts(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
+    access_service = EffectiveAccessService(db)
     links = [
         link
-        for link in EffectiveAccessService(db).resolve_user(user).account_links
-        if link.account_role in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}
+        for link in access_service.resolve_user(user).account_links
+        if link.portal_role is not None
     ]
-    account_ids = {link.account_id for link in links}
-    account_role_by_id = {link.account_id: link.account_role for link in links}
-    accounts = (
-        db.query(S3Account).filter(S3Account.id.in_(account_ids)).order_by(*s3_account_name_order_by(S3Account)).all()
-        if account_ids
-        else []
+    account_role_by_id = {link.account_id: link.portal_role for link in links}
+    accounts = sorted(
+        access_service.list_portal_accounts(user),
+        key=lambda account: (account.name or "").lower(),
     )
     results: list[S3AccountSchema] = []
     for acc in accounts:
         endpoint = acc.storage_endpoint
-        # Only show accounts eligible for portal workflows.
-        if not acc.rgw_account_id:
-            continue
-        if endpoint is None:
-            continue
-        if str(endpoint.provider) != "ceph":
-            continue
-        if not resolve_feature_flags(endpoint).iam_enabled:
-            continue
         root_link = None
         if is_admin_ui_role(user.role):
             root_link = (

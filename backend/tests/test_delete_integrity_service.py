@@ -146,7 +146,13 @@ def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
     db_session.add(s3_user)
     db_session.flush()
 
-    db_session.add(UserS3Account(user_id=user.id, account_id=account.id))
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            role="portal_user",
+        )
+    )
     db_session.add(AuditLog(user_email=user.email, user_role=user.role, scope="admin", action="x", account_id=account.id))
     rate_card = BillingRateCard(
         name="rc-1",
