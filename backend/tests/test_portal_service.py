@@ -64,8 +64,10 @@ from app.services.portal_service import (
     PortalService,
 )
 from app.services.portal.version_cleanup import PortalStorageSpaceVersionCleanupTarget
+from app.services.portal.trash_restore import PortalDeletedPrefixRestoreTarget
 from app.services.portal_role_sync import sync_portal_role_downgrades
 from app.services.bucket_usage_stats_service import BucketUsageStatsService
+from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
 
@@ -3949,6 +3951,156 @@ def test_portal_restore_deleted_object_creates_new_current_version(monkeypatch, 
             },
         }
     ]
+
+
+def test_portal_restore_deleted_prefix_paginates_and_reports_partial_failures(
+    monkeypatch,
+    db_session,
+):
+    service = PortalService(db_session)
+
+    class FakeClient:
+        def __init__(self):
+            self.list_calls = []
+
+        def list_object_versions(self, **kwargs):
+            self.list_calls.append(kwargs)
+            if len(self.list_calls) == 1:
+                return {
+                    "Versions": [
+                        {"Key": "reports/good.txt", "VersionId": "v2"},
+                        {"Key": "reports/good.txt", "VersionId": "v1"},
+                        {"Key": "reports/not-deleted.txt", "VersionId": "v3"},
+                    ],
+                    "DeleteMarkers": [
+                        {
+                            "Key": "reports/good.txt",
+                            "VersionId": "d2",
+                            "IsLatest": True,
+                        },
+                        {
+                            "Key": "reports/old-marker.txt",
+                            "VersionId": "d1",
+                            "IsLatest": False,
+                        },
+                    ],
+                    "IsTruncated": True,
+                    "NextKeyMarker": "reports/good.txt",
+                    "NextVersionIdMarker": "v1",
+                }
+            return {
+                "Versions": [
+                    {"Key": "reports/broken.txt", "VersionId": "v4"},
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "reports/broken.txt",
+                        "VersionId": "d4",
+                        "IsLatest": True,
+                    }
+                ],
+                "IsTruncated": False,
+            }
+
+    client = FakeClient()
+    restored: list[tuple[str, str]] = []
+
+    def fake_restore(
+        _client,
+        _bucket_name,
+        key,
+        version_id,
+        *,
+        space_id,
+    ):
+        assert space_id == "research-data"
+        if key == "reports/broken.txt":
+            raise RuntimeError("copy failed")
+        restored.append((key, version_id))
+
+    monkeypatch.setattr(
+        service,
+        "_restore_storage_space_object_version_with_client",
+        fake_restore,
+    )
+    progress = []
+    result = service.run_deleted_prefix_restore(
+        PortalDeletedPrefixRestoreTarget(
+            client=client,
+            bucket_name="trash-bucket",
+            storage_space_id="research-data",
+            storage_space_name="Research Data",
+            prefix="reports/",
+        ),
+        progress_callback=progress.append,
+    )
+
+    assert client.list_calls == [
+        {
+            "Bucket": "trash-bucket",
+            "Prefix": "reports/",
+            "MaxKeys": 1000,
+        },
+        {
+            "Bucket": "trash-bucket",
+            "Prefix": "reports/",
+            "MaxKeys": 1000,
+            "KeyMarker": "reports/good.txt",
+            "VersionIdMarker": "v1",
+        },
+    ]
+    assert restored == [("reports/good.txt", "v2")]
+    assert result.status == "partial"
+    assert result.restore_candidates == 2
+    assert result.restored_objects == 1
+    assert result.failed_objects == 1
+    assert result.failures[0].key == "reports/broken.txt"
+    assert progress[-1].stage == "completed"
+    assert progress[-1].total_candidates_final is True
+
+
+def test_portal_restore_deleted_prefix_can_cancel_during_listing(db_session):
+    service = PortalService(db_session)
+
+    class FakeClient:
+        def list_object_versions(self, **_kwargs):
+            return {
+                "Versions": [
+                    {"Key": "reports/deleted.txt", "VersionId": "v1"},
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "reports/deleted.txt",
+                        "VersionId": "d1",
+                        "IsLatest": True,
+                    }
+                ],
+                "IsTruncated": True,
+                "NextKeyMarker": "reports/deleted.txt",
+                "NextVersionIdMarker": "v1",
+            }
+
+    checks = 0
+
+    def cancel_after_first_page():
+        nonlocal checks
+        checks += 1
+        if checks > 1:
+            raise BucketPurgeCancelled()
+
+    with pytest.raises(BucketPurgeCancelled):
+        service.run_deleted_prefix_restore(
+            PortalDeletedPrefixRestoreTarget(
+                client=FakeClient(),
+                bucket_name="trash-bucket",
+                storage_space_id="research-data",
+                storage_space_name="Research Data",
+                prefix="reports/",
+            ),
+            cancel_check=cancel_after_first_page,
+        )
+
+    assert checks == 2
 
 
 def test_portal_viewer_cannot_restore_object_version(monkeypatch, db_session):

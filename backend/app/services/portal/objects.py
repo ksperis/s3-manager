@@ -341,6 +341,27 @@ class PortalObjectsMixin:
             bucket_name,
             target_key,
         )
+        self._restore_storage_space_object_version_with_client(
+            client,
+            bucket_name,
+            target_key,
+            source_version_id,
+            space_id=space_id,
+        )
+        return PortalStorageObjectRestoreResponse(
+            key=target_key,
+            restored_from_version_id=source_version_id,
+        )
+
+    def _restore_storage_space_object_version_with_client(
+        self,
+        client,
+        bucket_name: str,
+        target_key: str,
+        source_version_id: str,
+        *,
+        space_id: str,
+    ) -> None:
         try:
             client.head_object(
                 Bucket=bucket_name,
@@ -360,10 +381,6 @@ class PortalObjectsMixin:
             raise RuntimeError(
                 f"Unable to restore object '{target_key}' in storage space '{space_id}': {exc}"
             ) from exc
-        return PortalStorageObjectRestoreResponse(
-            key=target_key,
-            restored_from_version_id=source_version_id,
-        )
 
     def _head_storage_space_object(self, client, bucket_name: str, space_id: str, target_key: str) -> dict:
         try:

@@ -102,6 +102,7 @@ export type BrowserObjectVersion = {
 
 export type ListObjectVersionsResponse = {
   prefix?: string | null;
+  common_prefixes?: string[];
   versions: BrowserObjectVersion[];
   delete_markers: BrowserObjectVersion[];
   is_truncated: boolean;
@@ -486,11 +487,15 @@ export async function createBrowserBucket(
 
 export async function getBucketVersioning(
   accountId: S3AccountSelector,
-  bucketName: string
+  bucketName: string,
+  options?: BrowserRequestOptions
 ): Promise<BucketVersioningStatus> {
   const { data } = await client.get<BucketVersioningStatus>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/versioning`,
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildBrowserWorkspaceHeaders(options),
+    }
   );
   return data;
 }
@@ -611,15 +616,19 @@ export async function listObjectVersions(
   bucketName: string,
   options?: {
     prefix?: string;
+    delimiter?: string;
     key?: string | null;
     keyMarker?: string | null;
     versionIdMarker?: string | null;
     maxKeys?: number;
+    signal?: AbortSignal;
+    requestOptions?: BrowserRequestOptions;
   }
 ): Promise<ListObjectVersionsResponse> {
   const params = withS3AccountParam(
     {
       prefix: options?.prefix ?? "",
+      delimiter: options?.delimiter ?? undefined,
       key: options?.key ?? undefined,
       key_marker: options?.keyMarker ?? undefined,
       version_id_marker: options?.versionIdMarker ?? undefined,
@@ -629,7 +638,11 @@ export async function listObjectVersions(
   );
   const { data } = await client.get<ListObjectVersionsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/versions`,
-    { params }
+    {
+      params,
+      headers: buildBrowserWorkspaceHeaders(options?.requestOptions),
+      signal: options?.signal,
+    }
   );
   return data;
 }

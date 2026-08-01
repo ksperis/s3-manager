@@ -344,6 +344,51 @@ class PortalStorageObjectRestoreResponse(BaseModel):
     message: str = "Restored"
 
 
+PortalDeletedPrefixRestoreStatus = Literal["completed", "partial", "canceled"]
+PortalDeletedPrefixRestoreStage = Literal["prepare", "list", "restore", "completed"]
+
+
+class PortalDeletedPrefixRestoreRequest(BaseModel):
+    prefix: str = Field(min_length=1, max_length=1024)
+
+
+class PortalDeletedPrefixRestoreFailure(BaseModel):
+    key: str
+    detail: str
+
+
+class PortalDeletedPrefixRestoreProgress(BaseModel):
+    request_id: Optional[str] = None
+    stage: PortalDeletedPrefixRestoreStage = "prepare"
+    storage_space_id: str
+    storage_space_name: str
+    prefix: str
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+    restore_candidates: int = 0
+    restored_objects: int = 0
+    failed_objects: int = 0
+    total_candidates_final: bool = False
+    current_key: Optional[str] = None
+    message: Optional[str] = None
+
+
+class PortalDeletedPrefixRestoreResult(BaseModel):
+    status: PortalDeletedPrefixRestoreStatus
+    storage_space_id: str
+    storage_space_name: str
+    prefix: str
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+    restore_candidates: int = 0
+    restored_objects: int = 0
+    failed_objects: int = 0
+    failures: list[PortalDeletedPrefixRestoreFailure] = Field(default_factory=list)
+    failures_truncated: bool = False
+    started_at: datetime
+    finished_at: datetime
+
+
 class PortalStorageSpaceShare(BaseModel):
     id: str
     storage_space_id: str

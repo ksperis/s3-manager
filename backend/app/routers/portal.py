@@ -23,6 +23,9 @@ from app.models.portal import (
     PortalActivityItem,
     PortalAlert,
     PortalCollaboratorsResponse,
+    PortalDeletedPrefixRestoreProgress,
+    PortalDeletedPrefixRestoreRequest,
+    PortalDeletedPrefixRestoreResult,
     PortalEligibility,
     PortalPublicLink,
     PortalPublicLinkCreate,
@@ -298,6 +301,168 @@ def _stream_portal_storage_space_version_cleanup(
                 cancel_event,
                 logger=logger,
                 operation="portal_storage_space_history_cleanup",
+                request_id=request_id,
+            )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _stream_portal_deleted_prefix_restore(
+    request: Request,
+    *,
+    actor: User,
+    access: AccountAccess,
+    service: PortalService,
+    audit_service: AuditService,
+    target,
+) -> StreamingResponse:
+    request_id = uuid.uuid4().hex
+
+    async def event_generator():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        cancel_event = threading.Event()
+
+        def push_message(payload: str | None) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, payload)
+
+        def progress_callback(progress: PortalDeletedPrefixRestoreProgress) -> None:
+            payload = progress.model_copy(
+                update={"request_id": request_id}
+            ).model_dump(mode="json")
+            push_message(format_sse_event("progress", payload))
+
+        def cancel_check() -> None:
+            if cancel_event.is_set():
+                raise BucketPurgeCancelled()
+
+        audit_metadata = {
+            "request_id": request_id,
+            "storage_space_id": target.storage_space_id,
+            "storage_space_name": target.storage_space_name,
+            "bucket_name": target.bucket_name,
+            "prefix": target.prefix,
+        }
+
+        def worker() -> None:
+            try:
+                audit_service.record_action(
+                    user=actor,
+                    scope="portal",
+                    action="start_restore_deleted_prefix",
+                    entity_type="storage_space",
+                    entity_id=target.storage_space_id,
+                    account=access.account,
+                    metadata=audit_metadata,
+                )
+                result = service.run_deleted_prefix_restore(
+                    target,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check,
+                )
+                audit_service.record_action(
+                    user=actor,
+                    scope="portal",
+                    action="finish_restore_deleted_prefix",
+                    entity_type="storage_space",
+                    entity_id=target.storage_space_id,
+                    account=access.account,
+                    metadata={
+                        **audit_metadata,
+                        "restore_candidates": result.restore_candidates,
+                        "restored_objects": result.restored_objects,
+                        "failed_objects": result.failed_objects,
+                    },
+                    status="success" if result.status == "completed" else "partial",
+                )
+                push_message(format_sse_event("result", result.model_dump(mode="json")))
+                push_message(
+                    format_sse_event(
+                        "done",
+                        {"request_id": request_id, "status": result.status},
+                    )
+                )
+            except BucketPurgeCancelled:
+                audit_service.record_action(
+                    user=actor,
+                    scope="portal",
+                    action="cancel_restore_deleted_prefix",
+                    entity_type="storage_space",
+                    entity_id=target.storage_space_id,
+                    account=access.account,
+                    metadata=audit_metadata,
+                    status="canceled",
+                    message="Deleted prefix restoration canceled",
+                )
+                push_message(
+                    format_sse_event(
+                        "done",
+                        {"request_id": request_id, "status": "canceled"},
+                    )
+                )
+            except Exception as exc:  # pragma: no cover - defensive streaming boundary.
+                logger.exception("Portal deleted prefix restoration failed: %s", exc)
+                safe_message = sanitized_error_log_detail(exc)
+                audit_service.record_action(
+                    user=actor,
+                    scope="portal",
+                    action="fail_restore_deleted_prefix",
+                    entity_type="storage_space",
+                    entity_id=target.storage_space_id,
+                    account=access.account,
+                    metadata=audit_metadata,
+                    status="failed",
+                    message=safe_message,
+                )
+                push_message(
+                    format_sse_event(
+                        "error",
+                        {"request_id": request_id, "detail": safe_message},
+                    )
+                )
+                push_message(
+                    format_sse_event(
+                        "done",
+                        {"request_id": request_id, "status": "failed"},
+                    )
+                )
+            finally:
+                push_message(None)
+
+        worker_task = asyncio.create_task(asyncio.to_thread(worker))
+        try:
+            while True:
+                if await request.is_disconnected():
+                    cancel_event.set()
+                    break
+                try:
+                    message = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=SSE_KEEPALIVE_INTERVAL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        cancel_event.set()
+                        break
+                    yield ": keepalive\n\n"
+                    continue
+                if message is None:
+                    break
+                yield message
+        finally:
+            await wait_for_cancellable_worker(
+                worker_task,
+                cancel_event,
+                logger=logger,
+                operation="portal_deleted_prefix_restore",
                 request_id=request_id,
             )
 
@@ -1260,6 +1425,45 @@ def portal_restore_storage_space_object(
             message=sanitized_error_log_detail(exc),
         )
         _raise_portal_storage_runtime(exc)
+
+
+@router.post("/storage-spaces/{space_id}/trash/restore-prefix/stream")
+def portal_restore_deleted_prefix_stream(
+    request: Request,
+    space_id: str,
+    payload: PortalDeletedPrefixRestoreRequest,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> StreamingResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Portal endpoints require a UI user",
+        )
+    try:
+        target = service.prepare_deleted_prefix_restore(
+            actor,
+            access,
+            space_id,
+            prefix=payload.prefix,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=sanitize_error_detail(str(exc)),
+        ) from exc
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    return _stream_portal_deleted_prefix_restore(
+        request,
+        actor=actor,
+        access=access,
+        service=service,
+        audit_service=audit_service,
+        target=target,
+    )
 
 
 @router.delete("/storage-spaces/{space_id}/objects", response_model=PortalStorageObjectDeleteResponse)

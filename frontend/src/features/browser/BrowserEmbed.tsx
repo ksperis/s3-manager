@@ -5,7 +5,11 @@
 import type { S3AccountSelector } from "../../api/accountParams";
 import type { BrowserWorkspaceSurface } from "../../api/browser";
 import type { BrowserActionId } from "./browserActions";
-import BrowserPage, { type BrowserObjectDetailsRouteTarget, type BrowserTransferReporter } from "./BrowserPage";
+import BrowserPage, {
+  type BrowserDeletedObjectsOptions,
+  type BrowserObjectDetailsRouteTarget,
+  type BrowserTransferReporter,
+} from "./BrowserPage";
 
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
@@ -22,6 +26,8 @@ type BrowserEmbedProps = {
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
   onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
+  deletedObjectsOptions?: BrowserDeletedObjectsOptions;
+  refreshToken?: number;
   transferReporter?: BrowserTransferReporter;
 };
 
@@ -40,6 +46,8 @@ export default function BrowserEmbed({
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
+  deletedObjectsOptions,
+  refreshToken,
   transferReporter,
 }: BrowserEmbedProps) {
   return (
@@ -61,6 +69,8 @@ export default function BrowserEmbed({
       onSelectedBucketNameChange={onSelectedBucketNameChange}
       onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
       onCreatePublicLinkForObject={onCreatePublicLinkForObject}
+      deletedObjectsOptions={deletedObjectsOptions}
+      refreshToken={refreshToken}
       transferReporter={transferReporter}
     />
   );

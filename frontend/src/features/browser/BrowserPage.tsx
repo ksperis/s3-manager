@@ -220,6 +220,8 @@ import {
   COMPLETED_OPERATIONS_LIMIT,
   DEFAULT_DIRECT_DOWNLOAD_PARALLELISM,
   DEFAULT_DIRECT_UPLOAD_PARALLELISM,
+  DELETED_RESULTS_TARGET,
+  DELETED_VERSIONS_SCAN_LIMIT,
   DEFAULT_OTHER_OPERATIONS_PARALLELISM,
   DEFAULT_PROXY_DOWNLOAD_PARALLELISM,
   DEFAULT_PROXY_UPLOAD_PARALLELISM,
@@ -349,6 +351,8 @@ type BrowserPageProps = {
   onSelectedBucketNameChange?: (bucketName: string) => void;
   onOpenObjectDetailsRoute?: (target: BrowserObjectDetailsRouteTarget) => void;
   onCreatePublicLinkForObject?: (target: BrowserObjectDetailsRouteTarget) => void;
+  deletedObjectsOptions?: BrowserDeletedObjectsOptions;
+  refreshToken?: number;
   transferReporter?: BrowserTransferReporter;
 };
 
@@ -356,6 +360,20 @@ export type BrowserObjectDetailsRouteTarget = {
   bucketName: string;
   key: string;
   name: string;
+};
+
+export type BrowserDeletedObjectTarget = BrowserObjectDetailsRouteTarget & {
+  deletedAt?: string | null;
+  deleteMarkerVersionId?: string | null;
+};
+
+export type BrowserDeletedObjectsOptions = {
+  visible?: boolean;
+  showToggle?: boolean;
+  canRestore?: boolean;
+  onVisibilityChange?: (visible: boolean) => void;
+  onRestoreObject?: (target: BrowserDeletedObjectTarget) => void;
+  onRestorePrefix?: (target: BrowserObjectDetailsRouteTarget) => void;
 };
 
 export type BrowserTransferReporter = {
@@ -912,6 +930,8 @@ export default function BrowserPage({
   onSelectedBucketNameChange,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
+  deletedObjectsOptions,
+  refreshToken,
   transferReporter,
 }: BrowserPageProps = {}) {
   const browserContext = useBrowserContext();
@@ -1095,7 +1115,8 @@ export default function BrowserPage({
   const [objectVersionsTargetKey, setObjectVersionsTargetKey] = useState<
     string | null
   >(null);
-  const [bucketVersioningEnabled, setBucketVersioningEnabled] = useState(false);
+  const [bucketVersioningAvailable, setBucketVersioningAvailable] =
+    useState(false);
   const [showMultipartUploadsModal, setShowMultipartUploadsModal] =
     useState(false);
   const [multipartUploads, setMultipartUploads] = useState<
@@ -1195,7 +1216,19 @@ export default function BrowserPage({
     null,
   );
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
-  const [showDeletedObjects, setShowDeletedObjects] = useState(false);
+  const [internalShowDeletedObjects, setInternalShowDeletedObjects] =
+    useState(false);
+  const showDeletedObjects =
+    deletedObjectsOptions?.visible ?? internalShowDeletedObjects;
+  const setDeletedObjectsVisibility = useCallback(
+    (visible: boolean) => {
+      if (deletedObjectsOptions?.visible === undefined) {
+        setInternalShowDeletedObjects(visible);
+      }
+      deletedObjectsOptions?.onVisibilityChange?.(visible);
+    },
+    [deletedObjectsOptions],
+  );
   const [showFolderItems, setShowFolderItems] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">(
     "all",
@@ -2067,7 +2100,7 @@ export default function BrowserPage({
   }, [showSseCustomerModal, sseFeatureEnabled]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
-  const isVersioningEnabled = bucketVersioningEnabled && !isPortalBasicProfile;
+  const isVersioningEnabled = bucketVersioningAvailable;
   useEffect(() => {
     bucketNameRef.current = bucketName;
     prefixRef.current = prefix;
@@ -3142,6 +3175,7 @@ export default function BrowserPage({
         caseSensitive?: boolean;
         keyMarker?: string | null;
         versionIdMarker?: string | null;
+        signal?: AbortSignal;
       },
     ) => {
       if (
@@ -3177,6 +3211,10 @@ export default function BrowserPage({
       const normalizedQuery = caseSensitive
         ? queryValue
         : queryValue.toLowerCase();
+      const requestedVersionPrefix =
+        isPortalBasicProfile && queryValue
+          ? `${targetPrefix}${queryValue.replace(/^\/+/, "")}`
+          : targetPrefix;
 
       const matchesQuery = (key: string) => {
         if (!normalizedQuery) return true;
@@ -3194,30 +3232,56 @@ export default function BrowserPage({
         return comparable.includes(normalizedQuery);
       };
 
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        prefix: targetPrefix,
-        keyMarker: opts?.keyMarker ?? undefined,
-        versionIdMarker: opts?.versionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-      });
-      data.delete_markers.forEach((marker) => {
-        if (!marker.is_latest) return;
-        if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
-        const relative = marker.key.slice(targetPrefix.length);
-        if (!relative) return;
-        const isFolderMarker = marker.key.endsWith("/");
-        if (relative.includes("/") && !isRecursiveSearch) {
+      let nextKeyMarker = opts?.keyMarker ?? null;
+      let nextVersionIdMarker = opts?.versionIdMarker ?? null;
+      let isTruncated = true;
+      let scannedEntries = 0;
+      let firstPage = true;
+      while (
+        isTruncated &&
+        scannedEntries < DELETED_VERSIONS_SCAN_LIMIT &&
+        (firstPage ||
+          latestMarkersByKey.size + markerPrefixes.size <
+            DELETED_RESULTS_TARGET)
+      ) {
+        const data = await listObjectVersions(accountIdForApi, bucketName, {
+          prefix: requestedVersionPrefix,
+          delimiter: isRecursiveSearch ? undefined : "/",
+          keyMarker: nextKeyMarker ?? undefined,
+          versionIdMarker: nextVersionIdMarker ?? undefined,
+          maxKeys: VERSIONS_PAGE_SIZE,
+          signal: opts?.signal,
+          requestOptions: browserRequestOptions,
+        });
+        firstPage = false;
+        scannedEntries +=
+          data.versions.length +
+          data.delete_markers.length +
+          (data.common_prefixes?.length ?? 0);
+        (data.common_prefixes ?? []).forEach((prefixKey) => {
           if (typeFilter === "file") return;
-          const child = relative.split("/")[0];
-          if (!child) return;
-          const childPrefix = `${targetPrefix}${child}/`;
-          if (activePrefixes.has(childPrefix)) return;
-          if (!matchesQuery(childPrefix)) return;
-          markerPrefixes.add(childPrefix);
-          return;
-        }
-        if (typeFilter !== "file") {
-          if (isRecursiveSearch) {
+          if (!prefixKey.startsWith(targetPrefix)) return;
+          if (activePrefixes.has(prefixKey)) return;
+          if (!matchesQuery(prefixKey)) return;
+          markerPrefixes.add(prefixKey);
+        });
+        data.delete_markers.forEach((marker) => {
+          if (!marker.is_latest) return;
+          if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
+          const relative = marker.key.slice(targetPrefix.length);
+          if (!relative) return;
+          const isFolderMarker = marker.key.endsWith("/");
+          if (relative.includes("/") && !isRecursiveSearch) {
+            if (typeFilter === "file") return;
+            const child = relative.split("/")[0];
+            if (!child) return;
+            const childPrefix = `${targetPrefix}${child}/`;
+            if (activePrefixes.has(childPrefix)) return;
+            if (!matchesQuery(childPrefix)) return;
+            markerPrefixes.add(childPrefix);
+            return;
+          }
+          if (typeFilter !== "file" && isRecursiveSearch) {
             const segments = relative.split("/").filter(Boolean);
             if (segments.length > 1) {
               let running = targetPrefix;
@@ -3228,19 +3292,25 @@ export default function BrowserPage({
                 markerPrefixes.add(running);
               }
             }
-            if (isFolderMarker) {
-              if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
-                markerPrefixes.add(marker.key);
-              }
+            if (
+              isFolderMarker &&
+              !activePrefixes.has(marker.key) &&
+              matchesQuery(marker.key)
+            ) {
+              markerPrefixes.add(marker.key);
             }
           }
-        }
-        if (typeFilter === "folder") return;
-        if (isFolderMarker) return;
-        if (activeKeys.has(marker.key)) return;
-        if (!matchesQuery(marker.key)) return;
-        latestMarkersByKey.set(marker.key, marker);
-      });
+          if (typeFilter === "folder" || isFolderMarker) return;
+          if (activeKeys.has(marker.key)) return;
+          if (!matchesQuery(marker.key)) return;
+          latestMarkersByKey.set(marker.key, marker);
+        });
+        nextKeyMarker = data.next_key_marker ?? null;
+        nextVersionIdMarker = data.next_version_id_marker ?? null;
+        isTruncated = Boolean(
+          data.is_truncated && (nextKeyMarker || nextVersionIdMarker),
+        );
+      }
 
       const deletedObjectRows = Array.from(latestMarkersByKey.values())
         .sort((a, b) => a.key.localeCompare(b.key))
@@ -3256,22 +3326,20 @@ export default function BrowserPage({
       const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) =>
         a.localeCompare(b),
       );
-      const nextKeyMarker = data.next_key_marker ?? null;
-      const nextVersionIdMarker = data.next_version_id_marker ?? null;
       return {
         deletedObjects: deletedObjectRows,
         deletedPrefixes: deletedFolderRows,
         nextKeyMarker,
         nextVersionIdMarker,
-        isTruncated: Boolean(
-          data.is_truncated && (nextKeyMarker || nextVersionIdMarker),
-        ),
+        isTruncated,
       };
     },
     [
       accountIdForApi,
+      browserRequestOptions,
       bucketName,
       hasS3AccountContext,
+      isPortalBasicProfile,
       isVersioningEnabled,
       showDeletedObjects,
       storageFilter,
@@ -3402,6 +3470,7 @@ export default function BrowserPage({
                 versionIdMarker: isAppend
                   ? currentDeletedVersionIdMarker
                   : null,
+                signal: controller.signal,
               },
             );
             if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
@@ -3884,24 +3953,21 @@ export default function BrowserPage({
   ]);
 
   useEffect(() => {
-    if (
-      accountSwitchInFlight ||
-      !bucketName ||
-      !hasS3AccountContext ||
-      isPortalBasicProfile
-    ) {
-      setBucketVersioningEnabled(false);
+    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
+      setBucketVersioningAvailable(false);
       return;
     }
     let active = true;
-    getBucketVersioning(accountIdForApi, bucketName)
+    getBucketVersioning(accountIdForApi, bucketName, browserRequestOptions)
       .then((data) => {
         if (!active) return;
-        setBucketVersioningEnabled(Boolean(data.enabled));
+        setBucketVersioningAvailable(
+          data.status === "Enabled" || data.status === "Suspended",
+        );
       })
       .catch(() => {
         if (!active) return;
-        setBucketVersioningEnabled(false);
+        setBucketVersioningAvailable(false);
       });
     return () => {
       active = false;
@@ -3910,13 +3976,13 @@ export default function BrowserPage({
     accountIdForApi,
     accountSwitchInFlight,
     bucketName,
+    browserRequestOptions,
     hasS3AccountContext,
-    isPortalBasicProfile,
   ]);
 
   useEffect(() => {
     if (isVersioningEnabled) return;
-    setShowDeletedObjects(false);
+    setInternalShowDeletedObjects(false);
     setDeletedObjects([]);
     setDeletedPrefixes([]);
     setDeletedObjectsNextKeyMarker(null);
@@ -4304,6 +4370,7 @@ export default function BrowserPage({
         name: name || prefixKey,
         type: "folder",
         isDeleted: isDeletedFolder,
+        isHistorical: isDeletedFolder,
         size: "-",
         sizeBytes: null,
         modified: "-",
@@ -4763,8 +4830,13 @@ export default function BrowserPage({
   const canGoUp = prefixParts.length > 0;
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectableListItems = useMemo(
+    () => listItems.filter((item) => !item.isDeleted),
+    [listItems],
+  );
   const allSelected =
-    listItems.length > 0 && listItems.every((item) => selectedSet.has(item.id));
+    selectableListItems.length > 0 &&
+    selectableListItems.every((item) => selectedSet.has(item.id));
   const selectedItems = useMemo(
     () => items.filter((item) => selectedSet.has(item.id)),
     [items, selectedSet],
@@ -5195,6 +5267,24 @@ export default function BrowserPage({
       return;
     }
     if (item.isDeleted) {
+      if (deletedObjectsOptions) {
+        if (
+          deletedObjectsOptions.canRestore &&
+          deletedObjectsOptions.onRestoreObject
+        ) {
+          deletedObjectsOptions.onRestoreObject({
+            bucketName,
+            key: item.key,
+            name: item.name || item.key,
+            deletedAt:
+              item.modifiedAt != null
+                ? new Date(item.modifiedAt).toISOString()
+                : null,
+            deleteMarkerVersionId: item.deleteMarkerVersionId,
+          });
+        }
+        return;
+      }
       if (isVersioningEnabled) {
         openObjectDetails(item, "versions");
       }
@@ -5990,6 +6080,10 @@ export default function BrowserPage({
     event: ReactMouseEvent<HTMLElement>,
     item: BrowserItem,
   ) => {
+    if (item.isDeleted) {
+      openItemPrimaryAction(item);
+      return;
+    }
     handleItemSelectionClick(event, item.id);
   };
 
@@ -6001,7 +6095,7 @@ export default function BrowserPage({
       syncInspectorTabWithSelection(0);
       return;
     }
-    const nextIds = listItems.map((item) => item.id);
+    const nextIds = selectableListItems.map((item) => item.id);
     setSelectedIds(nextIds);
     setSelectionAnchorId(nextIds[0] ?? null);
     setActiveRowId(nextIds[0] ?? null);
@@ -7350,6 +7444,25 @@ export default function BrowserPage({
     },
     [loadObjects, loadTreeChildren],
   );
+  const previousRefreshTokenRef = useRef(refreshToken);
+  useEffect(() => {
+    if (
+      refreshToken === undefined ||
+      refreshToken === previousRefreshTokenRef.current
+    ) {
+      return;
+    }
+    previousRefreshTokenRef.current = refreshToken;
+    if (bucketName && hasS3AccountContext) {
+      void refreshObjectsNow(prefix);
+    }
+  }, [
+    bucketName,
+    hasS3AccountContext,
+    prefix,
+    refreshObjectsNow,
+    refreshToken,
+  ]);
 
   const recordUploadedKey = (bucket: string, key: string) => {
     if (!bucket || !key) return;
@@ -12289,7 +12402,11 @@ export default function BrowserPage({
   ) => {
     if (columnId === "type") {
       if (item.type === "folder") {
-        return item.isDeleted ? "Deleted folder" : "Folder";
+        return item.isHistorical
+          ? "Historical folder"
+          : item.isDeleted
+            ? "Deleted folder"
+            : "Folder";
       }
       return item.isDeleted ? "Deleted object" : "Object";
     }
@@ -12960,7 +13077,57 @@ export default function BrowserPage({
                   )}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {deletedObjectsOptions?.showToggle &&
+                  isVersioningEnabled &&
+                  bucketName && (
+                    <button
+                      type="button"
+                      className={chromeToolbarButtonClasses}
+                      aria-pressed={showDeletedObjects}
+                      onClick={() =>
+                        setDeletedObjectsVisibility(!showDeletedObjects)
+                      }
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">
+                        {showDeletedObjects
+                          ? "Hide deleted files"
+                          : "Show deleted files"}
+                      </span>
+                      <span className="sm:hidden">
+                        {showDeletedObjects ? "Hide deleted" : "Show deleted"}
+                      </span>
+                    </button>
+                  )}
+                {deletedObjectsOptions?.onRestorePrefix &&
+                  deletedObjectsOptions.canRestore &&
+                  showDeletedObjects &&
+                  isVersioningEnabled &&
+                  bucketName &&
+                  normalizedPrefix && (
+                    <button
+                      type="button"
+                      className={chromeToolbarButtonClasses}
+                      onClick={() =>
+                        deletedObjectsOptions.onRestorePrefix?.({
+                          bucketName,
+                          key: normalizedPrefix,
+                          name:
+                            normalizedPrefix
+                              .split("/")
+                              .filter(Boolean)
+                              .at(-1) ?? normalizedPrefix,
+                        })
+                      }
+                    >
+                      <HistoryIcon className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline">
+                        Restore deleted files in this folder
+                      </span>
+                      <span className="lg:hidden">Restore folder</span>
+                    </button>
+                  )}
                 {isCompactToolbarMode && (
                   <div className={browserToolbarControlsGroupClasses}>
                     <button
@@ -13657,6 +13824,7 @@ export default function BrowserPage({
                             onChange={toggleAllSelection}
                             aria-label="Select all"
                             className={uiCheckboxClass}
+                            disabled={selectableListItems.length === 0}
                           />
                         </th>
                         <th
@@ -13774,6 +13942,9 @@ export default function BrowserPage({
                             message={
                               hasActiveSearchFilters
                                 ? "No objects matched this search."
+                                : showDeletedObjects &&
+                                    deletedObjectsIsTruncated
+                                  ? "No deleted files found yet. Continue loading to search more history."
                                 : "No objects found for this path."
                             }
                             className="py-10 text-center"
@@ -13784,6 +13955,7 @@ export default function BrowserPage({
                         const isSelected = selectedSet.has(item.id);
                         const isActiveRow = activeRowId === item.id;
                         const isDeleted = Boolean(item.isDeleted);
+                        const isHistorical = Boolean(item.isHistorical);
                         const itemActionStates = resolveItemActionStates(item);
                         return (
                           <tr
@@ -13798,19 +13970,28 @@ export default function BrowserPage({
                               if (isInteractiveTarget(event.target)) {
                                 return;
                               }
+                              if (isDeleted) {
+                                return;
+                              }
                               handleItemSelectionClick(event, item.id);
                             }}
                             onDoubleClick={(event) =>
                               handleItemDoubleClick(event, item)
                             }
-                            onContextMenu={(event) =>
-                              handleItemContextMenu(event, item)
-                            }
+                            onContextMenu={(event) => {
+                              if (deletedObjectsOptions && isDeleted) {
+                                event.preventDefault();
+                                return;
+                              }
+                              handleItemContextMenu(event, item);
+                            }}
                             className={`${rowHeightClasses} transition-colors ${
                               isSelected
                                 ? "bg-primary-100/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
                                 : isActiveRow
                                   ? "bg-sky-50/90 hover:bg-sky-100/80 dark:bg-sky-900/20 dark:hover:bg-sky-900/30"
+                                  : isHistorical
+                                    ? "bg-amber-50/50 hover:bg-amber-100/60 dark:bg-amber-900/10 dark:hover:bg-amber-900/20"
                                   : isDeleted
                                     ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
                                     : isFocused
@@ -13823,15 +14004,18 @@ export default function BrowserPage({
                             >
                               <input
                                 type="checkbox"
-                                checked={isSelected}
+                                checked={!isDeleted && isSelected}
                                 onChange={() => toggleSelection(item.id)}
                                 aria-label={`Select ${item.name}`}
                                 className={uiCheckboxClass}
+                                disabled={isDeleted}
                               />
                             </td>
                             <td
                               className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body ${
-                                isDeleted
+                                isHistorical
+                                  ? "text-amber-800 dark:text-amber-200"
+                                : isDeleted
                                   ? "text-rose-700 dark:text-rose-200"
                                   : "text-slate-700 dark:text-slate-200"
                               }`}
@@ -13842,7 +14026,9 @@ export default function BrowserPage({
                               >
                                 <span
                                   className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-md border shadow-sm ${
-                                    isDeleted
+                                    isHistorical
+                                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                    : isDeleted
                                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
                                       : item.type === "folder"
                                         ? "border-amber-200 bg-amber-50/90 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
@@ -13867,7 +14053,9 @@ export default function BrowserPage({
                                       openItemPrimaryAction(item)
                                     }
                                     className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
-                                      isDeleted
+                                      isHistorical
+                                        ? "text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100"
+                                      : isDeleted
                                         ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
                                         : "text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
                                     }`}
@@ -13876,9 +14064,15 @@ export default function BrowserPage({
                                     <span className="truncate">
                                       {item.name}
                                     </span>
-                                    {isDeleted && (
-                                      <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
-                                        (deleted)
+                                    {(isDeleted || isHistorical) && (
+                                      <span
+                                        className={`shrink-0 ui-caption font-semibold ${
+                                          isHistorical
+                                            ? "text-amber-600 dark:text-amber-300"
+                                            : "text-rose-500 dark:text-rose-300"
+                                        }`}
+                                      >
+                                        {isHistorical ? "(history)" : "(deleted)"}
                                       </span>
                                     )}
                                   </button>
@@ -13886,18 +14080,28 @@ export default function BrowserPage({
                                     <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
                                       <span className="rounded-md border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                         {item.type === "folder"
-                                          ? isDeleted
-                                            ? "Deleted folder"
+                                          ? isHistorical
+                                            ? "Historical folder"
+                                            : isDeleted
+                                              ? "Deleted folder"
                                             : "Prefix"
                                           : isDeleted
                                             ? "Deleted object"
                                             : "Object"}
                                       </span>
-                                      {isDeleted && (
-                                        <span className="rounded-md border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
-                                          {item.type === "folder"
-                                            ? "Delete markers"
-                                            : "Delete marker"}
+                                      {(isDeleted || isHistorical) && (
+                                        <span
+                                          className={`rounded-md border px-2 py-0.5 font-semibold ${
+                                            isHistorical
+                                              ? "border-amber-200 text-amber-700 dark:border-amber-500/40 dark:text-amber-200"
+                                              : "border-rose-200 text-rose-700 dark:border-rose-500/40 dark:text-rose-200"
+                                          }`}
+                                        >
+                                          {isHistorical
+                                            ? "Version history"
+                                            : item.type === "folder"
+                                              ? "Delete markers"
+                                              : "Delete marker"}
                                         </span>
                                       )}
                                       {item.storageClass && (
@@ -13959,6 +14163,35 @@ export default function BrowserPage({
                                 )}
                                 {item.type === "file" &&
                                   isDeleted &&
+                                  deletedObjectsOptions?.onRestoreObject &&
+                                  deletedObjectsOptions.canRestore && (
+                                    <button
+                                      type="button"
+                                      className={rowActionButtonClasses}
+                                      aria-label={`Restore ${item.name}`}
+                                      title="Restore file"
+                                      onClick={() =>
+                                        deletedObjectsOptions.onRestoreObject?.({
+                                          bucketName,
+                                          key: item.key,
+                                          name: item.name || item.key,
+                                          deletedAt:
+                                            item.modifiedAt != null
+                                              ? new Date(
+                                                  item.modifiedAt,
+                                                ).toISOString()
+                                              : null,
+                                          deleteMarkerVersionId:
+                                            item.deleteMarkerVersionId,
+                                        })
+                                      }
+                                    >
+                                      <HistoryIcon />
+                                    </button>
+                                  )}
+                                {item.type === "file" &&
+                                  isDeleted &&
+                                  !deletedObjectsOptions?.onRestoreObject &&
                                   isVersioningEnabled && (
                                     <button
                                       type="button"
@@ -13975,20 +14208,22 @@ export default function BrowserPage({
                                       <HistoryIcon />
                                     </button>
                                   )}
-                                <button
-                                  type="button"
-                                  className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
-                                  aria-label="Download"
-                                  title={
-                                    !itemActionStates.download.enabled
-                                      ? "Restore from versions before download"
-                                      : "Download"
-                                  }
-                                  onClick={() => handleDownloadTarget(item)}
-                                  disabled={!itemActionStates.download.enabled}
-                                >
-                                  <DownloadIcon />
-                                </button>
+                                {(!isDeleted || !deletedObjectsOptions) && (
+                                  <button
+                                    type="button"
+                                    className={`${rowActionButtonClasses} ${!itemActionStates.download.enabled ? "opacity-50" : ""}`}
+                                    aria-label="Download"
+                                    title={
+                                      !itemActionStates.download.enabled
+                                        ? "Restore from versions before download"
+                                        : "Download"
+                                    }
+                                    onClick={() => handleDownloadTarget(item)}
+                                    disabled={!itemActionStates.download.enabled}
+                                  >
+                                    <DownloadIcon />
+                                  </button>
+                                )}
                                 {item.type === "file" &&
                                   !isDeleted &&
                                   itemActionStates.createPublicLink.visible && (
@@ -14003,31 +14238,35 @@ export default function BrowserPage({
                                       <LinkIcon />
                                     </button>
                                   )}
-                                <button
-                                  type="button"
-                                  className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
-                                  aria-label="Delete"
-                                  title={
-                                    !itemActionStates.delete.enabled
-                                      ? "Delete marker entries are managed in versions."
-                                      : "Delete"
-                                  }
-                                  onClick={() => handleDeleteItems([item])}
-                                  disabled={!itemActionStates.delete.enabled}
-                                >
-                                  <TrashIcon />
-                                </button>
-                                <button
-                                  type="button"
-                                  className={rowActionButtonClasses}
-                                  aria-label="More actions"
-                                  title="More"
-                                  onClick={(event) =>
-                                    handleItemActionsButtonClick(event, item)
-                                  }
-                                >
-                                  <MoreIcon />
-                                </button>
+                                {(!isDeleted || !deletedObjectsOptions) && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className={`${rowActionDangerButtonClasses} ${!itemActionStates.delete.enabled ? "opacity-50" : ""}`}
+                                      aria-label="Delete"
+                                      title={
+                                        !itemActionStates.delete.enabled
+                                          ? "Delete marker entries are managed in versions."
+                                          : "Delete"
+                                      }
+                                      onClick={() => handleDeleteItems([item])}
+                                      disabled={!itemActionStates.delete.enabled}
+                                    >
+                                      <TrashIcon />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={rowActionButtonClasses}
+                                      aria-label="More actions"
+                                      title="More"
+                                      onClick={(event) =>
+                                        handleItemActionsButtonClick(event, item)
+                                      }
+                                    >
+                                      <MoreIcon />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -14044,7 +14283,11 @@ export default function BrowserPage({
                       onClick={handleLoadMoreObjectResults}
                       disabled={objectsLoadingMore}
                     >
-                      {objectsLoadingMore ? "Loading..." : "Load more"}
+                      {objectsLoadingMore
+                        ? "Loading..."
+                        : !objectsIsTruncated && deletedObjectsIsTruncated
+                          ? "Continue loading deleted files"
+                          : "Load more"}
                     </button>
                   </div>
                 )}
@@ -14969,7 +15212,9 @@ export default function BrowserPage({
         onOpenItem={handleOpenItem}
         onOpenDetails={openItemDetails}
         onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
-        onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
+        onToggleShowDeleted={() =>
+          setDeletedObjectsVisibility(!showDeletedObjects)
+        }
         isMainBrowserPath={isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled}
         compactMode={compactMode}
         onSetCompactMode={(value) => {

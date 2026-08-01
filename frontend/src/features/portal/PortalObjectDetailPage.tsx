@@ -505,7 +505,7 @@ export default function PortalObjectDetailPage() {
       setPendingAction(null);
       window.setTimeout(() => {
         window.location.href = deletionMode === "trash"
-          ? `${storageSpacePath(space)}?tab=trash`
+          ? `${storageSpacePath(space)}?show_deleted=1`
           : fileListPath;
       }, 250);
     } catch (err) {

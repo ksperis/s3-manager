@@ -83,7 +83,13 @@ def _is_portal_browser_basic_route_allowed(request: Request) -> bool:
 
     operation = segments[2]
     if len(segments) == 3:
-        if method == "GET" and operation in {"objects", "cors", "download"}:
+        if method == "GET" and operation in {
+            "objects",
+            "cors",
+            "download",
+            "versioning",
+            "versions",
+        }:
             return True
         if method == "POST" and operation in {"presign", "delete", "folders", "proxy-upload"}:
             return True

@@ -236,6 +236,48 @@ export type PortalStorageObjectRestoreResponse = {
   message: string;
 };
 
+export type PortalDeletedPrefixRestoreFailure = {
+  key: string;
+  detail: string;
+};
+
+export type PortalDeletedPrefixRestoreProgress = {
+  request_id?: string | null;
+  stage: "prepare" | "list" | "restore" | "completed";
+  storage_space_id: string;
+  storage_space_name: string;
+  prefix: string;
+  scanned_versions: number;
+  scanned_delete_markers: number;
+  restore_candidates: number;
+  restored_objects: number;
+  failed_objects: number;
+  total_candidates_final?: boolean;
+  current_key?: string | null;
+  message?: string | null;
+};
+
+export type PortalDeletedPrefixRestoreResult = {
+  status: "completed" | "partial" | "canceled";
+  storage_space_id: string;
+  storage_space_name: string;
+  prefix: string;
+  scanned_versions: number;
+  scanned_delete_markers: number;
+  restore_candidates: number;
+  restored_objects: number;
+  failed_objects: number;
+  failures: PortalDeletedPrefixRestoreFailure[];
+  failures_truncated: boolean;
+  started_at: string;
+  finished_at: string;
+};
+
+export type PortalDeletedPrefixRestoreStreamOptions = {
+  signal?: AbortSignal;
+  onProgress?: (event: PortalDeletedPrefixRestoreProgress) => void;
+};
+
 export type PortalStorageSpaceVersionCleanupProgress = {
   request_id?: string | null;
   stage: "prepare" | "list" | "delete" | "completed";
@@ -836,6 +878,38 @@ export async function restorePortalStorageSpaceObject(
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
+}
+
+export function streamPortalDeletedPrefixRestore(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  prefix: string,
+  options?: PortalDeletedPrefixRestoreStreamOptions
+): Promise<PortalDeletedPrefixRestoreResult> {
+  const baseUrl = resolveApiBaseUrl();
+  const queryParams = withS3AccountParam(undefined, accountId) ?? {};
+  const query = new URLSearchParams();
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return streamBucketsWithSse<
+    PortalDeletedPrefixRestoreProgress,
+    PortalDeletedPrefixRestoreResult
+  >({
+    url: `${baseUrl}/portal/storage-spaces/${encodeURIComponent(spaceId)}/trash/restore-prefix/stream${suffix}`,
+    options,
+    requestInit: {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix }),
+    },
+    streamFailedLabel: "Deleted folder restoration stream failed",
+    missingResultMessage:
+      "Deleted folder restoration stream ended without a result payload",
+  });
 }
 
 export async function deletePortalStorageSpaceObject(

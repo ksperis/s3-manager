@@ -10,7 +10,12 @@ vi.mock("./client", () => ({
   LONG_RUNNING_REQUEST_TIMEOUT_MS: 0,
 }));
 
-import { listBrowserObjects, proxyUpload } from "./browser";
+import {
+  getBucketVersioning,
+  listBrowserObjects,
+  listObjectVersions,
+  proxyUpload,
+} from "./browser";
 
 describe("browser api", () => {
   beforeEach(() => {
@@ -45,6 +50,49 @@ describe("browser api", () => {
           force_refresh: true,
         }),
       }),
+    );
+  });
+
+  it("lists hierarchical versions with Portal headers, S3 cursors, and cancellation", async () => {
+    const signal = new AbortController().signal;
+
+    await getBucketVersioning("101", "research data", {
+      workspaceSurface: "portal",
+    });
+    await listObjectVersions("101", "research data", {
+      prefix: "reports/",
+      delimiter: "/",
+      keyMarker: "reports/a.txt",
+      versionIdMarker: "v2",
+      maxKeys: 1000,
+      signal,
+      requestOptions: { workspaceSurface: "portal" },
+    });
+
+    expect(clientMock.get).toHaveBeenNthCalledWith(
+      1,
+      "/browser/buckets/research%20data/versioning",
+      {
+        params: { account_id: "101" },
+        headers: { "X-S3-Workspace": "portal" },
+      },
+    );
+    expect(clientMock.get).toHaveBeenNthCalledWith(
+      2,
+      "/browser/buckets/research%20data/versions",
+      {
+        params: {
+          account_id: "101",
+          prefix: "reports/",
+          delimiter: "/",
+          key: undefined,
+          key_marker: "reports/a.txt",
+          version_id_marker: "v2",
+          max_keys: 1000,
+        },
+        headers: { "X-S3-Workspace": "portal" },
+        signal,
+      },
     );
   });
 

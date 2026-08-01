@@ -10,6 +10,7 @@ export type BrowserItem = {
   name: string;
   type: "folder" | "file";
   isDeleted?: boolean;
+  isHistorical?: boolean;
   deleteMarkerVersionId?: string | null;
   size: string;
   sizeBytes?: number | null;

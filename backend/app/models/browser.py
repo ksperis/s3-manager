@@ -101,6 +101,7 @@ class BrowserObjectVersion(BaseModel):
 
 class ListObjectVersionsResponse(BaseModel):
     prefix: Optional[str] = None
+    common_prefixes: list[str] = Field(default_factory=list)
     versions: list[BrowserObjectVersion] = Field(default_factory=list)
     delete_markers: list[BrowserObjectVersion] = Field(default_factory=list)
     is_truncated: bool = False

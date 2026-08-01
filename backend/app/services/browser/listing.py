@@ -528,6 +528,7 @@ class BrowserListingMixin:
         bucket_name: str,
         account: S3Account,
         prefix: str = "",
+        delimiter: Optional[str] = None,
         key: Optional[str] = None,
         key_marker: Optional[str] = None,
         version_id_marker: Optional[str] = None,
@@ -541,6 +542,8 @@ class BrowserListingMixin:
             "Prefix": query_prefix,
             "MaxKeys": max_keys,
         }
+        if delimiter and not filter_key:
+            kwargs["Delimiter"] = delimiter
         if key_marker:
             kwargs["KeyMarker"] = key_marker
         if version_id_marker:
@@ -586,6 +589,11 @@ class BrowserListingMixin:
         response_prefix = filter_key or (prefix or None)
         return ListObjectVersionsResponse(
             prefix=response_prefix,
+            common_prefixes=[
+                str(entry["Prefix"])
+                for entry in resp.get("CommonPrefixes", [])
+                if entry.get("Prefix")
+            ],
             versions=versions,
             delete_markers=delete_markers,
             is_truncated=bool(resp.get("IsTruncated")),

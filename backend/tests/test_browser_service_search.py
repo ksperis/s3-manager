@@ -48,6 +48,71 @@ def test_list_portal_storage_spaces_includes_descriptions():
     assert result[0].description == "Shared research datasets"
 
 
+def test_list_object_versions_preserves_hierarchy_and_s3_cursors(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def list_object_versions(self, **kwargs):  # noqa: ANN001
+            captured["kwargs"] = kwargs
+            return {
+                "Versions": [
+                    {
+                        "Key": "reports/current.csv",
+                        "VersionId": "v2",
+                        "IsLatest": True,
+                        "Size": 12,
+                    }
+                ],
+                "DeleteMarkers": [
+                    {
+                        "Key": "reports/deleted.csv",
+                        "VersionId": "d1",
+                        "IsLatest": True,
+                    }
+                ],
+                "CommonPrefixes": [
+                    {"Prefix": "reports/archive/"},
+                    {"Prefix": "reports/empty-history/"},
+                ],
+                "IsTruncated": True,
+                "KeyMarker": "reports/previous.csv",
+                "VersionIdMarker": "v0",
+                "NextKeyMarker": "reports/current.csv",
+                "NextVersionIdMarker": "v2",
+            }
+
+    service = BrowserService()
+    monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
+
+    result = service.list_object_versions(
+        "bucket-a",
+        _account(),
+        prefix="reports/",
+        delimiter="/",
+        key_marker="reports/previous.csv",
+        version_id_marker="v0",
+        max_keys=1000,
+    )
+
+    assert captured["kwargs"] == {
+        "Bucket": "bucket-a",
+        "Prefix": "reports/",
+        "Delimiter": "/",
+        "KeyMarker": "reports/previous.csv",
+        "VersionIdMarker": "v0",
+        "MaxKeys": 1000,
+    }
+    assert result.common_prefixes == [
+        "reports/archive/",
+        "reports/empty-history/",
+    ]
+    assert result.is_truncated is True
+    assert result.next_key_marker == "reports/current.csv"
+    assert result.next_version_id_marker == "v2"
+    assert result.versions[0].key == "reports/current.csv"
+    assert result.delete_markers[0].key == "reports/deleted.csv"
+
+
 def test_list_objects_recursive_folder_filter_builds_prefixes(monkeypatch):
     captured: dict[str, object] = {}
 

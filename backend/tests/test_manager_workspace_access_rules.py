@@ -298,6 +298,8 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         ("GET", "/api/browser/buckets/research/objects"),
         ("GET", "/api/browser/buckets/research/cors"),
         ("GET", "/api/browser/buckets/research/download"),
+        ("GET", "/api/browser/buckets/research/versioning"),
+        ("GET", "/api/browser/buckets/research/versions"),
         ("POST", "/api/browser/buckets/research/presign"),
         ("POST", "/api/browser/buckets/research/delete"),
         ("POST", "/api/browser/buckets/research/folders"),
@@ -317,7 +319,6 @@ def test_portal_browser_basic_route_guard_allows_file_profile_routes(method, pat
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("GET", "/api/browser/buckets/research/versioning"),
         ("POST", "/api/browser/buckets/research/objects/columns"),
         ("GET", "/api/browser/buckets/research/object-tags"),
         ("PUT", "/api/browser/buckets/research/object-meta"),

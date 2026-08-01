@@ -279,6 +279,7 @@ type RenderPageOptions = {
   storageEndpointCapabilities?: ComponentProps<typeof BrowserPage>["storageEndpointCapabilities"];
   onOpenObjectDetailsRoute?: ComponentProps<typeof BrowserPage>["onOpenObjectDetailsRoute"];
   onCreatePublicLinkForObject?: ComponentProps<typeof BrowserPage>["onCreatePublicLinkForObject"];
+  deletedObjectsOptions?: ComponentProps<typeof BrowserPage>["deletedObjectsOptions"];
 };
 
 function renderPageElement({
@@ -295,6 +296,7 @@ function renderPageElement({
   storageEndpointCapabilities,
   onOpenObjectDetailsRoute,
   onCreatePublicLinkForObject,
+  deletedObjectsOptions,
 }: RenderPageOptions = {}) {
   return (
     <BrowserSidebarTestHost>
@@ -312,6 +314,7 @@ function renderPageElement({
           storageEndpointCapabilities={storageEndpointCapabilities}
           onOpenObjectDetailsRoute={onOpenObjectDetailsRoute}
           onCreatePublicLinkForObject={onCreatePublicLinkForObject}
+          deletedObjectsOptions={deletedObjectsOptions}
         />
         <LocationProbe />
       </MemoryRouter>
@@ -900,7 +903,11 @@ describe("BrowserPage interactions", () => {
       "portal-bucket",
       expect.objectContaining({ workspaceSurface: "portal" }),
     );
-    expect(getBucketVersioningMock).not.toHaveBeenCalled();
+    expect(getBucketVersioningMock).toHaveBeenCalledWith(
+      "acc-portal",
+      "portal-bucket",
+      { workspaceSurface: "portal" },
+    );
 
     expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
     expect(within(rowA).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
@@ -952,6 +959,176 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /^Columns/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Versions/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps historical folders reachable after dense version pages in the Portal mixed view", async () => {
+    const restoreDeletedObject = vi.fn();
+    const restoreDeletedPrefix = vi.fn();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    listObjectVersionsMock
+      .mockResolvedValueOnce({
+        versions: Array.from({ length: 1000 }, (_, index) => ({
+          key: `dense/file-${index}.txt`,
+          version_id: `v-${index}`,
+          is_latest: false,
+          last_modified: "2026-07-28T10:00:00Z",
+          size: 1,
+          etag: null,
+          storage_class: "STANDARD",
+          owner: null,
+        })),
+        delete_markers: [],
+        common_prefixes: ["docs/"],
+        is_truncated: true,
+        next_key_marker: "dense/file-999.txt",
+        next_version_id_marker: "v-999",
+      })
+      .mockResolvedValueOnce({
+        versions: [],
+        delete_markers: [
+          {
+            key: "removed.txt",
+            version_id: "delete-1",
+            is_latest: true,
+            last_modified: "2026-07-29T12:00:00Z",
+            owner: null,
+          },
+        ],
+        common_prefixes: ["archive/", "docs/"],
+        is_truncated: false,
+        next_key_marker: null,
+        next_version_id_marker: null,
+      });
+
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+      deletedObjectsOptions: {
+        visible: true,
+        showToggle: true,
+        canRestore: true,
+        onVisibilityChange: vi.fn(),
+        onRestoreObject: restoreDeletedObject,
+        onRestorePrefix: restoreDeletedPrefix,
+      },
+    });
+
+    const historicalFolderRow = await findRowByLabel("archive");
+    const deletedFileRow = await findRowByLabel("removed.txt");
+    expect(within(historicalFolderRow).getByText("(history)")).toBeInTheDocument();
+    expect(screen.getAllByText("docs")).toHaveLength(1);
+    expect(
+      within(deletedFileRow).getByRole("checkbox", {
+        name: "Select removed.txt",
+      }),
+    ).toBeDisabled();
+    expect(
+      within(deletedFileRow).queryByRole("button", { name: "Download" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(deletedFileRow).queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(deletedFileRow).queryByRole("button", { name: "More actions" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(deletedFileRow).getByRole("button", {
+        name: "Restore removed.txt",
+      }),
+    );
+    expect(restoreDeletedObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucketName: "portal-bucket",
+        key: "removed.txt",
+        deleteMarkerVersionId: "delete-1",
+      }),
+    );
+
+    expect(listObjectVersionsMock).toHaveBeenCalledTimes(2);
+    expect(listObjectVersionsMock).toHaveBeenNthCalledWith(
+      1,
+      "acc-portal",
+      "portal-bucket",
+      expect.objectContaining({
+        delimiter: "/",
+        maxKeys: 1000,
+        requestOptions: { workspaceSurface: "portal" },
+      }),
+    );
+    expect(listObjectVersionsMock).toHaveBeenNthCalledWith(
+      2,
+      "acc-portal",
+      "portal-bucket",
+      expect.objectContaining({
+        keyMarker: "dense/file-999.txt",
+        versionIdMarker: "v-999",
+      }),
+    );
+  });
+
+  it("keeps an explicit continuation when 5,000 scanned versions yield no deleted row", async () => {
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+    listBrowserObjectsMock.mockResolvedValue({
+      prefix: "",
+      objects: [],
+      prefixes: [],
+      is_truncated: false,
+      next_continuation_token: null,
+    });
+    listObjectVersionsMock.mockResolvedValue({
+      versions: Array.from({ length: 1000 }, (_, index) => ({
+        key: `active/file-${index}.txt`,
+        version_id: `v-${index}`,
+        is_latest: false,
+        last_modified: "2026-07-28T10:00:00Z",
+        size: 1,
+        etag: null,
+        storage_class: "STANDARD",
+        owner: null,
+      })),
+      delete_markers: [],
+      common_prefixes: [],
+      is_truncated: true,
+      next_key_marker: "active/file-999.txt",
+      next_version_id_marker: "v-999",
+    });
+
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      actionProfile: "portal-basic",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+      deletedObjectsOptions: {
+        visible: true,
+        showToggle: true,
+        canRestore: true,
+        onVisibilityChange: vi.fn(),
+      },
+    });
+
+    expect(
+      await screen.findByText(
+        "No deleted files found yet. Continue loading to search more history.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Continue loading deleted files",
+      }),
+    ).toBeInTheDocument();
+    expect(listObjectVersionsMock).toHaveBeenCalledTimes(5);
   });
 
   it("uses Portal storage-space labels in the embedded inspector", async () => {

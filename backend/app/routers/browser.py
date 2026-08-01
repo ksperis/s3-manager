@@ -1459,6 +1459,7 @@ def get_sts_credentials(
 def list_versions(
     bucket_name: str,
     prefix: str = "",
+    delimiter: Optional[str] = None,
     key: Optional[str] = None,
     key_marker: Optional[str] = None,
     version_id_marker: Optional[str] = None,
@@ -1472,6 +1473,7 @@ def list_versions(
             bucket_name,
             account,
             prefix=prefix,
+            delimiter=delimiter,
             key=key,
             key_marker=key_marker,
             version_id_marker=version_id_marker,
