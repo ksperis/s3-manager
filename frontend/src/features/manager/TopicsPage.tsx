@@ -28,6 +28,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { extractApiError } from "../../utils/apiError";
 import { confirmDeletion } from "../../utils/confirm";
 import { stableSignature } from "../../utils/stableSignature";
+import { createUiDraftId } from "../../utils/uiDraftId";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
@@ -37,6 +38,7 @@ const defaultPolicyTemplate = `{
 }`;
 
 type AttributeDraft = {
+  uiId: string;
   key: string;
   value: string;
 };
@@ -78,7 +80,7 @@ const parseAttributeValue = (raw: string) => {
 const buildAttributeDrafts = (configuration: Record<string, unknown> | null | undefined): AttributeDraft[] => {
   return Object.entries(configuration ?? {})
     .filter(([key]) => !PRIMARY_ATTRIBUTE_KEYS.has(key))
-    .map(([key, value]) => ({ key, value: formatAttributeValue(value) }));
+    .map(([key, value]) => ({ uiId: createUiDraftId("topic-attribute"), key, value: formatAttributeValue(value) }));
 };
 
 const readPushEndpointValue = (configuration: Record<string, unknown> | null | undefined): string => {
@@ -111,7 +113,7 @@ const buildAttributesSignature = (
   stableSignature({
     pushEndpointValue,
     verifySslValue,
-    attributeItems,
+    attributeItems: attributeItems.map(({ key, value }) => ({ key, value })),
   });
 
 function extractError(err: unknown): string {
@@ -446,32 +448,32 @@ export default function TopicsPage() {
     setVerifySslValue(checked);
   };
 
-  const handleAttributeKeyChange = (index: number, value: string) => {
+  const handleAttributeKeyChange = (uiId: string, value: string) => {
     setAttributesStatus(null);
     setAttributesError(null);
     setAttributeItems((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, key: value } : item))
+      prev.map((item) => (item.uiId === uiId ? { ...item, key: value } : item))
     );
   };
 
-  const handleAttributeValueChange = (index: number, value: string) => {
+  const handleAttributeValueChange = (uiId: string, value: string) => {
     setAttributesStatus(null);
     setAttributesError(null);
     setAttributeItems((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, value } : item))
+      prev.map((item) => (item.uiId === uiId ? { ...item, value } : item))
     );
   };
 
   const handleAddAttribute = () => {
     setAttributesStatus(null);
     setAttributesError(null);
-    setAttributeItems((prev) => [...prev, { key: "", value: "" }]);
+    setAttributeItems((prev) => [...prev, { uiId: createUiDraftId("topic-attribute"), key: "", value: "" }]);
   };
 
-  const handleRemoveAttribute = (index: number) => {
+  const handleRemoveAttribute = (uiId: string) => {
     setAttributesStatus(null);
     setAttributesError(null);
-    setAttributeItems((prev) => prev.filter((_, idx) => idx !== index));
+    setAttributeItems((prev) => prev.filter((item) => item.uiId !== uiId));
   };
 
   const filteredTopics = useMemo(() => {
@@ -747,12 +749,12 @@ export default function TopicsPage() {
                 </p>
               ) : (
                 <div className="mt-2 space-y-2">
-                  {attributeItems.map((item, idx) => (
-                    <div key={`${item.key}-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                  {attributeItems.map((item) => (
+                    <div key={item.uiId} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                       <input
                         type="text"
                         value={item.key}
-                        onChange={(e) => handleAttributeKeyChange(idx, e.target.value)}
+                        onChange={(e) => handleAttributeKeyChange(item.uiId, e.target.value)}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         placeholder="attribute-key"
                         disabled={attributesLoading}
@@ -760,14 +762,14 @@ export default function TopicsPage() {
                       <input
                         type="text"
                         value={item.value}
-                        onChange={(e) => handleAttributeValueChange(idx, e.target.value)}
+                        onChange={(e) => handleAttributeValueChange(item.uiId, e.target.value)}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         placeholder='value or JSON ({"key":"value"})'
                         disabled={attributesLoading}
                       />
                       <button
                         type="button"
-                        onClick={() => handleRemoveAttribute(idx)}
+                        onClick={() => handleRemoveAttribute(item.uiId)}
                         disabled={attributesLoading}
                         className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100"
                       >

@@ -434,6 +434,70 @@ describe("BucketDetailPage replication state", () => {
     expect(screen.queryByText(/cross-zonegroup/i)).not.toBeInTheDocument();
   });
 
+  it("keeps the replication rule ID input mounted and focused while editing", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketReplicationMock.mockResolvedValue({
+      configuration: {
+        Role: "arn:aws:iam::123456789012:role/replication",
+        Rules: [
+          {
+            ID: "rule-1",
+            Status: "Enabled",
+            Destination: { Bucket: "arn:aws:s3:::target-bucket" },
+          },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(getCephAdminBucketReplicationMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+
+    const replicationCard = await screen.findByTestId("bucket-feature-replication");
+    await waitFor(() =>
+      expect(within(replicationCard).getByRole("textbox", { name: "ID" })).toHaveValue("rule-1")
+    );
+    const ruleIdInput = within(replicationCard).getByRole("textbox", { name: "ID" });
+    await user.type(ruleIdInput, "-updated");
+
+    expect(ruleIdInput).toHaveFocus();
+    expect(within(replicationCard).getByRole("textbox", { name: "ID" })).toBe(ruleIdInput);
+    expect(ruleIdInput).toHaveValue("rule-1-updated");
+  });
+
+  it("preserves bucket tag row identity when removing another draft", async () => {
+    const user = userEvent.setup();
+    getCephAdminBucketTagsMock.mockResolvedValueOnce({
+      tags: [
+        { key: "environment", value: "test" },
+        { key: "owner", value: "platform" },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <BucketDetailPage mode="ceph-admin" bucketNameOverride="demo-bucket" embedded />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Properties" }));
+    const tagsCard = await screen.findByTestId("bucket-feature-tags");
+    const tagKeyInputs = within(tagsCard).getAllByPlaceholderText("Tag key");
+    const ownerInput = tagKeyInputs[1];
+    const firstTagRow = tagKeyInputs[0].closest("div");
+    expect(firstTagRow).not.toBeNull();
+
+    await user.click(within(firstTagRow!).getByRole("button", { name: "Remove" }));
+
+    expect(within(tagsCard).getAllByPlaceholderText("Tag key")[0]).toBe(ownerInput);
+    expect(ownerInput).toHaveValue("owner");
+  });
+
   it("disables replication when the endpoint capability is disabled", async () => {
     const user = userEvent.setup();
     useCephAdminEndpointMock.mockReturnValue({

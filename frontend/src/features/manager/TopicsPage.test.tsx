@@ -120,6 +120,12 @@ describe("TopicsPage", () => {
     expect(attributeKeys.map((input) => (input as HTMLInputElement).value)).toEqual(["OpaqueData", "persistent"]);
     expect(attributeValues.map((input) => (input as HTMLInputElement).value)).toEqual(["trace=lab", "true"]);
 
+    const firstAttributeKey = attributeKeys[0];
+    await user.type(firstAttributeKey, "-updated");
+    expect(firstAttributeKey).toHaveFocus();
+    expect(within(dialog).getAllByPlaceholderText("attribute-key")[0]).toBe(firstAttributeKey);
+    expect(firstAttributeKey).toHaveValue("OpaqueData-updated");
+
     await user.clear(endpointInput);
     await user.type(endpointInput, "https://notify.example.test/hooks/updated");
     await user.click(within(dialog).getByRole("button", { name: "Save attributes" }));
@@ -128,7 +134,7 @@ describe("TopicsPage", () => {
     expect(updateTopicConfigurationMock).toHaveBeenCalledWith(7, topicArn, {
       "push-endpoint": "https://notify.example.test/hooks/updated",
       "verify-ssl": false,
-      OpaqueData: "trace=lab",
+      "OpaqueData-updated": "trace=lab",
       persistent: "true",
     });
   });

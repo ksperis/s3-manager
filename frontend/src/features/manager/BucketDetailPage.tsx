@@ -167,6 +167,20 @@ import {
 } from "./bucketDetail/bucketDetailSurface";
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
+import { createUiDraftId } from "../../utils/uiDraftId";
+
+type ReplicationRuleDraft = GraphicalReplicationRule & { uiId: string };
+type BucketTagDraft = BucketTag & { uiId: string };
+
+function createReplicationRuleDraft(
+  rule: GraphicalReplicationRule = createEmptyGraphicalReplicationRule()
+): ReplicationRuleDraft {
+  return { ...rule, uiId: createUiDraftId("replication-rule") };
+}
+
+function createBucketTagDraft(tag: BucketTag = { key: "", value: "" }): BucketTagDraft {
+  return { ...tag, uiId: createUiDraftId("bucket-tag") };
+}
 
 function getUserRole(): string | null {
   return readStoredUser()?.role ?? null;
@@ -507,14 +521,14 @@ export default function BucketDetailPage({
   const [replicationMode, setReplicationMode] = useState<"graphical" | "json">("graphical");
   const [replicationText, setReplicationText] = useState("{}");
   const [replicationRole, setReplicationRole] = useState("");
-  const [replicationRules, setReplicationRules] = useState<GraphicalReplicationRule[]>([createEmptyGraphicalReplicationRule()]);
+  const [replicationRules, setReplicationRules] = useState<ReplicationRuleDraft[]>([createReplicationRuleDraft()]);
   const [replicationWarning, setReplicationWarning] = useState<string | null>(null);
   const [replicationError, setReplicationError] = useState<string | null>(null);
   const [replicationStatus, setReplicationStatus] = useState<string | null>(null);
   const [replicationLoading, setReplicationLoading] = useState(false);
   const [savingReplication, setSavingReplication] = useState(false);
   const [clearingReplication, setClearingReplication] = useState(false);
-  const [bucketTags, setBucketTags] = useState<BucketTag[]>([]);
+  const [bucketTags, setBucketTags] = useState<BucketTagDraft[]>([]);
   const [bucketTagsLoading, setBucketTagsLoading] = useState(false);
   const [bucketTagsError, setBucketTagsError] = useState<string | null>(null);
   const [bucketTagsStatus, setBucketTagsStatus] = useState<string | null>(null);
@@ -1108,7 +1122,7 @@ export default function BucketDetailPage({
       setReplicationConfig({ configuration: {} });
       setReplicationText("{}");
       setReplicationRole("");
-      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationRules([createReplicationRuleDraft()]);
       setReplicationWarning(null);
       setReplicationError(null);
       setReplicationStatus(null);
@@ -1132,7 +1146,7 @@ export default function BucketDetailPage({
       setReplicationText(Object.keys(configuration).length > 0 ? JSON.stringify(configuration, null, 2) : "{}");
       const parsed = parseReplicationConfigurationForGraphical(configuration);
       setReplicationRole(parsed.role);
-      setReplicationRules(parsed.rules);
+      setReplicationRules(parsed.rules.map((rule) => createReplicationRuleDraft(rule)));
       setReplicationWarning(
         parsed.hasAdvancedFields
           ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
@@ -1142,7 +1156,7 @@ export default function BucketDetailPage({
       setReplicationConfig({ configuration: {} });
       setReplicationText("{}");
       setReplicationRole("");
-      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationRules([createReplicationRuleDraft()]);
       setReplicationWarning(null);
       const message = extractApiError(err, "Unable to load bucket replication configuration.");
       setReplicationError(message);
@@ -1200,7 +1214,7 @@ export default function BucketDetailPage({
           value: String(tag.value ?? ""),
         }))
         .filter((tag) => tag.key.length > 0);
-      setBucketTags(normalized);
+      setBucketTags(normalized.map((tag) => createBucketTagDraft(tag)));
       setBucketTagsSnapshot(normalized);
     } catch (err) {
       const message = extractApiError(err, "Unable to load bucket tags.");
@@ -2295,18 +2309,18 @@ export default function BucketDetailPage({
     }
   };
 
-  const updateBucketTagAt = (index: number, patch: Partial<BucketTag>) => {
-    setBucketTags((prev) => prev.map((tag, idx) => (idx === index ? { ...tag, ...patch } : tag)));
+  const updateBucketTag = (uiId: string, patch: Partial<BucketTag>) => {
+    setBucketTags((prev) => prev.map((tag) => (tag.uiId === uiId ? { ...tag, ...patch } : tag)));
   };
 
   const addBucketTag = () => {
-    setBucketTags((prev) => [...prev, { key: "", value: "" }]);
+    setBucketTags((prev) => [...prev, createBucketTagDraft()]);
     setBucketTagsStatus(null);
     setBucketTagsError(null);
   };
 
-  const removeBucketTagAt = (index: number) => {
-    setBucketTags((prev) => prev.filter((_, idx) => idx !== index));
+  const removeBucketTag = (uiId: string) => {
+    setBucketTags((prev) => prev.filter((tag) => tag.uiId !== uiId));
     setBucketTagsStatus(null);
     setBucketTagsError(null);
   };
@@ -2351,7 +2365,7 @@ export default function BucketDetailPage({
         } else {
           await putBucketTags(accountId, bucketName, filtered);
         }
-        setBucketTags(filtered);
+        setBucketTags(filtered.map((tag) => createBucketTagDraft(tag)));
         setBucketTagsSnapshot(filtered);
         setBucketTagsStatus("Bucket tags updated.");
       }
@@ -2489,22 +2503,22 @@ export default function BucketDetailPage({
     }
   };
 
-  const updateReplicationRule = (index: number, patch: Partial<GraphicalReplicationRule>) => {
+  const updateReplicationRule = (uiId: string, patch: Partial<GraphicalReplicationRule>) => {
     setReplicationRules((prev) =>
-      prev.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...patch } : rule))
+      prev.map((rule) => (rule.uiId === uiId ? { ...rule, ...patch } : rule))
     );
     setReplicationStatus(null);
   };
 
   const addReplicationRule = () => {
-    setReplicationRules((prev) => [...prev, createEmptyGraphicalReplicationRule()]);
+    setReplicationRules((prev) => [...prev, createReplicationRuleDraft()]);
     setReplicationStatus(null);
   };
 
-  const removeReplicationRule = (index: number) => {
+  const removeReplicationRule = (uiId: string) => {
     setReplicationRules((prev) => {
-      const next = prev.filter((_, ruleIndex) => ruleIndex !== index);
-      return next.length > 0 ? next : [createEmptyGraphicalReplicationRule()];
+      const next = prev.filter((rule) => rule.uiId !== uiId);
+      return next.length > 0 ? next : [createReplicationRuleDraft()];
     });
     setReplicationStatus(null);
   };
@@ -2556,7 +2570,7 @@ export default function BucketDetailPage({
       );
       const parsed = parseReplicationConfigurationForGraphical(normalizedConfiguration);
       setReplicationRole(parsed.role);
-      setReplicationRules(parsed.rules);
+      setReplicationRules(parsed.rules.map((rule) => createReplicationRuleDraft(rule)));
       setReplicationWarning(
         parsed.hasAdvancedFields
           ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
@@ -2588,7 +2602,7 @@ export default function BucketDetailPage({
       setReplicationConfig({ configuration: {} });
       setReplicationText("{}");
       setReplicationRole("");
-      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationRules([createReplicationRuleDraft()]);
       setReplicationWarning(null);
       setReplicationStatus("Replication configuration cleared.");
     } catch (err) {
@@ -3791,15 +3805,15 @@ export default function BucketDetailPage({
                           {bucketTags.length === 0 && (
                             <p className="ui-caption text-slate-500 dark:text-slate-400">No tags configured on this bucket.</p>
                           )}
-                          {bucketTags.map((tag, index) => (
+                          {bucketTags.map((tag) => (
                             <div
-                              key={`bucket-tag-${index}`}
+                              key={tag.uiId}
                               className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
                             >
                               <input
                                 type="text"
                                 value={tag.key}
-                                onChange={(e) => updateBucketTagAt(index, { key: e.target.value })}
+                                onChange={(e) => updateBucketTag(tag.uiId, { key: e.target.value })}
                                 className={bucketFeatureInputClass}
                                 placeholder="Tag key"
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
@@ -3807,14 +3821,14 @@ export default function BucketDetailPage({
                               <input
                                 type="text"
                                 value={tag.value}
-                                onChange={(e) => updateBucketTagAt(index, { value: e.target.value })}
+                                onChange={(e) => updateBucketTag(tag.uiId, { value: e.target.value })}
                                 className={bucketFeatureInputClass}
                                 placeholder="Tag value"
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               />
                               <button
                                 type="button"
-                                onClick={() => removeBucketTagAt(index)}
+                                onClick={() => removeBucketTag(tag.uiId)}
                                 className={bucketFeatureSecondaryActionClass}
                                 disabled={tagsNotImplemented || savingBucketTags || deletingBucketTags}
                               >
@@ -4373,14 +4387,14 @@ export default function BucketDetailPage({
                         <div className="space-y-3">
                           {replicationRules.map((rule, index) => (
                             <div
-                              key={`replication-rule-${index}-${rule.id || "new"}`}
+                              key={rule.uiId}
                               className={cx(uiCardMutedClass, "space-y-3 p-3")}
                             >
                               <div className="flex items-center justify-between">
                                 <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Rule {index + 1}</p>
                                 <button
                                   type="button"
-                                  onClick={() => removeReplicationRule(index)}
+                                  onClick={() => removeReplicationRule(rule.uiId)}
                                   disabled={replicationBlocked || replicationNotImplemented || replicationBusy || replicationRules.length <= 1}
                                   className="rounded-md border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                                 >
@@ -4393,7 +4407,7 @@ export default function BucketDetailPage({
                                   <input
                                     type="text"
                                     value={rule.id}
-                                    onChange={(e) => updateReplicationRule(index, { id: e.target.value })}
+                                    onChange={(e) => updateReplicationRule(rule.uiId, { id: e.target.value })}
                                     className={bucketFeatureInputClass}
                                     placeholder={`rule-${index + 1}`}
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
@@ -4403,7 +4417,7 @@ export default function BucketDetailPage({
                                   Status
                                   <select
                                     value={rule.status}
-                                    onChange={(e) => updateReplicationRule(index, { status: e.target.value as "Enabled" | "Disabled" })}
+                                    onChange={(e) => updateReplicationRule(rule.uiId, { status: e.target.value as "Enabled" | "Disabled" })}
                                     className={bucketFeatureInputClass}
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
                                   >
@@ -4418,7 +4432,7 @@ export default function BucketDetailPage({
                                     min={0}
                                     step={1}
                                     value={rule.priority}
-                                    onChange={(e) => updateReplicationRule(index, { priority: e.target.value })}
+                                    onChange={(e) => updateReplicationRule(rule.uiId, { priority: e.target.value })}
                                     className={bucketFeatureInputClass}
                                     placeholder="1"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
@@ -4429,7 +4443,7 @@ export default function BucketDetailPage({
                                   <input
                                     type="text"
                                     value={rule.prefix}
-                                    onChange={(e) => updateReplicationRule(index, { prefix: e.target.value })}
+                                    onChange={(e) => updateReplicationRule(rule.uiId, { prefix: e.target.value })}
                                     className={bucketFeatureInputClass}
                                     placeholder="logs/"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
@@ -4440,7 +4454,7 @@ export default function BucketDetailPage({
                                   <input
                                     type="text"
                                     value={rule.destinationBucket}
-                                    onChange={(e) => updateReplicationRule(index, { destinationBucket: e.target.value })}
+                                    onChange={(e) => updateReplicationRule(rule.uiId, { destinationBucket: e.target.value })}
                                     className={bucketFeatureInputClass}
                                     placeholder="arn:aws:s3:::target-bucket"
                                     disabled={replicationBlocked || replicationNotImplemented || replicationBusy}
@@ -4451,7 +4465,7 @@ export default function BucketDetailPage({
                                   <select
                                     value={rule.deleteMarkerStatus}
                                     onChange={(e) =>
-                                      updateReplicationRule(index, {
+                                      updateReplicationRule(rule.uiId, {
                                         deleteMarkerStatus: e.target.value as "Enabled" | "Disabled",
                                       })
                                     }
