@@ -208,16 +208,14 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
   });
 
-  it("replaces the dashboard with onboarding when there are no spaces or files", () => {
+  it("shows only Storage Spaces navigation when the loaded space list is empty", () => {
     mocks.hookResult.workspace = {
       ...mocks.hookResult.workspace,
-      usedBytes: 0,
-      usedObjects: 0,
+      usedBytes: 4096,
+      usedObjects: 37,
       spaces: [],
-      activity: [],
-      transfers: [],
-      alerts: [],
     };
+    mocks.hookResult.usageTrends.buckets.bucket_count = 3;
 
     render(
       <MemoryRouter>
@@ -225,17 +223,17 @@ describe("PortalDashboard storage workspace UX", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("link", { name: "Create a space" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces?create=1"
-    );
-    expect(screen.getByRole("link", { name: "Upload files" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces"
-    );
+    const navigationCard = screen.getByRole("heading", { name: "Set up your first space" }).closest("section");
+    expect(navigationCard).not.toBeNull();
+    const navigationLinks = within(navigationCard!).getAllByRole("link");
+    expect(navigationLinks).toHaveLength(1);
+    expect(navigationLinks[0]).toHaveAccessibleName("Open Storage Spaces");
+    expect(navigationLinks[0]).toHaveAttribute("href", "/portal/storage-spaces");
     expect(document.querySelector('[data-workspace-dashboard-kpi-row="true"]')).not.toBeInTheDocument();
     expect(screen.queryByText("Storage overview")).not.toBeInTheDocument();
     expect(screen.queryByText("Top storage spaces")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent transfers")).not.toBeInTheDocument();
   });
 
   it("aligns the storage overview card with manager growth and projection details", () => {
@@ -470,8 +468,9 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(within(topStorageSpaces!).getByText("0")).toBeInTheDocument();
   });
 
-  it("shows clear empty states when portal workspace signals are absent", () => {
+  it("shows clear empty states when optional portal workspace signals are absent", () => {
     mocks.hookResult.workspace = {
+      ...mocks.hookResult.workspace,
       accountName: "Laurent",
       userEmail: "manager@example.com",
       usedBytes: null,
@@ -483,7 +482,6 @@ describe("PortalDashboard storage workspace UX", () => {
       dataInBytes: null,
       dataOutBytes: null,
       usageTrend: [],
-      spaces: [],
       activity: [],
       transfers: [],
       alerts: [],
@@ -503,7 +501,7 @@ describe("PortalDashboard storage workspace UX", () => {
 
     expect(screen.getAllByText("Quota unavailable").length).toBeGreaterThan(0);
     expect(screen.getByText("Storage usage unavailable.")).toBeInTheDocument();
-    expect(screen.getByText("No Storage Spaces to display.")).toBeInTheDocument();
+    expect(screen.getByText("Research Data")).toBeInTheDocument();
     expect(screen.getByText("No recent activity.")).toBeInTheDocument();
     expect(screen.getByText("No recent transfers.")).toBeInTheDocument();
     expect(screen.getByText("No alerts to display.")).toBeInTheDocument();

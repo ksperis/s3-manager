@@ -545,8 +545,10 @@ function PortalOnboardingDashboard() {
           fr: "Un espace regroupe les fichiers, dossiers et collaborateurs. Une fois créé, ouvrez-le pour ajouter des fichiers.",
           de: "Ein Bereich hält Dateien, Ordner und Mitwirkende zusammen. Danach öffnen Sie ihn, um Dateien hochzuladen.",
         })}
-        primaryAction={{ label: t({ en: "Create a space", fr: "Créer un espace", de: "Bereich erstellen" }), to: "/portal/storage-spaces?create=1" }}
-        secondaryAction={{ label: t({ en: "Upload files", fr: "Ajouter des fichiers", de: "Dateien hochladen" }), to: "/portal/storage-spaces" }}
+        primaryAction={{
+          label: t({ en: "Open Storage Spaces", fr: "Ouvrir les espaces de stockage", de: "Speicherbereiche öffnen" }),
+          to: "/portal/storage-spaces",
+        }}
       />
     </div>
   );
@@ -723,7 +725,7 @@ export default function PortalDashboard() {
   });
   if (pageState) return pageState;
 
-  if (!storageSpacesLoading && !storageSpacesError && workspace.spaces.length === 0 && workspace.usedObjects === 0) {
+  if (!storageSpacesLoading && !storageSpacesError && workspace.spaces.length === 0) {
     return <PortalOnboardingDashboard />;
   }
 
