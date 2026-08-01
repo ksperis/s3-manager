@@ -94,6 +94,8 @@ type PortalOverrideFormSnapshot = {
   versionCleanup: TriState;
   versioning: TriState;
   lifecycle: TriState;
+  noncurrentExpirationOverride: boolean;
+  noncurrentExpirationDays: string;
   cors: TriState;
   corsOriginsOverride: boolean;
   corsOriginsText: string;
@@ -202,6 +204,8 @@ export default function S3AccountsPage() {
   const [adminPortalVersionCleanupOverride, setAdminPortalVersionCleanupOverride] = useState<TriState>("inherit");
   const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
   const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
+  const [adminBucketNoncurrentExpirationOverride, setAdminBucketNoncurrentExpirationOverride] = useState(false);
+  const [adminBucketNoncurrentExpirationDays, setAdminBucketNoncurrentExpirationDays] = useState("");
   const [adminBucketCorsOverride, setAdminBucketCorsOverride] = useState<TriState>("inherit");
   const [adminBucketCorsOriginsOverride, setAdminBucketCorsOriginsOverride] = useState(false);
   const [adminBucketCorsOriginsText, setAdminBucketCorsOriginsText] = useState("");
@@ -478,6 +482,8 @@ export default function S3AccountsPage() {
       setAdminPortalVersionCleanupOverride("inherit");
       setAdminBucketVersioningOverride("inherit");
       setAdminBucketLifecycleOverride("inherit");
+      setAdminBucketNoncurrentExpirationOverride(false);
+      setAdminBucketNoncurrentExpirationDays("");
       setAdminBucketCorsOverride("inherit");
       setAdminBucketCorsOriginsOverride(false);
       setAdminBucketCorsOriginsText("");
@@ -493,6 +499,11 @@ export default function S3AccountsPage() {
     const bucketDefaultsOverride = override.bucket_defaults;
     const versioning = resolveTriState(bucketDefaultsOverride?.versioning);
     const lifecycle = resolveTriState(bucketDefaultsOverride?.enable_lifecycle);
+    const noncurrentExpirationOverride = bucketDefaultsOverride?.noncurrent_version_expiration_days != null;
+    const noncurrentExpirationDays = String(
+      bucketDefaultsOverride?.noncurrent_version_expiration_days ??
+        effective.bucket_defaults.noncurrent_version_expiration_days
+    );
     const cors = resolveTriState(bucketDefaultsOverride?.enable_cors);
     const corsOriginsOverride = Boolean(bucketDefaultsOverride && bucketDefaultsOverride.cors_allowed_origins != null);
     const corsOriginsText = corsOriginsOverride
@@ -506,6 +517,8 @@ export default function S3AccountsPage() {
     setAdminPortalVersionCleanupOverride(versionCleanup);
     setAdminBucketVersioningOverride(versioning);
     setAdminBucketLifecycleOverride(lifecycle);
+    setAdminBucketNoncurrentExpirationOverride(noncurrentExpirationOverride);
+    setAdminBucketNoncurrentExpirationDays(noncurrentExpirationDays);
     setAdminBucketCorsOverride(cors);
     setAdminBucketCorsOriginsOverride(corsOriginsOverride);
     setAdminBucketCorsOriginsText(corsOriginsText);
@@ -518,6 +531,8 @@ export default function S3AccountsPage() {
         versionCleanup,
         versioning,
         lifecycle,
+        noncurrentExpirationOverride,
+        noncurrentExpirationDays: noncurrentExpirationOverride ? noncurrentExpirationDays : "",
         cors,
         corsOriginsOverride,
         corsOriginsText,
@@ -954,6 +969,10 @@ export default function S3AccountsPage() {
         versionCleanup: adminPortalVersionCleanupOverride,
         versioning: adminBucketVersioningOverride,
         lifecycle: adminBucketLifecycleOverride,
+        noncurrentExpirationOverride: adminBucketNoncurrentExpirationOverride,
+        noncurrentExpirationDays: adminBucketNoncurrentExpirationOverride
+          ? adminBucketNoncurrentExpirationDays
+          : "",
         cors: adminBucketCorsOverride,
         corsOriginsOverride: adminBucketCorsOriginsOverride,
         corsOriginsText: adminBucketCorsOriginsText,
@@ -963,6 +982,8 @@ export default function S3AccountsPage() {
       adminBucketCorsOriginsText,
       adminBucketCorsOverride,
       adminBucketLifecycleOverride,
+      adminBucketNoncurrentExpirationDays,
+      adminBucketNoncurrentExpirationOverride,
       adminBucketVersioningOverride,
       adminPortalNamedBucketCreateOverride,
       adminPortalAccessKeyCreateOverride,
@@ -1089,6 +1110,9 @@ export default function S3AccountsPage() {
     if (lifecycleValue !== undefined) {
       bucketDefaults.enable_lifecycle = lifecycleValue;
     }
+    if (adminBucketNoncurrentExpirationOverride) {
+      bucketDefaults.noncurrent_version_expiration_days = Number(adminBucketNoncurrentExpirationDays);
+    }
     const corsValue = toOverrideValue(adminBucketCorsOverride);
     if (corsValue !== undefined) {
       bucketDefaults.enable_cors = corsValue;
@@ -1105,6 +1129,14 @@ export default function S3AccountsPage() {
 
   const handleSaveAdminOverrides = async () => {
     if (!editingAccountId || !portalAccountSettings || portalSettingsSaving) return;
+    if (adminBucketNoncurrentExpirationOverride) {
+      const expirationDays = Number(adminBucketNoncurrentExpirationDays);
+      if (!Number.isInteger(expirationDays) || expirationDays < 1) {
+        setPortalSettingsMessage(null);
+        setPortalSettingsError("Non-current version expiration must be a positive integer.");
+        return;
+      }
+    }
     setPortalSettingsSaving(true);
     setPortalSettingsError(null);
     setPortalSettingsMessage(null);
@@ -2130,6 +2162,39 @@ export default function S3AccountsPage() {
                               </select>
                             }
                           />
+                          <PortalSettingsItem
+                            title="Non-current version expiration"
+                            description={`Effective for new Storage Spaces: ${effectivePortalSettings.bucket_defaults.noncurrent_version_expiration_days} days. Existing buckets are unchanged.`}
+                            action={
+                              <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={adminBucketNoncurrentExpirationOverride}
+                                  onChange={(e) => setAdminBucketNoncurrentExpirationOverride(e.target.checked)}
+                                  className={uiCheckboxClass}
+                                  disabled={portalSettingsLoading || portalSettingsSaving}
+                                  aria-label="Override non-current version expiration"
+                                />
+                                <span>Override</span>
+                              </label>
+                            }
+                          >
+                            <UiInput
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={adminBucketNoncurrentExpirationDays}
+                              onChange={(e) => setAdminBucketNoncurrentExpirationDays(e.target.value)}
+                              className="mt-2 w-28"
+                              size="compact"
+                              disabled={
+                                !adminBucketNoncurrentExpirationOverride ||
+                                portalSettingsLoading ||
+                                portalSettingsSaving
+                              }
+                              aria-label="Account non-current version expiration days"
+                            />
+                          </PortalSettingsItem>
                           <PortalSettingsItem
                             title="CORS"
                             description={`Effective: ${

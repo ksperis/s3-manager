@@ -215,6 +215,14 @@ def test_portal_server_access_log_retention_default_days():
     assert settings.portal.server_access_log_retention_days == 30
 
 
+def test_portal_noncurrent_version_expiration_days_are_positive():
+    settings = AppSettings()
+    assert settings.portal.bucket_defaults.noncurrent_version_expiration_days == 90
+
+    with pytest.raises(ValidationError):
+        AppSettings(portal={"bucket_defaults": {"noncurrent_version_expiration_days": 0}})
+
+
 def test_bucket_compare_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.bucket_compare_enabled is True

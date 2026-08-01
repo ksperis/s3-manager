@@ -20,6 +20,7 @@ class PortalBucketDefaultsOverride(BaseModel):
     versioning: Optional[bool] = None
     enable_cors: Optional[bool] = None
     enable_lifecycle: Optional[bool] = None
+    noncurrent_version_expiration_days: Optional[int] = Field(default=None, ge=1)
     cors_allowed_origins: Optional[list[str]] = None
 
 
@@ -37,6 +38,7 @@ class PortalBucketDefaults(BaseModel):
     versioning: bool = True
     enable_cors: bool = True
     enable_lifecycle: bool = True
+    noncurrent_version_expiration_days: int = Field(default=90, ge=1)
     cors_allowed_origins: list[str] = Field(default_factory=_default_portal_cors_origins)
 
 

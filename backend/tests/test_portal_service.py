@@ -328,6 +328,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
 
     portal_settings = PortalSettings()
     portal_settings.bucket_defaults.cors_allowed_origins = ["https://ui.example.test"]
+    portal_settings.bucket_defaults.noncurrent_version_expiration_days = 45
 
     bucket = service.create_bucket(
         user,
@@ -343,6 +344,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
     assert len(lifecycle_calls) == 1
     assert lifecycle_calls[0][1]["access_key"] == "ROOT-AK"
     assert lifecycle_calls[0][1]["secret_key"] == "ROOT-SK"
+    assert lifecycle_calls[0][1]["rules"][1]["NoncurrentVersionExpiration"] == {"NoncurrentDays": 45}
     assert len(cors_calls) == 1
     assert cors_calls[0][1]["access_key"] == "ROOT-AK"
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
@@ -2957,6 +2959,11 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     base = PortalSettings()
     service = PortalService(db_session)
     monkeypatch.setattr(service, "_portal_settings", lambda: base)
+    monkeypatch.setattr(
+        s3_client,
+        "put_bucket_lifecycle",
+        lambda *args, **kwargs: pytest.fail("Account overrides must not update existing bucket lifecycles"),
+    )
 
     effective = service.get_effective_portal_settings(account)
     assert effective.allow_private_storage_space_create is False
@@ -2977,7 +2984,10 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
             allow_private_storage_space_create=True,
             server_access_logging_enabled=False,
             storage_space_version_cleanup_enabled=False,
-            bucket_defaults={"enable_cors": False},
+            bucket_defaults={
+                "enable_cors": False,
+                "noncurrent_version_expiration_days": 45,
+            },
         ),
     )
     db_session.refresh(account)
@@ -2987,10 +2997,14 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
             "allow_private_storage_space_create": True,
             "server_access_logging_enabled": False,
             "storage_space_version_cleanup_enabled": False,
-            "bucket_defaults": {"enable_cors": False},
+            "bucket_defaults": {
+                "enable_cors": False,
+                "noncurrent_version_expiration_days": 45,
+            },
         }
     }
     assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
+    assert service.get_effective_portal_settings(account).bucket_defaults.noncurrent_version_expiration_days == 45
     assert service.get_effective_portal_settings(account).server_access_logging_enabled is False
     assert service.get_effective_portal_settings(account).storage_space_version_cleanup_enabled is False
 

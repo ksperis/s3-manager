@@ -53,7 +53,9 @@ class PortalBucketsUsersMixin:
         if portal_defaults.bucket_defaults.enable_lifecycle:
             s3_client.put_bucket_lifecycle(
                 bucket_name,
-                rules=self._portal_bucket_lifecycle_rules(),
+                rules=self._portal_bucket_lifecycle_rules(
+                    portal_defaults.bucket_defaults.noncurrent_version_expiration_days
+                ),
                 access_key=bucket_access_key,
                 secret_key=bucket_secret,
                 **self._s3_client_kwargs(account),

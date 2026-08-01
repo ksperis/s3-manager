@@ -112,30 +112,26 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleBucketDefaultVersioning = (value: boolean) => {
+  const handleBucketDefault = <Key extends keyof AppSettings["portal"]["bucket_defaults"]>(
+    key: Key,
+    value: AppSettings["portal"]["bucket_defaults"][Key]
+  ) => {
     setSettings((prev) =>
-      prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, versioning: value } } } : prev
-    );
-  };
-
-  const handleBucketDefaultLifecycle = (value: boolean) => {
-    setSettings((prev) =>
-      prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, enable_lifecycle: value } } } : prev
-    );
-  };
-
-  const handleBucketDefaultCors = (value: boolean) => {
-    setSettings((prev) =>
-      prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, enable_cors: value } } } : prev
+      prev
+        ? {
+            ...prev,
+            portal: {
+              ...prev.portal,
+              bucket_defaults: { ...prev.portal.bucket_defaults, [key]: value },
+            },
+          }
+        : prev
     );
   };
 
   const handleBucketCorsOrigins = (value: string) => {
     setCorsOriginsText(value);
-    const origins = normalizeListInput(value);
-    setSettings((prev) =>
-      prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, cors_allowed_origins: origins } } } : prev
-    );
+    handleBucketDefault("cors_allowed_origins", normalizeListInput(value));
   };
 
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
@@ -147,6 +143,13 @@ export default function PortalSettingsPage() {
     }
     if (!Number.isInteger(settings.portal.server_access_log_retention_days) || settings.portal.server_access_log_retention_days < 1) {
       setError("Server access log retention must be a positive integer.");
+      return;
+    }
+    if (
+      !Number.isInteger(settings.portal.bucket_defaults.noncurrent_version_expiration_days) ||
+      settings.portal.bucket_defaults.noncurrent_version_expiration_days < 1
+    ) {
+      setError("Non-current version expiration must be a positive integer.");
       return;
     }
     setSaving(true);
@@ -198,6 +201,7 @@ export default function PortalSettingsPage() {
   const portalServerAccessLogRetentionDays = settings?.portal.server_access_log_retention_days ?? 30;
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(settings?.portal.bucket_defaults.enable_lifecycle);
+  const noncurrentVersionExpirationDays = settings?.portal.bucket_defaults.noncurrent_version_expiration_days ?? "";
   const bucketCorsEnabled = Boolean(settings?.portal.bucket_defaults.enable_cors);
 
   return (
@@ -330,7 +334,7 @@ export default function PortalSettingsPage() {
               action={
                 <SettingsToggleAction
                   checked={bucketVersioningEnabled}
-                  onChange={(value) => handleBucketDefaultVersioning(value)}
+                  onChange={(value) => handleBucketDefault("versioning", value)}
                   disabled={!settings}
                   ariaLabel="Bucket versioning default"
                 />
@@ -338,13 +342,31 @@ export default function PortalSettingsPage() {
             />
             <SettingsItem
               title="Lifecycle baseline"
-              description="Remove obsolete delete markers and non-current versions after 90 days."
+              description="Remove obsolete delete markers and expire non-current versions on newly created Storage Spaces."
               action={
                 <SettingsToggleAction
                   checked={bucketLifecycleEnabled}
-                  onChange={(value) => handleBucketDefaultLifecycle(value)}
+                  onChange={(value) => handleBucketDefault("enable_lifecycle", value)}
                   disabled={!settings}
                   ariaLabel="Bucket lifecycle default"
+                />
+              }
+            />
+            <SettingsItem
+              title="Non-current version expiration"
+              description="Retention for non-current versions on new Storage Spaces. Existing buckets are unchanged."
+              action={
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={noncurrentVersionExpirationDays}
+                  onChange={(e) =>
+                    handleBucketDefault("noncurrent_version_expiration_days", Number(e.target.value))
+                  }
+                  disabled={!settings || !bucketLifecycleEnabled}
+                  aria-label="Non-current version expiration days"
+                  className={`w-28 ${settingsCompactInputClassName}`}
                 />
               }
             />
@@ -354,7 +376,7 @@ export default function PortalSettingsPage() {
               action={
                 <SettingsToggleAction
                   checked={bucketCorsEnabled}
-                  onChange={(value) => handleBucketDefaultCors(value)}
+                  onChange={(value) => handleBucketDefault("enable_cors", value)}
                   disabled={!settings}
                   ariaLabel="Portal CORS default"
                 />

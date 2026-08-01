@@ -58,6 +58,7 @@ function buildSettings(): AppSettings {
         versioning: true,
         enable_cors: true,
         enable_lifecycle: true,
+        noncurrent_version_expiration_days: 90,
         cors_allowed_origins: [],
       },
     },
@@ -136,6 +137,32 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.server_access_log_retention_days).toBe(45);
+  });
+
+  it("sends non-current version expiration days in save payload", async () => {
+    render(<PortalSettingsPage />);
+
+    const input = (await screen.findByLabelText("Non-current version expiration days")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "45" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
+    expect(payload.portal.bucket_defaults.noncurrent_version_expiration_days).toBe(45);
+  });
+
+  it("rejects a non-positive non-current version expiration", async () => {
+    render(<PortalSettingsPage />);
+
+    const input = (await screen.findByLabelText("Non-current version expiration days")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(await screen.findByText("Non-current version expiration must be a positive integer.")).toBeInTheDocument();
+    expect(updateAppSettingsMock).not.toHaveBeenCalled();
   });
 
   it("saves named storage creation setting without override policy controls", async () => {

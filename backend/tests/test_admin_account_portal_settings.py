@@ -64,7 +64,10 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
         f"/api/admin/accounts/{account.id}/portal-settings",
         json={
             "allow_private_storage_space_create": False,
-            "bucket_defaults": {"versioning": True},
+            "bucket_defaults": {
+                "versioning": True,
+                "noncurrent_version_expiration_days": 45,
+            },
         },
     )
 
@@ -72,6 +75,8 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
     body = response.json()
     assert body["admin_override"]["allow_private_storage_space_create"] is False
     assert body["admin_override"]["bucket_defaults"]["versioning"] is True
+    assert body["admin_override"]["bucket_defaults"]["noncurrent_version_expiration_days"] == 45
+    assert body["effective"]["bucket_defaults"]["noncurrent_version_expiration_days"] == 45
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
 
@@ -85,6 +90,17 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
     assert audit.actions[0]["scope"] == "admin"
     assert audit.actions[0]["account_id"] == account.id
     assert audit.actions[0]["metadata"]["admin_override"]["bucket_defaults"]["versioning"] is True
+
+
+def test_admin_put_account_portal_settings_rejects_non_positive_expiration_days(client, db_session):
+    account = _seed_account(db_session)
+
+    response = client.put(
+        f"/api/admin/accounts/{account.id}/portal-settings",
+        json={"bucket_defaults": {"noncurrent_version_expiration_days": 0}},
+    )
+
+    assert response.status_code == 422, response.text
 
 
 def test_admin_account_portal_settings_returns_404_for_unknown_account(client):

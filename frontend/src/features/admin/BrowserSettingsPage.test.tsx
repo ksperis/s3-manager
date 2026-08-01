@@ -58,6 +58,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
         versioning: false,
         enable_cors: true,
         enable_lifecycle: false,
+        noncurrent_version_expiration_days: 90,
         cors_allowed_origins: [],
       },
     },

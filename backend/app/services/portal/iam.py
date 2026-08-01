@@ -835,7 +835,7 @@ class PortalIamMixin:
             }
         ]
 
-    def _portal_bucket_lifecycle_rules(self) -> list[dict]:
+    def _portal_bucket_lifecycle_rules(self, noncurrent_version_expiration_days: int) -> list[dict]:
         return [
             {
                 "ID": "ExpireDeleteMarkers",
@@ -847,7 +847,9 @@ class PortalIamMixin:
                 "ID": "ExpireOldVersions",
                 "Status": "Enabled",
                 "Prefix": "",
-                "NoncurrentVersionExpiration": {"NoncurrentDays": 90},
+                "NoncurrentVersionExpiration": {
+                    "NoncurrentDays": noncurrent_version_expiration_days,
+                },
             },
         ]
 

@@ -138,7 +138,7 @@ Managed from Admin UI:
 - Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, and private S3 connections for UI users).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
-- Portal settings (`portal`): IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, bucket defaults, and super-admin account overrides.
+- Portal settings (`portal`): IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, and bucket defaults. `bucket_defaults.noncurrent_version_expiration_days` is a positive integer (90 by default), can be overridden per account by a super-admin, and is applied only when provisioning a new Storage Space with the default lifecycle enabled; existing buckets are not reconciled automatically.
 - Manager tool flags and behavior: bucket migration, compare, integrity check,
   purge, usage stats, Ceph S3 User key management, and migration parallelism.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).

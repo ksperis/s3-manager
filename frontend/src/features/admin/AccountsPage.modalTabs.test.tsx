@@ -40,6 +40,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
       versioning: false,
       enable_cors: false,
       enable_lifecycle: false,
+      noncurrent_version_expiration_days: 90,
       cors_allowed_origins: ["https://portal.example.test"],
     },
   },
@@ -604,6 +605,10 @@ describe("AccountsPage modal tabs", () => {
     });
     fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
     fireEvent.change(within(historyCleanup as HTMLElement).getByRole("combobox"), { target: { value: "disabled" } });
+    fireEvent.click(screen.getByLabelText("Override non-current version expiration"));
+    fireEvent.change(screen.getByLabelText("Account non-current version expiration days"), {
+      target: { value: "45" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
     await waitFor(() => {
@@ -611,8 +616,29 @@ describe("AccountsPage modal tabs", () => {
         allow_private_storage_space_create: false,
         allow_portal_named_bucket_create: true,
         storage_space_version_cleanup_enabled: false,
+        bucket_defaults: { noncurrent_version_expiration_days: 45 },
       });
     });
+  });
+
+  it("rejects a non-positive account lifecycle expiration override", async () => {
+    portalEnabled = true;
+
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
+    await screen.findByText("Non-current version expiration");
+
+    fireEvent.click(screen.getByLabelText("Override non-current version expiration"));
+    fireEvent.change(screen.getByLabelText("Account non-current version expiration days"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
+
+    expect(await screen.findByText("Non-current version expiration must be a positive integer.")).toBeInTheDocument();
+    expect(updateAccountPortalSettingsMock).not.toHaveBeenCalled();
   });
 
   it("resets account portal overrides from the portal tab", async () => {

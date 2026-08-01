@@ -62,6 +62,8 @@ class PortalSettingsMixin:
             target.enable_cors = override.enable_cors
         if override.enable_lifecycle is not None:
             target.enable_lifecycle = override.enable_lifecycle
+        if override.noncurrent_version_expiration_days is not None:
+            target.noncurrent_version_expiration_days = override.noncurrent_version_expiration_days
         if override.cors_allowed_origins is not None:
             target.cors_allowed_origins = override.cors_allowed_origins
 

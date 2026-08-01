@@ -20,6 +20,7 @@ export type PortalBucketDefaults = {
   versioning: boolean;
   enable_cors: boolean;
   enable_lifecycle: boolean;
+  noncurrent_version_expiration_days: number;
   cors_allowed_origins: string[];
 };
 
@@ -27,6 +28,7 @@ export type PortalBucketDefaultsOverride = {
   versioning?: boolean | null;
   enable_cors?: boolean | null;
   enable_lifecycle?: boolean | null;
+  noncurrent_version_expiration_days?: number | null;
   cors_allowed_origins?: string[] | null;
 };
 
