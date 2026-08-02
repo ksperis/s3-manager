@@ -186,30 +186,15 @@ export async function fetchGeneralSettings(): Promise<GeneralSettings> {
 }
 
 export async function fetchLoginSettings(): Promise<LoginSettings> {
-  const { data } = await client.get("/settings/login", {
+  const { data } = await client.get<LoginSettings>("/settings/login", {
     timeout: timeoutForRequestProfile("interactive"),
   });
-  const normalized = (data && typeof data === "object" ? data : {}) as Partial<LoginSettings>;
-  return {
-    allow_login_access_keys: Boolean(normalized.allow_login_access_keys ?? false),
-    allow_login_endpoint_list: Boolean(normalized.allow_login_endpoint_list ?? false),
-    allow_login_custom_endpoint: Boolean(normalized.allow_login_custom_endpoint ?? false),
-    default_endpoint_url: normalized.default_endpoint_url ?? null,
-    endpoints: Array.isArray(normalized.endpoints) ? normalized.endpoints : [],
-    login_logo_url: typeof normalized.login_logo_url === "string" ? normalized.login_logo_url : null,
-    seed_login_prefill: Boolean(normalized.seed_login_prefill ?? false),
-    seed_login_email: normalized.seed_login_email ?? null,
-    seed_login_password: normalized.seed_login_password ?? null,
-  };
+  return data;
 }
 
 export async function fetchBrandingSettings(): Promise<BrandingSettings> {
   const { data } = await client.get<BrandingSettings>("/settings/branding");
-  const normalized = (data && typeof data === "object" ? data : {}) as Partial<BrandingSettings>;
-  return {
-    primary_color: typeof normalized.primary_color === "string" ? normalized.primary_color : "#0ea5e9",
-    login_logo_url: typeof normalized.login_logo_url === "string" ? normalized.login_logo_url : null,
-  };
+  return data;
 }
 
 export async function updateAppSettings(payload: AppSettings): Promise<AppSettings> {
