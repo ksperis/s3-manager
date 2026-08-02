@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -682,7 +682,7 @@ def test_delete_endpoint_purges_derived_database_rows(db_session):
                 source="rgw_admin_bucket_stats",
             ),
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
                 s3_account_id=detached_account.id,
                 used_bytes=1,

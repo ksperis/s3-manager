@@ -2,9 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -32,8 +33,8 @@ class UserNotification(Base):
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=True, index=True)
     event_key = Column(String, nullable=False)
     payload_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow, index=True)
-    read_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utcnow, index=True)
+    read_at = Column(UTCDateTime(), nullable=True)
 
     user = relationship("User")
     storage_endpoint = relationship("StorageEndpoint")

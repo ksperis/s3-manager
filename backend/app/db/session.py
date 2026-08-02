@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy import Column, String, Text
 
 from .base import Base
 from .enums import UserRole
@@ -21,5 +22,5 @@ class S3Session(Base):
     account_name = Column(String, nullable=True)
     user_uid = Column(String, nullable=True)
     capabilities = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    last_used_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    last_used_at = Column(UTCDateTime(), default=utcnow, nullable=False)

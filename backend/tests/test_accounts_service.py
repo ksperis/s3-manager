@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Optional
 
 import pytest
@@ -392,7 +392,7 @@ def _seed_account_derived_rows(db_session, *, endpoint: StorageEndpoint, account
                 source="rgw_admin_bucket_stats",
             ),
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
                 s3_account_id=account.id,
                 used_bytes=1,

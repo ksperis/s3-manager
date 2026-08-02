@@ -71,7 +71,7 @@ def test_assume_role_parses_iso_expiration(monkeypatch):
                 "AccessKeyId": "ASSUME_AK",
                 "SecretAccessKey": "ASSUME_SK",
                 "SessionToken": "ASSUME_TOKEN",
-                "Expiration": "2026-03-05T10:20:30+00:00",
+                "Expiration": "2026-03-05T12:20:30+02:00",
             }
         }
     )
@@ -85,7 +85,7 @@ def test_assume_role_parses_iso_expiration(monkeypatch):
         "SK",
         endpoint="https://sts.example.test",
     )
-    assert exp.isoformat().startswith("2026-03-05T10:20:30")
+    assert exp == datetime(2026, 3, 5, 10, 20, 30, tzinfo=timezone.utc)
 
 
 def test_assume_role_raises_when_credentials_missing(monkeypatch):

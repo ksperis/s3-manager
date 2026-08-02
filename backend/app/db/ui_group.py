@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -20,7 +21,7 @@ class UiGroup(Base):
     avatar_icon = Column(String, nullable=True)
     avatar_image = Column(LargeBinary, nullable=True)
     avatar_content_type = Column(String, nullable=True)
-    avatar_updated_at = Column(DateTime, nullable=True)
+    avatar_updated_at = Column(UTCDateTime(), nullable=True)
     can_access_ceph_admin = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_storage_ops = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_bucket_compare = Column(Boolean, default=False, nullable=False, server_default="0")
@@ -31,8 +32,8 @@ class UiGroup(Base):
     can_access_manager_bucket_purge = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")
     browser_advanced_features_enabled = Column(Boolean, default=False, nullable=False, server_default="0")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     user_links = relationship("UserUiGroup", back_populates="group", cascade="all, delete-orphan")
     account_links = relationship("UiGroupS3Account", back_populates="group", cascade="all, delete-orphan")
@@ -50,7 +51,7 @@ class UserUiGroup(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="ui_group_links")
     group = relationship("UiGroup", back_populates="user_links")
@@ -71,8 +72,8 @@ class UiGroupS3Account(Base):
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     role = Column(String, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     group = relationship("UiGroup", back_populates="account_links")
     account = relationship("S3Account")
@@ -103,8 +104,8 @@ class UiGroupS3Connection(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("ui_groups.id"), nullable=False)
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id"), nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     group = relationship("UiGroup", back_populates="s3_connection_links")
     connection = relationship("S3Connection")

@@ -1,9 +1,10 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -25,8 +26,8 @@ class S3Account(Base):
     rgw_secret_key = Column(EncryptedString, nullable=True)
     rgw_user_uid = Column(String, nullable=True)
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
     portal_settings_override = Column(Text, nullable=True)
     portal_settings_delegated = Column(Boolean, default=False, nullable=False, server_default="0")
@@ -91,8 +92,8 @@ class UserS3Account(Base):
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
     role = Column(String, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     user = relationship(
         "User",
@@ -121,7 +122,7 @@ class AccountIAMUser(Base):
     iam_username = Column(String, nullable=True)
     active_access_key = Column(String, nullable=True)
     active_secret_key = Column(EncryptedString, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     user = relationship(
         "User",

@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.security import EncryptedString
 from .base import Base
@@ -36,7 +37,7 @@ class StorageEndpoint(Base):
     verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     tag_links = relationship("StorageEndpointTag", back_populates="endpoint", cascade="all, delete-orphan")

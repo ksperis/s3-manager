@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -55,12 +56,12 @@ class PortalStorageSpaceMetadata(Base):
     icon_preset = Column(String, nullable=False, default="bucket", server_default="bucket")
     icon_image = Column(LargeBinary, nullable=True)
     icon_content_type = Column(String, nullable=True)
-    icon_updated_at = Column(DateTime, nullable=True)
+    icon_updated_at = Column(UTCDateTime(), nullable=True)
     origin = Column(String, nullable=False, default="imported")
     name_editable = Column(Boolean, nullable=False, default=False)
-    archived_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    archived_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     account = relationship("S3Account")
     owner_user = relationship("User")
@@ -96,8 +97,8 @@ class PortalStorageSpaceGrant(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role = Column(String, nullable=False)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     storage_space = relationship("PortalStorageSpaceMetadata", back_populates="grants")
     user = relationship("User", foreign_keys=[user_id])
@@ -120,9 +121,9 @@ class PortalPublicLink(Base):
     label = Column(String, nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_by_email = Column(String, nullable=True)
-    expires_at = Column(DateTime, nullable=True)
-    revoked_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    expires_at = Column(UTCDateTime(), nullable=True)
+    revoked_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     account = relationship("S3Account")
     created_by = relationship("User")
@@ -162,9 +163,9 @@ class PortalExternalAccessCredential(Base):
     iam_username = Column(String, nullable=False)
     access_key_id = Column(String, nullable=False)
     status = Column(String, nullable=False, default="Active", server_default="Active")
-    revoked_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    revoked_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     account = relationship("S3Account")
     storage_space = relationship("PortalStorageSpaceMetadata")

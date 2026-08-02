@@ -1,5 +1,29 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 timezone-aware UTC migration
+
+Migration `0074_timezone_aware_utc_timestamps` converts every persisted
+PostgreSQL timestamp to `TIMESTAMP WITH TIME ZONE`. Existing values are
+interpreted explicitly as UTC during the conversion; no server or session
+timezone is consulted. The application now rejects timezone-naive datetime
+writes and serializes persisted values with an explicit UTC offset.
+
+Stop all backend instances and workers before applying the migration, because
+old code still writes and compares naive values. Back up the database, run
+Alembic through revision `0074`, then deploy the backend and frontend together.
+On large PostgreSQL tables, plan a maintenance window: each altered table is
+locked while PostgreSQL rewrites or validates its timestamp columns.
+
+SQLite has no timezone-bearing timestamp storage, so the migration does not
+rewrite its columns. The SQLAlchemy adapter still rejects naive application
+writes, stores the normalized UTC wall-clock representation, and restores an
+aware UTC value on every read. Back up the database, `-wal`, and `-shm` files as
+one consistent set before upgrading.
+
+Downgrade converts PostgreSQL values back to timezone-naive UTC. It does not
+restore the old application contract; deploy compatible code at the same time
+if a downgrade is unavoidable.
+
 ## 2026-08 managed private access migration
 
 Migration `0070_managed_private_access` is DB-only. It adds

@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 
 from app.core.security import EncryptedString
 from .base import Base
@@ -30,5 +31,5 @@ class LdapProvider(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     allow_insecure = Column(Boolean, nullable=False, default=False)
     allow_email_linking = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)

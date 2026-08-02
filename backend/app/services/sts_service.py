@@ -9,6 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
 from app.services.aws_client_config import build_interactive_aws_config
+from app.utils.time import normalize_utc
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def assume_role(
             expiration = expiration_raw
         else:
             expiration = datetime.fromisoformat(str(expiration_raw)) if expiration_raw else datetime.now(tz=timezone.utc)
-        return access, secret, token, expiration
+        return access, secret, token, normalize_utc(expiration, name="STS expiration")
     except (ClientError, BotoCoreError) as exc:
         raise RuntimeError(f"Unable to assume role {role_arn}: {exc}") from exc
 
@@ -102,6 +103,6 @@ def get_session_token(
             expiration = expiration_raw
         else:
             expiration = datetime.fromisoformat(str(expiration_raw)) if expiration_raw else datetime.now(tz=timezone.utc)
-        return access, secret, token, expiration
+        return access, secret, token, normalize_utc(expiration, name="STS expiration")
     except (ClientError, BotoCoreError) as exc:
         raise RuntimeError(f"Unable to get session token: {exc}") from exc

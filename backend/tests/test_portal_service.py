@@ -5266,7 +5266,11 @@ def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db
 
 def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(True))
-    monkeypatch.setattr(portal_router, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        portal_router,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=timezone.utc),
+    )
     endpoint = StorageEndpoint(
         name="portal-trends-endpoint",
         endpoint_url="https://portal-trends.example.test",
@@ -5306,7 +5310,7 @@ def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_se
                 last_used_bytes=100,
                 last_used_objects=10,
                 bucket_count=1,
-                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+                updated_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
             ),
             QuotaUsageDaily(
                 day=date(2026, 5, 10),
@@ -5315,7 +5319,7 @@ def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_se
                 last_used_bytes=999,
                 last_used_objects=99,
                 bucket_count=9,
-                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+                updated_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
             ),
         ]
     )
@@ -5491,7 +5495,11 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
                 last_used_bytes=100,
                 last_used_objects=10,
                 bucket_count=1,
-                updated_at=datetime.combine(today, datetime.min.time()),
+                    updated_at=datetime.combine(
+                        today,
+                        datetime.min.time(),
+                        tzinfo=timezone.utc,
+                    ),
             ),
             QuotaUsageDaily(
                 day=today,
@@ -5500,7 +5508,11 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
                 last_used_bytes=999,
                 last_used_objects=99,
                 bucket_count=9,
-                updated_at=datetime.combine(today, datetime.min.time()),
+                    updated_at=datetime.combine(
+                        today,
+                        datetime.min.time(),
+                        tzinfo=timezone.utc,
+                    ),
             ),
         ]
     )
@@ -5565,7 +5577,7 @@ def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(
             object_key="shared/report.pdf",
             created_by_user_id=user.id,
             created_by_email=user.email,
-            expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
         )
     )
     db_session.commit()
@@ -5671,7 +5683,7 @@ def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch,
             object_key="shared/report.pdf",
             created_by_user_id=user.id,
             created_by_email=user.email,
-            expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
         )
     )
     db_session.commit()

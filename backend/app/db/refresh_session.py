@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -17,12 +18,12 @@ class RefreshSession(Base):
     revoked_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     s3_session_id = Column(String, ForeignKey("s3_sessions.id"), nullable=True, index=True)
     auth_type = Column(String, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    last_used_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    last_used_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     last_ip = Column(String, nullable=True)
     last_user_agent = Column(String, nullable=True)
-    expires_at = Column(DateTime, nullable=False)
-    revoked_at = Column(DateTime, nullable=True)
+    expires_at = Column(UTCDateTime(), nullable=False)
+    revoked_at = Column(UTCDateTime(), nullable=True)
     revoked_reason = Column(String, nullable=True)
 
     user = relationship("User", foreign_keys=[user_id])

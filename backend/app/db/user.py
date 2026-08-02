@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -24,7 +25,7 @@ class User(Base):
     avatar_preference = Column(String, nullable=False, default="auto", server_default="auto")
     avatar_image = Column(LargeBinary, nullable=True)
     avatar_content_type = Column(String, nullable=True)
-    avatar_updated_at = Column(DateTime, nullable=True)
+    avatar_updated_at = Column(UTCDateTime(), nullable=True)
     hashed_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     role = Column(String, nullable=False, default=UserRole.UI_USER.value)
@@ -41,9 +42,9 @@ class User(Base):
     browser_advanced_features_enabled = Column(Boolean, default=False, nullable=False, server_default="0")
     auth_provider = Column(String, nullable=True)
     auth_provider_subject = Column(String, nullable=True)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
-    last_login_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
+    last_login_at = Column(UTCDateTime(), nullable=True)
     ui_language = Column(String, nullable=True)
     quota_alerts_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
     quota_alerts_global_watch = Column(Boolean, default=False, nullable=False, server_default="0")

@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from app.db import (
     ApiToken,
@@ -77,7 +77,7 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         token_hash="hash-own",
         user_id=owner.id,
         name="own-token",
-        expires_at=date(2099, 1, 1),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     revoked_by_owner = ApiToken(
         id="tok-other",
@@ -86,7 +86,7 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         user_id=other.id,
         revoked_by_user_id=owner.id,
         name="other-token",
-        expires_at=date(2099, 1, 1),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     db_session.add(own_token)
     db_session.add(revoked_by_owner)
@@ -96,7 +96,7 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         token_hash="ref-hash-own",
         user_id=owner.id,
         auth_type="ui",
-        expires_at=date(2099, 1, 1),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     revoked_refresh = RefreshSession(
         id="ref-other",
@@ -104,7 +104,7 @@ def test_delete_user_cleans_owned_connections_tokens_and_sessions(db_session):
         user_id=other.id,
         revoked_by_user_id=owner.id,
         auth_type="ui",
-        expires_at=date(2099, 1, 1),
+        expires_at=datetime(2099, 1, 1, tzinfo=UTC),
     )
     db_session.add(own_refresh)
     db_session.add(revoked_refresh)

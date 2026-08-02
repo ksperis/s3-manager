@@ -104,7 +104,7 @@ from app.utils.s3_endpoint import resolve_s3_client_options as _resolve_s3_clien
 from app.utils.normalize import normalize_string_list
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.time import utcnow
+from app.utils.time import normalize_utc, utcnow
 
 if TYPE_CHECKING:
     from app.routers.dependencies import AccountAccess

@@ -49,9 +49,7 @@ class PortalStorageSpacesMixin:
     def _normalize_storage_space_datetime(self, value: datetime | None) -> datetime | None:
         if value is None:
             return None
-        if value.tzinfo is None:
-            return value
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return normalize_utc(value, name="Storage space timestamp")
 
     def _storage_space_slug(self, value: str) -> str:
         slug = re.sub(r"[^a-z0-9-]+", "-", value.strip().lower())

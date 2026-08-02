@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 import json
 
 from app.db import (
@@ -105,7 +105,7 @@ def _seed_notification(
             },
             sort_keys=True,
         ),
-        created_at=datetime(2026, 1, 11, 9, 0, 0),
+        created_at=datetime(2026, 1, 11, 9, 0, 0, tzinfo=UTC),
     )
     db_session.add(notification)
     db_session.commit()

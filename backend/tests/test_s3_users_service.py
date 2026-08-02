@@ -187,7 +187,7 @@ def _seed_s3_user_derived_rows(db_session, *, endpoint: StorageEndpoint, s3_user
                 source="rgw_admin_bucket_stats",
             ),
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 1, 1, 8, 0, 0),
+                hour_ts=datetime(2026, 1, 1, 8, 0, 0, tzinfo=timezone.utc),
                 storage_endpoint_id=endpoint.id,
                 s3_user_id=s3_user.id,
                 used_bytes=1,
@@ -606,11 +606,11 @@ def test_list_users_and_minimal_are_sorted_case_insensitive_and_stable(db_sessio
 
 def test_paginate_users_name_and_non_name_sorts_are_stable(db_session):
     endpoint = _seed_ceph_endpoint(db_session)
-    older_time = datetime(2025, 1, 1, 12, 0, 0)
+    older_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     same_1 = _seed_local_user(db_session, name="same", uid="page-same-1", endpoint_id=endpoint.id, created_at=older_time)
     same_2 = _seed_local_user(db_session, name="same", uid="page-same-2", endpoint_id=endpoint.id, created_at=older_time)
     _seed_local_user(db_session, name="alpha", uid="page-alpha", endpoint_id=endpoint.id, created_at=older_time)
-    same_time = datetime(2026, 1, 1, 12, 0, 0)
+    same_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     tie_1 = _seed_local_user(
         db_session,
         name="time-charlie",
@@ -630,7 +630,7 @@ def test_paginate_users_name_and_non_name_sorts_are_stable(db_session):
         name="time-bravo",
         uid="page-time-3",
         endpoint_id=endpoint.id,
-        created_at=datetime(2026, 1, 2, 12, 0, 0),
+        created_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=timezone.utc),
     )
 
     service = S3UsersService(db_session)

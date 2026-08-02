@@ -2,12 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -48,10 +48,10 @@ class BucketMigration(Base):
     pause_requested = Column(Boolean, nullable=False, default=False, server_default="0")
     cancel_requested = Column(Boolean, nullable=False, default=False, server_default="0")
     worker_lease_owner = Column(String, nullable=True, index=True)
-    worker_lease_until = Column(DateTime, nullable=True, index=True)
+    worker_lease_until = Column(UTCDateTime(), nullable=True, index=True)
     precheck_status = Column(String, nullable=False, default="pending", server_default="pending", index=True)
     precheck_report_json = Column(Text, nullable=True)
-    precheck_checked_at = Column(DateTime, nullable=True)
+    precheck_checked_at = Column(UTCDateTime(), nullable=True)
 
     parallelism_max = Column(Integer, nullable=False, default=16, server_default="16")
 
@@ -63,12 +63,12 @@ class BucketMigration(Base):
 
     error_message = Column(String, nullable=True)
 
-    started_at = Column(DateTime, nullable=True)
-    finished_at = Column(DateTime, nullable=True)
-    last_heartbeat_at = Column(DateTime, nullable=True)
+    started_at = Column(UTCDateTime(), nullable=True)
+    finished_at = Column(UTCDateTime(), nullable=True)
+    last_heartbeat_at = Column(UTCDateTime(), nullable=True)
 
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
+    updated_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
 
     created_by = relationship("User", lazy="joined")
     items = relationship("BucketMigrationItem", back_populates="migration", cascade="all, delete-orphan")
@@ -116,10 +116,10 @@ class BucketMigrationItem(Base):
     target_policy_backup_json = Column(Text, nullable=True)
     error_message = Column(String, nullable=True)
 
-    started_at = Column(DateTime, nullable=True)
-    finished_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    started_at = Column(UTCDateTime(), nullable=True)
+    finished_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
+    updated_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
 
     migration = relationship("BucketMigration", back_populates="items")
     events = relationship("BucketMigrationEvent", back_populates="item")
@@ -140,7 +140,7 @@ class BucketMigrationEvent(Base):
     message = Column(Text, nullable=False)
     metadata_json = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
 
     migration = relationship("BucketMigration", back_populates="events")
     item = relationship("BucketMigrationItem", back_populates="events")

@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -168,7 +168,7 @@ def test_usage_history_hourly_and_daily_upserts(db_session, monkeypatch):
     _seed_account(db_session, endpoint)
 
     fake_admin = _FakeAdminClient(usage_bytes=50, usage_objects=5, quota_bytes=100, quota_objects=10)
-    fixed_now = datetime(2026, 1, 10, 10, 5, 0)
+    fixed_now = datetime(2026, 1, 10, 10, 5, 0, tzinfo=UTC)
 
     monkeypatch.setattr(quota_monitoring_service, "utcnow", lambda: fixed_now)
     monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=False, usage_history_enabled=True))
@@ -225,7 +225,7 @@ def test_usage_history_prefers_supervision_client_and_keeps_quota_optional(db_se
     account = _seed_account(db_session, endpoint)
 
     fake_supervision = _FakeAdminClient(usage_bytes=75, usage_objects=7, quota_bytes=0, quota_objects=0)
-    fixed_now = datetime(2026, 1, 10, 11, 5, 0)
+    fixed_now = datetime(2026, 1, 10, 11, 5, 0, tzinfo=UTC)
     seen: dict[str, int] = {}
 
     def resolve_supervision(endpoint_arg):
@@ -279,7 +279,7 @@ def test_alert_crossing_first_run_no_duplicate_and_reset(db_session, monkeypatch
 
     fake_admin = _FakeAdminClient(usage_bytes=90, usage_objects=90, quota_bytes=100, quota_objects=100)
     fake_mailer = _FakeMailer()
-    fixed_now = datetime(2026, 1, 11, 9, 0, 0)
+    fixed_now = datetime(2026, 1, 11, 9, 0, 0, tzinfo=UTC)
 
     monkeypatch.setattr(quota_monitoring_service, "utcnow", lambda: fixed_now)
     monkeypatch.setattr(quota_monitoring_service, "load_app_settings", lambda: _settings(quota_alerts_enabled=True, usage_history_enabled=False))
@@ -559,7 +559,7 @@ def test_smtp_incomplete_is_non_blocking(db_session, monkeypatch):
 def test_quota_history_constraints_prevent_duplicate_subject_rows(db_session):
     endpoint = _seed_endpoint(db_session)
     account = _seed_account(db_session, endpoint)
-    now = datetime(2026, 1, 12, 8, 0, 0)
+    now = datetime(2026, 1, 12, 8, 0, 0, tzinfo=UTC)
 
     db_session.add(
         QuotaUsageHourly(

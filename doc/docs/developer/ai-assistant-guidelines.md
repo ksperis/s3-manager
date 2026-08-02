@@ -215,6 +215,19 @@ flows unless the pathway is explicit, authorized, and audited.
   a bucket migration and before every meaningful item. Revocation must stop the
   workflow explicitly without reusing cached credentials.
 
+## Temporal invariants
+
+- Persisted datetimes use `UTCDateTime`; direct SQLAlchemy `DateTime` columns
+  are not allowed in application models.
+- Application and service boundaries keep timezone-aware values normalized to
+  UTC. Never strip `tzinfo`, call `datetime.utcnow()`, or write a naive value.
+- PostgreSQL stores these columns as `TIMESTAMP WITH TIME ZONE`. SQLite keeps a
+  UTC driver representation because it has no timezone-bearing storage type;
+  `UTCDateTime` is the only adapter responsible for that dialect detail.
+- API inputs that are persisted must require an explicit timezone. Existing
+  database values are transformed by Alembic rather than accepted through a
+  runtime compatibility path.
+
 ## Local UI validation for AI agents
 
 When a frontend change affects a real workspace route, do a browser-level smoke

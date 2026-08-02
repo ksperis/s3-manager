@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -23,8 +24,8 @@ class S3User(Base):
     rgw_access_key = Column(String, nullable=False)
     rgw_secret_key = Column(EncryptedString, nullable=False)
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
     allow_manager_bucket_quota = Column(Boolean, default=False, nullable=False, server_default="0")
     allow_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")

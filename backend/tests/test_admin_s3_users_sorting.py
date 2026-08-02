@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.db import S3User, UiGroup, UiGroupS3User, User, UserRole, UserS3User
 from app.services.tags_service import TagsService
@@ -58,9 +58,14 @@ def test_admin_s3_users_sort_by_name_desc_is_stable_by_id(client, db_session):
 
 
 def test_admin_s3_users_non_name_sort_still_applies(client, db_session):
-    base_time = datetime(2026, 1, 1, 12, 0, 0)
+    base_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     _seed_s3_user(db_session, name="alpha", uid="uid-time-alpha", created_at=base_time)
-    _seed_s3_user(db_session, name="bravo", uid="uid-time-bravo", created_at=datetime(2026, 1, 2, 12, 0, 0))
+    _seed_s3_user(
+        db_session,
+        name="bravo",
+        uid="uid-time-bravo",
+        created_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC),
+    )
     same_time_1 = _seed_s3_user(db_session, name="charlie", uid="uid-time-charlie", created_at=base_time)
     same_time_2 = _seed_s3_user(db_session, name="delta", uid="uid-time-delta", created_at=base_time)
 

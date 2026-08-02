@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, Integer, String, Text
 
 from app.core.security import EncryptedString
 from .base import Base
@@ -16,7 +17,7 @@ class OidcLoginState(Base):
     code_verifier = Column(String, nullable=False)
     nonce = Column(String, nullable=True)
     redirect_path = Column(String, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
 
 
 class OidcProvider(Base):
@@ -35,5 +36,5 @@ class OidcProvider(Base):
     icon_url = Column(String, nullable=True)
     use_pkce = Column(Boolean, nullable=False, default=True)
     use_nonce = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)

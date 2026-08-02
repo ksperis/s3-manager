@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.db import S3Connection, UiGroup, UiGroupS3Connection, User, UserRole, UserS3Connection
 from app.services.tags_service import TagsService
@@ -71,9 +71,13 @@ def test_admin_s3_connections_sort_by_name_desc(client, db_session):
 
 
 def test_admin_s3_connections_non_name_sort_still_applies(client, db_session):
-    base_time = datetime(2026, 1, 1, 12, 0, 0)
+    base_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     _seed_connection(db_session, name="alpha", created_at=base_time)
-    _seed_connection(db_session, name="bravo", created_at=datetime(2026, 1, 2, 12, 0, 0))
+    _seed_connection(
+        db_session,
+        name="bravo",
+        created_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC),
+    )
     same_time_1 = _seed_connection(db_session, name="charlie", created_at=base_time)
     same_time_2 = _seed_connection(db_session, name="delta", created_at=base_time)
 

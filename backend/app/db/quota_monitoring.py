@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
 from sqlalchemy import (
@@ -9,7 +10,6 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -63,7 +63,7 @@ class QuotaUsageHourly(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    hour_ts = Column(DateTime, nullable=False, index=True)
+    hour_ts = Column(UTCDateTime(), nullable=False, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)
     s3_account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=True, index=True)
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=True, index=True)
@@ -73,7 +73,7 @@ class QuotaUsageHourly(Base):
     quota_size_bytes = Column(BigInteger, nullable=True)
     quota_objects = Column(BigInteger, nullable=True)
     usage_ratio_pct = Column(Numeric(8, 3), nullable=True)
-    collected_at = Column(DateTime, nullable=False, default=utcnow)
+    collected_at = Column(UTCDateTime(), nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")
@@ -130,7 +130,7 @@ class QuotaUsageDaily(Base):
     bucket_count = Column(Integer, nullable=True)
     max_ratio_pct = Column(Numeric(8, 3), nullable=True)
     samples_count = Column(Integer, nullable=False, default=1, server_default="1")
-    updated_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")
@@ -179,11 +179,11 @@ class QuotaAlertState(Base):
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=True, index=True)
     last_level = Column(String, nullable=False, default="normal", server_default="normal")
     last_ratio_pct = Column(Numeric(8, 3), nullable=True)
-    last_checked_at = Column(DateTime, nullable=False, default=utcnow)
+    last_checked_at = Column(UTCDateTime(), nullable=False, default=utcnow)
     last_notified_level = Column(String, nullable=True)
-    last_notified_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow)
+    last_notified_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), nullable=False, default=utcnow)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")

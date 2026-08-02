@@ -45,12 +45,16 @@ def _parse_boundary(
             return date.fromisoformat(value[:10])
         if "T" not in value:
             parsed_day = date.fromisoformat(value[:10])
-            return datetime.combine(parsed_day, time.max if is_end else time.min)
+            return datetime.combine(
+                parsed_day,
+                time.max if is_end else time.min,
+                tzinfo=timezone.utc,
+            )
         normalized = value.replace("Z", "+00:00")
         parsed = datetime.fromisoformat(normalized)
-        if parsed.tzinfo is not None:
-            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError as exc:
         expected = "YYYY-MM-DD" if granularity == "daily" else "YYYY-MM-DD or ISO datetime"
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid date boundary, expected {expected}") from exc

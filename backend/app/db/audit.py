@@ -1,8 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -18,7 +19,7 @@ class AuditLog(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_email = Column(String, nullable=False)
     user_role = Column(String, nullable=False)

@@ -2,9 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Index, Integer, String, Text, UniqueConstraint
 
 from .base import Base
 
@@ -42,6 +43,6 @@ class BucketUsageStatsSnapshot(Base):
     current_noncurrent_distribution_json = Column(Text, nullable=False)
     warnings_json = Column(Text, nullable=True)
 
-    calculated_at = Column(DateTime, default=utcnow, nullable=False, index=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    calculated_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)

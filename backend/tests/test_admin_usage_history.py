@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 
@@ -63,7 +63,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
                 bucket_count=3,
                 max_ratio_pct=50.0,
                 samples_count=2,
-                updated_at=datetime(2026, 6, 7, 12, 0, 0),
+                updated_at=datetime(2026, 6, 7, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 7),
@@ -74,7 +74,7 @@ def test_list_usage_history_daily_records(client: TestClient, db_session, monkey
                 bucket_count=1,
                 max_ratio_pct=25.0,
                 samples_count=1,
-                updated_at=datetime(2026, 6, 7, 12, 5, 0),
+                updated_at=datetime(2026, 6, 7, 12, 5, 0, tzinfo=UTC),
             ),
         ]
     )
@@ -108,7 +108,11 @@ def test_list_usage_history_requires_enabled_feature(client: TestClient, monkeyp
 
 def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db_session, monkeypatch):
     monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=True))
-    monkeypatch.setattr(usage_history_service, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        usage_history_service,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC),
+    )
     endpoint = _seed_endpoint(db_session)
     other_endpoint = StorageEndpoint(
         name="Ceph other",
@@ -149,7 +153,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
                 bucket_count=3,
                 max_ratio_pct=50.0,
                 samples_count=2,
-                updated_at=datetime(2026, 6, 8, 12, 0, 0),
+                updated_at=datetime(2026, 6, 8, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 8),
@@ -160,7 +164,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
                 bucket_count=1,
                 max_ratio_pct=25.0,
                 samples_count=1,
-                updated_at=datetime(2026, 6, 8, 12, 5, 0),
+                updated_at=datetime(2026, 6, 8, 12, 5, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 8),
@@ -171,7 +175,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
                 bucket_count=4,
                 max_ratio_pct=80.0,
                 samples_count=1,
-                updated_at=datetime(2026, 6, 8, 12, 10, 0),
+                updated_at=datetime(2026, 6, 8, 12, 10, 0, tzinfo=UTC),
             ),
         ]
     )
@@ -199,7 +203,7 @@ def test_usage_history_trends_aggregate_endpoint_subjects(client: TestClient, db
             "max_usage_ratio_pct": 50.0,
             "subjects_count": 2,
             "samples_count": 3,
-            "collected_at": "2026-06-08T12:05:00",
+            "collected_at": "2026-06-08T12:05:00+00:00",
         }
     ]
 
@@ -261,7 +265,7 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
     db_session.commit()
     db_session.add(
         QuotaUsageHourly(
-            hour_ts=datetime(2026, 6, 8, 10, 0, 0),
+            hour_ts=datetime(2026, 6, 8, 10, 0, 0, tzinfo=UTC),
             storage_endpoint_id=endpoint.id,
             s3_user_id=s3_user.id,
             used_bytes=4096,
@@ -270,7 +274,7 @@ def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_
             quota_size_bytes=8192,
             quota_objects=10,
             usage_ratio_pct=70.0,
-            collected_at=datetime(2026, 6, 8, 10, 5, 0),
+            collected_at=datetime(2026, 6, 8, 10, 5, 0, tzinfo=UTC),
         )
     )
     db_session.commit()

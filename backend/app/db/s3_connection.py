@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -64,7 +65,7 @@ class S3Connection(Base):
     access_key_id = Column(String, nullable=False)
     secret_access_key = Column(EncryptedString, nullable=False)
     session_token = Column(EncryptedString, nullable=True)
-    expires_at = Column(DateTime, nullable=True)
+    expires_at = Column(UTCDateTime(), nullable=True)
     is_temporary = Column(Boolean, nullable=False, default=False, server_default="0")
     temp_user_uid = Column(String, nullable=True)
     temp_access_key_id = Column(String, nullable=True)
@@ -73,9 +74,9 @@ class S3Connection(Base):
     capabilities_json = Column(Text, nullable=False, default="{}", server_default="{}")
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
 
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, nullable=False)
-    last_used_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    last_used_at = Column(UTCDateTime(), nullable=True)
 
     created_by = relationship("User", back_populates="s3_connections", overlaps="s3_connections")
     storage_endpoint = relationship("StorageEndpoint")
@@ -111,8 +112,8 @@ class UserS3Connection(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id"), nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     user = relationship(
         "User",
@@ -176,8 +177,8 @@ class ManagedPrivateAccess(Base):
     iam_inline_policy_names_json = Column(Text, nullable=False, default="[]", server_default="[]")
     created_remote_principal = Column(Boolean, nullable=False, default=False, server_default="0")
     created_access_key = Column(Boolean, nullable=False, default=False, server_default="0")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     owner = relationship("User")
     connection = relationship("S3Connection", back_populates="managed_private_access")

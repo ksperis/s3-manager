@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -261,7 +261,11 @@ def test_manager_stats_dependency_rejects_connection_without_resolved_identity(d
 
 def test_manager_usage_trends_falls_back_per_metric(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    monkeypatch.setattr(manager_stats_router, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        manager_stats_router,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC),
+    )
     endpoint = _ceph_endpoint("ceph-usage-trends")
     account = S3Account(
         name="trend-account",
@@ -283,7 +287,7 @@ def test_manager_usage_trends_falls_back_per_metric(db_session, monkeypatch):
                 last_used_bytes=100,
                 last_used_objects=10,
                 bucket_count=None,
-                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+                updated_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 2),
@@ -292,7 +296,7 @@ def test_manager_usage_trends_falls_back_per_metric(db_session, monkeypatch):
                 last_used_bytes=200,
                 last_used_objects=20,
                 bucket_count=2,
-                updated_at=datetime(2026, 6, 2, 12, 0, 0),
+                updated_at=datetime(2026, 6, 2, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 8),
@@ -301,7 +305,7 @@ def test_manager_usage_trends_falls_back_per_metric(db_session, monkeypatch):
                 last_used_bytes=300,
                 last_used_objects=30,
                 bucket_count=3,
-                updated_at=datetime(2026, 6, 8, 12, 0, 0),
+                updated_at=datetime(2026, 6, 8, 12, 0, 0, tzinfo=UTC),
             ),
         ]
     )
@@ -340,7 +344,11 @@ def test_manager_usage_trends_returns_empty_when_history_disabled(db_session, mo
 
 def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    monkeypatch.setattr(manager_stats_router, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        manager_stats_router,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC),
+    )
     endpoint = _ceph_endpoint("ceph-usage-trends-user")
     account = S3Account(
         name="account-subject",
@@ -369,7 +377,7 @@ def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monk
                 last_used_bytes=999,
                 last_used_objects=99,
                 bucket_count=9,
-                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+                updated_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 5, 10),
@@ -378,7 +386,7 @@ def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monk
                 last_used_bytes=111,
                 last_used_objects=11,
                 bucket_count=1,
-                updated_at=datetime(2026, 5, 10, 12, 0, 0),
+                updated_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
             ),
         ]
     )
@@ -421,7 +429,11 @@ def test_manager_usage_trends_return_empty_for_connection_context(db_session, mo
 
 def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    monkeypatch.setattr(usage_history_service, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        usage_history_service,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC),
+    )
     endpoint = _ceph_endpoint("ceph-history-trends-account")
     account = S3Account(
         name="history-account",
@@ -443,34 +455,34 @@ def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypa
     db_session.add_all(
         [
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 6, 9, 10, 0, 0),
+                hour_ts=datetime(2026, 6, 9, 10, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
                 s3_account_id=account.id,
                 used_bytes=1024,
                 used_objects=10,
                 bucket_count=1,
                 usage_ratio_pct=10.0,
-                collected_at=datetime(2026, 6, 9, 10, 5, 0),
+                collected_at=datetime(2026, 6, 9, 10, 5, 0, tzinfo=UTC),
             ),
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 6, 9, 11, 0, 0),
+                hour_ts=datetime(2026, 6, 9, 11, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
                 s3_account_id=account.id,
                 used_bytes=2048,
                 used_objects=20,
                 bucket_count=2,
                 usage_ratio_pct=20.0,
-                collected_at=datetime(2026, 6, 9, 11, 5, 0),
+                collected_at=datetime(2026, 6, 9, 11, 5, 0, tzinfo=UTC),
             ),
             QuotaUsageHourly(
-                hour_ts=datetime(2026, 6, 9, 11, 0, 0),
+                hour_ts=datetime(2026, 6, 9, 11, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
                 s3_account_id=other_account.id,
                 used_bytes=8192,
                 used_objects=80,
                 bucket_count=8,
                 usage_ratio_pct=80.0,
-                collected_at=datetime(2026, 6, 9, 11, 10, 0),
+                collected_at=datetime(2026, 6, 9, 11, 10, 0, tzinfo=UTC),
             ),
         ]
     )
@@ -488,7 +500,11 @@ def test_manager_usage_history_trends_are_scoped_to_account(db_session, monkeypa
 
 def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    monkeypatch.setattr(usage_history_service, "utcnow", lambda: datetime(2026, 6, 9, 12, 0, 0))
+    monkeypatch.setattr(
+        usage_history_service,
+        "utcnow",
+        lambda: datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC),
+    )
     endpoint = _ceph_endpoint("ceph-history-trends-user")
     account = S3Account(
         name="account-subject",
@@ -519,7 +535,7 @@ def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_sessi
                 bucket_count=9,
                 max_ratio_pct=90.0,
                 samples_count=1,
-                updated_at=datetime(2026, 6, 8, 12, 0, 0),
+                updated_at=datetime(2026, 6, 8, 12, 0, 0, tzinfo=UTC),
             ),
             QuotaUsageDaily(
                 day=date(2026, 6, 8),
@@ -530,7 +546,7 @@ def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_sessi
                 bucket_count=1,
                 max_ratio_pct=11.0,
                 samples_count=2,
-                updated_at=datetime(2026, 6, 8, 12, 5, 0),
+                updated_at=datetime(2026, 6, 8, 12, 5, 0, tzinfo=UTC),
             ),
         ]
     )

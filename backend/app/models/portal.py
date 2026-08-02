@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
 from app.models.user import UserAvatar
@@ -516,7 +516,7 @@ class PortalPublicLink(BaseModel):
 class PortalPublicLinkCreate(BaseModel):
     object_key: str = Field(min_length=1)
     label: Optional[str] = Field(default=None, max_length=120)
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[AwareDatetime] = None
 
 
 class PortalActivityItem(BaseModel):

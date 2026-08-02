@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 
-def utcnow() -> datetime:
-    """Return current UTC as a naive datetime.
+def normalize_utc(value: datetime, *, name: str = "datetime") -> datetime:
+    """Validate a timezone-aware datetime and normalize it to UTC."""
+    if not isinstance(value, datetime):
+        raise TypeError(f"{name} must be a datetime value")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+    return value.astimezone(UTC)
 
-    The codebase historically stores naive UTC datetimes. This helper avoids
-    deprecated utcnow() while preserving that storage format.
-    """
-    return datetime.now(UTC).replace(tzinfo=None)
+
+def utcnow() -> datetime:
+    """Return the current time as an aware UTC datetime."""
+    return datetime.now(UTC)

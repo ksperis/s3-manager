@@ -2,9 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import CheckConstraint, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -37,9 +38,9 @@ class PortalAdminRequest(Base):
     error_message = Column(Text, nullable=True)
     decided_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     decided_by_email = Column(String, nullable=True)
-    decided_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    decided_at = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     account = relationship("S3Account")
     requester = relationship("User", foreign_keys=[requester_user_id])
@@ -65,7 +66,7 @@ class PortalAdminRequestMessage(Base):
     author_email = Column(String, nullable=False)
     author_role = Column(String, nullable=True)
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
 
     request = relationship("PortalAdminRequest", back_populates="messages")
     author = relationship("User")

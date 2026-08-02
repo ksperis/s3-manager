@@ -2,9 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -23,7 +24,7 @@ class EndpointHealthCheck(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)
-    checked_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    checked_at = Column(UTCDateTime(), nullable=False, default=utcnow, index=True)
     http_status = Column(Integer, nullable=True)
     latency_ms = Column(Integer, nullable=True)
     check_mode = Column(String, nullable=False, default="http", server_default="http")
@@ -57,7 +58,7 @@ class EndpointHealthLatest(Base):
     check_mode = Column(String, nullable=False, default="http", server_default="http")
     check_type = Column(String, nullable=False, default="availability", server_default="availability")
     scope = Column(String, nullable=False, default="endpoint", server_default="endpoint")
-    checked_at = Column(DateTime, nullable=False, index=True)
+    checked_at = Column(UTCDateTime(), nullable=False, index=True)
     status = Column(String, nullable=False)
     latency_ms = Column(Integer, nullable=True)
     http_status = Column(Integer, nullable=True)
@@ -67,7 +68,7 @@ class EndpointHealthLatest(Base):
     max_latency_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
     availability_24h = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")
 
@@ -97,14 +98,14 @@ class EndpointHealthStatusSegment(Base):
     check_type = Column(String, nullable=False, default="availability", server_default="availability")
     scope = Column(String, nullable=False, default="endpoint", server_default="endpoint")
     status = Column(String, nullable=False, index=True)
-    started_at = Column(DateTime, nullable=False, index=True)
-    ended_at = Column(DateTime, nullable=True, index=True)
+    started_at = Column(UTCDateTime(), nullable=False, index=True)
+    ended_at = Column(UTCDateTime(), nullable=True, index=True)
     checks_count = Column(Integer, nullable=False, default=0, server_default="0")
     min_latency_ms = Column(Integer, nullable=True)
     avg_latency_ms = Column(Integer, nullable=True)
     max_latency_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
-    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")
 
@@ -137,7 +138,7 @@ class EndpointHealthRollup(Base):
     check_type = Column(String, nullable=False, default="availability", server_default="availability")
     scope = Column(String, nullable=False, default="endpoint", server_default="endpoint")
     resolution_seconds = Column(Integer, nullable=False, default=300, server_default="300")
-    bucket_start = Column(DateTime, nullable=False, index=True)
+    bucket_start = Column(UTCDateTime(), nullable=False, index=True)
     up_count = Column(Integer, nullable=False, default=0, server_default="0")
     degraded_count = Column(Integer, nullable=False, default=0, server_default="0")
     down_count = Column(Integer, nullable=False, default=0, server_default="0")
@@ -147,6 +148,6 @@ class EndpointHealthRollup(Base):
     latency_max_ms = Column(Integer, nullable=True)
     latency_p95_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
-    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
+    updated_at = Column(UTCDateTime(), nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")

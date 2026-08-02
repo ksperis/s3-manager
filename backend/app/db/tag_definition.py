@@ -2,10 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 from app.utils.tagging import DEFAULT_TAG_SCOPE
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -41,8 +42,8 @@ class TagDefinition(Base):
     label_key = Column(String, nullable=False)
     color_key = Column(String, nullable=False)
     scope = Column(String, nullable=False, default=DEFAULT_TAG_SCOPE, server_default=DEFAULT_TAG_SCOPE)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     owner = relationship("User")
 
@@ -59,8 +60,8 @@ class StorageEndpointTag(Base):
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     endpoint = relationship("StorageEndpoint", back_populates="tag_links")
     tag_definition = relationship("TagDefinition")
@@ -78,8 +79,8 @@ class S3AccountTag(Base):
     account_id = Column(Integer, ForeignKey("s3_accounts.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     account = relationship("S3Account", back_populates="tag_links")
     tag_definition = relationship("TagDefinition")
@@ -97,8 +98,8 @@ class S3UserTag(Base):
     s3_user_id = Column(Integer, ForeignKey("s3_users.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     s3_user = relationship("S3User", back_populates="tag_links")
     tag_definition = relationship("TagDefinition")
@@ -116,8 +117,8 @@ class S3ConnectionTag(Base):
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
+    updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
 
     connection = relationship("S3Connection", back_populates="tag_links")
     tag_definition = relationship("TagDefinition")
