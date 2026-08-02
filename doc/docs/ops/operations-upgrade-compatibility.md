@@ -1,5 +1,17 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical account Portal settings overrides
+
+Migration `0088_canonical_portal_settings_override` replaces the historical
+`{"admin": {...}}` envelope with the direct `PortalSettingsOverride` object.
+It removes obsolete `portal_manager` data and unknown or invalid fields while
+retaining every valid current override. Empty, malformed, and non-object values
+become `NULL`, the canonical representation of no account override.
+
+Deploy the migration and backend together. The backend no longer unwraps old
+payloads or hides invalid persisted values, and the API rejects unknown override
+fields. The data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical audit metadata
 
 Migration `0087_canonical_audit_metadata` rewrites every non-null audit metadata

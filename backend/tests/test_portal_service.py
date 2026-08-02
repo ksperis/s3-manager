@@ -2980,19 +2980,14 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
     assert db_session.query(PortalPublicLink).filter_by(token="restore-link-token").one().revoked_at is None
 
 
-def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_session):
+def test_portal_account_override_uses_canonical_payload(monkeypatch, db_session):
     account = S3Account(
         name="portal-storage-override",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
         portal_settings_override=json.dumps(
             {
-                "admin": {"allow_private_storage_space_create": False},
-                "portal_manager": {
-                    "allow_portal_named_bucket_create": True,
-                    "allow_portal_user_access_key_create": False,
-                    "bucket_defaults": {"enable_cors": False},
-                },
+                "allow_private_storage_space_create": False,
             }
         ),
     )
@@ -3036,15 +3031,13 @@ def test_legacy_portal_manager_account_override_is_ignored(monkeypatch, db_sessi
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
     assert stored == {
-        "admin": {
-            "allow_private_storage_space_create": True,
-            "server_access_logging_enabled": False,
-            "storage_space_version_cleanup_enabled": False,
-            "bucket_defaults": {
-                "enable_cors": False,
-                "noncurrent_version_expiration_days": 45,
-            },
-        }
+        "allow_private_storage_space_create": True,
+        "server_access_logging_enabled": False,
+        "storage_space_version_cleanup_enabled": False,
+        "bucket_defaults": {
+            "enable_cors": False,
+            "noncurrent_version_expiration_days": 45,
+        },
     }
     assert service.get_effective_portal_settings(account).bucket_defaults.enable_cors is False
     assert service.get_effective_portal_settings(account).bucket_defaults.noncurrent_version_expiration_days == 45

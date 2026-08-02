@@ -9,44 +9,34 @@ class PortalSettingsMixin:
     def _portal_settings(self) -> PortalSettings:
         return load_app_settings().portal
 
-    def _load_portal_settings_overrides(
+    def _load_portal_settings_override(
         self,
         account: S3Account,
     ) -> PortalSettingsOverride:
         raw = account.portal_settings_override
-        if not raw:
+        if raw is None:
             return PortalSettingsOverride()
-        try:
-            payload = json.loads(raw)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Unable to parse portal settings overrides for account %s: %s", account.id, exc)
-            return PortalSettingsOverride()
+        payload = json.loads(raw)
         if not isinstance(payload, dict):
-            return PortalSettingsOverride()
-        admin_payload = payload.get("admin")
-        if not isinstance(admin_payload, dict):
-            admin_payload = {}
-        try:
-            return PortalSettingsOverride.model_validate(admin_payload)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Invalid admin portal settings override for account %s: %s", account.id, exc)
-            return PortalSettingsOverride()
+            raise ValueError("Persisted Portal settings override must be a JSON object")
+        return PortalSettingsOverride.model_validate(payload, strict=True)
 
     def _override_payload(self, override: PortalSettingsOverride) -> dict:
-        return override.model_dump(exclude_unset=True, exclude_none=False)
+        return override.model_dump(exclude_unset=True, exclude_none=True)
 
-    def _persist_portal_settings_overrides(
+    def _persist_portal_settings_override(
         self,
         account: S3Account,
-        admin_override: PortalSettingsOverride,
+        override: PortalSettingsOverride,
         *,
         delegated_to_portal_managers: Optional[bool] = None,
     ) -> None:
-        payload: dict[str, Any] = {}
-        admin_payload = self._override_payload(admin_override)
-        if admin_payload:
-            payload["admin"] = admin_payload
-        account.portal_settings_override = json.dumps(payload) if payload else None
+        payload = self._override_payload(override)
+        account.portal_settings_override = (
+            json.dumps(payload, separators=(",", ":"), sort_keys=True)
+            if payload
+            else None
+        )
         if delegated_to_portal_managers is not None:
             account.portal_settings_delegated = bool(delegated_to_portal_managers)
         self.db.add(account)
@@ -71,7 +61,7 @@ class PortalSettingsMixin:
         if override.cors_allowed_origins is not None:
             target.cors_allowed_origins = override.cors_allowed_origins
 
-    def _apply_admin_overrides(
+    def _apply_override(
         self,
         portal_settings: PortalSettings,
         override: PortalSettingsOverride,
@@ -98,9 +88,9 @@ class PortalSettingsMixin:
 
     def _effective_portal_settings(self, account: S3Account, base_settings: Optional[PortalSettings] = None) -> PortalSettings:
         base = base_settings or self._portal_settings()
-        admin_override = self._load_portal_settings_overrides(account)
+        override = self._load_portal_settings_override(account)
         effective = base.model_copy(deep=True)
-        self._apply_admin_overrides(effective, admin_override)
+        self._apply_override(effective, override)
         return effective
 
     def get_effective_portal_settings(
@@ -113,9 +103,9 @@ class PortalSettingsMixin:
 
     def get_portal_account_settings(self, account: S3Account) -> PortalAccountSettings:
         base = self._portal_settings()
-        admin_override = self._load_portal_settings_overrides(account)
+        admin_override = self._load_portal_settings_override(account)
         effective = base.model_copy(deep=True)
-        self._apply_admin_overrides(effective, admin_override)
+        self._apply_override(effective, admin_override)
         return PortalAccountSettings(
             effective=effective,
             admin_override=admin_override,
@@ -143,14 +133,12 @@ class PortalSettingsMixin:
         *,
         delegated_to_portal_managers: Optional[bool] = None,
     ) -> PortalAccountSettings:
-        payload = override.model_dump(exclude_unset=True, exclude_none=False)
-        admin_override = PortalSettingsOverride.model_validate(payload)
         effective = self._portal_settings().model_copy(deep=True)
-        self._apply_admin_overrides(effective, admin_override)
+        self._apply_override(effective, override)
         self.reconcile_portal_server_access_logging(account, portal_settings=effective)
-        self._persist_portal_settings_overrides(
+        self._persist_portal_settings_override(
             account,
-            admin_override,
+            override,
             delegated_to_portal_managers=delegated_to_portal_managers,
         )
         return self.get_portal_account_settings(account)

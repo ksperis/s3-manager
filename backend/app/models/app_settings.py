@@ -4,7 +4,7 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.config import get_settings
 from app.models.storage_endpoint import StorageEndpointPublic
@@ -17,6 +17,8 @@ def _default_portal_cors_origins() -> list[str]:
 
 
 class PortalBucketDefaultsOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     versioning: Optional[bool] = None
     enable_cors: Optional[bool] = None
     enable_lifecycle: Optional[bool] = None
@@ -25,6 +27,8 @@ class PortalBucketDefaultsOverride(BaseModel):
 
 
 class PortalSettingsOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     allow_portal_key: Optional[bool] = None
     browser_access_enabled: Optional[bool] = None
     allow_private_storage_space_create: Optional[bool] = None

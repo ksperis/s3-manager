@@ -34,10 +34,7 @@ def _seed_account(db_session, *, overrides: dict | None = None) -> S3Account:
 def test_admin_get_account_portal_settings_returns_account_overrides(client, db_session):
     account = _seed_account(
         db_session,
-        overrides={
-            "admin": {"allow_private_storage_space_create": False},
-            "portal_manager": {"allow_portal_user_access_key_create": True},
-        },
+        overrides={"allow_private_storage_space_create": False},
     )
 
     response = client.get(f"/api/admin/accounts/{account.id}/portal-settings")
@@ -50,16 +47,14 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
     assert body["delegated_to_portal_managers"] is False
 
 
-def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_override_and_audits(client, db_session):
+def test_admin_put_account_portal_settings_replaces_override_and_audits(client, db_session):
     audit = _CapturingAuditService()
     app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: audit
     account = _seed_account(
         db_session,
         overrides={
-            "portal_manager": {
-                "allow_portal_user_access_key_create": True,
-                "bucket_defaults": {"enable_cors": True},
-            },
+            "allow_portal_user_access_key_create": True,
+            "bucket_defaults": {"enable_cors": True},
         },
     )
 
@@ -88,9 +83,8 @@ def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_overri
 
     db_session.refresh(account)
     stored = json.loads(account.portal_settings_override)
-    assert stored["admin"]["browser_access_enabled"] is True
-    assert stored["admin"]["allow_private_storage_space_create"] is False
-    assert "portal_manager" not in stored
+    assert stored["browser_access_enabled"] is True
+    assert stored["allow_private_storage_space_create"] is False
 
     assert len(audit.actions) == 1
     assert audit.actions[0]["action"] == "update_account_portal_settings"
@@ -105,7 +99,7 @@ def test_account_browser_override_can_disable_enabled_global_default(client, db_
     monkeypatch.setattr(portal_settings_module, "load_app_settings", lambda: settings)
     account = _seed_account(
         db_session,
-        overrides={"admin": {"browser_access_enabled": False}},
+        overrides={"browser_access_enabled": False},
     )
 
     response = client.get(f"/api/admin/accounts/{account.id}/portal-settings")
@@ -127,10 +121,21 @@ def test_admin_put_account_portal_settings_rejects_non_positive_expiration_days(
     assert response.status_code == 422, response.text
 
 
+def test_admin_put_account_portal_settings_rejects_unknown_fields(client, db_session):
+    account = _seed_account(db_session)
+
+    response = client.put(
+        f"/api/admin/accounts/{account.id}/portal-settings",
+        json={"portal_manager": {"browser_access_enabled": True}},
+    )
+
+    assert response.status_code == 422, response.text
+
+
 def test_admin_can_delegate_shared_portal_overrides(client, db_session):
     account = _seed_account(
         db_session,
-        overrides={"admin": {"allow_private_storage_space_create": False}},
+        overrides={"allow_private_storage_space_create": False},
     )
 
     response = client.put(
