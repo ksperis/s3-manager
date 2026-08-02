@@ -240,7 +240,7 @@ export default function BrowserWorkspaceSidebar({
                   <StorageSpaceIcon
                     icon={bucket.icon}
                     name={displayName}
-                    size="compact"
+                    size="sidebar"
                     decorative
                   />
                 ) : (

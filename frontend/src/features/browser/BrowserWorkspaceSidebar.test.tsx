@@ -45,6 +45,6 @@ describe("BrowserWorkspaceSidebar", () => {
     );
 
     const row = screen.getByRole("button", { name: /Research data/ });
-    expect(row.querySelector('[data-storage-space-icon-preset="media"]')).toBeInTheDocument();
+    expect(row.querySelector('[data-storage-space-icon-preset="media"]')).toHaveClass("h-6", "w-6");
   });
 });

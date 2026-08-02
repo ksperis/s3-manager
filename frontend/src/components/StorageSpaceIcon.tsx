@@ -28,6 +28,7 @@ const iconPaths: Record<StorageSpaceIconPreset, string> = {
 
 const sizeClasses = {
   compact: "h-4 w-4",
+  sidebar: "h-6 w-6",
   sm: "h-7 w-7",
   md: "h-9 w-9",
   lg: "h-12 w-12",
