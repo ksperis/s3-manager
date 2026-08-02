@@ -700,7 +700,6 @@ class S3UsersService:
             rgw_access_key=access_key,
             rgw_secret_key=secret_key,
             storage_endpoint_id=endpoint.id,
-            tags_json="[]",
         )
         self.db.add(s3_user)
         self.db.flush()
@@ -773,7 +772,6 @@ class S3UsersService:
                 rgw_access_key=access_key,
                 rgw_secret_key=secret_key,
                 storage_endpoint_id=endpoint.id,
-                tags_json="[]",
             )
             self.db.add(s3_user)
             self.db.flush()

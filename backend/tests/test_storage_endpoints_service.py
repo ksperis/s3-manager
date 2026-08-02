@@ -554,9 +554,12 @@ def test_update_endpoint_tags_normalizes_and_serializes_tags(db_session):
 
     assert [tag.label for tag in updated.tags] == ["prod", "rgw-a"]
     assert [tag.color_key for tag in updated.tags] == ["neutral", "neutral"]
+    db_session.expire_all()
     persisted = db_session.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint.id).first()
     assert persisted is not None
-    assert json.loads(persisted.tags_json) == ["prod", "rgw-a"]
+    assert [
+        tag.label for tag in service.tags.get_storage_endpoint_tags(persisted)
+    ] == ["prod", "rgw-a"]
 
 
 def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session, monkeypatch):

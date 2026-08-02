@@ -78,8 +78,6 @@ class S3Connection(Base):
         default=DEFAULT_S3_CONNECTION_CAPABILITIES_JSON,
         server_default=DEFAULT_S3_CONNECTION_CAPABILITIES_JSON,
     )
-    tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
-
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     last_used_at = Column(UTCDateTime(), nullable=True)

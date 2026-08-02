@@ -231,9 +231,12 @@ def test_create_and_update_connection_normalize_tags(db_session, monkeypatch):
 
     assert [tag.label for tag in updated.tags] == ["finance", "archive", "prod"]
     assert [tag.color_key for tag in updated.tags] == ["neutral", "neutral", "neutral"]
+    db_session.expire_all()
     persisted = db_session.query(S3Connection).filter(S3Connection.id == created.id).first()
     assert persisted is not None
-    assert json.loads(persisted.tags_json) == ["finance", "archive", "prod"]
+    assert [
+        tag.label for tag in service.tags.get_connection_tags(persisted)
+    ] == ["finance", "archive", "prod"]
 
 
 def test_connection_models_reject_non_string_tags():

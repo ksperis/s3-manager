@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.db import S3Account, S3AccountTag, S3Connection, S3ConnectionTag, S3User, S3UserTag, StorageEndpoint, StorageEndpointTag, TagDefinition
 from app.models.tagging import TagDefinitionSummary
-from app.utils.normalize import dump_string_list_json
 from app.utils.tagging import (
     DEFAULT_TAG_COLOR_KEY,
     DEFAULT_TAG_SCOPE,
@@ -179,7 +178,6 @@ class TagsService:
             link.position = position
             next_links.append(link)
         setattr(parent, "tag_links", next_links)
-        parent.tags_json = dump_string_list_json([item["label"] for item in normalized])
         self.db.add(parent)
         self.db.flush()
         self.cleanup_orphan_definitions()

@@ -825,7 +825,6 @@ class S3AccountsService:
                 rgw_user_uid=root_uid,
                 email=item.email,
                 storage_endpoint_id=endpoint.id if endpoint else None,
-                tags_json="[]",
             )
             self.db.add(account)
             self.db.flush()
@@ -896,7 +895,6 @@ class S3AccountsService:
             rgw_user_uid=root_uid,
             email=payload.email,
             storage_endpoint_id=endpoint.id,
-            tags_json="[]",
         )
         self.db.add(account)
         self.db.flush()

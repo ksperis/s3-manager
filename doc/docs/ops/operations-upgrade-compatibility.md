@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 normalized tags only
+
+Migration `0078_remove_legacy_tags_json` removes the `tags_json` mirrors from
+storage endpoints, S3 accounts, S3 users, and S3 connections. Normalized tag
+definitions and ordered link tables have been the only read source since their
+introduction; the backend now writes only that canonical model.
+
+Deploy the migration and backend together because older instances still write
+the removed columns. Downgrade recreates each JSON mirror from the normalized
+links in stored order, but the current backend never reads or maintains it.
+
 ## 2026-08 canonical S3 connection capabilities
 
 Migration `0077_canonical_s3_connection_capabilities` rewrites every cached S3

@@ -32,7 +32,6 @@ class StorageEndpoint(Base):
     features_config = Column(Text, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
     force_path_style = Column(Boolean, default=False, nullable=False, server_default="0")
     verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")

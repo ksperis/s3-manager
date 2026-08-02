@@ -3,7 +3,7 @@
 from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -23,7 +23,6 @@ class S3User(Base):
     email = Column(String, nullable=True)
     rgw_access_key = Column(String, nullable=False)
     rgw_secret_key = Column(EncryptedString, nullable=False)
-    tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)

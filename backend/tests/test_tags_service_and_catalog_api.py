@@ -2,8 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import json
-
 from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, TagDefinition, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
@@ -103,18 +101,6 @@ def test_tags_service_propagates_admin_managed_color_updates_across_entities(db_
     assert definitions[0].label == "prod"
     assert definitions[0].color_key == "blue"
     assert definitions[0].scope == "standard"
-
-
-def test_tags_service_no_longer_reads_tags_json_without_normalized_links(db_session):
-    endpoint = _endpoint(db_session, name="legacy-json-only-endpoint")
-    endpoint.tags_json = json.dumps(["legacy-only"])
-    db_session.add(endpoint)
-    db_session.commit()
-    db_session.refresh(endpoint)
-
-    service = TagsService(db_session)
-
-    assert service.get_storage_endpoint_tags(endpoint) == []
 
 
 def test_tags_service_isolates_private_tag_colors_per_owner(db_session):

@@ -408,7 +408,6 @@ def create_s3_connection(
         credential_owner_identifier=payload.credential_owner_identifier,
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
-        tags_json="[]",
         created_at=utcnow(),
         updated_at=utcnow(),
     )

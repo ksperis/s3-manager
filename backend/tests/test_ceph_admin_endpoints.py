@@ -62,7 +62,6 @@ def _build_endpoint(
         supervision_secret_key="METRICS-SK" if has_supervision_credentials else None,
         ceph_admin_access_key="ADMIN-AK",
         ceph_admin_secret_key="ADMIN-SK",
-        tags_json='["prod","rgw-a"]',
         tag_links=[
             SimpleNamespace(
                 id=1,

@@ -25,7 +25,6 @@ class S3Account(Base):
     rgw_access_key = Column(String, nullable=True)
     rgw_secret_key = Column(EncryptedString, nullable=True)
     rgw_user_uid = Column(String, nullable=True)
-    tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)

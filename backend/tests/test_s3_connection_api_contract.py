@@ -293,7 +293,6 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         name="contract-endpoint",
         endpoint_url="https://contract-endpoint.example.test",
         provider=StorageProvider.CEPH.value,
-        tags_json=json.dumps(["endpoint-prod", "ceph-a"]),
         is_default=True,
         is_editable=True,
     )
@@ -305,7 +304,6 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         rgw_access_key="AK-CONTRACT-ACCOUNT",
         rgw_secret_key="SK-CONTRACT-ACCOUNT",
         storage_endpoint_id=endpoint.id,
-        tags_json=json.dumps(["account-finance"]),
     )
     db_session.add(account)
     db_session.flush()
@@ -326,7 +324,6 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         access_key_id="AK-CONN-CTX",
         secret_access_key="SK-CONN-CTX",
         capabilities_json=json.dumps({"can_manage_iam": False}),
-        tags_json=json.dumps(["connection-shared"]),
     )
     db_session.add(connection)
     db_session.flush()
