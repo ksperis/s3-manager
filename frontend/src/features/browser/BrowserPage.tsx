@@ -348,6 +348,7 @@ import {
   mergeUniqueStringsWithLimit,
 } from "./browserListingState";
 import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
+import { buildBulkRestorePlan } from "./browserBulkRestorePlan";
 import type {
   BrowserItem,
   BulkMetadataDraft,
@@ -8050,40 +8051,6 @@ export default function BrowserPage({
     return Array.from(keys);
   };
 
-  const getVersionEntryTime = (entry: BrowserObjectVersion) => {
-    if (!entry.last_modified) return 0;
-    const parsed = new Date(entry.last_modified).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-
-  const sortVersionEntriesByDateDesc = (entries: BrowserObjectVersion[]) =>
-    entries
-      .slice()
-      .sort((a, b) => getVersionEntryTime(b) - getVersionEntryTime(a));
-
-  const findVersionForDate = (
-    entries: BrowserObjectVersion[],
-    targetTime: number,
-  ) => {
-    const sorted = sortVersionEntriesByDateDesc(entries);
-    return sorted.find((entry) => {
-      if (!entry.last_modified) return false;
-      return new Date(entry.last_modified).getTime() <= targetTime;
-    });
-  };
-
-  const findLatestRestorableVersion = (entries: BrowserObjectVersion[]) => {
-    const sorted = sortVersionEntriesByDateDesc(entries);
-    return (
-      sorted.find(
-        (entry) =>
-          !entry.is_delete_marker &&
-          typeof entry.version_id === "string" &&
-          entry.version_id.length > 0,
-      ) ?? null
-    );
-  };
-
   const updateDeleteDetailsStatus = (
     operationId: string,
     keys: string[],
@@ -9344,121 +9311,17 @@ export default function BrowserPage({
     let operationId: string | null = null;
     let controller: AbortController | null = null;
     try {
-      const buildRestorePlan = async () => {
-        const fileItems = bulkActionItems.filter(
-          (item) => item.type === "file",
-        );
-        const folderItems = bulkActionItems.filter(
-          (item) => item.type === "folder",
-        );
-        const restoreCandidates = new Map<string, string>();
-        const presentAtDate = new Set<string>();
-        const deleteCandidates = new Set<string>();
-        const unchangedKeys = new Set<string>();
-
-        for (const item of fileItems) {
-          const { versions, deleteMarkers } = await listAllVersionsForKey(
-            item.key,
-          );
-          const allEntries = [...versions, ...deleteMarkers];
-          const latest = allEntries.find((entry) => entry.is_latest);
-          const latestRestorable = findLatestRestorableVersion(allEntries);
-
-          if (isLatestRestoreMode) {
-            if (latest?.is_delete_marker && latestRestorable?.version_id) {
-              restoreCandidates.set(item.key, latestRestorable.version_id);
-            }
-            continue;
-          }
-
-          const match = findVersionForDate(allEntries, targetTime);
-          if (match && !match.is_delete_marker && match.version_id) {
-            if (
-              latest &&
-              !latest.is_delete_marker &&
-              latest.version_id === match.version_id
-            ) {
-              unchangedKeys.add(item.key);
-            } else {
-              restoreCandidates.set(item.key, match.version_id);
-            }
-            presentAtDate.add(item.key);
-          } else if (
-            bulkRestoreRestoreDeleted &&
-            latest?.is_delete_marker &&
-            latestRestorable?.version_id
-          ) {
-            restoreCandidates.set(item.key, latestRestorable.version_id);
-          } else if (allowDeleteMissing) {
-            deleteCandidates.add(item.key);
-          }
-        }
-
-        for (const folder of folderItems) {
-          const folderPrefix = normalizePrefix(folder.key);
-          const { versions, deleteMarkers } =
-            await listAllVersionsForPrefix(folderPrefix);
-          const byKey = new Map<string, BrowserObjectVersion[]>();
-          [...versions, ...deleteMarkers].forEach((entry) => {
-            const list = byKey.get(entry.key) ?? [];
-            list.push(entry);
-            byKey.set(entry.key, list);
-          });
-          byKey.forEach((entries, key) => {
-            const latest = entries.find((entry) => entry.is_latest);
-            const latestRestorable = findLatestRestorableVersion(entries);
-
-            if (isLatestRestoreMode) {
-              if (latest?.is_delete_marker && latestRestorable?.version_id) {
-                restoreCandidates.set(key, latestRestorable.version_id);
-              }
-              return;
-            }
-
-            const match = findVersionForDate(entries, targetTime);
-            if (match && !match.is_delete_marker && match.version_id) {
-              if (
-                latest &&
-                !latest.is_delete_marker &&
-                latest.version_id === match.version_id
-              ) {
-                unchangedKeys.add(key);
-              } else {
-                restoreCandidates.set(key, match.version_id);
-              }
-              presentAtDate.add(key);
-            } else if (
-              bulkRestoreRestoreDeleted &&
-              latest?.is_delete_marker &&
-              latestRestorable?.version_id
-            ) {
-              restoreCandidates.set(key, latestRestorable.version_id);
-            }
-          });
-          if (allowDeleteMissing) {
-            const currentObjects = await listAllObjectsForPrefix(folderPrefix);
-            currentObjects.forEach((obj) => {
-              if (!presentAtDate.has(obj.key)) {
-                deleteCandidates.add(obj.key);
-              }
-            });
-          }
-        }
-
-        const restoreList = Array.from(restoreCandidates.entries()).map(
-          ([key, versionId]) => ({
-            key,
-            versionId,
-          }),
-        );
-        const deleteList = allowDeleteMissing
-          ? Array.from(deleteCandidates)
-          : [];
-        return { restoreList, deleteList, unchangedKeys };
-      };
-
       const { restoreList, deleteList, unchangedKeys } =
-        await buildRestorePlan();
+        await buildBulkRestorePlan({
+          items: bulkActionItems,
+          restoreLatestDeleted: isLatestRestoreMode,
+          targetTime,
+          deleteMissing: allowDeleteMissing,
+          listVersionsForKey: listAllVersionsForKey,
+          listVersionsForPrefix: listAllVersionsForPrefix,
+          listObjectsForPrefix: (targetPrefix) =>
+            listAllObjectsForPrefix(targetPrefix),
+        });
       const unchangedCount = unchangedKeys.size;
       const total = restoreList.length + deleteList.length;
       if (total === 0) {
