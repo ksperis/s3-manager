@@ -150,14 +150,6 @@ class TopicsService:
                 return value
         return value
 
-    def _to_int(self, value: Any) -> Optional[int]:
-        if value is None or value == "":
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
     def _topic_from_attributes(
         self,
         arn: str,
@@ -171,8 +163,6 @@ class TopicsService:
             arn=arn,
             owner=attributes.get("Owner"),
             is_ceph=is_ceph,
-            subscriptions_confirmed=self._to_int(attributes.get("SubscriptionsConfirmed")),
-            subscriptions_pending=self._to_int(attributes.get("SubscriptionsPending")),
             configuration=self._parse_configurable_attributes(attributes),
         )
 

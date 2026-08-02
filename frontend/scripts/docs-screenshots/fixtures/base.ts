@@ -563,16 +563,12 @@ const TOPICS = [
     name: "object-events",
     arn: "arn:aws:sns:us-east-1:111111111111:object-events",
     owner: "111111111111",
-    subscriptions_confirmed: 2,
-    subscriptions_pending: 1,
     configuration: { "verify-ssl": "true" },
   },
   {
     name: "billing-alerts",
     arn: "arn:aws:sns:us-east-1:111111111111:billing-alerts",
     owner: "111111111111",
-    subscriptions_confirmed: 1,
-    subscriptions_pending: 0,
     configuration: { "delivery-policy": "default" },
   },
 ];

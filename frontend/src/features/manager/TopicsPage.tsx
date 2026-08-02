@@ -120,15 +120,6 @@ function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
 }
 
-function renderTopicSubscriptionCounts(topic: Topic) {
-  return (
-    <>
-      <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
-      <div>Pending: {topic.subscriptions_pending ?? 0}</div>
-    </>
-  );
-}
-
 export default function TopicsPage() {
   const {
     accounts,
@@ -525,12 +516,6 @@ export default function TopicsPage() {
       ),
     },
     {
-      id: "subscriptions",
-      label: "Subscriptions",
-      cellClassName: "ui-caption",
-      render: renderTopicSubscriptionCounts,
-    },
-    {
       id: "actions",
       label: "Actions",
       align: "right",
@@ -599,7 +584,7 @@ export default function TopicsPage() {
       {needsS3AccountSelection ? (
         <PageEmptyState
           title="Select an account before managing SNS topics"
-          description="SNS topics are created within an execution context. Choose an account to list topics, review subscriptions, and update notification settings."
+          description="SNS topics are created within an execution context. Choose an account to list topics and update notification settings."
           primaryAction={{ label: "Open buckets", to: "/manager/buckets" }}
           tone="warning"
         />
@@ -613,7 +598,7 @@ export default function TopicsPage() {
       ) : (
         <ListPageSection
             title="Topics"
-            description={`${accountLabel} · Topic inventory, subscriptions, attributes, and policies.`}
+            description={`${accountLabel} · Topic inventory, attributes, and policies.`}
             countLabel={`${filteredTopics.length} result(s)`}
             search={
               <input

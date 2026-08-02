@@ -62,6 +62,9 @@ def test_parse_topic_configuration_normalizes_ceph_endpoint():
         "Policy": '{"Version":"2012-10-17","Statement":[]}',
         "Version": "2012-10-17",
         "Statement": [{"Effect": "Allow"}],
+        "SubscriptionsConfirmed": "2",
+        "SubscriptionsPending": "1",
+        "SubscriptionsDeleted": "3",
         "EndPoint": json.dumps(
             {
                 "EndpointAddress": "https://example.com/webhook",
@@ -88,6 +91,9 @@ def test_parse_topic_configuration_normalizes_ceph_endpoint():
     assert "Policy" not in result
     assert "Version" not in result
     assert "Statement" not in result
+    assert "SubscriptionsConfirmed" not in result
+    assert "SubscriptionsPending" not in result
+    assert "SubscriptionsDeleted" not in result
 
 
 def test_set_topic_configuration_skips_noop_for_ceph_endpoint(monkeypatch):
@@ -182,7 +188,7 @@ def test_set_topic_configuration_only_sends_changes(monkeypatch):
     assert result == {"push-endpoint": "https://new.example.com", "verify-ssl": False}
 
 
-def test_list_topics_deduplicates_ceph_entries_and_uses_sns_subscription_counts(monkeypatch):
+def test_list_topics_deduplicates_ceph_entries_and_loads_topic_attributes(monkeypatch):
     service = TopicsService()
     arn = "arn:aws:sns:default:tenant:topic-generic_test_unistra_preprod2"
     monkeypatch.setattr(
@@ -210,8 +216,6 @@ def test_list_topics_deduplicates_ceph_entries_and_uses_sns_subscription_counts(
         return {
             "TopicArn": topic_arn,
             "Owner": "tenant",
-            "SubscriptionsConfirmed": "2",
-            "SubscriptionsPending": "1",
         }
 
     monkeypatch.setattr(sns_client, "get_topic_attributes", fake_get_topic_attributes)
@@ -223,8 +227,9 @@ def test_list_topics_deduplicates_ceph_entries_and_uses_sns_subscription_counts(
     assert topic.name == "topic-generic_test_unistra_preprod2"
     assert topic.arn == arn
     assert topic.is_ceph is True
-    assert topic.subscriptions_confirmed == 2
-    assert topic.subscriptions_pending == 1
+    assert topic.owner == "tenant"
+    assert "subscriptions_confirmed" not in topic.model_dump()
+    assert "subscriptions_pending" not in topic.model_dump()
     assert attributes_calls == [arn]
 
 
@@ -253,8 +258,6 @@ def test_list_topics_ignores_ceph_notification_entries_as_topic_names_without_pr
         "get_topic_attributes",
         lambda topic_arn, *_, **__: {
             "TopicArn": topic_arn,
-            "SubscriptionsConfirmed": "4",
-            "SubscriptionsPending": "0",
         },
     )
 
@@ -263,8 +266,6 @@ def test_list_topics_ignores_ceph_notification_entries_as_topic_names_without_pr
     assert len(topics) == 1
     assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
-    assert topics[0].subscriptions_confirmed == 4
-    assert topics[0].subscriptions_pending == 0
 
 
 def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
@@ -278,8 +279,6 @@ def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
         lambda topic_arn, *_, **__: {
             "TopicArn": topic_arn,
             "Owner": "123456789012",
-            "SubscriptionsConfirmed": "1",
-            "SubscriptionsPending": "0",
         },
     )
 
@@ -288,5 +287,4 @@ def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
     assert len(topics) == 1
     assert topics[0].name == "standard-topic"
     assert topics[0].is_ceph is False
-    assert topics[0].subscriptions_confirmed == 1
-    assert topics[0].subscriptions_pending == 0
+    assert topics[0].owner == "123456789012"

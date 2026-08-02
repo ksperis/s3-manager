@@ -10,8 +10,6 @@ export type Topic = {
   arn: string;
   owner?: string | null;
   is_ceph?: boolean;
-  subscriptions_confirmed?: number | null;
-  subscriptions_pending?: number | null;
   configuration?: Record<string, unknown> | null;
 };
 

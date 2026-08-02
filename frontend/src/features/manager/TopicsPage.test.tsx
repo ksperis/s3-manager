@@ -84,8 +84,6 @@ describe("TopicsPage", () => {
       {
         name: "topic-events",
         arn: topicArn,
-        subscriptions_confirmed: 1,
-        subscriptions_pending: 0,
         configuration: { "verify-ssl": "false" },
       },
     ]);
@@ -139,7 +137,7 @@ describe("TopicsPage", () => {
     });
   });
 
-  it("renders Ceph topics with standard SNS subscription counters", async () => {
+  it("renders canonical Ceph topics without raw notification details", async () => {
     const user = userEvent.setup();
     const topicArn = "arn:aws:sns:default:tenant:ceph-topic-main";
     useS3AccountContextMock.mockReturnValue({
@@ -162,15 +160,11 @@ describe("TopicsPage", () => {
         name: "ceph-topic-main",
         arn: topicArn,
         is_ceph: true,
-        subscriptions_confirmed: 2,
-        subscriptions_pending: 0,
       },
       {
         name: "secondary-topic",
         arn: "arn:aws:sns:default:tenant:secondary-topic",
         is_ceph: true,
-        subscriptions_confirmed: 0,
-        subscriptions_pending: 0,
       },
     ]);
 
@@ -183,14 +177,9 @@ describe("TopicsPage", () => {
     expect(await screen.findByText("ceph-topic-main")).toBeInTheDocument();
     expect(screen.getAllByText("ceph-topic-main")).toHaveLength(1);
     expect(screen.getByText("secondary-topic")).toBeInTheDocument();
-    expect(screen.getByText("Confirmed: 2")).toBeInTheDocument();
-    expect(screen.getAllByText("Pending: 0")).toHaveLength(2);
     expect(screen.getByRole("table")).toHaveClass("responsive-data-table");
     expect(screen.getByText("ceph-topic-main").closest("td")).toHaveAttribute("data-mobile-primary", "true");
-    expect(screen.getByText("Confirmed: 2").closest("td")).toHaveAttribute(
-      "data-label",
-      "Subscriptions"
-    );
+    expect(screen.queryByRole("columnheader", { name: "Subscriptions" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Attributes" })[0].closest("td")).toHaveAttribute(
       "data-mobile-actions",
       "true"
