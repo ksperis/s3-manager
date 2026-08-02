@@ -229,9 +229,6 @@ class FakeRGWAdminImport:
         self.calls.append(("get_account_user", account_id))
         raise RGWAdminError("account user endpoint unavailable")
 
-    def create_account_user(self, *args, **kwargs):
-        raise RGWAdminError("should not be called")
-
     def create_user_with_account_id(self, *args, **kwargs):
         return {}
 

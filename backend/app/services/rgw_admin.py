@@ -1,7 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import re
-import secrets
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -464,21 +463,6 @@ class RGWAdminClient:
                         existing[field_name] = field_value
 
         return result
-
-    def create_account_user(
-        self,
-        account_id: str,
-        uid: str,
-        display_name: Optional[str] = None,
-        email: Optional[str] = None,
-        account_root: bool = False,
-    ) -> Dict[str, Any]:
-        return self.create_user_with_account_id(
-            uid=uid,
-            account_id=account_id,
-            display_name=display_name or email or uid,
-            account_root=account_root,
-        )
 
     def get_account_user(
         self, account_id: str, uid: str, allow_not_found: bool = False
@@ -1073,28 +1057,6 @@ class RGWAdminClient:
             allow_not_implemented=True,
         )
 
-    def provision_account_keys(self, account_id: str, account_name: str) -> Tuple[Optional[str], Optional[str]]:
-        account_info = self.create_account(account_id=account_id, account_name=account_name)
-        keys = self._extract_keys(account_info)
-        root_uid = f"{account_id}-root"
-        if not keys:
-            try:
-                user_data = self.create_user_with_account_id(
-                    uid=root_uid,
-                    account_id=account_id,
-                    display_name=account_name,
-                    account_root=True,
-                )
-                keys = self._extract_keys(user_data)
-            except RGWAdminError:
-                keys = []
-        if not keys:
-            fetched = self.get_user(root_uid, tenant=None, allow_not_found=True)
-            keys = self._extract_keys(fetched or {})
-        if not keys:
-            return None, None
-        return keys[0].get("access_key"), keys[0].get("secret_key")
-
     def create_user_with_account_id(
         self,
         uid: str,
@@ -1161,51 +1123,6 @@ class RGWAdminClient:
         if purge_data:
             params["purge-data"] = "true"
         return self._request_operation("DELETE", "/admin/user", params=params)
-
-    def provision_user_keys(
-        self,
-        user_email: str,
-        tenant: Optional[str] = None,
-        account_id: Optional[str] = None,
-        account_root: bool = True,
-    ) -> Tuple[str, str]:
-        uid = self._sanitize_uid(user_email)
-        keys: list[Dict[str, Any]] = []
-        if account_id:
-            try:
-                data = self.create_user_with_account_id(
-                    uid=uid,
-                    account_id=account_id,
-                    display_name=user_email,
-                    account_root=account_root,
-                )
-                keys = self._extract_keys(data)
-            except RGWAdminError:
-                keys = []
-            if not keys:
-                try:
-                    data = self.create_access_key(uid, tenant=account_id)
-                    keys = self._extract_keys(data)
-                except RGWAdminError:
-                    keys = []
-            if not keys:
-                fetched = self.get_user(uid, tenant=None, allow_not_found=True)
-                keys = self._extract_keys(fetched or {})
-        else:
-            data = self.create_user(uid=uid, display_name=user_email, email=user_email, tenant=tenant)
-            keys = self._extract_keys(data)
-            if not keys:
-                try:
-                    data = self.create_access_key(uid, tenant=tenant)
-                    keys = self._extract_keys(data)
-                except RGWAdminError:
-                    keys = []
-            if not keys:
-                fetched = self.get_user(uid, tenant=tenant, allow_not_found=True)
-                keys = self._extract_keys(fetched or {})
-        if not keys:
-            return secrets.token_hex(16), secrets.token_urlsafe(32)
-        return keys[0].get("access_key"), keys[0].get("secret_key")
 
     def get_user_quota(self, uid: str, tenant: Optional[str] = None) -> Tuple[Optional[int], Optional[int]]:
         payload = self.get_user(uid, tenant=tenant, allow_not_found=True) or {}

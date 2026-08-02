@@ -5,15 +5,6 @@ from app.db import S3Account, User, UserS3Account, UserRole
 from tests.s3_account_factory import make_s3_account
 
 
-class FakeRGWAdmin:
-    def __init__(self):
-        self.calls = []
-
-    def provision_user_keys(self, user_email: str, account_id: str, account_root: bool = False, tenant=None):
-        self.calls.append((user_email, account_id, account_root))
-        return "AK", "SK"
-
-
 def test_assign_user_to_account_creates_link_and_root(db_session):
     # Seed account and user
     account = (

@@ -282,35 +282,6 @@ def test_create_user_with_account_id_conflict_and_delete_user_fallback(monkeypat
     assert attempts == ["with spaces", "with-spaces"]
 
 
-def test_provision_account_keys_and_user_keys_paths(monkeypatch):
-    client = _client()
-
-    # Account provisioning path where no keys are ever returned.
-    monkeypatch.setattr(client, "create_account", lambda *args, **kwargs: {})
-    monkeypatch.setattr(client, "create_user_with_account_id", lambda *args, **kwargs: {})
-    monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: {})
-    access, secret = client.provision_account_keys("RGW1", "Account1")
-    assert (access, secret) == (None, None)
-
-    # User provisioning with account fallback to generated tokens.
-    monkeypatch.setattr(client, "create_user_with_account_id", lambda *args, **kwargs: {})
-    monkeypatch.setattr(client, "create_access_key", lambda *args, **kwargs: {})
-    monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: {})
-    monkeypatch.setattr("app.services.rgw_admin.secrets.token_hex", lambda n: "hex-token")
-    monkeypatch.setattr("app.services.rgw_admin.secrets.token_urlsafe", lambda n: "url-token")
-    ak, sk = client.provision_user_keys("user@example.test", account_id="RGW1")
-    assert (ak, sk) == ("hex-token", "url-token")
-
-    # Non-account provisioning with created user keys.
-    monkeypatch.setattr(
-        client,
-        "create_user",
-        lambda *args, **kwargs: {"keys": [{"access_key": "AK-USER", "secret_key": "SK-USER"}]},
-    )
-    ak2, sk2 = client.provision_user_keys("user2@example.test")
-    assert (ak2, sk2) == ("AK-USER", "SK-USER")
-
-
 def test_get_account_quota_and_set_user_caps(monkeypatch):
     client = _client()
     monkeypatch.setattr(client, "get_account", lambda *args, **kwargs: {"not_found": True})
@@ -611,17 +582,7 @@ def test_misc_admin_helpers_and_quota_paths(monkeypatch):
     assert isinstance(factory_client, RGWAdminClient)
 
 
-def test_provision_paths_cover_additional_fallbacks(monkeypatch):
-    client = _client()
-
-    def _raise_admin_error(*args, **kwargs):
-        raise RGWAdminError("boom")
-
-    monkeypatch.setattr(client, "create_account", lambda *args, **kwargs: {})
-    monkeypatch.setattr(client, "create_user_with_account_id", _raise_admin_error)
-    monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: {"keys": [{"access_key": "AK-FETCH", "secret_key": "SK-FETCH"}]})
-    assert client.provision_account_keys("RGW1", "Account1") == ("AK-FETCH", "SK-FETCH")
-
+def test_create_user_with_account_id_uses_account_lookup_after_conflict(monkeypatch):
     conflict_client = _client()
     monkeypatch.setattr(conflict_client, "_request", lambda *args, **kwargs: {"conflict": True})
     monkeypatch.setattr(conflict_client, "get_user", lambda *args, **kwargs: {"not_found": True})
@@ -636,41 +597,8 @@ def test_provision_paths_cover_additional_fallbacks(monkeypatch):
     )
     assert payload == {"uid": "account-user"}
 
-    account_client = _client()
-    monkeypatch.setattr(account_client, "create_user_with_account_id", _raise_admin_error)
-    monkeypatch.setattr(account_client, "create_access_key", _raise_admin_error)
-    monkeypatch.setattr(
-        account_client,
-        "get_user",
-        lambda *args, **kwargs: {"keys": [{"access_key": "AK-ACC", "secret_key": "SK-ACC"}]},
-    )
-    assert account_client.provision_user_keys("account.user@test", account_id="RGW1") == ("AK-ACC", "SK-ACC")
-
-    user_client = _client()
-    monkeypatch.setattr(user_client, "create_user", lambda *args, **kwargs: {})
-    monkeypatch.setattr(user_client, "create_access_key", _raise_admin_error)
-    monkeypatch.setattr(
-        user_client,
-        "get_user",
-        lambda *args, **kwargs: {"keys": [{"access_key": "AK-USER", "secret_key": "SK-USER"}]},
-    )
-    assert user_client.provision_user_keys("plain.user@test") == ("AK-USER", "SK-USER")
-
-
-def test_account_user_wrappers_and_filters(monkeypatch):
+def test_get_account_user_filters_account_id(monkeypatch):
     client = _client()
-    captured: dict[str, object] = {}
-
-    def fake_create_user_with_account_id(*args, **kwargs):
-        captured["kwargs"] = kwargs
-        return {"uid": kwargs["uid"], "account_id": kwargs["account_id"]}
-
-    monkeypatch.setattr(client, "create_user_with_account_id", fake_create_user_with_account_id)
-    result = client.create_account_user("RGW1", "alice", display_name="Alice", email="alice@test", account_root=False)
-    assert result == {"uid": "alice", "account_id": "RGW1"}
-    assert captured["kwargs"]["display_name"] == "Alice"
-    assert captured["kwargs"]["account_root"] is False
-
     monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: {"uid": "alice", "account_id": "RGW2"})
     assert client.get_account_user("RGW1", "alice", allow_not_found=True) is None
     monkeypatch.setattr(client, "get_user", lambda *args, **kwargs: {"uid": "alice", "account_id": "RGW1"})
@@ -857,7 +785,7 @@ def test_bucket_info_usage_and_user_key_success_paths(monkeypatch):
     assert "show-summary" not in captured[-1]["params"]
 
 
-def test_delete_user_tenant_and_non_account_access_key_fallback(monkeypatch):
+def test_delete_user_passes_tenant(monkeypatch):
     client = _client()
     captured: list[dict[str, object]] = []
 
@@ -869,15 +797,6 @@ def test_delete_user_tenant_and_non_account_access_key_fallback(monkeypatch):
     monkeypatch.setattr(client, "_request", fake_delete)
     client.delete_user("alice", tenant="RGW1")
     assert captured[-1]["tenant"] == "RGW1"
-
-    monkeypatch.setattr(client, "create_user", lambda *args, **kwargs: {})
-    monkeypatch.setattr(
-        client,
-        "create_access_key",
-        lambda *args, **kwargs: {"keys": [{"access_key": "AK-NEW", "secret_key": "SK-NEW"}]},
-    )
-    assert client.provision_user_keys("plain.user@test") == ("AK-NEW", "SK-NEW")
-
 
 def test_rgw_admin_remaining_small_branches(monkeypatch):
     client = _client()
