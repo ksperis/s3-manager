@@ -2,7 +2,18 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import json
+from typing import Optional
+
+from app.db import S3Account
+from app.models.app_settings import (
+    PortalBucketDefaults,
+    PortalBucketDefaultsOverride,
+    PortalSettings,
+    PortalSettingsOverride,
+)
+from app.models.portal import PortalAccountSettings, PortalProjectSettings
+from app.services.app_settings_service import load_app_settings
 
 
 class PortalSettingsMixin:
