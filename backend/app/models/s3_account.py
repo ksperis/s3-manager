@@ -57,11 +57,11 @@ class S3Account(BaseModel):
     rgw_user_uids: Optional[list[str]] = None
     rgw_topic_count: Optional[int] = None
     rgw_topics: Optional[list[str]] = None
-    storage_endpoint_id: Optional[int] = None
-    storage_endpoint_name: Optional[str] = None
-    storage_endpoint_url: Optional[str] = None
+    storage_endpoint_id: int
+    storage_endpoint_name: str
+    storage_endpoint_url: str
     storage_endpoint_is_default: Optional[bool] = None
-    storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    storage_endpoint_capabilities: dict[str, bool]
     allow_manager_bucket_quota: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 

@@ -27,7 +27,7 @@ function getStorageSuffix(context: AccountLike): string {
   if (isDefaultStorageEndpoint(context)) return "";
   const endpointName = isExecutionContext(context)
     ? context.endpoint_name || context.endpoint_url
-    : context.storage_endpoint_name || context.storage_endpoint_url;
+    : context.storage_endpoint_name;
   const label = endpointName || "Custom endpoint";
   return ` (${label})`;
 }

@@ -29,6 +29,12 @@ function account(overrides: Partial<S3Account>): S3Account {
     id: "1",
     name: "Primary",
     tags: [],
+    is_s3_user: false,
+    storage_endpoint_id: 1,
+    storage_endpoint_name: "Default endpoint",
+    storage_endpoint_url: "https://s3.example.test",
+    storage_endpoint_is_default: true,
+    storage_endpoint_capabilities: {},
     ...overrides,
   };
 }

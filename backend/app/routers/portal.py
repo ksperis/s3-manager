@@ -528,14 +528,12 @@ def list_portal_accounts(
                 quota_max_objects=None,
                 root_user_email=root_link[0] if root_link else None,
                 root_user_id=root_link[1] if root_link else None,
-                storage_endpoint_id=endpoint.id if endpoint else None,
-                storage_endpoint_name=endpoint.name if endpoint else None,
-                storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                storage_endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
-                storage_endpoint_capabilities=(
-                    features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-                    if endpoint
-                    else None
+                storage_endpoint_id=endpoint.id,
+                storage_endpoint_name=endpoint.name,
+                storage_endpoint_url=endpoint.endpoint_url,
+                storage_endpoint_is_default=bool(endpoint.is_default),
+                storage_endpoint_capabilities=features_to_capabilities(
+                    normalize_features_config(endpoint.provider, endpoint.features_config)
                 ),
                 account_role=account_role_by_id.get(acc.id),
             )

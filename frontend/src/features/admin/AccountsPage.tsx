@@ -222,12 +222,7 @@ export default function S3AccountsPage() {
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
   const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;
-  const editingEndpoint = useMemo(() => {
-    if (!editingS3Account?.storage_endpoint_id) return null;
-    return storageEndpoints.find((endpoint) => endpoint.id === editingS3Account.storage_endpoint_id) ?? null;
-  }, [editingS3Account?.storage_endpoint_id, storageEndpoints]);
-  const editingCapabilities =
-    editingS3Account?.storage_endpoint_capabilities ?? editingEndpoint?.capabilities ?? null;
+  const editingCapabilities = editingS3Account?.storage_endpoint_capabilities ?? null;
   const editingEndpointId = editingS3Account?.storage_endpoint_id ?? null;
   const editingEndpointCanWrite = editingEndpointId ? endpointAccountsWrite[editingEndpointId] === true : false;
   const usageEnabled = Boolean(editingCapabilities?.usage);

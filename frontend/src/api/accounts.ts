@@ -51,11 +51,11 @@ export type S3Account = {
   rgw_user_uids?: string[] | null;
   rgw_topic_count?: number | null;
   rgw_topics?: string[] | null;
-  storage_endpoint_id?: number | null;
-  storage_endpoint_name?: string | null;
-  storage_endpoint_url?: string | null;
+  storage_endpoint_id: number;
+  storage_endpoint_name: string;
+  storage_endpoint_url: string;
   storage_endpoint_is_default?: boolean | null;
-  storage_endpoint_capabilities?: Record<string, boolean> | null;
+  storage_endpoint_capabilities: Record<string, boolean>;
   allow_manager_bucket_quota?: boolean;
 };
 

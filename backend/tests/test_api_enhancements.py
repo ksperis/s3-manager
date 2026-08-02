@@ -35,6 +35,10 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
                 quota_max_objects=payload.quota_max_objects,
                 user_ids=[],
                 user_links=[],
+                storage_endpoint_id=1,
+                storage_endpoint_name="Ceph",
+                storage_endpoint_url="https://s3.example.test",
+                storage_endpoint_capabilities={"account": True},
             )
 
     app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
@@ -56,6 +60,8 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
     assert body["name"] == "quota-acc"
     assert body["quota_max_size_gb"] == 500
     assert body["quota_max_objects"] == 1000000
+    assert body["storage_endpoint_id"] == 1
+    assert body["storage_endpoint_name"] == "Ceph"
     assert captured == {
         "name": "quota-acc",
         "email": "quota@example.com",

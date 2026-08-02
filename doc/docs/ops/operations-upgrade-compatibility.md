@@ -1,5 +1,14 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical execution-context catalogue
+
+The unused `GET /api/manager/accounts` endpoint has been removed. The frontend
+already uses `GET /api/me/execution-contexts?workspace=manager`, whose explicit
+context kinds and capabilities replace the heterogeneous account-shaped
+response. Requests to the removed endpoint now return `404`. Canonical account
+responses now always include a non-null Storage Endpoint ID, name, URL, and
+capability map.
+
 ## 2026-08 removal of the dead Portal key setting
 
 Migration `0093_remove_dead_portal_key_setting` removes `allow_portal_key`

@@ -57,7 +57,6 @@ from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import quota_monitor as internal_quota_monitor
 from app.routers.internal import usage_history as internal_usage_history
 from app.routers.internal import s3_connections as internal_s3_connections
-from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import activity as manager_activity
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
@@ -195,11 +194,6 @@ app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_usage_history.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)
-app.include_router(
-    manager_accounts.router,
-    prefix=settings.api_v1_prefix,
-    dependencies=[Depends(require_manager_context_enabled)],
-)
 app.include_router(
     manager_context.router,
     prefix=settings.api_v1_prefix,
