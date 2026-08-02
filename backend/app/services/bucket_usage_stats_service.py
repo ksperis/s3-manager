@@ -196,13 +196,24 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, sort_keys=True, default=str)
 
 
-def _json_loads(value: str | None, fallback: Any) -> Any:
-    if not value:
-        return fallback
-    try:
-        return json.loads(value)
-    except (TypeError, ValueError):
-        return fallback
+def _load_distribution_entries(
+    value: str,
+) -> list[BucketUsageStatsDistributionEntry]:
+    payload = json.loads(value)
+    if not isinstance(payload, list):
+        raise ValueError("Bucket usage distribution must be a JSON list")
+    return [BucketUsageStatsDistributionEntry.model_validate(entry) for entry in payload]
+
+
+def _load_warnings(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    payload = json.loads(value)
+    if not isinstance(payload, list) or any(
+        not isinstance(item, str) for item in payload
+    ):
+        raise ValueError("Bucket usage warnings must be a JSON string list")
+    return payload
 
 
 def _normalize_dt(value: datetime | None) -> datetime | None:
@@ -1006,12 +1017,6 @@ class BucketUsageStatsService:
         )
 
     def _snapshot_from_row(self, row: BucketUsageStatsSnapshotRow) -> BucketUsageStatsSnapshot:
-        def entries(value: str) -> list[BucketUsageStatsDistributionEntry]:
-            payload = _json_loads(value, [])
-            if not isinstance(payload, list):
-                return []
-            return [BucketUsageStatsDistributionEntry(**entry) for entry in payload if isinstance(entry, dict)]
-
         return BucketUsageStatsSnapshot(
             scope_kind=row.scope_kind,
             scope_id=row.scope_id,
@@ -1026,11 +1031,11 @@ class BucketUsageStatsService:
             total_bytes=int(row.total_bytes or 0),
             current_bytes=int(row.current_bytes or 0),
             noncurrent_bytes=int(row.noncurrent_bytes or 0),
-            data_type_distribution=entries(row.data_type_distribution_json),
-            storage_class_distribution=entries(row.storage_class_distribution_json),
-            size_distribution=entries(row.size_distribution_json),
-            age_distribution=entries(row.age_distribution_json),
-            current_vs_noncurrent=entries(row.current_noncurrent_distribution_json),
-            warnings=[str(item) for item in _json_loads(row.warnings_json, []) if isinstance(item, str)],
+            data_type_distribution=_load_distribution_entries(row.data_type_distribution_json),
+            storage_class_distribution=_load_distribution_entries(row.storage_class_distribution_json),
+            size_distribution=_load_distribution_entries(row.size_distribution_json),
+            age_distribution=_load_distribution_entries(row.age_distribution_json),
+            current_vs_noncurrent=_load_distribution_entries(row.current_noncurrent_distribution_json),
+            warnings=_load_warnings(row.warnings_json),
             calculated_at=row.calculated_at,
         )

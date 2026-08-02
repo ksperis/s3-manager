@@ -13,6 +13,8 @@ from app.services.bucket_usage_stats_service import (
     BucketUsageStatsAggregateTarget,
     BucketUsageStatsResolvedTarget,
     BucketUsageStatsService,
+    _load_distribution_entries,
+    _load_warnings,
     classify_data_type,
 )
 
@@ -75,6 +77,18 @@ def test_classify_data_type_prefers_backup_names_over_archives():
     assert classify_data_type("dataset/sample.parquet") == "scientific_data"
     assert classify_data_type("src/app.ts") == "source_code"
     assert classify_data_type("README") == "unknown"
+
+
+def test_persisted_usage_stats_json_uses_strict_list_contracts():
+    assert _load_distribution_entries("[]") == []
+    assert _load_warnings(None) == []
+    assert _load_warnings('["partial"]') == ["partial"]
+    for raw in ("{", "{}", '["invalid"]'):
+        with pytest.raises((ValueError, TypeError)):
+            _load_distribution_entries(raw)
+    for raw in ("{", "{}", '["partial",42]'):
+        with pytest.raises(ValueError):
+            _load_warnings(raw)
 
 
 def test_usage_stats_calculates_versions_current_noncurrent_and_delete_markers():

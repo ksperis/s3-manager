@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical bucket usage statistics JSON
+
+Migration `0085_canonical_bucket_usage_stats_json` rewrites every persisted
+bucket distribution as a JSON list of objects and every non-null warning set as
+a JSON list of strings. Malformed containers and entries are removed once;
+`warnings_json = NULL` remains the canonical representation of no warnings.
+
+Deploy the migration and backend together. Snapshot loading now validates every
+distribution entry and warning instead of returning empty data for malformed
+storage. The data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical managed-access IAM state
 
 Migration `0084_canonical_managed_access_iam_lists` rewrites the tracked IAM
