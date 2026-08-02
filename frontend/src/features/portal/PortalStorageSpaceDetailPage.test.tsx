@@ -103,7 +103,6 @@ const mocks = vi.hoisted(() => ({
           ipAddress: "192.168.1.10",
         },
       ],
-      transfers: [],
       alerts: [],
     },
     loading: false,
@@ -480,11 +479,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     });
     expect(embedProps.storageEndpointCapabilities).toEqual({ sse: true, sts: true });
     expect(embedProps.onOpenObjectDetailsRoute).toEqual(expect.any(Function));
-    expect(embedProps.transferReporter).toMatchObject({
-      start: expect.any(Function),
-      complete: expect.any(Function),
-      fail: expect.any(Function),
-    });
+    expect(embedProps.transferReporter).toBeUndefined();
   });
 
   it("loads Storage Space statistics lazily and keeps the tab in the URL", async () => {

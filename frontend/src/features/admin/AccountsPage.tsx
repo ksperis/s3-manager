@@ -2147,7 +2147,7 @@ export default function S3AccountsPage() {
                             title="Server access logging"
                             description={`Effective for storage spaces: ${
                               effectivePortalSettings.server_access_logging_enabled ? "enabled" : "disabled"
-                            }`}
+                            }. Disabled means no exhaustive object audit.`}
                             action={
                               <select
                                 value={adminPortalServerAccessLoggingOverride}

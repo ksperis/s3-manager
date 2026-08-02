@@ -273,7 +273,7 @@ def _provision_account(
 
     super_admin_session.post(
         f"/admin/users/{manager_user_id}/assign-account",
-        json={"account_id": account_id, "account_root": True},
+        json={"account_id": account_id, "role": "account_administrator"},
         expected_status=200,
     )
 

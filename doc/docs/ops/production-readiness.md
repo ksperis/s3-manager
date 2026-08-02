@@ -30,7 +30,7 @@ Do not publish the URL broadly until these gates are explicit:
 | Scheduler | Healthcheck, billing, quota-monitor, and usage-history jobs are enabled or intentionally disabled. | Cron schedules, latest successful run, token source. |
 | Endpoint | First storage endpoint has healthcheck evidence and known capability flags. | Endpoint status screenshot or log. |
 | Access | Admin, Manager, Portal, Browser, Ceph Admin, and Storage Ops are enabled only for intended users. | Role/group mapping and feature flags. |
-| Audit | Audit trail and backend logs are retained centrally. | Log destination and retention policy. |
+| Audit | Application control-plane audit, backend logs, and provider S3 access logs are retained centrally. | Separate destinations, activation evidence, identity attribution, and retention policies. |
 | Support | User troubleshooting and admin runbook are linked from internal support docs. | Support handover note. |
 
 ## First rollout sequence

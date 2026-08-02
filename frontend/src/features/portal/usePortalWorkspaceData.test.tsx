@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   fetchPortalAlertsMock: vi.fn(),
   fetchPortalCollaboratorsMock: vi.fn(),
   fetchPortalStateMock: vi.fn(),
-  fetchPortalTransfersMock: vi.fn(),
   fetchPortalUsageMock: vi.fn(),
   fetchPortalUsageTrendsMock: vi.fn(),
   listPortalStorageSpacesMock: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock("../../api/portal", () => ({
   fetchPortalAlerts: (...args: unknown[]) => mocks.fetchPortalAlertsMock(...args),
   fetchPortalCollaborators: (...args: unknown[]) => mocks.fetchPortalCollaboratorsMock(...args),
   fetchPortalState: (...args: unknown[]) => mocks.fetchPortalStateMock(...args),
-  fetchPortalTransfers: (...args: unknown[]) => mocks.fetchPortalTransfersMock(...args),
   fetchPortalUsage: (...args: unknown[]) => mocks.fetchPortalUsageMock(...args),
   fetchPortalUsageTrends: (...args: unknown[]) => mocks.fetchPortalUsageTrendsMock(...args),
   listPortalStorageSpaces: (...args: unknown[]) => mocks.listPortalStorageSpacesMock(...args),
@@ -54,7 +52,6 @@ describe("usePortalWorkspaceData", () => {
       collaborators: [],
     });
     mocks.fetchPortalStateMock.mockResolvedValue({});
-    mocks.fetchPortalTransfersMock.mockResolvedValue([]);
     mocks.fetchPortalUsageMock.mockResolvedValue(null);
     mocks.fetchPortalUsageTrendsMock.mockResolvedValue(null);
     mocks.listPortalStorageSpacesMock.mockResolvedValue([]);
@@ -81,6 +78,20 @@ describe("usePortalWorkspaceData", () => {
 
     await waitFor(() => {
       expect(mocks.listPortalStorageSpacesMock).toHaveBeenCalledWith("101", undefined);
+    });
+  });
+
+  it("removes the legacy persisted Portal transfer history", async () => {
+    window.localStorage.setItem("portal:v3:transfers", "[]");
+
+    render(
+      <LanguageProvider>
+        <Probe />
+      </LanguageProvider>
+    );
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("portal:v3:transfers")).toBeNull();
     });
   });
 });

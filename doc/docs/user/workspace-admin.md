@@ -16,7 +16,9 @@ Use **Admin** for platform governance and global configuration.
 4. Use **Connections** for S3 connections.
 5. Use **Storage Backends** for endpoints and endpoint status.
 6. Use **Usage & Metrics** to review endpoint-scoped storage, usage composition, usage history, and traffic from tabbed categories.
-7. Use **Audit & Reporting** for billing, stored usage-history snapshots, and audit trail.
+7. Use **Audit & Reporting** for billing, stored usage-history snapshots, and
+   the control-plane/security audit trail. Object operations are investigated
+   in S3 provider access logs, not Admin Audit.
 8. If superadmin, use **Settings** pages for global behavior, authentication options, UI-managed OIDC/LDAP providers, and key rotation.
 
 ## Expected result
@@ -97,6 +99,7 @@ image up to 1 MiB. Group images never use Gravatar or an OIDC profile image.
 - [Feature: Admin Usage and Metrics](feature-admin-metrics.md)
 - [Feature: Usage History in Admin](feature-usage-history-admin.md)
 - [Feature: Key Rotation in Admin](feature-key-rotation-admin.md)
+- [Admin: Audit](admin-audit.md)
 - [Storage admin runbook](admin-runbook-storage-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Ops / Configuration](../ops/configuration.md)

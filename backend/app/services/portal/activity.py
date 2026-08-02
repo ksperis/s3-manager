@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.services.audit_service import parse_audit_metadata
+from app.services.audit_policy import NON_PERSISTED_AUDIT_ACTIONS
 
 from ._shared import *
 
@@ -51,8 +52,6 @@ class PortalActivityMixin:
         return str(raw_space_id)
 
     def _audit_target_label(self, log: AuditLog, metadata: dict[str, Any], storage_space: PortalStorageSpaceSummary | None) -> str:
-        if log.entity_type == "object" and log.entity_id:
-            return os.path.basename(log.entity_id.rstrip("/")) or log.entity_id
         if log.entity_type == "storage_space" and storage_space:
             return storage_space.name
         if "target_user_id" in metadata:
@@ -61,12 +60,6 @@ class PortalActivityMixin:
 
     def _portal_action_label(self, action: str) -> str:
         labels = {
-            "upload_object": "Uploaded",
-            "download_object": "Downloaded",
-            "create_folder": "Created folder",
-            "delete_object": "Deleted",
-            "restore_object_version": "Restored version",
-            "restore_deleted_object": "Restored from trash",
             "grant_storage_space_share": "Shared",
             "update_storage_space_share": "Updated share",
             "revoke_storage_space_share": "Removed share",
@@ -94,7 +87,11 @@ class PortalActivityMixin:
         query_limit = min(max(limit, 1), 200)
         logs = (
             self.db.query(AuditLog)
-            .filter(AuditLog.scope == "portal", AuditLog.account_id == access.account.id)
+            .filter(
+                AuditLog.scope == "portal",
+                AuditLog.account_id == access.account.id,
+                AuditLog.action.notin_(NON_PERSISTED_AUDIT_ACTIONS),
+            )
             .order_by(AuditLog.id.desc())
             .limit(min(query_limit * 5, 500))
             .all()
@@ -126,63 +123,6 @@ class PortalActivityMixin:
             if len(items) >= query_limit:
                 break
         return items
-
-    def list_portal_transfers(
-        self,
-        user: User,
-        access: "AccountAccess",
-        *,
-        space_id: Optional[str] = None,
-        limit: int = 100,
-    ) -> list[PortalTransfer]:
-        visible_spaces = self._visible_storage_space_lookup(user, access)
-        selected_space = visible_spaces.get(space_id) if space_id else None
-        if space_id and selected_space is None:
-            raise RuntimeError("Storage space not found or not allowed.")
-        query_limit = min(max(limit, 1), 200)
-        logs = (
-            self.db.query(AuditLog)
-            .filter(
-                AuditLog.scope == "portal",
-                AuditLog.account_id == access.account.id,
-                AuditLog.action.in_(["upload_object", "download_object"]),
-            )
-            .order_by(AuditLog.id.desc())
-            .limit(min(query_limit * 5, 500))
-            .all()
-        )
-        transfers: list[PortalTransfer] = []
-        for log in logs:
-            metadata = self._audit_metadata(log)
-            raw_space_id = self._audit_storage_space_id(log, metadata)
-            storage_space = self._audit_storage_space(log, metadata, visible_spaces)
-            if raw_space_id is not None and storage_space is None:
-                continue
-            if selected_space is not None and storage_space != selected_space:
-                continue
-            if storage_space is None and log.user_id != user.id:
-                continue
-            failed = log.status != "success"
-            target = log.entity_id or "object"
-            transfers.append(
-                PortalTransfer(
-                    id=f"audit-{log.id}",
-                    name=os.path.basename(target.rstrip("/")) or target,
-                    direction="Upload" if log.action == "upload_object" else "Download",
-                    status="Failed" if failed else "Completed",
-                    progress=0 if failed else 100,
-                    size_bytes=metadata.get("size_bytes") if isinstance(metadata.get("size_bytes"), int) else None,
-                    storage_space_id=storage_space.id if storage_space else None,
-                    storage_space_name=storage_space.name if storage_space else None,
-                    started_at=log.created_at,
-                    eta_label="-" if failed else "Completed",
-                    speed_label="-",
-                    error_message=log.message if failed else None,
-                )
-            )
-            if len(transfers) >= query_limit:
-                break
-        return transfers
 
     def list_portal_alerts(
         self,
@@ -287,26 +227,6 @@ class PortalActivityMixin:
                 )
                 break
 
-        failed_transfer = next(
-            (
-                transfer
-                for transfer in self.list_portal_transfers(user, access, limit=10)
-                if transfer.status == "Failed"
-            ),
-            None,
-        )
-        if failed_transfer:
-            alerts.append(
-                PortalAlert(
-                    id=f"transfer-failed-{failed_transfer.id}",
-                    tone="warning",
-                    title="Transfer retry needed",
-                    description=f"{failed_transfer.name} failed recently.",
-                    severity_label="Warning",
-                    storage_space_id=failed_transfer.storage_space_id,
-                    created_at=failed_transfer.started_at,
-                )
-            )
         return self.dedupe_portal_alerts(alerts)[: min(max(limit, 1), 100)]
 
     @staticmethod

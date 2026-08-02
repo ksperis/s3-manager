@@ -35,7 +35,6 @@ from app.models.portal import (
     PortalServerAccessLogFilterQuery,
     PortalServerAccessLogPage,
     PortalState,
-    PortalTransfer,
     PortalStorageObjectDeleteResponse,
     PortalStorageObjectDetail,
     PortalStorageObjectRestoreRequest,
@@ -753,26 +752,9 @@ def portal_collaborator_access_review(
         _raise_portal_storage_runtime(exc)
 
 
-@router.get("/transfers", response_model=list[PortalTransfer])
-def portal_transfers(
-    space_id: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=200),
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> list[PortalTransfer]:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    try:
-        return service.list_portal_transfers(actor, access, space_id=space_id, limit=limit)
-    except RuntimeError as exc:
-        _raise_portal_storage_runtime(exc)
-
-
-@router.get("/transfers/server-access-logs", response_model=list[PortalServerAccessLogEntry])
+@router.get("/access-logs", response_model=list[PortalServerAccessLogEntry])
 def portal_server_access_logs(
     date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    mode: str = Query("transfers", pattern=r"^(transfers|operations)$"),
     space_id: Optional[str] = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -790,7 +772,6 @@ def portal_server_access_logs(
             actor,
             access,
             date=date,
-            mode=mode,
             space_id=space_id,
             timezone_offset_minutes=timezone_offset_minutes,
             limit=limit,
@@ -803,10 +784,9 @@ def portal_server_access_logs(
         _raise_portal_storage_runtime(exc)
 
 
-@router.get("/transfers/server-access-logs/page", response_model=PortalServerAccessLogPage)
+@router.get("/access-logs/page", response_model=PortalServerAccessLogPage)
 def portal_server_access_logs_page(
     date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    mode: str = Query("transfers", pattern=r"^(transfers|operations)$"),
     space_id: Optional[str] = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -824,7 +804,6 @@ def portal_server_access_logs_page(
             actor,
             access,
             date=date,
-            mode=mode,
             space_id=space_id,
             timezone_offset_minutes=timezone_offset_minutes,
             limit=limit,
@@ -837,7 +816,7 @@ def portal_server_access_logs_page(
         _raise_portal_storage_runtime(exc)
 
 
-@router.get("/transfers/server-access-logs/raw")
+@router.get("/access-logs/raw")
 def portal_server_access_logs_raw(
     date_from: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     date_to: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
@@ -1575,49 +1554,20 @@ def portal_restore_storage_space_object(
     space_id: str,
     payload: PortalStorageObjectRestoreRequest,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageObjectRestoreResponse:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    action = "restore_object_version" if payload.version_id else "restore_deleted_object"
     try:
-        result = service.restore_storage_space_object_version(
+        return service.restore_storage_space_object_version(
             actor,
             access,
             space_id,
             payload.key,
             version_id=payload.version_id,
         )
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action=action,
-            entity_type="object",
-            entity_id=result.key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "restored_from_version_id": result.restored_from_version_id,
-            },
-        )
-        return result
     except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action=action,
-            entity_type="object",
-            entity_id=payload.key,
-            account=access.account,
-            metadata={
-                "storage_space_id": space_id,
-                "requested_version_id": payload.version_id,
-            },
-            status="failed",
-            message=sanitized_error_log_detail(exc),
-        )
         _raise_portal_storage_runtime(exc)
 
 
@@ -1665,7 +1615,6 @@ def portal_delete_storage_space_object(
     space_id: str,
     key: str = Query(..., min_length=1),
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageObjectDeleteResponse:
     actor = access.actor
@@ -1673,28 +1622,8 @@ def portal_delete_storage_space_object(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
         deleted_key = service.delete_storage_space_object(actor, access, space_id, key)
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="delete_object",
-            entity_type="object",
-            entity_id=deleted_key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-        )
         return PortalStorageObjectDeleteResponse(key=deleted_key, message="Deleted")
     except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="delete_object",
-            entity_type="object",
-            entity_id=key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-            status="failed",
-            message=sanitized_error_log_detail(exc),
-        )
         _raise_portal_storage_runtime(exc)
 
 
@@ -1703,7 +1632,6 @@ def portal_download_storage_space_object(
     space_id: str,
     key: str = Query(..., min_length=1),
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> StreamingResponse:
     actor = access.actor
@@ -1711,31 +1639,11 @@ def portal_download_storage_space_object(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
         stream, content_type, filename = service.download_storage_space_object(actor, access, space_id, key)
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="download_object",
-            entity_type="object",
-            entity_id=key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-        )
         headers = {}
         if filename:
             headers["Content-Disposition"] = build_attachment_content_disposition(filename)
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
     except RuntimeError as exc:
-        audit_service.record_action(
-            user=actor,
-            scope="portal",
-            action="download_object",
-            entity_type="object",
-            entity_id=key,
-            account=access.account,
-            metadata={"storage_space_id": space_id},
-            status="failed",
-            message=sanitized_error_log_detail(exc),
-        )
         _raise_portal_storage_runtime(exc)
 
 

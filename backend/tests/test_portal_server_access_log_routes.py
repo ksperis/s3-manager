@@ -30,9 +30,9 @@ def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
 @pytest.mark.parametrize(
     "url",
     [
-        "/api/portal/transfers/server-access-logs?date=2026-07-08",
-        "/api/portal/transfers/server-access-logs/page?date=2026-07-08",
-        "/api/portal/transfers/server-access-logs/raw?date_from=2026-07-08&date_to=2026-07-08",
+        "/api/portal/access-logs?date=2026-07-08",
+        "/api/portal/access-logs/page?date=2026-07-08",
+        "/api/portal/access-logs/raw?date_from=2026-07-08&date_to=2026-07-08",
     ],
 )
 def test_portal_server_access_log_routes_require_manager(
@@ -88,3 +88,18 @@ def test_portal_server_access_log_routes_require_manager(
     allowed = client.get(url)
 
     assert allowed.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/portal/transfers",
+        "/api/portal/transfers/server-access-logs?date=2026-07-08",
+        "/api/portal/transfers/server-access-logs/page?date=2026-07-08",
+        "/api/portal/transfers/server-access-logs/raw?date_from=2026-07-08&date_to=2026-07-08",
+    ],
+)
+def test_removed_portal_transfer_routes_return_not_found(url: str, client: TestClient) -> None:
+    response = client.get(url)
+
+    assert response.status_code == 404

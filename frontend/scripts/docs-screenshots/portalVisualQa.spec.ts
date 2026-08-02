@@ -73,7 +73,7 @@ const portalRoutes = [
   },
   {
     path: "/portal/history?view=transfers",
-    expected: { en: "Transfers", fr: "Transferts", de: "Übertragungen" },
+    expected: { en: "Activity", fr: "Activité", de: "Aktivität" },
   },
   {
     path: "/portal/usage",

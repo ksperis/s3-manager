@@ -9,7 +9,6 @@ import type { UiTone } from "../../components/ui/styles";
 import type {
   PortalWorkspaceRole,
   PortalWorkspaceSpace,
-  PortalWorkspaceTransfer,
 } from "./portalWorkspaceModel";
 
 export function PortalPageState({
@@ -70,13 +69,4 @@ export function portalRoleTone(role: PortalWorkspaceRole): UiTone {
 
 export function portalVisibilityTone(visibility: PortalStorageSpaceVisibility): UiTone {
   return visibility === "shared" ? "primary" : "neutral";
-}
-
-type PortalTransferStatusTone = "neutral" | "primary" | "danger" | "success";
-
-export function portalTransferStatusTone(status: PortalWorkspaceTransfer["status"]): PortalTransferStatusTone {
-  if (status === "Failed") return "danger";
-  if (status === "Completed") return "success";
-  if (status === "Uploading" || status === "Queued") return "primary";
-  return "neutral";
 }

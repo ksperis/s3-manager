@@ -3245,7 +3245,7 @@ def test_portal_server_access_log_existing_bucket_keeps_retention_unchanged(monk
     assert log_bucket == service._portal_server_access_log_bucket_name(account)
 
 
-def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkeypatch, db_session):
+def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkeypatch, db_session):
     account = S3Account(
         name="portal-log-read",
         rgw_account_id="rgw-log-read",
@@ -3297,13 +3297,11 @@ def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkey
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: client)
 
-    transfers = service.list_portal_server_access_logs(user, access, date="2026-07-08", mode="transfers")
-    operations = service.list_portal_server_access_logs(user, access, date="2026-07-08", mode="operations")
+    operations = service.list_portal_server_access_logs(user, access, date="2026-07-08")
     page = service.list_portal_server_access_log_page(
         user,
         access,
         date="2026-07-08",
-        mode="operations",
         limit=1,
         offset=1,
     )
@@ -3311,13 +3309,14 @@ def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkey
         user,
         access,
         date="2026-07-08",
-        mode="operations",
         limit=10,
         offset=0,
         advanced_filter=PortalServerAccessLogFilterQuery(
             rules=[
                 PortalServerAccessLogFilterRule(field="action", op="eq", value="upload"),
+                PortalServerAccessLogFilterRule(field="space", op="contains", value="research"),
                 PortalServerAccessLogFilterRule(field="path", op="contains", value="maquette"),
+                PortalServerAccessLogFilterRule(field="result", op="eq", value="success"),
             ]
         ),
     )
@@ -3329,17 +3328,16 @@ def test_portal_server_access_logs_parse_standard_records_and_filter_mode(monkey
     )
 
     assert client.prefixes
-    assert [entry.operation for entry in transfers] == ["REST.POST.OBJECT", "REST.PUT.OBJECT"]
     assert len(operations) == 3
-    assert transfers[0].direction == "Upload"
-    assert transfers[0].object_key == "captures/s3-manager/maquette/manager_dashboard.png"
-    assert transfers[0].request_uri == "POST /research-data HTTP/1.1"
-    assert transfers[1].operation == "REST.PUT.OBJECT"
-    assert transfers[1].object_key == "reports/external.csv"
-    assert transfers[1].object_size == 512
-    assert transfers[1].requester == "external"
-    assert transfers[1].client_ip == "10.0.0.5"
-    assert transfers[1].auth_type == "AuthHeader"
+    assert operations[0].direction == "Upload"
+    assert operations[0].object_key == "captures/s3-manager/maquette/manager_dashboard.png"
+    assert operations[0].request_uri == "POST /research-data HTTP/1.1"
+    assert operations[2].operation == "REST.PUT.OBJECT"
+    assert operations[2].object_key == "reports/external.csv"
+    assert operations[2].object_size == 512
+    assert operations[2].requester == "external"
+    assert operations[2].client_ip == "10.0.0.5"
+    assert operations[2].auth_type == "AuthHeader"
     assert operations[1].operation_category == "delete"
     assert page.total == 3
     assert page.limit == 1
@@ -3460,7 +3458,7 @@ def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_
     monkeypatch.setattr(service, "_portal_server_access_client", lambda _account: _Client())
     monkeypatch.setattr(service, "_portal_server_access_rgw_admin_client", lambda _account: admin)
 
-    page = service.list_portal_server_access_log_page(actor, access, date="2026-07-08", mode="operations", limit=10)
+    page = service.list_portal_server_access_log_page(actor, access, date="2026-07-08", limit=10)
     identities = {entry.requester: entry.requester_identity for entry in page.entries}
 
     assert identities["external-iam-id"].kind == "external_access"
@@ -3483,7 +3481,6 @@ def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_
         actor,
         access,
         date="2026-07-08",
-        mode="operations",
         limit=10,
         advanced_filter=PortalServerAccessLogFilterQuery(
             rules=[PortalServerAccessLogFilterRule(field="identity", op="contains", value="portal-6-1")]
@@ -5163,7 +5160,7 @@ def test_archived_storage_space_suspends_public_link_download(db_session):
         service.download_public_link("archived-token")
 
 
-def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(monkeypatch, db_session):
+def test_portal_governance_activity_is_filtered_by_visible_storage_spaces(monkeypatch, db_session):
     account = S3Account(name="portal-activity", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="activity@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -5175,13 +5172,13 @@ def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(mo
                 user_email=user.email,
                 user_role=user.role,
                 scope="portal",
-                action="upload_object",
-                entity_type="object",
-                entity_id="raw-data/report.csv",
+                action="update_storage_space",
+                entity_type="storage_space",
+                entity_id="research-data",
                 account_id=account.id,
                 account_name=account.name,
                 status="success",
-                metadata_json=json.dumps({"storage_space_id": "research-data", "size_bytes": 42}),
+                metadata_json=json.dumps({"storage_space_id": "research-data"}),
                 ip_address="192.0.2.10",
             ),
             AuditLog(
@@ -5189,9 +5186,9 @@ def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(mo
                 user_email=user.email,
                 user_role=user.role,
                 scope="portal",
-                action="download_object",
-                entity_type="object",
-                entity_id="secret.txt",
+                action="update_storage_space",
+                entity_type="storage_space",
+                entity_id="hidden-data",
                 account_id=account.id,
                 account_name=account.name,
                 status="success",
@@ -5211,19 +5208,14 @@ def test_portal_activity_and_transfers_are_filtered_by_visible_storage_spaces(mo
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     activity = service.list_portal_activity(user, access)
-    transfers = service.list_portal_transfers(user, access)
-
     assert [(item.action, item.target, item.storage_space_name, item.ip_address) for item in activity] == [
-        ("Uploaded", "report.csv", "Research Data", "192.0.2.10")
-    ]
-    assert [(item.direction, item.status, item.progress, item.size_bytes) for item in transfers] == [
-        ("Upload", "Completed", 100, 42)
+        ("Updated storage space", "Research Data", "Research Data", "192.0.2.10")
     ]
     with pytest.raises(RuntimeError, match="Storage space not found"):
         service.list_portal_activity(user, access, space_id="hidden-data")
 
 
-def test_portal_user_activity_and_transfers_use_content_access(db_session):
+def test_portal_user_governance_activity_uses_visible_space_access(db_session):
     account = S3Account(name="portal-activity-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="activity-privacy@example.com", hashed_password="x", role="ui_user")
     hidden_owner = User(email="hidden-activity-owner@example.com", hashed_password="x", role="ui_user")
@@ -5250,26 +5242,26 @@ def test_portal_user_activity_and_transfers_use_content_access(db_session):
                 user_email=user.email,
                 user_role=user.role,
                 scope="portal",
-                action="upload_object",
-                entity_type="object",
-                entity_id="visible/report.csv",
+                action="grant_storage_space_share",
+                entity_type="storage_space",
+                entity_id="visible-data",
                 account_id=account.id,
                 account_name=account.name,
                 status="success",
-                metadata_json=json.dumps({"storage_space_id": "visible-data", "size_bytes": 42}),
+                metadata_json=json.dumps({"storage_space_id": "visible-data", "target_user_id": 42}),
             ),
             AuditLog(
                 user_id=hidden_owner.id,
                 user_email=hidden_owner.email,
                 user_role=hidden_owner.role,
                 scope="portal",
-                action="download_object",
-                entity_type="object",
-                entity_id="hidden/secret.txt",
+                action="grant_storage_space_share",
+                entity_type="storage_space",
+                entity_id="hidden-data",
                 account_id=account.id,
                 account_name=account.name,
                 status="success",
-                metadata_json=json.dumps({"storage_space_id": "hidden-data", "size_bytes": 99}),
+                metadata_json=json.dumps({"storage_space_id": "hidden-data", "target_user_id": 99}),
             ),
         ]
     )
@@ -5278,15 +5270,10 @@ def test_portal_user_activity_and_transfers_use_content_access(db_session):
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
 
     activity = service.list_portal_activity(user, access)
-    transfers = service.list_portal_transfers(user, access)
-
     assert [(item.action, item.storage_space_name, item.target) for item in activity] == [
-        ("Uploaded", "Visible Data", "report.csv")
+        ("Shared", "Visible Data", "Visible Data")
     ]
-    assert [(item.direction, item.storage_space_name, item.size_bytes) for item in transfers] == [
-        ("Upload", "Visible Data", 42)
-    ]
-    serialized = "".join(item.model_dump_json() for item in [*activity, *transfers])
+    serialized = "".join(item.model_dump_json() for item in activity)
     assert "Hidden Data" not in serialized
 
 
@@ -5881,27 +5868,11 @@ def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatc
     assert payload.unavailable_reason == "Usage history is disabled."
 
 
-def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(monkeypatch, db_session):
+def test_portal_alerts_are_derived_from_quota_and_public_sharing(monkeypatch, db_session):
     account = S3Account(name="portal-alerts", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="alerts@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
-    db_session.add(
-        AuditLog(
-            user_id=user.id,
-            user_email=user.email,
-            user_role=user.role,
-            scope="portal",
-            action="upload_object",
-            entity_type="object",
-            entity_id="failed.zip",
-            account_id=account.id,
-            account_name=account.name,
-            status="failed",
-            message="network error",
-            metadata_json=json.dumps({"storage_space_id": "public-data"}),
-        )
-    )
     db_session.add(
         PortalPublicLink(
             token="expiring-token",
@@ -5938,10 +5909,8 @@ def test_portal_alerts_are_derived_from_quota_public_spaces_and_transfer_errors(
     assert "quota-near" in warning_ids
     assert any(alert_id.startswith("public-link-") for alert_id in warning_ids)
     assert any(alert_id.startswith("link-expiring-") for alert_id in warning_ids)
-    assert any(alert_id.startswith("transfer-failed-audit-") for alert_id in warning_ids)
     assert any("public link" in alert.description for alert in alerts)
     assert any("expires soon" in alert.description for alert in alerts)
-    assert any(alert.description == "failed.zip failed recently." for alert in alerts)
 
 
 def test_portal_alert_deduplication_keeps_highest_severity():
@@ -6027,7 +5996,6 @@ def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch,
         "get_usage",
         lambda *_args, **_kwargs: PortalUsage(used_bytes=None, used_objects=None, quota_max_size_bytes=None),
     )
-    monkeypatch.setattr(service, "list_portal_transfers", lambda *_args, **_kwargs: [])
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
 
     assert service.list_portal_alerts(user, access) == []
@@ -6106,7 +6074,7 @@ def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_sessi
         service.get_storage_space_object_detail(user, access, "hidden-space", "raw-data/file.txt")
 
 
-def test_portal_object_download_route_audits_scope_portal(db_session):
+def test_portal_object_download_route_does_not_require_application_audit(db_session):
     account = S3Account(name="portal-object-download-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-download-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -6121,31 +6089,18 @@ def test_portal_object_download_route_audits_scope_portal(db_session):
             assert key == "raw-data/readme.txt"
             return iter([b"hello"]), "text/plain", "readme.txt"
 
-    class FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    audit_service = FakeAuditService()
-
     response = portal_router.portal_download_storage_space_object(
         "research-data",
         key="raw-data/readme.txt",
         access=access,
-        audit_service=audit_service,
         service=FakeService(),
     )
 
     assert response.media_type == "text/plain"
     assert response.headers["content-disposition"].startswith('attachment; filename="readme.txt"')
-    assert audit_service.actions[0]["scope"] == "portal"
-    assert audit_service.actions[0]["action"] == "download_object"
-    assert audit_service.actions[0]["metadata"] == {"storage_space_id": "research-data"}
 
 
-def test_portal_object_restore_route_audits_recovery_source(db_session):
+def test_portal_object_restore_route_does_not_require_application_audit(db_session):
     account = S3Account(name="portal-object-restore-route")
     user = User(email="portal-object-restore-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -6172,14 +6127,6 @@ def test_portal_object_restore_route_audits_recovery_source(db_session):
                 restored_from_version_id=version_id,
             )
 
-    class FakeAuditService:
-        def __init__(self):
-            self.actions = []
-
-        def record_action(self, **kwargs):
-            self.actions.append(kwargs)
-
-    audit_service = FakeAuditService()
     response = portal_router.portal_restore_storage_space_object(
         "research-data",
         payload=PortalStorageObjectRestoreRequest(
@@ -6187,17 +6134,10 @@ def test_portal_object_restore_route_audits_recovery_source(db_session):
             version_id="v2",
         ),
         access=access,
-        audit_service=audit_service,
         service=FakeService(),
     )
 
     assert response.restored_from_version_id == "v2"
-    assert audit_service.actions[0]["scope"] == "portal"
-    assert audit_service.actions[0]["action"] == "restore_object_version"
-    assert audit_service.actions[0]["metadata"] == {
-        "storage_space_id": "research-data",
-        "restored_from_version_id": "v2",
-    }
 
 
 def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_session):

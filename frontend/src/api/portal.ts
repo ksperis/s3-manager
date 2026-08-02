@@ -464,23 +464,6 @@ export type PortalActivityItem = {
   status: string;
 };
 
-export type PortalTransfer = {
-  id: string;
-  name: string;
-  direction: "Upload" | "Download";
-  status: "Completed" | "Uploading" | "Queued" | "Failed";
-  progress: number;
-  size_bytes?: number | null;
-  storage_space_id?: string | null;
-  storage_space_name?: string | null;
-  started_at: string;
-  eta_label: string;
-  speed_label: string;
-  error_message?: string | null;
-};
-
-type PortalServerAccessLogMode = "transfers" | "operations";
-
 export type PortalServerAccessRequesterIdentity = {
   label: string;
   kind: "portal_user" | "external_access" | "rgw_user" | "rgw_account" | "unknown";
@@ -689,24 +672,10 @@ export async function fetchPortalCollaboratorAccessReview(
   return data;
 }
 
-export async function fetchPortalTransfers(
-  accountId: S3AccountSelector,
-  options?: { spaceId?: string; limit?: number }
-): Promise<PortalTransfer[]> {
-  const baseParams: Record<string, string | number> = {};
-  if (options?.spaceId) baseParams.space_id = options.spaceId;
-  if (options?.limit) baseParams.limit = options.limit;
-  const { data } = await client.get<PortalTransfer[]>("/portal/transfers", {
-    params: withS3AccountParam(baseParams, accountId),
-  });
-  return data;
-}
-
 export async function fetchPortalServerAccessLogs(
   accountId: S3AccountSelector,
   options: {
     date: string;
-    mode?: PortalServerAccessLogMode;
     spaceId?: string;
     limit?: number;
     offset?: number;
@@ -716,14 +685,13 @@ export async function fetchPortalServerAccessLogs(
 ): Promise<PortalServerAccessLogEntry[]> {
   const baseParams: Record<string, string | number> = {
     date: options.date,
-    mode: options.mode ?? "transfers",
     timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
   };
   if (options.spaceId) baseParams.space_id = options.spaceId;
   if (options.limit) baseParams.limit = options.limit;
   if (options.offset) baseParams.offset = options.offset;
   if (options.advancedFilter) baseParams.advanced_filter = options.advancedFilter;
-  const { data } = await client.get<PortalServerAccessLogEntry[]>("/portal/transfers/server-access-logs", {
+  const { data } = await client.get<PortalServerAccessLogEntry[]>("/portal/access-logs", {
     params: withS3AccountParam(baseParams, accountId),
   });
   return data;
@@ -733,7 +701,6 @@ export async function fetchPortalServerAccessLogPage(
   accountId: S3AccountSelector,
   options: {
     date: string;
-    mode?: PortalServerAccessLogMode;
     spaceId?: string;
     limit?: number;
     offset?: number;
@@ -743,14 +710,13 @@ export async function fetchPortalServerAccessLogPage(
 ): Promise<PortalServerAccessLogPage> {
   const baseParams: Record<string, string | number> = {
     date: options.date,
-    mode: options.mode ?? "transfers",
     limit: options.limit ?? 200,
     offset: options.offset ?? 0,
     timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
   };
   if (options.spaceId) baseParams.space_id = options.spaceId;
   if (options.advancedFilter) baseParams.advanced_filter = options.advancedFilter;
-  const { data } = await client.get<PortalServerAccessLogPage>("/portal/transfers/server-access-logs/page", {
+  const { data } = await client.get<PortalServerAccessLogPage>("/portal/access-logs/page", {
     params: withS3AccountParam(baseParams, accountId),
   });
   return data;
@@ -771,7 +737,7 @@ export async function downloadPortalServerAccessRawLogs(
     timezone_offset_minutes: options.timezoneOffsetMinutes ?? new Date().getTimezoneOffset(),
   };
   if (options.spaceId) baseParams.space_id = options.spaceId;
-  const response = await client.get<Blob>("/portal/transfers/server-access-logs/raw", {
+  const response = await client.get<Blob>("/portal/access-logs/raw", {
     params: withS3AccountParam(baseParams, accountId),
     responseType: "blob",
     timeout: LONG_RUNNING_REQUEST_TIMEOUT_MS,

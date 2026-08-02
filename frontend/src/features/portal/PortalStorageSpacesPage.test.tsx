@@ -69,7 +69,6 @@ const mocks = vi.hoisted(() => ({
         },
       ],
       activity: [],
-      transfers: [],
       alerts: [],
     },
     state: {

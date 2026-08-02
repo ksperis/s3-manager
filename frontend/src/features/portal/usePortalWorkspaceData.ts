@@ -10,7 +10,6 @@ import {
   fetchPortalAlerts,
   fetchPortalCollaborators,
   fetchPortalState,
-  fetchPortalTransfers,
   listPortalStorageSpaces,
   fetchPortalTraffic,
   fetchPortalUsage,
@@ -20,28 +19,24 @@ import {
   type PortalCollaboratorsResponse,
   type PortalStorageSpaceSummary,
   type PortalState,
-  type PortalTransfer,
   type PortalUsage,
 } from "../../api/portal";
 import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientJson, removeClientStorage } from "../../utils/clientStorage";
 import {
   buildPortalWorkspaceModel,
   type PortalWorkspaceActivityItem,
   type PortalWorkspaceAlert,
-  type PortalWorkspaceTransfer,
 } from "./portalWorkspaceModel";
 import {
   portalActivityActionLabel,
   portalDateLabel,
   portalSeverityLabel,
   portalTimeAgoLabel,
-  portalTransferEtaLabel,
 } from "./portalI18n";
 import { usePortalAccountContext } from "./PortalAccountContext";
-import { listPortalLocalTransfers, subscribePortalTransferUpdates } from "./portalTransferTracker";
 
 function readUserEmail(): string | null {
   if (typeof window === "undefined") return null;
@@ -61,23 +56,6 @@ function activityFromApi(item: PortalActivityItem, locale: ReturnType<typeof use
   };
 }
 
-function transferFromApi(item: PortalTransfer, locale: ReturnType<typeof useI18n>["locale"], t: ReturnType<typeof useI18n>["t"]): PortalWorkspaceTransfer {
-  return {
-    id: item.id,
-    name: item.name,
-    direction: item.direction,
-    status: item.status,
-    progress: item.progress,
-    sizeBytes: item.size_bytes,
-    spaceName: item.storage_space_name ?? t({ en: "Workspace", fr: "Espace de travail", de: "Arbeitsbereich" }),
-    startedAt: item.started_at,
-    startedLabel: portalTimeAgoLabel(item.started_at, locale, t),
-    etaLabel: portalTransferEtaLabel(item.eta_label, t),
-    speedLabel: item.speed_label,
-    errorMessage: item.error_message ?? null,
-  };
-}
-
 function alertFromApi(item: PortalAlert, t: ReturnType<typeof useI18n>["t"]): PortalWorkspaceAlert {
   return {
     id: item.id,
@@ -93,7 +71,6 @@ export function usePortalWorkspaceData({
   includeUsage = false,
   includeActivity = false,
   includeCollaborators = false,
-  includeTransfers = false,
   includeAlerts = false,
   includeTraffic = false,
   includeTrafficTrend = false,
@@ -105,7 +82,6 @@ export function usePortalWorkspaceData({
   includeUsage?: boolean;
   includeActivity?: boolean;
   includeCollaborators?: boolean;
-  includeTransfers?: boolean;
   includeAlerts?: boolean;
   includeTraffic?: boolean;
   includeTrafficTrend?: boolean;
@@ -125,9 +101,7 @@ export function usePortalWorkspaceData({
   const [health, setHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [activity, setActivity] = useState<PortalActivityItem[] | null>(null);
   const [collaborators, setCollaborators] = useState<PortalCollaboratorsResponse | null>(null);
-  const [transfers, setTransfers] = useState<PortalTransfer[] | null>(null);
   const [alerts, setAlerts] = useState<PortalAlert[] | null>(null);
-  const [localTransfers, setLocalTransfers] = useState<PortalWorkspaceTransfer[]>([]);
   const [stateLoading, setStateLoading] = useState(false);
   const [storageSpacesLoading, setStorageSpacesLoading] = useState(false);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -136,7 +110,6 @@ export function usePortalWorkspaceData({
   const [healthLoading, setHealthLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
-  const [transfersLoading, setTransfersLoading] = useState(false);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageSpacesError, setStorageSpacesError] = useState<string | null>(null);
@@ -147,6 +120,10 @@ export function usePortalWorkspaceData({
   const [refreshToken, setRefreshToken] = useState(0);
   const refreshWorkspaceData = useCallback(() => {
     setRefreshToken((token) => token + 1);
+  }, []);
+
+  useEffect(() => {
+    removeClientStorage(CLIENT_STORAGE_KEYS.legacyPortalTransfers);
   }, []);
 
   useEffect(() => {
@@ -463,31 +440,6 @@ export function usePortalWorkspaceData({
 
   useEffect(() => {
     let cancelled = false;
-    if (!includeTransfers || !hasAccountContext || !accountIdForApi) {
-      setTransfers(null);
-      setTransfersLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-    setTransfersLoading(true);
-    fetchPortalTransfers(accountIdForApi, { limit: 100 })
-      .then((data) => {
-        if (!cancelled) setTransfers(data);
-      })
-      .catch(() => {
-        if (!cancelled) setTransfers(null);
-      })
-      .finally(() => {
-        if (!cancelled) setTransfersLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountIdForApi, hasAccountContext, includeTransfers, refreshToken]);
-
-  useEffect(() => {
-    let cancelled = false;
     if (!includeAlerts || !hasAccountContext || !accountIdForApi) {
       setAlerts(null);
       setAlertsLoading(false);
@@ -511,16 +463,6 @@ export function usePortalWorkspaceData({
     };
   }, [accountIdForApi, hasAccountContext, includeAlerts, refreshToken]);
 
-  useEffect(() => {
-    if (!accountIdForApi) {
-      setLocalTransfers([]);
-      return () => undefined;
-    }
-    const refresh = () => setLocalTransfers(listPortalLocalTransfers(String(accountIdForApi)));
-    refresh();
-    return subscribePortalTransferUpdates(refresh);
-  }, [accountIdForApi]);
-
   const workspace = useMemo(() => {
     const base = buildPortalWorkspaceModel({
         account: selectedAccount,
@@ -534,10 +476,6 @@ export function usePortalWorkspaceData({
     return {
       ...base,
       activity: activity ? activity.map((item) => activityFromApi(item, locale, t)) : [],
-      transfers: [
-        ...localTransfers.map((transfer) => ({ ...transfer, etaLabel: portalTransferEtaLabel(transfer.etaLabel, t) })),
-        ...(transfers ?? []).map((item) => transferFromApi(item, locale, t)),
-      ],
       alerts: alerts ? alerts.map((item) => alertFromApi(item, t)) : [],
       usageTrend: (traffic?.series ?? []).map((point) => ({
         label: portalDateLabel(point.timestamp, locale, { month: "short", day: "numeric" }),
@@ -547,7 +485,7 @@ export function usePortalWorkspaceData({
       dataInBytes: traffic?.totals.bytes_in ?? null,
       dataOutBytes: traffic?.totals.bytes_out ?? null,
     };
-  }, [activity, alerts, localTransfers, locale, selectedAccount, state, storageSpaces, t, traffic, transfers, usage]);
+  }, [activity, alerts, locale, selectedAccount, state, storageSpaces, t, traffic, usage]);
   const healthAlerts = useMemo<PortalWorkspaceAlert[]>(() => {
     if (!health) return [];
     const ongoingIncident = health.incidents.find(
@@ -607,7 +545,6 @@ export function usePortalWorkspaceData({
     healthLoading,
     activityLoading,
     collaboratorsLoading,
-    transfersLoading,
     alertsLoading,
     error: accountError ?? stateError ?? storageSpacesError,
     accountError,

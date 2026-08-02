@@ -92,7 +92,7 @@ from app.routers.browser_common import (
     require_replication_feature as _common_require_replication_feature,
     require_sse_feature as _common_require_sse_feature,
 )
-from app.routers.http_errors import raise_bad_gateway_from_runtime, sanitized_error_log_detail
+from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
@@ -123,55 +123,6 @@ BrowserActor = Union[User, ManagerSessionPrincipal]
 class CreateBucketPayload(BaseModel):
     name: str
     versioning: bool = False
-
-
-def _is_portal_browser_context(account: S3Account) -> bool:
-    return bool(getattr(account, "_portal_browser_role", None))
-
-
-def _record_browser_or_portal_action(
-    audit_service: AuditService,
-    *,
-    actor: BrowserActor,
-    account: S3Account,
-    bucket_name: str,
-    action: str,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[str] = None,
-    metadata: Optional[dict[str, Any]] = None,
-    portal_action: Optional[str] = None,
-    portal_entity_type: Optional[str] = None,
-    portal_entity_id: Optional[str] = None,
-    status: str = "success",
-    message: Optional[str] = None,
-) -> None:
-    if not _is_portal_browser_context(account):
-        _common_record_browser_action(
-            audit_service,
-            actor=actor,
-            scope="browser",
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            account=account,
-            metadata=metadata,
-            status=status,
-            message=message,
-        )
-        return
-    portal_metadata = {"storage_space_id": bucket_name, **(metadata or {})}
-    _common_record_browser_action(
-        audit_service,
-        actor=actor,
-        scope="portal",
-        action=portal_action or action,
-        entity_type=portal_entity_type or entity_type,
-        entity_id=portal_entity_id or entity_id,
-        account=account,
-        metadata=portal_metadata,
-        status=status,
-        message=message,
-    )
 
 
 def _invalidate_browser_listing_cache(
@@ -1509,19 +1460,10 @@ def update_object_metadata(
     payload: ObjectMetadataUpdate,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectMetadata:
     try:
-        result = service.update_object_metadata(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="update_object_metadata",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"version_id": payload.version_id},
-        )
-        return result
+        return service.update_object_metadata(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -1549,21 +1491,18 @@ def put_object_tags(
     payload: ObjectTags,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectTags:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
-        result = service.put_object_tags(bucket_name, account, payload.key, payload.tags, version_id=payload.version_id)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="put_object_tags",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"version_id": payload.version_id},
+        return service.put_object_tags(
+            bucket_name,
+            account,
+            payload.key,
+            payload.tags,
+            version_id=payload.version_id,
         )
-        return result
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -1591,19 +1530,10 @@ def put_object_acl(
     payload: ObjectAcl,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectAcl:
     try:
-        result = service.put_object_acl(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="put_object_acl",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"version_id": payload.version_id},
-        )
-        return result
+        return service.put_object_acl(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -1631,19 +1561,10 @@ def put_object_legal_hold(
     payload: ObjectLegalHold,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectLegalHold:
     try:
-        result = service.put_object_legal_hold(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="put_object_legal_hold",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"version_id": payload.version_id},
-        )
-        return result
+        return service.put_object_legal_hold(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -1671,19 +1592,10 @@ def put_object_retention(
     payload: ObjectRetention,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectRetention:
     try:
-        result = service.put_object_retention(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="put_object_retention",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"version_id": payload.version_id},
-        )
-        return result
+        return service.put_object_retention(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -1694,44 +1606,14 @@ def delete_objects(
     payload: DeleteObjectsPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     if not payload.objects:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing objects")
-    portal_target_key = payload.objects[0].key if payload.objects else None
     try:
         deleted = service.delete_objects(bucket_name, account, payload)
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="delete_objects",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            portal_action="delete_object",
-            portal_entity_type="object" if portal_target_key else "storage_space",
-            portal_entity_id=f"{bucket_name}/{portal_target_key}" if portal_target_key else bucket_name,
-            metadata={"count": len(payload.objects)},
-        )
         return {"deleted": deleted}
     except RuntimeError as exc:
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="delete_objects",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            portal_action="delete_object",
-            portal_entity_type="object" if portal_target_key else "storage_space",
-            portal_entity_id=f"{bucket_name}/{portal_target_key}" if portal_target_key else bucket_name,
-            metadata={"count": len(payload.objects)},
-            status="failure",
-            message=sanitized_error_log_detail(exc),
-        )
         raise_bad_gateway_from_runtime(exc)
 
 
@@ -1741,27 +1623,12 @@ def copy_object(
     payload: CopyObjectPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     if not payload.source_key or not payload.destination_key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing source or destination key")
     try:
         service.copy_object(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="copy_object",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.source_key}",
-            account=account,
-            metadata={
-                "source": payload.source_key,
-                "source_bucket": payload.source_bucket or bucket_name,
-                "destination_bucket": bucket_name,
-                "destination": payload.destination_key,
-                "move": payload.move,
-                "version_id": payload.source_version_id,
-            },
-        )
         return {"message": "ok"}
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
@@ -1773,41 +1640,14 @@ def create_folder(
     payload: CreateFolderPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     if not payload.prefix:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing prefix")
     try:
         service.create_folder(bucket_name, account, payload.prefix)
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="create_folder",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            portal_entity_type="object",
-            portal_entity_id=f"{bucket_name}/{payload.prefix}",
-            metadata={"prefix": payload.prefix},
-        )
         return {"message": "created", "prefix": payload.prefix}
     except RuntimeError as exc:
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="create_folder",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            portal_entity_type="object",
-            portal_entity_id=f"{bucket_name}/{payload.prefix}",
-            metadata={"prefix": payload.prefix},
-            status="failure",
-            message=sanitized_error_log_detail(exc),
-        )
         raise_bad_gateway_from_runtime(exc)
 
 
@@ -1820,8 +1660,7 @@ def upload_via_proxy(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ProxyUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -1836,31 +1675,8 @@ def upload_via_proxy(
             content_type=content_type,
             sse_customer=sse_customer,
         )
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="upload_via_proxy",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            portal_action="upload_object",
-            metadata={"size_bytes": getattr(file, "size", None)} if isinstance(getattr(file, "size", None), int) else None,
-        )
         return ProxyUploadResponse(message="Upload completed", key=key)
     except RuntimeError as exc:
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="upload_via_proxy",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            portal_action="upload_object",
-            status="failure",
-            message=sanitized_error_log_detail(exc),
-        )
         raise_bad_gateway_from_runtime(exc)
 
 
@@ -1872,8 +1688,7 @@ def download_object(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -1890,30 +1705,8 @@ def download_object(
         headers = {}
         if filename:
             headers["Content-Disposition"] = build_attachment_content_disposition(filename)
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="download_object",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            metadata={"version_id": version_id} if version_id else None,
-        )
         return StreamingResponse(stream, media_type=content_type or "application/octet-stream", headers=headers)
     except RuntimeError as exc:
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="download_object",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            metadata={"version_id": version_id} if version_id else None,
-            status="failure",
-            message=sanitized_error_log_detail(exc),
-        )
         raise_bad_gateway_from_runtime(exc)
 
 
@@ -1941,22 +1734,19 @@ def multipart_init(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> MultipartUploadInitResponse:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
         _common_require_sse_feature(account)
     try:
-        result = service.initiate_multipart_upload(bucket_name, account, payload, sse_customer=sse_customer)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="multipart_init",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
+        return service.initiate_multipart_upload(
+            bucket_name,
+            account,
+            payload,
+            sse_customer=sse_customer,
         )
-        return result
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -2038,37 +1828,14 @@ def complete_multipart_upload(
     payload: CompleteMultipartUploadRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="multipart_complete",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            portal_action="upload_object",
-        )
         return {"message": "completed"}
     except RuntimeError as exc:
-        _record_browser_or_portal_action(
-            audit_service,
-            actor=actor,
-            account=account,
-            bucket_name=bucket_name,
-            action="multipart_complete",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            portal_action="upload_object",
-            status="failure",
-            message=sanitized_error_log_detail(exc),
-        )
         raise_bad_gateway_from_runtime(exc)
 
 
@@ -2079,19 +1846,12 @@ def abort_multipart_upload(
     key: str,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.abort_multipart_upload(bucket_name, account, key, upload_id)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="multipart_abort",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            account=account,
-        )
         return {"message": "aborted"}
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
@@ -2103,19 +1863,10 @@ def restore_object(
     payload: ObjectRestoreRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
     try:
-        result = service.restore_object(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="restore_object",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
-            account=account,
-            metadata={"days": payload.days, "tier": payload.tier, "version_id": payload.version_id},
-        )
-        return result
+        return service.restore_object(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
 
@@ -2126,17 +1877,9 @@ def cleanup_object_versions(
     payload: CleanupObjectVersionsPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> CleanupObjectVersionsResponse:
     try:
-        result = service.cleanup_object_versions(bucket_name, account, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="cleanup_object_versions",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-        return result
+        return service.cleanup_object_versions(bucket_name, account, payload)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)

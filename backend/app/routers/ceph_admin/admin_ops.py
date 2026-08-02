@@ -9,7 +9,6 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.core.database import SessionLocal
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.ceph_admin import (
     CephAdminAccountDeleteRequest,
@@ -619,7 +618,7 @@ def stream_bucket_index_check_batch(
     request: Request,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
-    service = BucketIndexCheckService(SessionLocal)
+    service = BucketIndexCheckService()
 
     def run_check(progress_callback, cancel_check):
         result = service.run(
@@ -630,9 +629,6 @@ def stream_bucket_index_check_batch(
             parallelism=payload.parallelism,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
-            actor_user=ctx.actor,
-            actor_email=getattr(ctx.actor, "email", None),
-            actor_role=getattr(ctx.actor, "role", None),
         )
         _invalidate_bucket_admin_ops_caches(int(ctx.endpoint.id))
         return result

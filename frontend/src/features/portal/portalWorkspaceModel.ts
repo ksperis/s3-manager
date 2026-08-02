@@ -68,21 +68,6 @@ export type PortalWorkspaceActivityItem = {
   ipAddress: string;
 };
 
-export type PortalWorkspaceTransfer = {
-  id: string;
-  name: string;
-  direction: "Upload" | "Download";
-  status: "Completed" | "Uploading" | "Queued" | "Failed";
-  progress: number;
-  sizeBytes?: number | null;
-  spaceName: string;
-  startedAt?: string | null;
-  startedLabel: string;
-  etaLabel: string;
-  speedLabel: string;
-  errorMessage?: string | null;
-};
-
 export type PortalWorkspaceAlert = {
   id: string;
   tone: PortalWorkspaceAlertTone;
@@ -101,7 +86,6 @@ export type PortalWorkspaceModel = {
   userEmail: string | null;
   spaces: PortalWorkspaceSpace[];
   activity: PortalWorkspaceActivityItem[];
-  transfers: PortalWorkspaceTransfer[];
   alerts: PortalWorkspaceAlert[];
   usageTrend: PortalWorkspaceTrendPoint[];
   usedBytes?: number | null;
@@ -244,7 +228,6 @@ export function buildPortalWorkspaceModel({
     userEmail,
     spaces,
     activity: [],
-    transfers: [],
     alerts: [],
     usageTrend: [],
     usedBytes: usage?.used_bytes ?? state?.used_bytes ?? spaceUsedBytes,

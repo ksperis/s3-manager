@@ -18,6 +18,8 @@ Use this page when a term in the UI or documentation is unclear.
 | Endpoint capability | A backend capability reported or configured for an endpoint, such as IAM, SNS, metrics, usage, SSE, replication, or static website support. |
 | UI tags | Local console metadata used to organize working sets. UI tags are not backend S3 object or bucket tags unless a feature explicitly updates S3 tags. |
 | AccessDenied | A storage-side denial from IAM or S3. It is expected when credentials do not allow the requested action. |
+| Application audit | Control-plane, security, configuration, and workflow-control events stored by s3-manager. It excludes object data operations. |
+| S3 access logs | Provider-side data-plane evidence for object requests. Delivery may be delayed and depends on activation and retention. |
 
 ## Search tips
 
@@ -27,7 +29,7 @@ Use this page when a term in the UI or documentation is unclear.
 | permissions, denied, forbidden | AccessDenied, IAM, feature availability, execution context |
 | access key, secret key, credentials | Portal Access Keys, IAM, S3 connection |
 | activity, history, audit | Portal Activity, Admin audit, usage history |
-| transfer, upload progress, queue | Portal Transfers, Browser object operations, bucket migration |
+| transfer, upload progress, queue | Browser operation bar, Portal traffic metrics, bucket migration |
 | quota, capacity, usage | Admin Usage and Metrics, usage stats, quota monitoring, Portal usage, billing |
 | sharing, collaborator, public link | Portal sharing, Viewer, Editor, Manager |
 | delete, empty bucket, purge | Bucket purge, safe destructive operations, object delete |

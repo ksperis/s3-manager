@@ -79,7 +79,6 @@ import {
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
-import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
 import {
   PortalPageState,
@@ -1410,21 +1409,6 @@ export default function PortalStorageSpaceDetailPage() {
                     setDeletedPrefixRestoreError(null);
                   }
                 : undefined,
-            }}
-            transferReporter={{
-              start: (transfer) => {
-                if (transfer.bucketName !== lockedBucketName) return null;
-                return startPortalTransfer({
-                  accountId: String(accountIdForApi),
-                  spaceId: space.id,
-                  spaceName: space.name,
-                  name: transfer.name,
-                  direction: transfer.direction,
-                  sizeBytes: transfer.sizeBytes,
-                });
-              },
-              complete: completePortalTransfer,
-              fail: failPortalTransfer,
             }}
           />
         </div>

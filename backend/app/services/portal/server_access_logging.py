@@ -743,15 +743,20 @@ class PortalServerAccessLoggingMixin:
         identity = entry.requester_identity
         if field == "action":
             return _portal_log_filter_value_texts([entry.operation_category, entry.operation, entry.direction])
+        if field == "space":
+            return _portal_log_filter_value_texts(
+                [
+                    entry.storage_space_id,
+                    entry.storage_space_name,
+                    entry.bucket_name,
+                ]
+            )
         if field == "path":
             return _portal_log_filter_value_texts(
                 [
                     entry.object_key,
                     entry.object_name,
                     entry.request_uri,
-                    entry.bucket_name,
-                    entry.storage_space_id,
-                    entry.storage_space_name,
                 ]
             )
         if field == "identity":
@@ -766,6 +771,17 @@ class PortalServerAccessLoggingMixin:
                     identity.user_id if identity else None,
                     identity.email if identity else None,
                 ]
+            )
+        if field == "result":
+            result_label = (
+                "success"
+                if entry.status_code is not None and entry.status_code < 400
+                else "failure"
+                if entry.status_code is not None
+                else None
+            )
+            return _portal_log_filter_value_texts(
+                [entry.status_code, entry.error_code, result_label]
             )
         return []
 
@@ -829,7 +845,6 @@ class PortalServerAccessLoggingMixin:
         access: "AccountAccess",
         *,
         date: str,
-        mode: str = "transfers",
         space_id: Optional[str] = None,
         timezone_offset_minutes: int = 0,
     ) -> list[PortalServerAccessLogEntry]:
@@ -839,8 +854,6 @@ class PortalServerAccessLoggingMixin:
             selected_date = date_cls.fromisoformat(date)
         except ValueError as exc:
             raise ValueError("date must use YYYY-MM-DD format") from exc
-        if mode not in {"transfers", "operations"}:
-            raise ValueError("mode must be transfers or operations")
         space_by_bucket = self._portal_server_access_space_by_bucket(user, access, space_id=space_id)
         if not space_by_bucket:
             return []
@@ -869,8 +882,6 @@ class PortalServerAccessLoggingMixin:
                     continue
                 if not (start_utc <= entry.timestamp < end_utc):
                     continue
-                if mode == "transfers" and entry.operation_category not in {"upload", "download"}:
-                    continue
                 entries.append(entry)
         self._resolve_portal_server_access_requester_identities(access.account, entries)
         entries.sort(key=lambda item: item.timestamp, reverse=True)
@@ -882,7 +893,6 @@ class PortalServerAccessLoggingMixin:
         access: "AccountAccess",
         *,
         date: str,
-        mode: str = "transfers",
         space_id: Optional[str] = None,
         timezone_offset_minutes: int = 0,
         limit: int = 200,
@@ -895,7 +905,6 @@ class PortalServerAccessLoggingMixin:
             user,
             access,
             date=date,
-            mode=mode,
             space_id=space_id,
             timezone_offset_minutes=timezone_offset_minutes,
         )
@@ -908,7 +917,6 @@ class PortalServerAccessLoggingMixin:
         access: "AccountAccess",
         *,
         date: str,
-        mode: str = "transfers",
         space_id: Optional[str] = None,
         timezone_offset_minutes: int = 0,
         limit: int = 200,
@@ -921,7 +929,6 @@ class PortalServerAccessLoggingMixin:
             user,
             access,
             date=date,
-            mode=mode,
             space_id=space_id,
             timezone_offset_minutes=timezone_offset_minutes,
         )

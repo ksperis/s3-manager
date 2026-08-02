@@ -28,9 +28,15 @@ Backend preserves storage/API denial semantics and logs server-side details.
 
 - Routers validate the HTTP boundary and call services.
 - Services own business rules, storage execution choices, and audit metadata.
+  The central audit policy rejects data-plane and operational-noise actions
+  before persistence.
 - Client modules wrap S3, IAM, RGW Admin Ops, or external integrations.
 - Models and migrations define persistence; do not encode new authorization semantics only in the frontend.
 
 ## Operational routes
 
-Internal cron routes are not UI routes. Keep them token-protected, auditable, and documented in Ops pages when scheduler behavior changes.
+Internal cron routes are not UI routes. Keep them token-protected and documented
+in Ops pages when scheduler behavior changes. Their health, billing, and usage
+collection runs are operational telemetry rather than application audit rows.
+
+See [Audit boundary](audit-boundary.md) before adding any audit producer.

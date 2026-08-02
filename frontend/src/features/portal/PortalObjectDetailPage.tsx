@@ -46,9 +46,8 @@ import {
 } from "./portalUi";
 import { portalDateTimeLabel, portalPublicLinkStatusLabel } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
-import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
 
-type ObjectTab = "preview" | "history" | "sharing" | "details" | "events";
+type ObjectTab = "preview" | "history" | "sharing" | "details";
 
 type PendingObjectAction =
   | { type: "delete-object" }
@@ -377,7 +376,6 @@ export default function PortalObjectDetailPage() {
             de: "Wiederherstellungsoptionen werden geprüft...",
           })
       : null;
-  const objectEvents = workspace.activity.filter((item) => item.target === object.name || item.target === object.path);
   const openPublicLinkDialog = () => {
     if (!canCreatePublicLink) return;
     setActiveTab("sharing");
@@ -454,19 +452,10 @@ export default function PortalObjectDetailPage() {
   };
   const handleDownload = async () => {
     if (!accountIdForApi || downloading) return;
-    const transferId = startPortalTransfer({
-      accountId: String(accountIdForApi),
-      spaceId: space.id,
-      spaceName: space.name,
-      name: object.name || objectName(object.path),
-      direction: "Download",
-      sizeBytes: object.sizeBytes ?? undefined,
-    });
     setDownloading(true);
     setDownloadMessage(null);
     try {
       const result = await downloadPortalStorageSpaceObject(accountIdForApi, space.id, object.path);
-      completePortalTransfer(transferId, result.filename);
       const href = URL.createObjectURL(result.blob);
       const link = document.createElement("a");
       link.href = href;
@@ -479,7 +468,6 @@ export default function PortalObjectDetailPage() {
     } catch (err) {
       console.error(err);
       const message = extractApiError(err, t({ en: "Unable to download this file.", fr: "Impossible de télécharger ce fichier.", de: "Diese Datei kann nicht heruntergeladen werden." }));
-      failPortalTransfer(transferId, message);
       setDownloadMessage(message);
     } finally {
       setDownloading(false);
@@ -703,7 +691,6 @@ export default function PortalObjectDetailPage() {
             : []),
           { id: "sharing", label: t({ en: "Sharing", fr: "Partage", de: "Freigabe" }) },
           { id: "details", label: t({ en: "Details", fr: "Détails", de: "Details" }) },
-          { id: "events", label: t({ en: "Events", fr: "Événements", de: "Ereignisse" }) },
         ]}
         activeTab={activeTab}
         onChange={(tab) => setActiveTab(tab as ObjectTab)}
@@ -893,26 +880,6 @@ export default function PortalObjectDetailPage() {
             </dl>
           </details>
           {objectLoading ? <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>{t({ en: "Loading metadata...", fr: "Chargement des métadonnées...", de: "Metadaten werden geladen..." })}</div> : null}
-          </UiCard>
-        </PortalTabPanel>
-      ) : null}
-
-      {activeTab === "events" ? (
-        <PortalTabPanel idPrefix="portal-object-detail" tabId="events">
-          <UiCard title={t({ en: "Recent events", fr: "Événements récents", de: "Letzte Ereignisse" })}>
-          <div className="grid gap-2">
-            {objectEvents.slice(0, 12).map((item) => (
-              <div key={item.id} className={cx(uiCardMutedClass, "px-3 py-2 text-xs")}>
-                <div className={cx("font-bold", uiTitleTextClass)}>{item.action}</div>
-                <div className={cx("mt-1", uiMutedTextClass)}>{item.actor} · {item.timeLabel}</div>
-              </div>
-            ))}
-            {objectEvents.length === 0 ? (
-              <div className={cx(uiCardMutedClass, "px-3 py-6 text-center text-xs font-semibold", uiMutedTextClass)}>
-                {t({ en: "No file events available.", fr: "Aucun événement disponible pour ce fichier.", de: "Keine Dateiereignisse verfügbar." })}
-              </div>
-            ) : null}
-          </div>
           </UiCard>
         </PortalTabPanel>
       ) : null}

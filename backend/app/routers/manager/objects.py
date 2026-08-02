@@ -7,8 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.db import S3Account, User
 from app.models.object import ListObjectsResponse
-from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
-from app.services.audit_service import AuditService
+from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.services.objects_service import ObjectsService, get_objects_service
 from app.routers.http_errors import sanitize_error_detail
 
@@ -40,7 +39,7 @@ def list_objects(
     continuation_token: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    _: dict = Depends(get_current_account_admin),
+    _: User = Depends(get_current_account_admin),
 ):
     try:
         return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token)
@@ -56,8 +55,7 @@ async def upload_object(
     key: Optional[str] = Form(None),
     account: S3Account = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: User = Depends(get_current_account_admin),
 ):
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing filename")
@@ -72,19 +70,6 @@ async def upload_object(
     try:
         contents = await file.read()
         service.upload_object(bucket_name, account, target_key, file_obj=contents, content_type=file.content_type)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="upload_object",
-            entity_type="object",
-            entity_id=target_key,
-            account=account,
-            metadata={
-                "bucket": bucket_name,
-                "content_type": file.content_type,
-                "size_bytes": len(contents),
-            },
-        )
         return UploadResponse(key=target_key, message="Uploaded")
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
@@ -96,20 +81,10 @@ def create_folder(
     payload: CreateFolderPayload,
     account: S3Account = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: User = Depends(get_current_account_admin),
 ):
     try:
         service.create_folder(bucket_name, account, folder_prefix=payload.prefix)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="create_folder",
-            entity_type="object_prefix",
-            entity_id=payload.prefix,
-            account=account,
-            metadata={"bucket": bucket_name},
-        )
         return {"message": "Folder created", "prefix": payload.prefix}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc
@@ -121,26 +96,12 @@ def delete_objects(
     payload: DeleteObjectsPayload,
     account: S3Account = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
-    current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    _: dict = Depends(get_current_account_admin),
 ):
     if not payload.keys:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No keys provided")
     try:
         service.delete_objects(bucket_name, account, payload.keys)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_objects",
-            entity_type="object",
-            entity_id=None,
-            account=account,
-            metadata={
-                "bucket": bucket_name,
-                "count": len(payload.keys),
-                "keys_sample": payload.keys[:5],
-            },
-        )
         return {"message": f"Deleted {len(payload.keys)} object(s)"}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=sanitize_error_detail(str(exc))) from exc

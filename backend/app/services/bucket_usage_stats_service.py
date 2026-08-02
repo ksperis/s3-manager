@@ -27,7 +27,6 @@ from app.models.bucket_usage_stats import (
     BucketUsageStatsStatus,
 )
 from app.services import s3_client
-from app.services.audit_service import AuditService
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.time import utcnow
 
@@ -881,28 +880,7 @@ class BucketUsageStatsService:
             raise RuntimeError("Session factory is required to persist bucket usage statistics")
         db = self.session_factory()
         try:
-            persisted = self.upsert_snapshot(db, snapshot)
-            AuditService(db).record_action(
-                user=actor_user,
-                user_email=actor_email,
-                user_role=actor_role,
-                scope="bucket_usage_stats",
-                action="calculate_bucket_usage_stats",
-                entity_type="bucket",
-                entity_id=target.bucket_name,
-                account_id=getattr(target.account, "id", None) if isinstance(getattr(target.account, "id", None), int) and getattr(target.account, "id", None) > 0 else None,
-                account_name=getattr(target.account, "name", None),
-                metadata={
-                    "scope_kind": target.scope_kind,
-                    "scope_id": target.scope_id,
-                    "scan_mode": persisted.scan_mode,
-                    "version_listing_available": persisted.version_listing_available,
-                    "object_version_count": persisted.object_version_count,
-                    "total_bytes": persisted.total_bytes,
-                },
-                status="success",
-            )
-            return persisted
+            return self.upsert_snapshot(db, snapshot)
         finally:
             db.close()
 

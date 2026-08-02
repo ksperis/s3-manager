@@ -61,14 +61,8 @@ def test_batch_request_deduplicates_tenant_bucket_targets_and_caps_size():
         CephAdminBucketIndexCheckBatchRequest(targets=[{"name": f"bucket-{index}"} for index in range(201)])
 
 
-def test_batch_service_is_read_only_and_keeps_partial_results(monkeypatch):
-    service = BucketIndexCheckService(lambda: None)
-    audits: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        service,
-        "_audit",
-        lambda target, result, **_kwargs: audits.append((target.name, result.status)),
-    )
+def test_batch_service_is_read_only_and_keeps_partial_results():
+    service = BucketIndexCheckService()
     progress = []
     admin = FakeAdmin()
 
@@ -89,14 +83,13 @@ def test_batch_service_is_read_only_and_keeps_partial_results(monkeypatch):
         "bucket-b": "failed",
     }
     assert all(call == {"tenant": None, "fix": False, "check_objects": False} for _, call in admin.calls)
-    assert sorted(audits) == [("bucket-a", "completed"), ("bucket-b", "failed")]
+    assert not hasattr(service, "_audit")
     assert progress[0].stage == "prepare"
     assert progress[-1].completed_buckets == 2
 
 
-def test_batch_service_honors_cooperative_cancellation(monkeypatch):
-    service = BucketIndexCheckService(lambda: None)
-    monkeypatch.setattr(service, "_audit", lambda *_args, **_kwargs: None)
+def test_batch_service_honors_cooperative_cancellation():
+    service = BucketIndexCheckService()
 
     with pytest.raises(BucketIndexCheckCancelled):
         service.run(

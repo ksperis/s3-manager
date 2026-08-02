@@ -348,7 +348,7 @@ export default function AuditLogsPage() {
   return (
     <PageShell
       title="Audit trail"
-      description="Last administrative actions performed through the UI."
+      description="Control-plane, security, configuration, and workflow-control events."
       breadcrumbs={adminPageBreadcrumbs("audit")}
       actions={[
         {
@@ -361,7 +361,7 @@ export default function AuditLogsPage() {
       <PageControlStrip
         label="Audit scope"
         title={hasActiveFilters ? "Filtered audit trail" : "Full audit trail"}
-        description="Refine the UI audit trail by actor, workspace, status, action, and free-text search."
+        description="Refine the application control-plane audit by actor, workspace, status, action, and free-text search. Object operations belong in provider S3 access logs."
         controls={filters}
         items={[
           { label: "Loaded entries", value: logs.length.toLocaleString() },
@@ -376,7 +376,7 @@ export default function AuditLogsPage() {
       <ListPageSection
           className="bg-white/95 dark:bg-slate-900/60"
           title="Audit trail"
-          description="Administrative actions performed through the UI."
+          description="Application control-plane and security actions. Object data operations are intentionally excluded."
           countLabel={`${filteredLogs.length} entr${filteredLogs.length === 1 ? "y" : "ies"}${isFiltered ? ` of ${logs.length}` : ""}`}
       >
 

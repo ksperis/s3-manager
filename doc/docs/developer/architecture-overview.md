@@ -15,6 +15,13 @@ s3-manager uses a standard web-console architecture:
 4. Backend resolves execution context/executor.
 5. Backend calls storage APIs (S3, IAM, RGW Admin Ops when applicable).
 
+## Audit architecture
+
+Application `audit_logs` records control-plane, security, configuration, and
+workflow-control events. S3 object activity belongs to the data plane and is
+audited through provider Server Access Logging or an equivalent storage log.
+See [Audit boundary](audit-boundary.md).
+
 ## Surface map
 
 | Surface | Primary route | Backend authority |

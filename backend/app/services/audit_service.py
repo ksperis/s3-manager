@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.sensitive_data import sanitize_audit_metadata
 from app.db import S3Account, AuditLog, User
+from app.services.audit_policy import should_persist_audit_action
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,9 @@ class AuditService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> None:
+        if not should_persist_audit_action(action):
+            return
+
         resolved_account_id, resolved_account_name = self._resolve_account_reference(
             account,
             account_id,

@@ -46,7 +46,6 @@ const mocks = vi.hoisted(() => ({
         },
       ],
       activity: [],
-      transfers: [],
       alerts: [],
     },
     loading: false,
@@ -161,7 +160,7 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByRole("tab", { name: "Preview" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Sharing" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Events" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Events" })).not.toBeInTheDocument();
     expect(screen.getByText("Quick actions")).toBeInTheDocument();
     expect(await screen.findByText("hello content")).toBeInTheDocument();
     expect(screen.queryByText("Public links")).not.toBeInTheDocument();
@@ -205,8 +204,6 @@ describe("PortalObjectDetailPage", () => {
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
     expect(screen.getByText("AES256")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Events" }));
-    expect(screen.getByText("No file events available.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Versions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Metadata" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();

@@ -392,6 +392,7 @@ export function createAppRoutes() {
               <Route path="shares/:userId" element={<PortalCollaboratorAccessPage />} />
               <Route path="requests" element={<PortalRequestsPage />} />
               <Route path="history" element={<PortalHistoryPage />} />
+              <Route path="transfers" element={<Navigate to="/portal/history" replace />} />
               <Route path="usage" element={<PortalUsagePage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
             </Route>

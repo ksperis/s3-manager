@@ -63,7 +63,6 @@ from app.models.portal import (
     PortalServerAccessLogPage,
     PortalServerAccessRequesterIdentity,
     PortalState,
-    PortalTransfer,
     PortalStorageObjectDetail,
     PortalDeletedPrefixRestoreFailure,
     PortalDeletedPrefixRestoreProgress,

@@ -17,7 +17,7 @@ Use this page when your main goal is object access, limited bucket actions, or d
    - Upload, download, preview, delete, restore versions.
 2. For guided account self-service, open **Portal**:
    - Select the assigned RGW account.
-   - Use the dashboard for Storage Spaces, shares, activity, transfers, usage,
+   - Use the dashboard for Storage Spaces, shares, governance activity, usage,
      alerts, and preferences.
 3. For advanced bucket and identity operations with delegated rights, open
    **Manager**.

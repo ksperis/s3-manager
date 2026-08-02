@@ -2,10 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalHistoryPage from "./PortalHistoryPage";
-import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 
 const mocks = vi.hoisted(() => ({
-  transfers: [] as PortalWorkspaceTransfer[],
   serverAccessLoggingEnabled: true,
   accountRole: "portal_manager",
   workspaceLoading: false,
@@ -32,7 +30,7 @@ vi.mock("./usePortalWorkspaceData", () => ({
         { id: "research-data", name: "Research Data" },
         { id: "lab-exchange", name: "Lab Exchange" },
       ],
-      transfers: mocks.transfers,
+      activity: [],
     },
     state: {
       server_access_logging_enabled: mocks.serverAccessLoggingEnabled,
@@ -42,7 +40,6 @@ vi.mock("./usePortalWorkspaceData", () => ({
     loading: mocks.workspaceLoading,
     accountLoading: false,
     activityLoading: false,
-    transfersLoading: false,
     error: null,
     accountError: null,
     hasAccountContext: true,
@@ -74,46 +71,6 @@ describe("PortalHistoryPage", () => {
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: mocks.createObjectURL });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: mocks.revokeObjectURL });
     Object.defineProperty(HTMLAnchorElement.prototype, "click", { configurable: true, value: mocks.anchorClick });
-    mocks.transfers = [
-      {
-        id: "audit-1",
-        name: "report.csv",
-        direction: "Upload",
-        status: "Completed",
-        progress: 100,
-        sizeBytes: 42,
-        spaceName: "Research Data",
-        startedAt: "2026-07-08T10:25:00Z",
-        startedLabel: "2m ago",
-        etaLabel: "Completed",
-        speedLabel: "-",
-      },
-      {
-        id: "audit-2",
-        name: "results.zip",
-        direction: "Download",
-        status: "Queued",
-        progress: 0,
-        sizeBytes: 2048,
-        spaceName: "Research Data",
-        startedLabel: "Now",
-        etaLabel: "Queued",
-        speedLabel: "-",
-      },
-      {
-        id: "audit-3",
-        name: "raw-data.tar",
-        direction: "Upload",
-        status: "Failed",
-        progress: 0,
-        sizeBytes: 4096,
-        spaceName: "Lab Exchange",
-        startedLabel: "5m ago",
-        etaLabel: "-",
-        speedLabel: "-",
-        errorMessage: "Quota reached.",
-      },
-    ];
   });
 
   it("opens activity by default without loading transfer or access-log content", () => {
@@ -126,28 +83,16 @@ describe("PortalHistoryPage", () => {
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
-  it("shows unified history navigation and keeps technical access logs in a manager-only tab", async () => {
+  it("normalizes the removed transfers view to governance activity", async () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.getByRole("tab", { name: "Activity" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Transfers" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "Transfers" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Access logs" })).toBeInTheDocument();
-    expect(screen.getByText("Latest transfer history")).toBeInTheDocument();
-    expect(screen.getByText("Needs attention")).toBeInTheDocument();
-    expect(screen.getByText("Retry from the related space")).toBeInTheDocument();
-    expect(screen.getByText("report.csv")).toBeInTheDocument();
-    expect(screen.getAllByText("Upload").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
-    expect(screen.getByText("Available in the space.")).toBeInTheDocument();
-    expect(screen.getByText("Waiting to start.")).toBeInTheDocument();
-    expect(screen.getByText("Quota reached.")).toBeInTheDocument();
-    expect(screen.getAllByRole("table")[0]).toHaveClass("responsive-data-table");
-    expect(screen.getByText("report.csv").closest("td")).toHaveAttribute("data-mobile-primary", "true");
-    expect(screen.getByRole("group", { name: "Transfer direction" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Activity panel content")).toBeInTheDocument();
     expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
 
@@ -159,7 +104,7 @@ describe("PortalHistoryPage", () => {
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalledWith(
         "101",
-        expect.objectContaining({ mode: "operations", limit: 25, offset: 0 })
+        expect.objectContaining({ limit: 25, offset: 0 })
       );
     });
   });
@@ -186,23 +131,12 @@ describe("PortalHistoryPage", () => {
     });
   });
 
-  it("points an empty recent transfer history back to spaces", () => {
-    mocks.transfers = [];
-
-    renderPage();
-
-    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
-    expect(screen.getByText("No recent transfer yet")).toBeInTheDocument();
-    expect(screen.getByText("The latest uploads and downloads started from your spaces appear here automatically.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Start from spaces" })).toHaveAttribute("href", "/portal/storage-spaces");
-  });
-
   it("hides access logs when detailed logging is disabled for the active account", () => {
     mocks.serverAccessLoggingEnabled = false;
 
     renderPage();
 
-    expect(screen.getByRole("tab", { name: "Transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Access logs" })).not.toBeInTheDocument();
     expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
@@ -213,10 +147,10 @@ describe("PortalHistoryPage", () => {
 
     renderPage();
 
-    expect(screen.getByRole("tab", { name: "Transfers" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Access logs" })).not.toBeInTheDocument();
     expect(screen.queryByText("Technical access logs")).not.toBeInTheDocument();
-    expect(screen.getByText("Review workspace activity and recent file transfers for the spaces you can use.")).toBeInTheDocument();
+    expect(screen.getByText("Review governance activity and, for project managers, provider S3 access logs.")).toBeInTheDocument();
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
@@ -289,7 +223,7 @@ describe("PortalHistoryPage", () => {
     await waitFor(() => {
       expect(mocks.fetchPortalServerAccessLogPage).toHaveBeenCalledWith(
         "101",
-        expect.objectContaining({ date: "2026-07-08", mode: "operations", limit: 25, offset: 0 })
+        expect.objectContaining({ date: "2026-07-08", limit: 25, offset: 0 })
       );
     });
     expect(await screen.findByText("Added a file")).toBeInTheDocument();
@@ -328,6 +262,7 @@ describe("PortalHistoryPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Advanced filter/i }));
     fireEvent.change(screen.getByLabelText("Action"), { target: { value: "upload" } });
+    fireEvent.change(screen.getByLabelText("Result"), { target: { value: "failure" } });
     fireEvent.change(screen.getByLabelText("Path"), { target: { value: "captures/" } });
     fireEvent.change(screen.getByLabelText("Person or key"), { target: { value: "portal-6-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
@@ -344,12 +279,14 @@ describe("PortalHistoryPage", () => {
         match: "all",
         rules: [
           { field: "action", op: "eq", value: "upload" },
+          { field: "result", op: "eq", value: "failure" },
           { field: "path", op: "contains", value: "captures/" },
           { field: "identity", op: "contains", value: "portal-6-1" },
         ],
       });
     });
     expect(screen.getByText(/Action: Uploads/)).toBeInTheDocument();
+    expect(screen.getByText(/Result: Failed/)).toBeInTheDocument();
     expect(screen.getByText(/Person or key contains: portal-6-1/)).toBeInTheDocument();
   });
 

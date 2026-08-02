@@ -7,6 +7,7 @@ Use this page to define the minimum backup contract for s3-manager deployments.
 | Data | Why it matters |
 |---|---|
 | Application database | UI users, account links, app settings, Portal metadata, grants, audit, usage, billing, and operational history. |
+| Provider S3 access logs | Required for exhaustive object-level audit; they are not stored in the application database. |
 | Credential encryption key | Required to decrypt stored credentials after restore. |
 | Runtime secrets | JWT/refresh secrets, scheduler token, SMTP, OIDC/LDAP, and deployment-specific credentials. |
 | Deployment values | Helm values, Compose `.env`, ingress, and scheduler configuration. |
@@ -18,6 +19,10 @@ Use this page to define the minimum backup contract for s3-manager deployments.
 3. Back up Helm values or Compose environment files without placing secrets in Git.
 4. Keep at least one recent backup outside the cluster or host that runs s3-manager.
 5. Test restore before user onboarding and before major upgrades.
+6. Back up the application database immediately before migration `0091`; it
+   irreversibly purges historical data-plane and operational-noise audit rows.
+7. Protect provider access-log buckets or the equivalent centralized log store
+   according to the required object-audit retention period.
 
 ## Restore checklist
 

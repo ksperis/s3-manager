@@ -7,14 +7,12 @@ import { useSearchParams } from "react-router-dom";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import DataTableShell, { type DataTableColumn } from "../../components/list/DataTableShell";
 import Modal from "../../components/Modal";
-import PageEmptyState from "../../components/PageEmptyState";
 import PageShell from "../../components/PageShell";
 import PageBanner from "../../components/PageBanner";
 import UiButton from "../../components/ui/UiButton";
 import UiBadge from "../../components/ui/UiBadge";
 import UiCard from "../../components/ui/UiCard";
-import UiProgressBar from "../../components/ui/UiProgressBar";
-import { cx, type UiTone, uiDividerClass, uiLabelClass, uiMutedTextClass, uiTitleTextClass } from "../../components/ui/styles";
+import { cx, type UiTone, uiDividerClass, uiLabelClass, uiMutedTextClass } from "../../components/ui/styles";
 import { useUnsavedChangesGuard } from "../../components/useUnsavedChangesGuard";
 import { useI18n } from "../../i18n";
 import {
@@ -25,15 +23,10 @@ import {
 } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
-import {
-  portalTransferStatusTone,
-  resolvePortalWorkspacePageState,
-} from "./portalUi";
+import { resolvePortalWorkspacePageState } from "./portalUi";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
-import { portalTransferDirectionLabel, portalTransferStatusLabel } from "./portalI18n";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import PortalActivityPanel from "./PortalActivityPanel";
-import type { PortalWorkspaceTransfer } from "./portalWorkspaceModel";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
   advancedFilterBackdropClass,
@@ -57,17 +50,18 @@ import {
   type TextMatchMode,
 } from "../cephAdmin/filtering/advancedFilterShared";
 
-type HistoryTab = "activity" | "transfers" | "access";
-type LiveTransferTab = "all" | "uploads" | "downloads";
+type HistoryTab = "activity" | "access";
 type ServerLogActionFilter = "" | "upload" | "download" | "delete" | "list" | "metadata" | "other";
+type ServerLogResultFilter = "" | "success" | "failure";
 type ServerLogAdvancedFilterState = {
   action: ServerLogActionFilter;
+  result: ServerLogResultFilter;
   path: string;
   pathMatchMode: TextMatchMode;
   identity: string;
   identityMatchMode: TextMatchMode;
 };
-type ServerLogAdvancedFilterField = "action" | "path" | "identity";
+type ServerLogAdvancedFilterField = "action" | "result" | "path" | "identity";
 type ActiveServerLogFilterRemoveAction = { type: "advanced"; field: ServerLogAdvancedFilterField };
 
 type ServerLogRow = {
@@ -92,6 +86,7 @@ type ServerLogRow = {
 
 const defaultServerLogAdvancedFilter: ServerLogAdvancedFilterState = {
   action: "",
+  result: "",
   path: "",
   pathMatchMode: "contains",
   identity: "",
@@ -100,7 +95,7 @@ const defaultServerLogAdvancedFilter: ServerLogAdvancedFilterState = {
 
 function hasServerLogAdvancedFilters(advanced: ServerLogAdvancedFilterState | null): boolean {
   if (!advanced) return false;
-  return Boolean(advanced.action || advanced.path.trim() || advanced.identity.trim());
+  return Boolean(advanced.action || advanced.result || advanced.path.trim() || advanced.identity.trim());
 }
 
 function buildServerLogAdvancedFilterPayload(advanced: ServerLogAdvancedFilterState | null): string | undefined {
@@ -108,6 +103,9 @@ function buildServerLogAdvancedFilterPayload(advanced: ServerLogAdvancedFilterSt
   const rules: Array<Record<string, unknown>> = [];
   if (advanced.action) {
     rules.push({ field: "action", op: "eq", value: advanced.action });
+  }
+  if (advanced.result) {
+    rules.push({ field: "result", op: "eq", value: advanced.result });
   }
   rules.push(...buildTextFieldRules("path", advanced.path, advanced.pathMatchMode));
   rules.push(...buildTextFieldRules("identity", advanced.identity, advanced.identityMatchMode));
@@ -253,7 +251,7 @@ function serverLogStatusLabel(entry: PortalServerAccessLogEntry, t: ReturnType<t
 }
 
 function historyTabFromSearch(value: string | null): HistoryTab {
-  if (value === "transfers" || value === "access") return value;
+  if (value === "access") return value;
   return "activity";
 }
 
@@ -261,7 +259,6 @@ export default function PortalHistoryPage() {
   const { t, locale } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedHistoryTab = historyTabFromSearch(searchParams.get("view"));
-  const [activeLiveTab, setActiveLiveTab] = useState<LiveTransferTab>("all");
   const [serverLogDate, setServerLogDate] = useState(todayDateInputValue);
   const [serverLogSpaceId, setServerLogSpaceId] = useState("");
   const [showServerLogAdvancedFilter, setShowServerLogAdvancedFilter] = useState(false);
@@ -289,12 +286,10 @@ export default function PortalHistoryPage() {
     accountError,
     accountLoading,
     activityLoading,
-    transfersLoading,
     accountIdForApi,
     selectedAccount,
   } = usePortalWorkspaceData({
     includeActivity: requestedHistoryTab === "activity",
-    includeTransfers: requestedHistoryTab === "transfers",
   });
   const storageSpaces = workspace.spaces ?? [];
   const serverAccessLoggingEnabled = state?.server_access_logging_enabled ?? true;
@@ -309,10 +304,6 @@ export default function PortalHistoryPage() {
       {
         id: "activity",
         label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }),
-      },
-      {
-        id: "transfers",
-        label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }),
       },
     ];
     if (serverAccessLoggingEnabled && canViewServerAccessLogs) {
@@ -351,147 +342,6 @@ export default function PortalHistoryPage() {
     zIndexClass: "z-[70]",
   });
 
-  const transfers = useMemo(() => {
-    if (activeLiveTab === "uploads") return workspace.transfers.filter((transfer) => transfer.direction === "Upload");
-    if (activeLiveTab === "downloads") return workspace.transfers.filter((transfer) => transfer.direction === "Download");
-    return workspace.transfers;
-  }, [activeLiveTab, workspace.transfers]);
-  const transfersTableStatus = transfers.length === 0 ? "empty" : "ready";
-  const visibleSizeBytes = useMemo(
-    () => transfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0),
-    [transfers]
-  );
-  const transferSummary = useMemo(() => {
-    const allTransfers = workspace.transfers;
-    return {
-      active: allTransfers.filter((transfer) => transfer.status === "Uploading" || transfer.status === "Queued").length,
-      completed: allTransfers.filter((transfer) => transfer.status === "Completed").length,
-      failed: allTransfers.filter((transfer) => transfer.status === "Failed").length,
-      totalSizeBytes: allTransfers.reduce((sum, transfer) => sum + (transfer.sizeBytes ?? 0), 0),
-    };
-  }, [workspace.transfers]);
-  const emptyTransferMessage =
-    activeLiveTab === "uploads"
-      ? t({
-          en: "No uploads yet. Add files from a space to follow them here.",
-          fr: "Aucun envoi pour le moment. Ajoutez des fichiers depuis un espace pour les suivre ici.",
-          de: "Noch keine Uploads. Fügen Sie Dateien aus einem Bereich hinzu, um sie hier zu verfolgen.",
-        })
-      : activeLiveTab === "downloads"
-        ? t({
-            en: "No downloads yet. Download a file from a space to follow it here.",
-            fr: "Aucun téléchargement pour le moment. Téléchargez un fichier depuis un espace pour le suivre ici.",
-            de: "Noch keine Downloads. Laden Sie eine Datei aus einem Bereich herunter, um sie hier zu verfolgen.",
-          })
-        : t({
-            en: "No file movement to show yet. Upload or download from a space to see progress here.",
-            fr: "Aucun mouvement de fichier à afficher. Envoyez ou téléchargez depuis un espace pour voir la progression ici.",
-            de: "Noch keine Dateibewegung. Laden Sie aus einem Bereich hoch oder herunter, um den Fortschritt hier zu sehen.",
-          });
-  const transferNote = useCallback((transfer: PortalWorkspaceTransfer) => {
-    if (transfer.errorMessage) return transfer.errorMessage;
-    if (transfer.status === "Failed") {
-      return t({
-        en: "Open the space and retry when you are ready.",
-        fr: "Ouvrez l'espace et réessayez quand vous êtes prêt.",
-        de: "Öffnen Sie den Bereich und versuchen Sie es erneut, wenn Sie bereit sind.",
-      });
-    }
-    if (transfer.status === "Queued") {
-      return t({
-        en: "Waiting to start.",
-        fr: "En attente de démarrage.",
-        de: "Wartet auf den Start.",
-      });
-    }
-    if (transfer.status === "Uploading") {
-      return transfer.direction === "Upload"
-        ? t({
-            en: "Keep the space open until the upload finishes.",
-            fr: "Gardez l'espace ouvert jusqu'à la fin de l'envoi.",
-            de: "Lassen Sie den Bereich offen, bis der Upload abgeschlossen ist.",
-          })
-        : t({
-            en: "Preparing the download.",
-            fr: "Préparation du téléchargement.",
-            de: "Download wird vorbereitet.",
-          });
-    }
-    return transfer.direction === "Upload"
-      ? t({
-          en: "Available in the space.",
-          fr: "Disponible dans l'espace.",
-          de: "Im Bereich verfügbar.",
-        })
-      : t({
-          en: "Saved by your browser.",
-          fr: "Enregistré par votre navigateur.",
-          de: "Vom Browser gespeichert.",
-        });
-  }, [t]);
-
-  const transferColumns = useMemo<DataTableColumn<PortalWorkspaceTransfer>[]>(
-    () => [
-      {
-        id: "name",
-        label: t({ en: "File", fr: "Fichier", de: "Datei" }),
-        primary: true,
-        cellClassName: "break-words",
-        render: (transfer) => transfer.name,
-      },
-      {
-        id: "space",
-        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-        cellClassName: "break-words",
-        render: (transfer) => transfer.spaceName,
-      },
-      {
-        id: "direction",
-        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-        render: (transfer) => portalTransferDirectionLabel(transfer.direction, t),
-      },
-      {
-        id: "status",
-        label: t({ en: "Status", fr: "Statut", de: "Status" }),
-        render: (transfer) => (
-          <UiBadge tone={portalTransferStatusTone(transfer.status)}>{portalTransferStatusLabel(transfer.status, t)}</UiBadge>
-        ),
-      },
-      {
-        id: "progress",
-        label: t({ en: "Progress", fr: "Progression", de: "Fortschritt" }),
-        render: (transfer) => (
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="w-28 max-w-full"><UiProgressBar value={transfer.progress} /></div>
-            <span className="shrink-0">{transfer.progress}%</span>
-          </div>
-        ),
-      },
-      {
-        id: "size",
-        label: t({ en: "Size", fr: "Taille", de: "Größe" }),
-        render: (transfer) => formatBytes(transfer.sizeBytes ?? 0),
-      },
-      {
-        id: "started",
-        label: t({ en: "Started", fr: "Démarré", de: "Gestartet" }),
-        render: (transfer) => transfer.startedLabel,
-      },
-      {
-        id: "eta",
-        label: t({ en: "Time left", fr: "Temps restant", de: "Verbleibende Zeit" }),
-        render: (transfer) => transfer.etaLabel,
-      },
-      {
-        id: "note",
-        label: t({ en: "Note", fr: "Note", de: "Hinweis" }),
-        cellClassName: "break-words text-xs",
-        render: (transfer) => transferNote(transfer),
-      },
-    ],
-    [t, transferNote]
-  );
-
   const resetServerLogResults = useCallback(() => {
     setServerLogs([]);
     setServerLogsTotal(0);
@@ -520,6 +370,18 @@ export default function PortalHistoryPage() {
   const serverLogActionLabel = useCallback(
     (value: ServerLogActionFilter) => serverLogActionOptions.find((option) => option.value === value)?.label ?? value,
     [serverLogActionOptions]
+  );
+  const serverLogResultOptions = useMemo(
+    () => [
+      { value: "", label: t({ en: "Any result", fr: "Tous les résultats", de: "Jedes Ergebnis" }) },
+      { value: "success", label: t({ en: "Succeeded", fr: "Réussi", de: "Erfolgreich" }) },
+      { value: "failure", label: t({ en: "Failed", fr: "Échec", de: "Fehlgeschlagen" }) },
+    ] as Array<{ value: ServerLogResultFilter; label: string }>,
+    [t]
+  );
+  const serverLogResultLabel = useCallback(
+    (value: ServerLogResultFilter) => serverLogResultOptions.find((option) => option.value === value)?.label ?? value,
+    [serverLogResultOptions]
   );
 
   const updateServerLogAdvancedField = useCallback((field: keyof ServerLogAdvancedFilterState, value: string) => {
@@ -560,7 +422,9 @@ export default function PortalHistoryPage() {
   const pathPending = pathDraftValue !== pathAppliedValue || (pathDraftValue.length > 0 && pathDraftMode !== pathAppliedMode);
   const identityPending = identityDraftValue !== identityAppliedValue || (identityDraftValue.length > 0 && identityDraftMode !== identityAppliedMode);
   const actionPending = serverLogAdvancedDraft.action !== (serverLogAdvancedApplied?.action ?? "");
+  const resultPending = serverLogAdvancedDraft.result !== (serverLogAdvancedApplied?.result ?? "");
   const actionFieldState = fieldHighlight(Boolean(serverLogAdvancedApplied?.action), actionPending);
+  const resultFieldState = fieldHighlight(Boolean(serverLogAdvancedApplied?.result), resultPending);
   const pathFieldState = fieldHighlight(Boolean(pathAppliedValue), pathPending);
   const identityFieldState = fieldHighlight(Boolean(identityAppliedValue), identityPending);
 
@@ -577,12 +441,14 @@ export default function PortalHistoryPage() {
   const clearServerLogAdvancedField = useCallback((field: ServerLogAdvancedFilterField) => {
     setServerLogAdvancedDraft((prev) => {
       if (field === "action") return { ...prev, action: "" };
+      if (field === "result") return { ...prev, result: "" };
       if (field === "path") return { ...prev, path: "" };
       return { ...prev, identity: "" };
     });
     setServerLogAdvancedApplied((prev) => {
       if (!prev) return prev;
       if (field === "action") return { ...prev, action: "" };
+      if (field === "result") return { ...prev, result: "" };
       if (field === "path") return { ...prev, path: "" };
       return { ...prev, identity: "" };
     });
@@ -601,6 +467,13 @@ export default function PortalHistoryPage() {
         remove: { type: "advanced", field: "action" },
       });
     }
+    if (serverLogAdvancedApplied?.result) {
+      items.push({
+        id: "result",
+        label: `${t({ en: "Result", fr: "Résultat", de: "Ergebnis" })}: ${serverLogResultLabel(serverLogAdvancedApplied.result)}`,
+        remove: { type: "advanced", field: "result" },
+      });
+    }
     const pathLabel = serverLogAdvancedApplied
       ? formatTextFilterSummary(t({ en: "Path", fr: "Chemin", de: "Pfad" }), serverLogAdvancedApplied.path, pathAppliedMode)
       : null;
@@ -610,7 +483,7 @@ export default function PortalHistoryPage() {
       : null;
     if (identityLabel) items.push({ id: "identity", label: identityLabel, remove: { type: "advanced", field: "identity" } });
     return items;
-  }, [identityAppliedMode, pathAppliedMode, serverLogActionLabel, serverLogAdvancedApplied, t]);
+  }, [identityAppliedMode, pathAppliedMode, serverLogActionLabel, serverLogAdvancedApplied, serverLogResultLabel, t]);
 
   const serverLogAdvancedDraftSummaryItems = useMemo(() => {
     const items: Array<{ id: string; label: string }> = [];
@@ -620,18 +493,24 @@ export default function PortalHistoryPage() {
         label: `${t({ en: "Action", fr: "Action", de: "Aktion" })}: ${serverLogActionLabel(serverLogAdvancedDraft.action)}`,
       });
     }
+    if (serverLogAdvancedDraft.result) {
+      items.push({
+        id: "result",
+        label: `${t({ en: "Result", fr: "Résultat", de: "Ergebnis" })}: ${serverLogResultLabel(serverLogAdvancedDraft.result)}`,
+      });
+    }
     const pathLabel = formatTextFilterSummary(t({ en: "Path", fr: "Chemin", de: "Pfad" }), serverLogAdvancedDraft.path, pathDraftMode);
     if (pathLabel) items.push({ id: "path", label: pathLabel });
     const identityLabel = formatTextFilterSummary(t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" }), serverLogAdvancedDraft.identity, identityDraftMode);
     if (identityLabel) items.push({ id: "identity", label: identityLabel });
     return items;
-  }, [identityDraftMode, pathDraftMode, serverLogActionLabel, serverLogAdvancedDraft, t]);
+  }, [identityDraftMode, pathDraftMode, serverLogActionLabel, serverLogAdvancedDraft, serverLogResultLabel, t]);
   const serverLogAdvancedDraftActiveCount = serverLogAdvancedDraftSummaryItems.length;
 
   useEffect(() => {
     if (loading || accountLoading) return;
     const rawView = searchParams.get("view");
-    const invalidView = rawView !== null && !["activity", "transfers", "access"].includes(rawView);
+    const invalidView = rawView !== null && !["activity", "access"].includes(rawView);
     const inaccessibleAccessView =
       requestedHistoryTab === "access" && (!serverAccessLoggingEnabled || !canViewServerAccessLogs);
     if (invalidView || inaccessibleAccessView || rawView === "activity") {
@@ -653,9 +532,8 @@ export default function PortalHistoryPage() {
     setServerLogsLoading(true);
     setServerLogsError(null);
     setServerLogsLoaded(false);
-    void fetchPortalServerAccessLogPage(accountIdForApi, {
+      void fetchPortalServerAccessLogPage(accountIdForApi, {
         date: serverLogDate,
-        mode: "operations",
         spaceId: serverLogSpaceId || undefined,
         limit: serverLogPageSize,
         offset: (serverLogPage - 1) * serverLogPageSize,
@@ -871,10 +749,7 @@ export default function PortalHistoryPage() {
 
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
-    loading:
-      loading ||
-      (activeHistoryTab === "activity" && activityLoading) ||
-      (activeHistoryTab === "transfers" && transfersLoading),
+    loading: loading || (activeHistoryTab === "activity" && activityLoading),
     accountError,
     error,
     hasAccountContext,
@@ -883,130 +758,14 @@ export default function PortalHistoryPage() {
   });
   if (pageState) return pageState;
 
-  const liveTransfersContent = workspace.transfers.length === 0 ? (
-    <PageEmptyState
-      eyebrow={t({ en: "Nothing moving", fr: "Aucun mouvement", de: "Keine Bewegung" })}
-      title={t({ en: "No recent transfer yet", fr: "Aucun transfert récent", de: "Noch kein aktueller Transfer" })}
-      description={t({
-        en: "The latest uploads and downloads started from your spaces appear here automatically.",
-        fr: "Les derniers envois et téléchargements lancés depuis vos espaces apparaissent ici automatiquement.",
-        de: "Die neuesten Uploads und Downloads aus Ihren Bereichen erscheinen hier automatisch.",
-      })}
-      primaryAction={{ label: t({ en: "Start from spaces", fr: "Commencer depuis les espaces", de: "In Bereichen starten" }), to: "/portal/storage-spaces" }}
-    />
-  ) : (
-    <>
-      <UiCard
-        muted
-        title={t({ en: "Transfer summary", fr: "Résumé des transferts", de: "Übertragungsübersicht" })}
-        description={t({
-          en: "These are the latest uploads and downloads started from the spaces you can access.",
-          fr: "Voici les derniers envois et téléchargements lancés depuis les espaces auxquels vous avez accès.",
-          de: "Dies sind die neuesten Uploads und Downloads aus den Bereichen, auf die Sie zugreifen können.",
-        })}
-      >
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="min-w-0">
-            <div className={uiLabelClass}>{t({ en: "In progress", fr: "En cours", de: "In Bearbeitung" })}</div>
-            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.active}</div>
-            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-              {t({ en: "Uploads or downloads still moving", fr: "Envois ou téléchargements encore en cours", de: "Uploads oder Downloads laufen noch" })}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <div className={uiLabelClass}>{t({ en: "Completed", fr: "Terminés", de: "Abgeschlossen" })}</div>
-            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.completed}</div>
-            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-              {t({ en: "Files confirmed by Portal", fr: "Fichiers confirmés par le portail", de: "Vom Portal bestätigte Dateien" })}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <div className={uiLabelClass}>{t({ en: "Needs attention", fr: "À vérifier", de: "Zu prüfen" })}</div>
-            <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{transferSummary.failed}</div>
-            <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-              {transferSummary.failed > 0
-                ? t({ en: "Retry from the related space", fr: "À relancer depuis l'espace lié", de: "Aus dem zugehörigen Bereich erneut versuchen" })
-                : t({ en: "No failed transfers", fr: "Aucun transfert en échec", de: "Keine fehlgeschlagenen Übertragungen" })}
-            </p>
-          </div>
-        </div>
-        <div className={cx("mt-4 border-t pt-3 text-xs", uiDividerClass, uiMutedTextClass)}>
-          {t({
-            en: `Tracked file size: ${formatBytes(transferSummary.totalSizeBytes)}`,
-            fr: `Taille des fichiers suivis : ${formatBytes(transferSummary.totalSizeBytes)}`,
-            de: `Verfolgte Dateigröße: ${formatBytes(transferSummary.totalSizeBytes)}`,
-          })}
-        </div>
-      </UiCard>
-
-      <UiCard
-        title={t({ en: "Latest transfer history", fr: "Historique des derniers transferts", de: "Verlauf der neuesten Transfers" })}
-        description={t({
-          en: "Filter recent uploads and downloads by direction.",
-          fr: "Filtrez les envois et téléchargements récents par sens.",
-          de: "Filtern Sie aktuelle Uploads und Downloads nach Richtung.",
-        })}
-      >
-        <div className={cx("mb-3 border-b pb-3", uiDividerClass)}>
-          <div
-            className="flex flex-wrap gap-2"
-            role="group"
-            aria-label={t({ en: "Transfer direction", fr: "Sens du transfert", de: "Übertragungsrichtung" })}
-          >
-            {([
-              { id: "all", label: t({ en: "All", fr: "Tous", de: "Alle" }) },
-              { id: "uploads", label: t({ en: "Uploads", fr: "Envois", de: "Hochladen" }) },
-              { id: "downloads", label: t({ en: "Downloads", fr: "Téléchargements", de: "Herunterladen" }) },
-            ] as Array<{ id: LiveTransferTab; label: string }>).map((option) => {
-              const selected = option.id === activeLiveTab;
-              return (
-                <UiButton
-                  key={option.id}
-                  size="xs"
-                  variant={selected ? "secondary" : "ghost"}
-                  aria-pressed={selected}
-                  onClick={() => setActiveLiveTab(option.id)}
-                  className={selected ? "bg-[var(--ui-selected-bg)] text-primary dark:text-[var(--ui-text)]" : undefined}
-                >
-                  {option.label}
-                </UiButton>
-              );
-            })}
-          </div>
-        </div>
-        <DataTableShell
-          columns={transferColumns}
-          rows={transfers}
-          rowKey={(transfer) => transfer.id}
-          status={transfersTableStatus}
-          loadingMessage={t({ en: "Loading transfers...", fr: "Chargement des transferts...", de: "Übertragungen werden geladen..." })}
-          errorMessage={t({ en: "Unable to load transfers.", fr: "Impossible de charger les transferts.", de: "Übertragungen können nicht geladen werden." })}
-          emptyMessage={emptyTransferMessage}
-          responsiveCards
-        />
-        <div className={cx("mt-3 text-[11px]", uiMutedTextClass)}>
-          {t({ en: `Visible file size: ${formatBytes(visibleSizeBytes)}`, fr: `Taille visible des fichiers : ${formatBytes(visibleSizeBytes)}`, de: `Sichtbare Dateigröße: ${formatBytes(visibleSizeBytes)}` })}
-        </div>
-      </UiCard>
-    </>
-  );
-
   return (
     <PageShell
         title={t({ en: "History", fr: "Historique", de: "Verlauf" })}
-        description={
-          canViewServerAccessLogs
-            ? t({
-                en: "Review workspace activity, file transfers, and technical access logs for the spaces you can use.",
-                fr: "Consultez l'activité, les transferts de fichiers et les journaux d'accès techniques des espaces que vous pouvez utiliser.",
-                de: "Prüfen Sie Aktivität, Dateiübertragungen und technische Zugriffsprotokolle Ihrer Bereiche.",
-              })
-            : t({
-                en: "Review workspace activity and recent file transfers for the spaces you can use.",
-                fr: "Consultez l'activité et les transferts de fichiers récents des espaces que vous pouvez utiliser.",
-                de: "Prüfen Sie Aktivität und aktuelle Dateiübertragungen Ihrer Bereiche.",
-              })
-        }
+        description={t({
+          en: "Review governance activity and, for project managers, provider S3 access logs.",
+          fr: "Consultez l'activité de gouvernance et, pour les gestionnaires de projet, les journaux d'accès S3 du fournisseur.",
+          de: "Prüfen Sie Governance-Aktivitäten und als Projektmanager die S3-Zugriffsprotokolle des Anbieters.",
+        })}
         breadcrumbs={portalBreadcrumbs({ label: t({ en: "History", fr: "Historique", de: "Verlauf" }) })}
         actions={[{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces", variant: "secondary" }]}
         rightContent={
@@ -1016,13 +775,15 @@ export default function PortalHistoryPage() {
         }
     >
 
-      <PortalPageTabs
-        tabs={historyTabs}
-        activeTab={activeHistoryTab}
-        onChange={(tab) => selectHistoryTab(tab as HistoryTab)}
-        ariaLabel={t({ en: "History views", fr: "Vues de l'historique", de: "Verlaufsansichten" })}
-        idPrefix="portal-history"
-      />
+      {historyTabs.length > 1 ? (
+        <PortalPageTabs
+          tabs={historyTabs}
+          activeTab={activeHistoryTab}
+          onChange={(tab) => selectHistoryTab(tab as HistoryTab)}
+          ariaLabel={t({ en: "History views", fr: "Vues de l'historique", de: "Verlaufsansichten" })}
+          idPrefix="portal-history"
+        />
+      ) : null}
 
       <PortalTabPanel idPrefix="portal-history" tabId={activeHistoryTab}>
       {activeHistoryTab === "activity" ? (
@@ -1031,9 +792,9 @@ export default function PortalHistoryPage() {
         <UiCard
           title={t({ en: "Technical access logs", fr: "Journaux d'accès techniques", de: "Technische Zugriffsprotokolle" })}
           description={t({
-            en: "Use these manager-only logs to investigate S3 requests for a selected date and space.",
-            fr: "Utilisez ces journaux réservés aux managers pour examiner les requêtes S3 d'une date et d'un espace donnés.",
-            de: "Verwenden Sie diese nur für Manager sichtbaren Protokolle, um S3-Anfragen für ein Datum und einen Bereich zu untersuchen.",
+            en: "Use these manager-only provider logs to investigate S3 requests. Delivery may be delayed and depends on logging activation and retention.",
+            fr: "Utilisez ces journaux fournisseur réservés aux managers pour examiner les requêtes S3. Leur livraison peut être différée et dépend de l'activation et de la rétention.",
+            de: "Untersuchen Sie mit diesen nur für Manager sichtbaren Anbieterprotokollen S3-Anfragen. Die Bereitstellung kann verzögert sein und hängt von Aktivierung und Aufbewahrung ab.",
           })}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -1133,7 +894,7 @@ export default function PortalHistoryPage() {
                   <div className="space-y-3">
                     {renderAdvancedFilterDraftSummary(serverLogAdvancedDraftSummaryItems)}
                     <section className={advancedFilterSectionClass}>
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <div className="grid gap-3 md:grid-cols-4">
                         <div className={advancedFilterFieldCardClass()}>
                           <label className={cx(uiLabelClass, actionFieldState.labelClass)} htmlFor="portal-server-log-action-filter">
                             {t({ en: "Action", fr: "Action", de: "Aktion" })}
@@ -1145,6 +906,23 @@ export default function PortalHistoryPage() {
                             className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 ${actionFieldState.fieldClass}`)}
                           >
                             {serverLogActionOptions.map((option) => (
+                              <option key={option.value || "any"} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className={advancedFilterFieldCardClass()}>
+                          <label className={cx(uiLabelClass, resultFieldState.labelClass)} htmlFor="portal-server-log-result-filter">
+                            {t({ en: "Result", fr: "Résultat", de: "Ergebnis" })}
+                          </label>
+                          <select
+                            id="portal-server-log-result-filter"
+                            value={serverLogAdvancedDraft.result}
+                            onChange={(event) => updateServerLogAdvancedField("result", event.target.value as ServerLogResultFilter)}
+                            className={advancedFilterControlClass(`mt-2 w-full px-2 py-1.5 ${resultFieldState.fieldClass}`)}
+                          >
+                            {serverLogResultOptions.map((option) => (
                               <option key={option.value || "any"} value={option.value}>
                                 {option.label}
                               </option>
@@ -1183,7 +961,7 @@ export default function PortalHistoryPage() {
                             className={advancedFilterControlClass(`mt-2 w-full resize-y px-2 py-1.5 font-normal ${pathFieldState.fieldClass}`)}
                           />
                         </div>
-                        <div className={advancedFilterFieldCardClass("md:col-span-3")}>
+                        <div className={advancedFilterFieldCardClass("md:col-span-4")}>
                           <div className="flex items-center justify-between gap-2">
                             <label className={cx(uiLabelClass, identityFieldState.labelClass)} htmlFor="portal-server-log-identity-filter">
                               {t({ en: "Person or key", fr: "Personne ou clé", de: "Person oder Schlüssel" })}
@@ -1276,7 +1054,9 @@ export default function PortalHistoryPage() {
             </div>
           </div>
         </UiCard>
-      ) : liveTransfersContent}
+      ) : (
+        <PortalActivityPanel workspace={workspace} />
+      )}
       </PortalTabPanel>
 
       {rawLogsModalOpen ? (

@@ -63,6 +63,12 @@ Use **Browser** for direct bucket/object operations.
 - Some actions depend on the current state. Examples: `Open` is available for a single folder selection, and deleted entries must be restored through versioning flows before direct object operations resume.
 - The last bucket and prefix are remembered only inside the current tab. A
   second tab using the same context can navigate independently.
+- Upload, download, delete, copy, restore, and object metadata changes are not
+  stored in the application audit table. Use Server Access Logging or the
+  equivalent provider request logs for object-level audit. The Browser
+  operations bar still shows live progress, but it is not durable history.
+- Use one owned private S3 connection or IAM identity per person. Keys may
+  overlap during rotation, but must not be shared between users.
 
 ## Expected result
 
@@ -75,6 +81,10 @@ You can perform day-to-day object operations directly from the UI.
     Portal projects additionally require `portal_enabled`,
     `browser_portal_enabled`, and effective project setting
     `portal.browser_access_enabled`.
+
+!!! warning
+    If the S3 backend does not have data-plane logging enabled and retained,
+    there is no exhaustive audit trail for object operations.
 
 !!! note
     If no eligible private connection exists, Browser links to **Profile >

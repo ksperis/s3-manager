@@ -61,9 +61,9 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
   const emptyActivityMessage =
     workspace.activity.length === 0
       ? t({
-          en: "No recent changes yet. Add files, invite collaborators, or create spaces to build a history here.",
-          fr: "Aucun changement récent. Ajoutez des fichiers, invitez des collaborateurs ou créez des espaces pour construire l'historique.",
-          de: "Noch keine letzten Änderungen. Fügen Sie Dateien hinzu, laden Sie Mitwirkende ein oder erstellen Sie Bereiche, um hier einen Verlauf aufzubauen.",
+          en: "No recent governance changes. Create a space, update settings, or manage access to build a history here.",
+          fr: "Aucun changement de gouvernance récent. Créez un espace, modifiez des paramètres ou gérez les accès pour construire l'historique.",
+          de: "Noch keine Governance-Änderungen. Erstellen Sie einen Bereich, ändern Sie Einstellungen oder verwalten Sie Zugriffe, um hier einen Verlauf aufzubauen.",
         })
       : t({
           en: "No matching activity. Adjust the filters to see more changes.",
@@ -174,7 +174,7 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
         expandedRow={(item) =>
           expandedActivityId === item.id ? (
             <dl className={cx(uiCardMutedClass, "grid gap-2 px-3 py-2 text-xs sm:grid-cols-[140px_1fr]")}>
-              <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "File or item", fr: "Fichier ou élément", de: "Datei oder Element" })}</dt>
+              <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Resource", fr: "Ressource", de: "Ressource" })}</dt>
               <dd className={cx(uiTitleTextClass, "break-all")}>{item.target}</dd>
               <dt className={cx("font-semibold", uiMutedTextClass)}>{t({ en: "Action", fr: "Action", de: "Aktion" })}</dt>
               <dd className={uiTitleTextClass}>{item.action}</dd>
@@ -204,9 +204,9 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
           eyebrow={t({ en: "No history yet", fr: "Aucun historique", de: "Noch kein Verlauf" })}
           title={t({ en: "Activity starts with your spaces", fr: "L'activité commence dans vos espaces", de: "Aktivität beginnt in Ihren Bereichen" })}
           description={t({
-            en: "Upload files, create folders, or invite collaborators from a space. The most recent changes will appear here.",
-            fr: "Ajoutez des fichiers, créez des dossiers ou invitez des collaborateurs depuis un espace. Les changements récents apparaîtront ici.",
-            de: "Laden Sie Dateien hoch, erstellen Sie Ordner oder laden Sie Mitwirkende aus einem Bereich ein. Die letzten Änderungen erscheinen hier.",
+            en: "Create spaces, manage collaborators and links, or update settings. The latest governance changes will appear here.",
+            fr: "Créez des espaces, gérez les collaborateurs et les liens, ou modifiez les paramètres. Les derniers changements de gouvernance apparaîtront ici.",
+            de: "Erstellen Sie Bereiche, verwalten Sie Mitwirkende und Links oder ändern Sie Einstellungen. Die letzten Governance-Änderungen erscheinen hier.",
           })}
           primaryAction={{ label: t({ en: "Open spaces", fr: "Ouvrir les espaces", de: "Bereiche öffnen" }), to: "/portal/storage-spaces" }}
         />
@@ -216,9 +216,9 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
             muted
             title={t({ en: "Activity overview", fr: "Vue d'ensemble de l'activité", de: "Aktivitätsübersicht" })}
             description={t({
-              en: "A quick view of recent work across the spaces you can access.",
-              fr: "Une vue rapide du travail récent dans les espaces auxquels vous avez accès.",
-              de: "Ein schneller Überblick über die letzten Arbeiten in Ihren zugänglichen Bereichen.",
+              en: "A quick view of recent governance changes across the spaces you can access.",
+              fr: "Une vue rapide des changements de gouvernance récents dans les espaces auxquels vous avez accès.",
+              de: "Ein schneller Überblick über aktuelle Governance-Änderungen in Ihren zugänglichen Bereichen.",
             })}
           >
             <div className="grid gap-4 sm:grid-cols-3">
@@ -226,7 +226,7 @@ export default function PortalActivityPanel({ workspace }: PortalActivityPanelPr
                 <div className={uiLabelClass}>{t({ en: "Recent changes", fr: "Changements récents", de: "Letzte Änderungen" })}</div>
                 <div className={cx("mt-1 text-2xl leading-7", uiTitleTextClass)}>{activitySummary.events}</div>
                 <p className={cx("mt-1 text-xs", uiMutedTextClass)}>
-                  {t({ en: "Visible file and sharing events", fr: "Événements visibles de fichiers et partages", de: "Sichtbare Datei- und Freigabeereignisse" })}
+                  {t({ en: "Visible access and configuration events", fr: "Événements visibles d'accès et de configuration", de: "Sichtbare Zugriffs- und Konfigurationsereignisse" })}
                 </p>
               </div>
               <div className="min-w-0">

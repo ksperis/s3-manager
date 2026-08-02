@@ -68,7 +68,6 @@ describe("buildPortalWorkspaceModel", () => {
 
     expect(workspace.spaces).toEqual([]);
     expect(workspace.activity).toEqual([]);
-    expect(workspace.transfers).toEqual([]);
     expect(workspace.alerts).toEqual([]);
     expect(workspace.usageTrend).toEqual([]);
     expect(workspace.requestCount).toBeNull();

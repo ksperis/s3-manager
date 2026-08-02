@@ -45,6 +45,29 @@ def _statement_by_sid(policy: dict[str, Any], sid: str) -> dict[str, Any] | None
     return None
 
 
+def _has_attributed_upload(
+    entries: Any,
+    *,
+    object_key: str,
+    identity_kind: str,
+    identity_email: str,
+) -> bool:
+    if not isinstance(entries, list):
+        return False
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("object_key") != object_key:
+            continue
+        identity = entry.get("requester_identity") or {}
+        if (
+            entry.get("operation_category") == "upload"
+            and identity.get("kind") == identity_kind
+            and identity.get("email") == identity_email
+            and identity.get("resolved") is True
+        ):
+            return True
+    return False
+
+
 def _upload_via_portal_browser(
     session: BackendSession,
     account_id: int,
@@ -186,11 +209,6 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
     external_access_key_id: str | None = None
     personal_access_key_id: str | None = None
 
-    super_admin_session.post(
-        f"/admin/users/{provisioned_account.manager_user_id}/assign-account",
-        json={"account_id": account_id, "account_root": True, "account_role": "portal_manager"},
-        expected_status=200,
-    )
     super_admin_session.put(
         f"/admin/accounts/{account_id}/portal-settings",
         json={"server_access_logging_enabled": True},
@@ -318,15 +336,31 @@ def test_portal_storage_space_configures_server_access_logging_on_lab(
         )
 
         today = datetime.now(timezone.utc).date().isoformat()
-        server_logs = manager_session.get(
-            "/portal/transfers/server-access-logs",
-            params={
-                "account_id": account_id,
-                "date": today,
-                "mode": "operations",
-                "limit": 50,
-                "timezone_offset_minutes": 0,
-            },
+        server_log_params = {
+            "account_id": account_id,
+            "date": today,
+            "limit": 200,
+            "timezone_offset_minutes": 0,
+        }
+        server_logs = _wait_for_value(
+            "Portal Server Access Logging identity attribution",
+            lambda: manager_session.get("/portal/access-logs", params=server_log_params),
+            lambda current: (
+                _has_attributed_upload(
+                    current,
+                    object_key="browser/upload.txt",
+                    identity_kind="portal_user",
+                    identity_email=provisioned_account.manager_email,
+                )
+                and _has_attributed_upload(
+                    current,
+                    object_key="external/direct-upload.txt",
+                    identity_kind="external_access",
+                    identity_email="ceph-functional-external@example.com",
+                )
+            ),
+            timeout=120,
+            interval=2,
         )
         assert isinstance(server_logs, list)
 

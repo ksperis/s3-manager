@@ -6,10 +6,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from time import monotonic
 from typing import Callable
 
-from sqlalchemy.orm import Session, sessionmaker
-
 from app.core.sensitive_data import sanitize_error_detail
-from app.db import User
 from app.models.ceph_admin import (
     CephAdminAdminOpsResult,
     CephAdminBucketIndexCheckBatchBucketResult,
@@ -17,7 +14,6 @@ from app.models.ceph_admin import (
     CephAdminBucketIndexCheckBatchResult,
     CephAdminBucketIndexCheckTarget,
 )
-from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, RGWAdminOperationResponse
 from app.utils.time import utcnow
 
@@ -46,49 +42,7 @@ def execute_bucket_index_check_operation(
     )
 
 
-def _qualified_bucket(target: CephAdminBucketIndexCheckTarget) -> str:
-    return f"{target.tenant}/{target.name}" if target.tenant else target.name
-
-
 class BucketIndexCheckService:
-    def __init__(self, session_factory: sessionmaker[Session] | Callable[[], Session]) -> None:
-        self.session_factory = session_factory
-
-    def _audit(
-        self,
-        target: CephAdminBucketIndexCheckTarget,
-        result: CephAdminBucketIndexCheckBatchBucketResult,
-        *,
-        endpoint_id: int,
-        endpoint_name: str,
-        actor_user: User | None,
-        actor_email: str | None,
-        actor_role: str | None,
-    ) -> None:
-        db = self.session_factory()
-        try:
-            AuditService(db).record_action(
-                user=actor_user,
-                user_email=actor_email,
-                user_role=actor_role,
-                scope="ceph-admin",
-                action="ceph_admin.bucket.index_check",
-                entity_type="rgw_bucket",
-                entity_id=_qualified_bucket(target),
-                metadata={
-                    "endpoint_id": endpoint_id,
-                    "endpoint_name": endpoint_name,
-                    "options": {"fix": False, "check_objects": False},
-                    "rgw_status_code": result.rgw_status_code,
-                    "rgw_error_code": result.rgw_error_code,
-                    "bulk": True,
-                },
-                status="success" if result.status == "completed" else "failed",
-                message=result.message,
-            )
-        finally:
-            db.close()
-
     def run(
         self,
         rgw_admin: RGWAdminClient,
@@ -99,9 +53,6 @@ class BucketIndexCheckService:
         parallelism: int,
         progress_callback: ProgressCallback | None = None,
         cancel_check: CancelCheck | None = None,
-        actor_user: User | None = None,
-        actor_email: str | None = None,
-        actor_role: str | None = None,
     ) -> CephAdminBucketIndexCheckBatchResult:
         started_at = utcnow()
         if progress_callback:
@@ -161,15 +112,6 @@ class BucketIndexCheckService:
                     duration_seconds=monotonic() - started,
                     message=str(sanitize_error_detail(str(exc))),
                 )
-            self._audit(
-                target,
-                result,
-                endpoint_id=endpoint_id,
-                endpoint_name=endpoint_name,
-                actor_user=actor_user,
-                actor_email=actor_email,
-                actor_role=actor_role,
-            )
             return result
 
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bucket-index-check") as executor:

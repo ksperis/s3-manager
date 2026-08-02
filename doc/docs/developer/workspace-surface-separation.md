@@ -9,7 +9,7 @@ execution identity.
 ## Surfaces
 
 - `/portal` is the end-user Storage Workspace. It is centered on storage spaces,
-  simple file operations, shares, activity, transfers, usage, alerts, requests
+  simple file operations, shares, governance activity, usage, alerts, requests
   to storage admins, and user preferences.
 - `/browser` is the shared object explorer. Its Standard profile covers normal
   file work; its Advanced profile adds diagnostics, versions, metadata, tags,
@@ -59,12 +59,10 @@ on its job.
 | SSE-C controls | Customer-provided encryption keys create handling and support risks. | SSE-C controls require endpoint capability and are disabled for the Portal basic profile. | Disabled in Portal Browser and unavailable when endpoint capabilities do not advertise SSE support. | Consider restricting SSE-C to advanced users only, or disabling it per endpoint when support teams cannot recover from user-managed keys. |
 | Proxy transfers and transfer concurrency | Backend proxy mode and high parallelism affect backend load and security posture. | Browser settings expose global proxy mode, ZIP streaming threshold, and upload/download/operation parallelism. These are not per-user or per-workspace today. | Not disabled per workspace or user today. | Decide whether high-throughput or proxy features need stricter defaults for Portal, shared connections, or constrained deployments. |
 
-Portal Browser operations that pass through backend routes with the resolved
-Portal context are audited with `scope = portal` and a Storage Space metadata
-reference. The Portal UI also records local transfer progress for uploads and
-downloads it can observe. Presigned downloads opened directly by the browser are
-not marked completed locally because the web app cannot observe the final file
-save.
+Portal Browser object operations are data-plane activity and are not persisted
+in application `audit_logs`. The Browser operation bar may show in-session
+progress, but it is not durable history. Object-level evidence comes from
+provider S3 access logs and the personal Portal IAM execution identity.
 
 Portal identities appear in root `/browser` only when the effective project
 setting `portal.browser_access_enabled` is true. They still run with the
@@ -76,7 +74,8 @@ labels.
 
 - Keep Portal labels user-oriented: `Storage Spaces`, `Shares`, `History`,
   `Storage health`, `Help requests`, and `Settings`. `History` separates
-  activity, transfers, and manager-only access logs into explicit tabs.
+  governance Activity from manager-only provider Access logs when available;
+  the tab bar is hidden when Activity is the only view.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   Portal functional profile, Standard layout, compact density, resolved
@@ -109,7 +108,7 @@ labels.
   Archived Storage Spaces suspend Portal access and public links without
   deleting stored grants or links.
 - Portal user usage views may show global account usage and quota pressure, but
-  named Storage Space breakdowns, activity, and transfer rows must be scoped to
+  named Storage Space breakdowns and traffic rows must be scoped to
   content-accessible Storage Spaces. Any hidden remainder must be represented
   only as an anonymous `Other` aggregate with no bucket or Storage Space
   identifiers.
@@ -153,9 +152,10 @@ Portal canonical routes are:
 - `/portal/requests`
 - `/portal/settings`
 
-`/portal/history` is the only Portal history destination. Its optional
-`view=transfers` and `view=access` parameters select the corresponding tabs;
-the default activity view has no query parameter.
+`/portal/history` is the only Portal history destination. Its default Activity
+view contains governance changes only. `view=access` selects manager-only S3
+provider access logs. Stale `view=transfers` values normalize to Activity, and
+`/portal/transfers` redirects to `/portal/history`.
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 and `/portal/policies` are intentionally not routed in the production Portal
@@ -167,7 +167,7 @@ The Admin counterpart for storage-admin triage is `/admin/portal-requests`.
 
 ## Portal Backend Cleanup Notes
 
-Portal uses Storage Space, file, share, activity, transfer, usage, alert,
+Portal uses Storage Space, file, share, governance activity, access-log, usage, alert,
 billing-source, health, request, and delegated settings endpoints only. Legacy
 backend routes that exposed bucket-centric or advanced identity concepts have
 been removed from the Portal router and API client:
@@ -209,8 +209,12 @@ Use these replacement surfaces instead:
   `/portal/storage-spaces/{spaceId}/objects*` for object detail routes.
 - Collaboration: `/portal/storage-spaces/{spaceId}/shares*`.
 - Public links: `/portal/storage-spaces/{spaceId}/public-links*`.
-- Usage, activity, transfers, alerts, traffic, health, and billing source:
+- Usage, governance activity, alerts, traffic, health, and billing source:
   the remaining Portal read endpoints.
+- Manager-only provider S3 access logs:
+  `/portal/access-logs`, `/portal/access-logs/page`, and
+  `/portal/access-logs/raw`. The removed
+  `/portal/transfers/server-access-logs*` aliases deliberately return `404`.
 - External S3 credentials:
   `/portal/access-keys`, excluding the active Portal runtime key. Personal keys
   follow the user's Portal grants; external credentials are dedicated IAM users
@@ -258,7 +262,9 @@ The current backend flow is:
    user, and bucket-policy projections from database state. The manager group
    grants account-wide Storage Space data access; technical buckets deny the
    individual manager principals with resource policies.
-7. Record mutating Portal actions through audit logging.
+7. Record only Portal control-plane, security, configuration, and global
+   workflow-control actions through application audit logging. Object data-plane
+   operations use provider S3 access logs.
 8. Return user-facing shapes without policy JSON, principals, ARNs, or
    advanced S3 diagnostics.
 
@@ -314,7 +320,7 @@ Playwright setup:
 - authenticated user: `storage.user@example.com`;
 - selected Portal account: `Helios Retail` (`selectedPortalAccountId=101`);
 - fixture Storage Spaces: `genomics-2026`, `photos`, and `datasets`;
-- fixture shares, activity, transfers, alerts, traffic, usage, billing source,
+- fixture shares, activity, alerts, traffic, usage, billing source,
   and locked Browser object listing data;
 - no live storage credentials or backend state are required.
 
@@ -340,7 +346,7 @@ viewports:
 - `/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz`
 - `/portal/shares`
 - `/portal/history`
-- `/portal/history?view=transfers`
+- `/portal/history?view=access`
 - `/portal/usage`
 - `/portal/requests`
 - `/portal/access-keys`

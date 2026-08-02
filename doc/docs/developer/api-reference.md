@@ -16,7 +16,7 @@ Use route-level schemas and examples in code as the canonical API contract.
 | `/api/auth` | login/session | Local, OIDC, LDAP, refresh-session, and current-user flows. |
 | `/api/admin` | platform admins | Users, groups, endpoints, app settings, billing, audit, metrics, and key rotation. |
 | `/api/manager` | account/context admins | Buckets, IAM, topics, usage stats, migrations, and Manager tools. |
-| `/api/portal` | Portal users/managers | Storage Spaces, files, shares, access keys, usage, activity, transfers, and settings. |
+| `/api/portal` | Portal users/managers | Storage Spaces, files, shares, access keys, usage, governance activity, provider access logs, and settings. |
 | `/api/browser` | object operators | Bucket/object browsing for the selected execution context. |
 | `/api/ceph-admin` | Ceph admins | Endpoint-scoped RGW Admin Ops workflows. |
 | `/api/storage-ops` | storage operators | Cross-context operational bucket views and actions. |
@@ -31,6 +31,23 @@ Use route-level schemas and examples in code as the canonical API contract.
 - Storage-side denials preserve upstream semantics where possible, especially `AccessDenied`.
 
 Do not infer storage permission from UI access. Native storage workflows still depend on the selected execution identity and S3/IAM decision.
+
+## Audit and Portal access-log APIs
+
+- `/api/admin/audit/logs` keeps the existing model and pagination contract but
+  contains only control-plane and security events.
+- `/api/portal/access-logs`, `/api/portal/access-logs/page`, and
+  `/api/portal/access-logs/raw` expose provider Server Access Logging to Portal
+  Managers. List/page cover all S3 categories; there is no `mode` parameter.
+- List/page can filter by action, Storage Space, path, requester identity, and
+  result.
+- `/api/portal/transfers` and
+  `/api/portal/transfers/server-access-logs*` were removed without aliases and
+  return `404`.
+
+Object operations are never inferred from the application audit API. Provider
+logs may be delayed and are complete only when delivery and retention are
+configured.
 
 ## Pagination and filters
 

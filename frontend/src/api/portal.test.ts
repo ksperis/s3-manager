@@ -46,7 +46,6 @@ import {
   fetchPortalStorageSpaceTrash,
   fetchPortalStorageSpace,
   fetchPortalUsageHistoryTrends,
-  fetchPortalTransfers,
   fetchPortalUsageTrends,
   getPortalUsageStatsAggregate,
   importPortalStorageSpace,
@@ -335,13 +334,11 @@ describe("portal storage spaces api", () => {
     });
   });
 
-  it("fetches portal activity transfers and alerts", async () => {
+  it("fetches portal activity access logs and alerts", async () => {
     await fetchPortalActivity("101", { spaceId: "research data", limit: 25 });
     await fetchPortalCollaborators("101");
-    await fetchPortalTransfers("101", { limit: 10 });
     await fetchPortalServerAccessLogs("101", {
       date: "2026-07-08",
-      mode: "operations",
       spaceId: "research data",
       limit: 25,
       offset: 50,
@@ -350,7 +347,6 @@ describe("portal storage spaces api", () => {
     });
     await fetchPortalServerAccessLogPage("101", {
       date: "2026-07-08",
-      mode: "operations",
       spaceId: "research data",
       limit: 25,
       offset: 50,
@@ -375,14 +371,10 @@ describe("portal storage spaces api", () => {
     expect(clientMock.get).toHaveBeenCalledWith("/portal/collaborators", {
       params: { account_id: "101" },
     });
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers", {
-      params: { account_id: "101", limit: 10 },
-    });
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs", {
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-logs", {
       params: {
         account_id: "101",
         date: "2026-07-08",
-        mode: "operations",
         space_id: "research data",
         limit: 25,
         offset: 50,
@@ -390,11 +382,10 @@ describe("portal storage spaces api", () => {
         advanced_filter: '{"match":"all","rules":[{"field":"identity","op":"contains","value":"portal-6-1"}]}',
       },
     });
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs/page", {
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-logs/page", {
       params: {
         account_id: "101",
         date: "2026-07-08",
-        mode: "operations",
         space_id: "research data",
         limit: 25,
         offset: 50,
@@ -402,7 +393,7 @@ describe("portal storage spaces api", () => {
         advanced_filter: '{"match":"all","rules":[{"field":"path","op":"contains","value":"captures/"}]}',
       },
     });
-    expect(clientMock.get).toHaveBeenCalledWith("/portal/transfers/server-access-logs/raw", {
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/access-logs/raw", {
       params: {
         account_id: "101",
         date_from: "2026-07-08",

@@ -174,10 +174,10 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
 <div class="docs-screenshot-carousel" data-docs-carousel data-carousel-title="Portal workspace">
   <figure data-thumb-label="Overview">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal dashboard with usage, activity, collaborator, transfer, and alert summaries" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal dashboard with usage, activity, collaborator, transfer, and alert summaries" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal dashboard with usage, governance activity, collaborator, and alert summaries" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal dashboard with usage, governance activity, collaborator, and alert summaries" loading="lazy">
     </div>
-    <figcaption><strong>Overview.</strong> Portal opens on a user dashboard with quota, space usage, recent activity, transfers, collaborator signals, and simple alerts.</figcaption>
+    <figcaption><strong>Overview.</strong> Portal opens on a user dashboard with quota, space usage, recent governance activity, collaborator signals, and simple alerts.</figcaption>
   </figure>
   <figure data-thumb-label="Spaces">
     <div class="docs-themed-shot" data-docs-themed-shot>

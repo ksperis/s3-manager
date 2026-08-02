@@ -29,8 +29,8 @@ describe("PortalActivityPanel", () => {
       {
         id: "api-activity-1",
         actor: "alice@example.com",
-        action: "Uploaded",
-        target: "report.csv",
+        action: "Created Storage Space",
+        target: "Research Data",
         spaceId: "research-data",
         spaceName: "Research Data",
         timeLabel: "2m ago",
@@ -66,8 +66,8 @@ describe("PortalActivityPanel", () => {
     expect(screen.getByLabelText("Space")).toHaveClass("ui-control");
     expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("alice@example.com").closest("table")).toHaveClass("responsive-data-table");
-    expect(screen.getAllByText("Uploaded").length).toBeGreaterThan(0);
-    expect(screen.getByText("alice@example.com").closest("td")).toHaveTextContent("report.csv");
+    expect(screen.getAllByText("Created Storage Space").length).toBeGreaterThan(0);
+    expect(screen.getByText("alice@example.com").closest("td")).toHaveTextContent("Research Data");
     expect(screen.getAllByText("Research Data").length).toBeGreaterThan(0);
     expect(screen.getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
     const openSpaceLinks = screen.getAllByRole("link", { name: "Open space" });
@@ -90,7 +90,7 @@ describe("PortalActivityPanel", () => {
     expect(screen.queryByText("192.0.2.10")).not.toBeInTheDocument();
 
     await user.click(showDetailsButtons[0]);
-    expect(screen.getByText("File or item")).toBeInTheDocument();
+    expect(screen.getByText("Resource")).toBeInTheDocument();
     expect(screen.getAllByText("Action").length).toBeGreaterThan(1);
     expect(screen.getByText("IP address")).toBeInTheDocument();
     expect(screen.getByText("192.0.2.10")).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe("PortalActivityPanel", () => {
     renderPage();
 
     expect(screen.getByText("Activity starts with your spaces")).toBeInTheDocument();
-    expect(screen.getByText("Upload files, create folders, or invite collaborators from a space. The most recent changes will appear here.")).toBeInTheDocument();
+    expect(screen.getByText("Create spaces, manage collaborators and links, or update settings. The latest governance changes will appear here.")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Open spaces" }).at(0)).toHaveAttribute("href", "/portal/storage-spaces");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });

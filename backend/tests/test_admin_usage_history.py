@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import json
 from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
@@ -217,7 +216,7 @@ def test_usage_history_trends_require_enabled_feature(client: TestClient, monkey
     assert response.json()["detail"] == "Usage history is disabled"
 
 
-def test_collect_usage_history_runs_without_quota_alerts_and_audits(client: TestClient, db_session, monkeypatch):
+def test_collect_usage_history_runs_without_quota_alerts_or_audit_rows(client: TestClient, db_session, monkeypatch):
     monkeypatch.setattr(usage_history_router, "load_app_settings", lambda: _settings(usage_history_enabled=True))
     calls: list[dict[str, bool]] = []
 
@@ -244,11 +243,7 @@ def test_collect_usage_history_runs_without_quota_alerts_and_audits(client: Test
     assert calls == [{"include_quota_alerts": False, "include_usage_history": True}]
     payload = response.json()
     assert payload["subjects_processed"] == 1
-    audit = db_session.query(AuditLog).filter(AuditLog.action == "collect_usage_history").one()
-    metadata = json.loads(audit.metadata_json or "{}")
-    assert audit.scope == "admin"
-    assert metadata["history_hourly_upserts"] == 1
-    assert metadata["manual_trigger"] is True
+    assert db_session.query(AuditLog).filter(AuditLog.action == "collect_usage_history").count() == 0
 
 
 def test_list_usage_history_hourly_records_include_quota(client: TestClient, db_session, monkeypatch):

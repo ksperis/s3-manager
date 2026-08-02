@@ -1,5 +1,22 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 control-plane audit boundary
+
+Migration `0091_purge_data_plane_audit_logs` irreversibly removes historical
+object data-plane actions and non-audit operational noise from `audit_logs`.
+Take a verified application database backup immediately before applying it;
+downgrade is intentionally unsupported and recovery requires restoring that
+backup. Deploy the migration, backend, and frontend together.
+
+The application audit now contains only control-plane, security,
+configuration, and global workflow-control events. Object evidence moves to
+Server Access Logging or the provider's equivalent. Portal clients must use
+`/api/portal/access-logs`, `/page`, and `/raw`; the removed
+`/api/portal/transfers` and
+`/api/portal/transfers/server-access-logs*` routes return `404`. The new access
+log routes do not accept `mode` and expose all S3 categories with action,
+space, path, identity, and result filters.
+
 ## 2026-08 canonical bucket migration JSON state
 
 Migration `0090_canonical_bucket_migration_json` rewrites persisted bucket

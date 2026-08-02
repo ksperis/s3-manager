@@ -48,7 +48,8 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/portal/shares*` and public-link/collaboration concepts | `user/portal-sharing.md` | Covered |
 | `/portal/access-keys` | `user/portal-access-keys.md` | Covered |
 | `/portal/usage` and Portal alerts | `user/portal-usage-alerts.md` | Covered |
-| `/portal/history` activity, transfer, and access-log tabs | `user/portal-activity.md` + `user/portal-transfers.md` | Covered |
+| `/portal/history` governance activity and access-log views | `user/portal-activity.md` | Covered |
+| `/admin/audit` control-plane and security audit | `user/admin-audit.md` + `developer/audit-boundary.md` | Covered |
 | `/portal/settings` | `user/portal-settings.md` | Covered |
 | `/browser` | `user/workspace-browser.md` + `user/feature-objects-browser.md` | Covered |
 | `/browser` object versions modal | `user/feature-object-versions-browser.md` | Covered |

@@ -63,7 +63,8 @@ runbooks.
 | `AccessDenied` appears during an S3 action | Storage-side IAM/S3 policy and selected execution identity. | Bucket/key, context selector, route, upstream error id if present. |
 | Health, quota, billing, or usage data is stale | Scheduler/CronJob status, `INTERNAL_CRON_TOKEN`, latest collection logs. | Job schedule, last successful run, backend log excerpt. |
 | Portal or Browser cannot open files | Browser sub-flags, Portal account link, Storage Space grants, endpoint capability. | Workspace, Storage Space or bucket, role/grant, exact action. |
-| A destructive or bulk operation failed | Backend route logs, audit trail, upstream S3/RGW response. | Operation id, actor, account/context, target bucket/prefix. |
+| An object or bulk data operation failed | Provider S3 access logs, backend route logs, upstream S3/RGW response. | Personal executor identity, bucket/key, operation id, target prefix. |
+| A purge, migration, global restore, or history cleanup failed | Application audit and backend route logs. | Actor, account/context, workflow id, target scope. |
 
 ## What an operator should keep in hand
 

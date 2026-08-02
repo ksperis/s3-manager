@@ -21,9 +21,9 @@ cost.
 | Uploads & downloads | File movement and activity when traffic collection is available. |
 | Costs | Optional monthly estimate for storage and transfer activity. |
 | Other | Anonymous storage used elsewhere in the project. It is not a Storage Space you can open and does not reveal hidden names or identifiers. |
-| Alerts | Deduplicated warnings such as quota near limit, public links, failed transfer, or degraded endpoint. |
+| Alerts | Deduplicated warnings such as quota near limit, public links, or a degraded endpoint. |
 
-Activity and transfer details are shown only for Storage Spaces you can access.
+Traffic details are shown only for Storage Spaces you can access.
 The dashboard may keep global totals so you can understand quota pressure, but
 it must not expose the names of other users' private spaces.
 

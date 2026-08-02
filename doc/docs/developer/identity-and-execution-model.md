@@ -13,6 +13,19 @@ credentials perform S3, IAM, or RGW operations.
 | Portal grant model | User-facing Storage Space visibility and role. | Private Owner, team Viewer/Editor grants, project Manager, Portal account links. |
 | Backend workflow identity | Explicit technical credential used for controlled orchestration. | Portal IAM provisioning, healthchecks, billing, quota, key rotation. |
 
+## Personal storage identity contract
+
+- Every human operator uses a dedicated IAM identity or owned private S3
+  connection; credentials are never shared between people.
+- One personal identity may temporarily have multiple keys during rotation.
+  Every key must still identify that same person and be retired after rotation.
+- Portal already executes S3 operations with the signed-in user's personal IAM
+  identity. Portal external access is assigned to one named person and must
+  preserve that attribution.
+- Application audit identifies control-plane actors. Object-level attribution
+  comes from provider S3 access logs. Without provider logging and retention,
+  the application cannot reconstruct an exhaustive object audit trail.
+
 ## Context and executor
 
 - `/manager` and `/browser` rely on execution context selection.
@@ -77,7 +90,7 @@ from a cached user profile.
 ## Practical impact
 
 A single UI user can have access to multiple accounts, connections, and
-endpoints while keeping execution explicit and auditable. Granting a menu item
+endpoints while keeping execution explicit and attributable. Granting a menu item
 or Manager tool access does not grant native storage permission by itself; S3,
 IAM, RGW Admin Ops, or Portal grants still decide whether the storage action is
 allowed.

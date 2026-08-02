@@ -83,9 +83,9 @@ nav:
           - "Portal: Storage Health": user/portal-usage-alerts.md
           - "Portal: Help Requests": user/portal-requests.md
           - "Portal: Activity": user/portal-activity.md
-          - "Portal: Transfers": user/portal-transfers.md
           - "Portal: Settings": user/portal-settings.md
       - Admin Features:
+          - "Admin: Audit": user/admin-audit.md
           - "Feature: Endpoint Status in Admin": user/feature-endpoint-status-admin.md
           - "Feature: Billing in Admin": user/feature-billing-admin.md
           - "Feature: Admin Usage and Metrics": user/feature-admin-metrics.md
@@ -147,6 +147,7 @@ nav:
           - "Architecture: frontend": developer/architecture-frontend.md
           - "Architecture: database": developer/architecture-database.md
           - Identity and execution model: developer/identity-and-execution-model.md
+          - Audit boundary: developer/audit-boundary.md
       - Design and Surface Contracts:
           - Principles: developer/principles.md
           - Product design guidelines: developer/product-design-guidelines.md

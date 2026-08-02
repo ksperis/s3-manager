@@ -46,20 +46,16 @@ import {
   LinkIcon,
   OpenIcon,
   TransferIcon,
-  UploadIcon,
 } from "../browser/browserIcons";
-import { storageSpacePath, type PortalWorkspaceSpace, type PortalWorkspaceTransfer } from "./portalWorkspaceModel";
+import { storageSpacePath, type PortalWorkspaceSpace } from "./portalWorkspaceModel";
 import {
   portalRoleTone,
-  portalTransferStatusTone,
   resolvePortalWorkspacePageState,
 } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 import {
   portalRoleLabel,
   portalTrendPeriodLabel,
-  portalTransferDirectionLabel,
-  portalTransferStatusLabel,
 } from "./portalI18n";
 
 type StorageSpaceRow = {
@@ -82,16 +78,6 @@ type ActivityRow = {
   time: string;
   tone: WorkspaceDashboardTone;
   icon: ReactNode;
-};
-
-type TransferRow = {
-  id: string;
-  name: string;
-  detail: string;
-  status: PortalWorkspaceTransfer["status"];
-  statusLabel: string;
-  progress: number;
-  tone: "neutral" | "primary" | "danger" | "success";
 };
 
 type QuickLink = {
@@ -205,34 +191,15 @@ function buildActivityRows(workspaceActivity: ReturnType<typeof usePortalWorkspa
   return workspaceActivity.slice(0, 5).map((item) => {
     const action = item.action.toLowerCase();
     const isShare = action.includes("share") || action.includes("partage") || action.includes("freigabe") || action.includes("link");
-    const isTransfer =
-      action.includes("upload") ||
-      action.includes("download") ||
-      action.includes("envoy") ||
-      action.includes("télécharg") ||
-      action.includes("hochgeladen") ||
-      action.includes("heruntergeladen");
     return {
       id: item.id,
       label: t({ en: `${item.actor} ${action} ${item.target}`, fr: `${item.actor} ${action} ${item.target}`, de: `${item.actor} ${action} ${item.target}` }),
       detail: item.spaceName ?? item.ipAddress,
       time: item.timeLabel,
-      tone: isShare ? "violet" : isTransfer ? "emerald" : "blue",
-      icon: isShare ? <LinkIcon className="h-4 w-4" /> : isTransfer ? <UploadIcon className="h-4 w-4" /> : <HistoryIcon className="h-4 w-4" />,
+      tone: isShare ? "violet" : "blue",
+      icon: isShare ? <LinkIcon className="h-4 w-4" /> : <HistoryIcon className="h-4 w-4" />,
     };
   });
-}
-
-function buildTransferRows(workspaceTransfers: ReturnType<typeof usePortalWorkspaceData>["workspace"]["transfers"], t: TFunction): TransferRow[] {
-  return workspaceTransfers.slice(0, 5).map((transfer) => ({
-    id: transfer.id,
-    name: transfer.name,
-    detail: `${portalTransferDirectionLabel(transfer.direction, t)} - ${transfer.spaceName} - ${transfer.startedLabel}`,
-    status: transfer.status,
-    statusLabel: portalTransferStatusLabel(transfer.status, t),
-    progress: transfer.progress,
-    tone: portalTransferStatusTone(transfer.status),
-  }));
 }
 
 function StorageOverviewCard({
@@ -373,39 +340,6 @@ function TopStorageSpacesCard({ rows }: { rows: StorageSpaceRow[] }) {
                 {row.percent != null ? <ProgressBar value={row.percent} className="h-1.5" /> : <span className="h-1.5" />}
               </div>
               <span className="text-right ui-caption font-semibold text-[var(--ui-text)]">{formatDashboardNumber(row.objectCount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </WorkspaceDashboardCard>
-  );
-}
-
-function RecentTransfersCard({ rows }: { rows: TransferRow[] }) {
-  const { t } = useI18n();
-  return (
-    <WorkspaceDashboardCard
-      title={t({ en: "Recent transfers", fr: "Transferts récents", de: "Letzte Übertragungen" })}
-      action={<Link to="/portal/history?view=transfers" className="ui-caption font-semibold text-primary">{t({ en: "View all", fr: "Tout voir", de: "Alle anzeigen" })}</Link>}
-    >
-      {rows.length === 0 ? (
-        <WorkspaceDashboardEmptyState>{t({ en: "No recent transfers.", fr: "Aucun transfert récent.", de: "Keine letzten Übertragungen." })}</WorkspaceDashboardEmptyState>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((transfer) => (
-            <div key={transfer.id} className="rounded-md border border-[color:var(--ui-border-soft)] px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate ui-caption font-semibold text-[var(--ui-text)]">{transfer.name}</p>
-                  <p className={cx("mt-0.5 truncate ui-caption", uiMutedTextClass)}>{transfer.detail}</p>
-                </div>
-                <UiBadge tone={transfer.tone} className="rounded-md px-2 py-0 text-[11px] leading-5">
-                  {transfer.statusLabel}
-                </UiBadge>
-              </div>
-              {transfer.status === "Uploading" || transfer.status === "Queued" ? (
-                <ProgressBar value={transfer.progress} tone="blue" className="mt-2 h-1.5" />
-              ) : null}
             </div>
           ))}
         </div>
@@ -580,7 +514,6 @@ export default function PortalDashboard() {
     includeUsage: true,
     includeActivity: true,
     includeCollaborators: true,
-    includeTransfers: true,
     includeAlerts: true,
     includeTraffic: true,
     includeTrafficTrend: true,
@@ -590,7 +523,6 @@ export default function PortalDashboard() {
 
   const storageRows = useMemo(() => buildStorageRows(workspace.spaces, usage?.other_storage_space), [usage?.other_storage_space, workspace.spaces]);
   const activityRows = useMemo(() => buildActivityRows(workspace.activity, t), [t, workspace.activity]);
-  const transferRows = useMemo(() => buildTransferRows(workspace.transfers, t), [t, workspace.transfers]);
   const currentTraffic = trafficByWindow.day ?? traffic;
   const trafficTrend = useMemo(() => {
     const selection = selectWorkspaceTrafficTrend(trafficByWindow);
@@ -699,13 +631,6 @@ export default function PortalDashboard() {
       icon: <LinkIcon className="h-4 w-4" />,
     },
     {
-      label: t({ en: "Transfers", fr: "Transferts", de: "Übertragungen" }),
-      detail: t({ en: "Track uploads and downloads", fr: "Suivre les envois et téléchargements", de: "Hochladen und Herunterladen verfolgen" }),
-      to: "/portal/history?view=transfers",
-      tone: "amber",
-      icon: <TransferIcon className="h-4 w-4" />,
-    },
-    {
       label: t({ en: "Usage analytics", fr: "Analyse d'utilisation", de: "Nutzungsanalyse" }),
       detail: t({ en: "Inspect usage and traffic", fr: "Consulter l'utilisation et le trafic", de: "Nutzung und Traffic prüfen" }),
       to: "/portal/usage",
@@ -778,8 +703,7 @@ export default function PortalDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
-        <RecentTransfersCard rows={transferRows} />
+      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
         <RecentActivityCard rows={activityRows} />
         <AlertsCard alerts={alerts} healthStatus={healthStatus} />
         <QuickLinksCard links={quickLinks} />

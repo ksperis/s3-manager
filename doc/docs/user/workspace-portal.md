@@ -3,7 +3,7 @@
 ## When to use
 
 Use **Portal** for an end-user workspace focused on spaces, files,
-collaborators, activity, transfers, usage, alerts, storage-admin requests, and
+collaborators, governance activity, usage, alerts, storage-admin requests, and
 simple preferences.
 
 ## Prerequisites
@@ -21,7 +21,7 @@ simple preferences.
    - The selected project is recorded in `?project=`. Each open Portal tab uses
      the project shown in its own URL.
 3. Use **Home** for the dashboard, quota, usage by space, collaborators,
-   active external tool access, recent activity, shared spaces, transfers, and
+   active external tool access, recent governance activity, shared spaces, and
    simple alerts.
 4. Use **Spaces** to create or open a space, browse files when content access
    is available, upload, download, and invite collaborators.
@@ -33,9 +33,8 @@ simple preferences.
 6. Use **Collaborators** to review workspace members, open a person's effective
    access review across active spaces, and manage public links when enabled.
    Managers can review every member; other members can review themselves.
-7. Use **History** and **Storage health** for collaboration history, file
-   movement, technical access logs when allowed, storage health, and cost
-   checks.
+7. Use **History** and **Storage health** for governance activity, manager-only
+   S3 access logs when enabled, storage health, and cost checks.
 8. Use **Help requests** to follow requests for missing collaborators, user
    removal, or storage-limit changes.
 9. Use **Settings** to review the selected project's access, storage service,
@@ -51,8 +50,7 @@ simple preferences.
 | Create credentials for external S3 tools | [Portal: External tools](portal-access-keys.md) | One-time secrets, endpoint guidance, and hidden runtime keys. |
 | Understand room left, growth, movement, and alerts | [Portal: Storage Health](portal-usage-alerts.md) | Storage used, per-space usage, trends, costs, and unavailable metrics. |
 | Follow admin-help requests | [Portal: Help Requests](portal-requests.md) | Missing collaborators, user removal, storage-limit changes, statuses, and admin messages. |
-| Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible space and file events. |
-| Follow file operations | [Portal: Transfers](portal-transfers.md) | Queued, running, completed, and failed transfers. |
+| Review governance and S3 access | [Portal: Activity and Access Logs](portal-activity.md) | Portal-visible control changes and manager-only provider access logs. |
 | Review project settings | [Portal: Settings](portal-settings.md) | Effective project settings are visible to every member; delegated Portal Managers can edit the shared project override. |
 
 ## Portal model in one minute
@@ -69,7 +67,7 @@ simple preferences.
   creation is enabled. Only Portal managers can create or import team spaces.
 - **Archived** spaces stay registered but suspend file browsing, sharing, and public links until restored.
 - **Storage health** can show the project total and quota. For regular Portal
-  users, space details, activity, and transfers are limited to spaces
+  users, space details and governance activity are limited to spaces
   they can access; undisclosed usage can appear only as the anonymous `Other`
   aggregate.
 - File browsing inside a space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
@@ -79,6 +77,8 @@ simple preferences.
 - Portal roles come from a private owner, the manager project role, the team access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.
+- Portal file operations use a personal IAM identity. Provider S3 access logs,
+  when enabled, are the data-plane audit source and can arrive after a delay.
 - The dashboard **Collaborators** KPI counts active workspace members for the
   selected project and shows how many active external tool accesses exist for
   the storage spaces visible to you.
@@ -113,8 +113,7 @@ collaborator grants as their source of truth.
 - [Portal: External tools](portal-access-keys.md)
 - [Portal: Storage Health](portal-usage-alerts.md)
 - [Portal: Help Requests](portal-requests.md)
-- [Portal: Activity](portal-activity.md)
-- [Portal: Transfers](portal-transfers.md)
+- [Portal: Activity and Access Logs](portal-activity.md)
 - [Portal: Settings](portal-settings.md)
 - [Workspace: Browser](workspace-browser.md)
 - [Use cases for storage users](use-cases-storage-user.md)
@@ -122,6 +121,6 @@ collaborator grants as their source of truth.
 ## Visual example
 
 <div class="docs-themed-shot" data-docs-themed-shot>
-  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
-  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal Storage Workspace dashboard with usage, activity, shares, transfers, and alerts" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/workspace-portal.light.png" alt="Portal Storage Workspace dashboard with usage, governance activity, shares, and alerts" loading="lazy">
+  <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/workspace-portal.dark.png" alt="Portal Storage Workspace dashboard with usage, governance activity, shares, and alerts" loading="lazy">
 </div>

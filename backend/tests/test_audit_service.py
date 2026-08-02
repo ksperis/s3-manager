@@ -5,6 +5,11 @@ import json
 import pytest
 
 from app.db import AuditLog, S3Account, User, UserRole
+from app.services.audit_policy import (
+    DATA_PLANE_AUDIT_ACTIONS,
+    NON_AUDIT_OPERATION_ACTIONS,
+    should_persist_audit_action,
+)
 from app.services.audit_service import (
     MAX_AUDIT_METADATA_LENGTH,
     AuditService,
@@ -37,7 +42,7 @@ def test_record_action_keeps_persisted_account_fk(db_session) -> None:
     service.record_action(
         user=user,
         scope="browser",
-        action="delete_objects",
+        action="update_bucket_versioning",
         entity_type="bucket",
         entity_id="bucket-a",
         account=account,
@@ -58,7 +63,7 @@ def test_record_action_omits_fk_for_synthetic_account_context(db_session) -> Non
     service.record_action(
         user=user,
         scope="browser",
-        action="delete_objects",
+        action="update_bucket_versioning",
         entity_type="bucket",
         entity_id="bucket-b",
         account=synthetic_account,
@@ -144,3 +149,58 @@ def test_audit_metadata_parser_rejects_noncanonical_storage() -> None:
     for raw in ("{", "[]", '"value"'):
         with pytest.raises(ValueError):
             parse_audit_metadata(raw)
+
+
+@pytest.mark.parametrize(
+    "action",
+    sorted(DATA_PLANE_AUDIT_ACTIONS | NON_AUDIT_OPERATION_ACTIONS),
+)
+@pytest.mark.parametrize("status", ["success", "failure"])
+def test_record_action_does_not_persist_excluded_actions(
+    db_session,
+    action: str,
+    status: str,
+) -> None:
+    AuditService(db_session).record_action(
+        user=None,
+        user_email="actor@example.com",
+        user_role="user",
+        scope="browser",
+        action=action,
+        status=status,
+        metadata={"secret_access_key": "must-not-be-processed"},
+    )
+
+    assert db_session.query(AuditLog).count() == 0
+    assert should_persist_audit_action(action) is False
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "login_success",
+        "logout",
+        "revoke_api_token",
+        "create_iam_user",
+        "create_portal_share",
+        "create_public_link",
+        "update_bucket_versioning",
+        "update_project_portal_settings",
+        "start_bucket_migration",
+        "finish_storage_space_history_cleanup",
+    ],
+)
+def test_record_action_keeps_control_security_and_workflow_actions(
+    db_session,
+    action: str,
+) -> None:
+    AuditService(db_session).record_action(
+        user=None,
+        user_email="actor@example.com",
+        user_role="user",
+        scope="portal",
+        action=action,
+    )
+
+    assert db_session.query(AuditLog).one().action == action
+    assert should_persist_audit_action(action) is True

@@ -44,6 +44,11 @@ workflow.
   user reaches it, **For myself** is unavailable, but an external access can
   still be created because it receives a separate IAM user.
 - Personal tool access follows your current Portal space grants.
+- Every tool identity must remain assigned to one person. Multiple personal
+  keys are allowed during rotation, but never share a key between people.
+- Portal itself already uses your personal IAM identity, so provider access
+  logs can attribute Portal S3 requests to you. External access must preserve
+  the same one-person attribution contract.
 - External tool access is limited to one space and to the selected
   permission level.
 - Tool access does not grant access outside the underlying storage policies.

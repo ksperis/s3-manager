@@ -10,9 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User
 from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, BillingSummary
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_current_super_admin
 from app.routers.http_errors import sanitize_error_detail
-from app.services.audit_service import AuditService
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
 from app.services.operation_lease_service import (
@@ -72,7 +71,6 @@ def billing_summary(
 def billing_collect_daily(
     day: str = Query(..., description="UTC day YYYY-MM-DD"),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_billing_enabled()
@@ -97,18 +95,6 @@ def billing_collect_daily(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
     finally:
         lease_service.release(lease)
-    audit_service.record_action(
-        user=current_user,
-        scope="admin",
-        action="billing.collect_daily",
-        entity_type="billing_collection",
-        entity_id=parsed.isoformat(),
-        metadata={
-            "day": parsed.isoformat(),
-            "manual_trigger": True,
-            "errors_count": len(result.get("errors") or []) if isinstance(result, dict) else None,
-        },
-    )
     return result
 
 

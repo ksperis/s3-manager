@@ -148,8 +148,7 @@ PortalStorageSpaceAccountMemberRole = Literal["Viewer", "Editor"]
 PortalStorageSpaceIconSource = Literal["preset", "uploaded"]
 PortalStorageSpaceIconPreset = Literal["bucket", "folder", "archive", "database", "media"]
 PortalStorageSpaceShareDirection = Literal["with_me", "by_me"]
-PortalTransferDirection = Literal["Upload", "Download"]
-PortalTransferStatus = Literal["Completed", "Uploading", "Queued", "Failed"]
+PortalServerAccessDirection = Literal["Upload", "Download"]
 PortalAlertTone = Literal["info", "warning", "danger"]
 PortalStorageObjectPreviewType = Literal["text", "image", "unavailable"]
 
@@ -577,21 +576,6 @@ class PortalActivityItem(BaseModel):
     status: str = "success"
 
 
-class PortalTransfer(BaseModel):
-    id: str
-    name: str
-    direction: PortalTransferDirection
-    status: PortalTransferStatus
-    progress: int = 100
-    size_bytes: Optional[int] = None
-    storage_space_id: Optional[str] = None
-    storage_space_name: Optional[str] = None
-    started_at: datetime
-    eta_label: str = "Completed"
-    speed_label: str = "-"
-    error_message: Optional[str] = None
-
-
 class PortalServerAccessRequesterIdentity(BaseModel):
     label: str
     kind: Literal["portal_user", "external_access", "rgw_user", "rgw_account", "unknown"]
@@ -603,7 +587,7 @@ class PortalServerAccessRequesterIdentity(BaseModel):
     resolved: bool = False
 
 
-PortalServerAccessLogFilterField = Literal["action", "path", "identity"]
+PortalServerAccessLogFilterField = Literal["action", "space", "path", "identity", "result"]
 PortalServerAccessLogFilterOp = Literal[
     "eq",
     "neq",
@@ -645,7 +629,7 @@ class PortalServerAccessLogEntry(BaseModel):
     operation_category: Literal["upload", "download", "delete", "metadata", "list", "other"]
     object_key: Optional[str] = None
     object_name: Optional[str] = None
-    direction: Optional[PortalTransferDirection] = None
+    direction: Optional[PortalServerAccessDirection] = None
     status_code: Optional[int] = None
     error_code: Optional[str] = None
     bytes_sent: Optional[int] = None

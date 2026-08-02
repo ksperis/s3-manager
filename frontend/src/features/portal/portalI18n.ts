@@ -11,7 +11,6 @@ import type {
 import type {
   PortalWorkspaceRole,
   PortalWorkspaceStatus,
-  PortalWorkspaceTransfer,
 } from "./portalWorkspaceModel";
 
 type TFunction = (message: I18nMessage) => string;
@@ -58,26 +57,6 @@ export function portalAccessSourceLabel(source: string | null | undefined, t: TF
   if (source === "direct") return t({ en: "Direct access", fr: "Accès direct", de: "Direkter Zugriff" });
   if (source === "group") return t({ en: "Group access", fr: "Accès par groupe", de: "Gruppenzugriff" });
   return t({ en: "Direct and group access", fr: "Accès direct et par groupe", de: "Direkter und Gruppenzugriff" });
-}
-
-export function portalTransferDirectionLabel(direction: PortalWorkspaceTransfer["direction"], t: TFunction): string {
-  return direction === "Upload"
-    ? t({ en: "Upload", fr: "Envoi", de: "Hochladen" })
-    : t({ en: "Download", fr: "Téléchargement", de: "Herunterladen" });
-}
-
-export function portalTransferStatusLabel(status: PortalWorkspaceTransfer["status"], t: TFunction): string {
-  if (status === "Completed") return t({ en: "Completed", fr: "Terminé", de: "Abgeschlossen" });
-  if (status === "Uploading") return t({ en: "Uploading", fr: "Envoi en cours", de: "Hochladen läuft" });
-  if (status === "Queued") return t({ en: "Queued", fr: "En attente", de: "In Warteschlange" });
-  return t({ en: "Failed", fr: "Échec", de: "Fehlgeschlagen" });
-}
-
-export function portalTransferEtaLabel(label: string, t: TFunction): string {
-  if (label === "Completed") return t({ en: "Completed", fr: "Terminé", de: "Abgeschlossen" });
-  if (label === "Queued") return t({ en: "Queued", fr: "En attente", de: "In Warteschlange" });
-  if (label === "In progress") return t({ en: "In progress", fr: "En cours", de: "In Bearbeitung" });
-  return label;
 }
 
 export function portalCollaboratorSpaceAccessSourceLabel(

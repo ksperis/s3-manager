@@ -8,7 +8,8 @@
 - Expose internal scheduler/API automation paths only on trusted networks.
 - Store LDAP bind passwords, SMTP password, storage credentials, and registry tokens in a secret manager.
 - Enable only the workspaces and feature flags that are ready for users.
-- Configure central logs and retain audit events for user-impacting actions.
+- Configure central backend logs, retain application control-plane audit, and
+  enable provider S3 access logging for object-level evidence.
 - Run the documented CI or local security scans before publishing images.
 
 ## Authentication and access
@@ -34,8 +35,14 @@
 
 ## Audit and traceability
 
-- Retain audit trail centrally.
-- Correlate UI actions with backend logs and executor identity.
+- Retain application control-plane and security audit centrally.
+- Enable and retain Server Access Logging or equivalent provider logs for S3
+  data-plane operations. Delivery can be delayed; disabled logging means there
+  is no exhaustive object audit.
+- Correlate UI control changes with backend logs and object requests with their
+  dedicated executor identity.
+- Give every person a dedicated IAM identity or owned private connection.
+  Multiple keys are allowed only for rotation and must never be shared.
 - LDAP login success, failure, rate-limit, and provider configuration failures are audited without recording submitted passwords.
 - Backend HTTP 5xx details are sanitized before being returned or logged by the HTTP exception handler. Do not bypass the shared error helpers when exposing upstream S3/RGW/IAM failures.
 

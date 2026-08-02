@@ -285,7 +285,7 @@ export default function PortalSettingsPage() {
             />
             <SettingsItem
               title="Server access logging"
-              description="Enable S3 Server Access Logging on Portal Storage Spaces and retain logs in the account technical bucket."
+              description="Enable object-level S3 audit on Portal Storage Spaces and retain logs in the account technical bucket. Without it, the application has no exhaustive object audit."
               action={
                 <SettingsToggleAction
                   checked={portalServerAccessLoggingEnabled}

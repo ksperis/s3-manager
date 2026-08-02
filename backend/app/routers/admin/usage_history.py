@@ -11,9 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import User
 from app.models.usage_history import UsageHistoryResponse, UsageHistoryTrendResponse
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_current_super_admin
 from app.services.app_settings_service import load_app_settings
-from app.services.audit_service import AuditService
 from app.services.operation_lease_service import (
     OperationLeaseService,
     USAGE_HISTORY_COLLECT_OPERATION,
@@ -105,7 +104,6 @@ def usage_history_trends(
 @router.post("/collect")
 def collect_usage_history(
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
     db: Session = Depends(get_db),
 ) -> dict:
     _ensure_usage_history_enabled()
@@ -129,18 +127,4 @@ def collect_usage_history(
     finally:
         lease_service.release(lease)
 
-    audit_service.record_action(
-        user=current_user,
-        scope="admin",
-        action="collect_usage_history",
-        entity_type="usage_history",
-        metadata={
-            "subjects_total": result.get("subjects_total"),
-            "subjects_processed": result.get("subjects_processed"),
-            "history_hourly_upserts": result.get("history_hourly_upserts"),
-            "history_daily_upserts": result.get("history_daily_upserts"),
-            "errors_count": len(result.get("errors") or []),
-            "manual_trigger": True,
-        },
-    )
     return result

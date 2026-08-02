@@ -101,6 +101,7 @@ describe("route snapshot", () => {
       "/portal/shares/:userId",
       "/portal/requests",
       "/portal/history",
+      "/portal/transfers",
       "/portal/usage",
       "/portal/settings",
       "/login",

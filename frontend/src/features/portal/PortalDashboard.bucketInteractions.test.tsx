@@ -74,26 +74,12 @@ const mocks = vi.hoisted(() => {
         {
           id: "activity-1",
           actor: "manager@example.com",
-          action: "Uploaded",
-          target: "report.pdf",
+          action: "Created public link",
+          target: "Research Data",
           spaceId: "research-data",
           spaceName: "Research Data",
           timeLabel: "4 min ago",
           ipAddress: "192.168.1.10",
-        },
-      ],
-      transfers: [
-        {
-          id: "transfer-1",
-          name: "report.pdf",
-          direction: "Upload",
-          status: "Completed",
-          progress: 100,
-          sizeBytes: 512,
-          spaceName: "Research Data",
-          startedLabel: "4 min ago",
-          etaLabel: "Completed",
-          speedLabel: "-",
         },
       ],
       alerts: [
@@ -195,14 +181,13 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByRole("heading", { name: "Portal dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Storage overview")).toBeInTheDocument();
     expect(screen.getByText("Top storage spaces")).toBeInTheDocument();
-    expect(screen.getByText("Recent transfers")).toBeInTheDocument();
+    expect(screen.queryByText("Recent transfers")).not.toBeInTheDocument();
     expect(screen.getByText("Recent activity")).toBeInTheDocument();
     expect(screen.getByText("Alerts & service status")).toBeInTheDocument();
     expect(screen.getByText("Quick links")).toBeInTheDocument();
     expect(screen.getByText("Collaborators")).toBeInTheDocument();
     expect(screen.getByText("Storage services operational")).toBeInTheDocument();
-    expect(screen.getByText(/manager@example.com uploaded report.pdf/i)).toBeInTheDocument();
-    expect(screen.getAllByText("report.pdf").length).toBeGreaterThan(0);
+    expect(screen.getByText(/manager@example.com created public link research data/i)).toBeInTheDocument();
     expect(screen.getByText("Storage quota is getting close")).toBeInTheDocument();
     expect(screen.queryByText(/iam|policy|lifecycle|sns|migration|execution context/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mock|mocked|preview/i)).not.toBeInTheDocument();
@@ -352,7 +337,7 @@ describe("PortalDashboard storage workspace UX", () => {
       "/portal/storage-spaces/research-data"
     );
     expect(screen.getByRole("link", { name: /Shares/ })).toHaveAttribute("href", "/portal/shares");
-    expect(screen.getByRole("link", { name: /Transfers/ })).toHaveAttribute("href", "/portal/history?view=transfers");
+    expect(screen.queryByRole("link", { name: /^Transfers/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Create user|Create policy|SNS|Lifecycle/i })).not.toBeInTheDocument();
   });
 
@@ -483,7 +468,6 @@ describe("PortalDashboard storage workspace UX", () => {
       dataOutBytes: null,
       usageTrend: [],
       activity: [],
-      transfers: [],
       alerts: [],
     };
     mocks.hookResult.traffic = null;
@@ -503,7 +487,7 @@ describe("PortalDashboard storage workspace UX", () => {
     expect(screen.getByText("Storage usage unavailable.")).toBeInTheDocument();
     expect(screen.getByText("Research Data")).toBeInTheDocument();
     expect(screen.getByText("No recent activity.")).toBeInTheDocument();
-    expect(screen.getByText("No recent transfers.")).toBeInTheDocument();
+    expect(screen.queryByText("No recent transfers.")).not.toBeInTheDocument();
     expect(screen.getByText("No alerts to display.")).toBeInTheDocument();
     expect(screen.getByText("Storage service status unavailable")).toBeInTheDocument();
   });

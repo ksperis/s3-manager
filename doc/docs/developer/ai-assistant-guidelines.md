@@ -184,8 +184,11 @@ flows unless the pathway is explicit, authorized, and audited.
 - Update relevant documentation alongside behavior changes.
 - Add targeted tests or a documented reproducible scenario for changes related
   to keys, quotas, or permissions.
-- Emit audit logs for mutating actions with at least actor, scope or surface,
-  action, target entity, and account context.
+- Emit application audit logs only for control-plane, security, configuration,
+  and workflow-control changes, with at least actor, scope or surface, action,
+  target entity, and account context. Never add object data-plane or operational
+  telemetry actions to `audit_logs`; follow
+  [Audit boundary](audit-boundary.md).
 - Include executor or workflow identifiers in audit metadata when available.
 
 ## Access-model invariants
