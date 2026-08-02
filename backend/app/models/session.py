@@ -62,8 +62,3 @@ class ManagerSessionPrincipal:
     role: str = UserRole.UI_USER.value
     email: str = "s3-session@local"
     id: Optional[int] = None
-
-    def audit_fallbacks(self) -> tuple[str, str]:
-        fallback_email = self.email or f"s3:{self.account_id or 'unknown'}"
-        fallback_role = self.role or "s3_session"
-        return fallback_email, fallback_role

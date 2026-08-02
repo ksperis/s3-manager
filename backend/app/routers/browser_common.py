@@ -74,7 +74,7 @@ def record_browser_action(
             message=message,
         )
         return
-    user_email, user_role = actor.audit_fallbacks()
+    user_email, user_role = actor.email, actor.role
     audit_service.record_action(
         user=None,
         user_email=user_email,

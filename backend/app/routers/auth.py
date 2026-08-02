@@ -494,7 +494,7 @@ def login_with_s3_keys(
         user_uid=principal.user_uid,
         capabilities=principal.capabilities,
     )
-    email, role = principal.audit_fallbacks()
+    email, role = principal.email, principal.role
     ip_address, user_agent, request_id = _request_audit_context(request)
     audit_service.record_action(
         user=None,
@@ -658,7 +658,7 @@ def refresh_access_token(
         if not principal:
             refresh_service.revoke(session)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
-        audit_user_email, audit_user_role = principal.audit_fallbacks()
+        audit_user_email, audit_user_role = principal.email, principal.role
         audit_metadata["s3_session_id"] = principal.session_id
         audit_metadata["actor_type"] = principal.actor_type
         audit_metadata["account_id"] = principal.account_id
@@ -714,7 +714,7 @@ def logout(
             elif session.s3_session_id:
                 principal = SessionService(db).get_principal(session.s3_session_id)
                 if principal:
-                    audit_user_email, audit_user_role = principal.audit_fallbacks()
+                    audit_user_email, audit_user_role = principal.email, principal.role
                     metadata["s3_session_id"] = principal.session_id
                     metadata["actor_type"] = principal.actor_type
                     metadata["account_id"] = principal.account_id
