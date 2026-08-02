@@ -139,7 +139,7 @@ export default function ApiTokensPage({ showPageHeader = true, onUnsavedChangesC
     setError(null);
     try {
       const data = await listApiTokens(includeRevoked);
-      setTokens(Array.isArray(data) ? data : []);
+      setTokens(data);
     } catch (loadError) {
       setError(extractError(loadError));
     } finally {

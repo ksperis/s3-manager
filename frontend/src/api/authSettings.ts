@@ -100,7 +100,7 @@ export type LdapProviderAdminPayload = {
 
 export async function fetchOidcAdminProviders(): Promise<OidcProviderAdminItem[]> {
   const { data } = await client.get<OidcProviderAdminItem[]>("/admin/settings/oidc/providers");
-  return Array.isArray(data) ? data : [];
+  return data;
 }
 
 export async function createOidcAdminProvider(payload: OidcProviderAdminPayload): Promise<OidcProviderAdminItem> {
@@ -125,7 +125,7 @@ export async function deleteOidcAdminProvider(providerId: string): Promise<void>
 
 export async function fetchLdapAdminProviders(): Promise<LdapProviderAdminItem[]> {
   const { data } = await client.get<LdapProviderAdminItem[]>("/admin/settings/ldap/providers");
-  return Array.isArray(data) ? data : [];
+  return data;
 }
 
 export async function createLdapAdminProvider(payload: LdapProviderAdminPayload): Promise<LdapProviderAdminItem> {

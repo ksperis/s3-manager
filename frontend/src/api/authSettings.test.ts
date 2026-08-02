@@ -75,8 +75,10 @@ describe("authSettings api", () => {
   });
 
   it("lists OIDC providers through the admin settings endpoint", async () => {
-    await fetchOidcAdminProviders();
+    const providers = [{ provider_id: "google" }];
+    clientMock.get.mockResolvedValueOnce({ data: providers });
 
+    await expect(fetchOidcAdminProviders()).resolves.toBe(providers);
     expect(clientMock.get).toHaveBeenCalledWith("/admin/settings/oidc/providers");
   });
 
@@ -95,8 +97,10 @@ describe("authSettings api", () => {
   });
 
   it("lists LDAP providers through the admin settings endpoint", async () => {
-    await fetchLdapAdminProviders();
+    const providers = [{ provider_id: "corp" }];
+    clientMock.get.mockResolvedValueOnce({ data: providers });
 
+    await expect(fetchLdapAdminProviders()).resolves.toBe(providers);
     expect(clientMock.get).toHaveBeenCalledWith("/admin/settings/ldap/providers");
   });
 
