@@ -22,7 +22,7 @@ import {
   updateAccountPortalSettings,
   updateS3Account,
 } from "../../api/accounts";
-import type { PortalSettingsOverride } from "../../api/appSettings";
+import type { PortalSettingsAdminUpdate, PortalSettingsOverride } from "../../api/appSettings";
 import type { PortalAccountSettings } from "../../api/portal";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
@@ -87,6 +87,7 @@ type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PortalAccountRole = "portal_user" | "portal_manager" | "account_administrator";
 type PortalOverrideFormSnapshot = {
+  delegatedToPortalManagers: boolean;
   browserAccess: TriState;
   bucketCreate: TriState;
   namedBucketCreate: TriState;
@@ -198,6 +199,7 @@ export default function S3AccountsPage() {
   const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
   const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
+  const [portalSettingsDelegated, setPortalSettingsDelegated] = useState(false);
   const [adminPortalBrowserAccessOverride, setAdminPortalBrowserAccessOverride] = useState<TriState>("inherit");
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalNamedBucketCreateOverride, setAdminPortalNamedBucketCreateOverride] = useState<TriState>("inherit");
@@ -477,6 +479,7 @@ export default function S3AccountsPage() {
 
   useEffect(() => {
     if (!portalAccountSettings) {
+      setPortalSettingsDelegated(false);
       setAdminPortalBrowserAccessOverride("inherit");
       setAdminPortalBucketCreateOverride("inherit");
       setAdminPortalNamedBucketCreateOverride("inherit");
@@ -494,6 +497,7 @@ export default function S3AccountsPage() {
     }
     const override = portalAccountSettings.admin_override;
     const effective = portalAccountSettings.effective;
+    const delegatedToPortalManagers = portalAccountSettings.delegated_to_portal_managers;
     const browserAccess = resolveTriState(override.browser_access_enabled);
     const bucketCreate = resolveTriState(override.allow_private_storage_space_create);
     const namedBucketCreate = resolveTriState(override.allow_portal_named_bucket_create);
@@ -514,6 +518,7 @@ export default function S3AccountsPage() {
       ? (bucketDefaultsOverride?.cors_allowed_origins ?? []).join("\n")
       : (effective.bucket_defaults.cors_allowed_origins || []).join("\n");
 
+    setPortalSettingsDelegated(delegatedToPortalManagers);
     setAdminPortalBrowserAccessOverride(browserAccess);
     setAdminPortalBucketCreateOverride(bucketCreate);
     setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
@@ -529,6 +534,7 @@ export default function S3AccountsPage() {
     setAdminBucketCorsOriginsText(corsOriginsText);
     setPortalInitialSignature(
       buildPortalOverrideFormSignature({
+        delegatedToPortalManagers,
         browserAccess,
         bucketCreate,
         namedBucketCreate,
@@ -968,6 +974,7 @@ export default function S3AccountsPage() {
   const portalCurrentSignature = useMemo(
     () =>
       buildPortalOverrideFormSignature({
+        delegatedToPortalManagers: portalSettingsDelegated,
         browserAccess: adminPortalBrowserAccessOverride,
         bucketCreate: adminPortalBucketCreateOverride,
         namedBucketCreate: adminPortalNamedBucketCreateOverride,
@@ -998,6 +1005,7 @@ export default function S3AccountsPage() {
       adminPortalBucketCreateOverride,
       adminPortalServerAccessLoggingOverride,
       adminPortalVersionCleanupOverride,
+      portalSettingsDelegated,
     ]
   );
   const editCloseGuard = useUnsavedChangesGuard({
@@ -1086,8 +1094,10 @@ export default function S3AccountsPage() {
     }
   };
 
-  const buildAdminPortalOverridePayload = (): PortalSettingsOverride => {
-    const payload: PortalSettingsOverride = {};
+  const buildAdminPortalOverridePayload = (): PortalSettingsAdminUpdate => {
+    const payload: PortalSettingsAdminUpdate = {
+      delegated_to_portal_managers: portalSettingsDelegated,
+    };
     const browserAccessValue = toOverrideValue(adminPortalBrowserAccessOverride);
     if (browserAccessValue !== undefined) {
       payload.browser_access_enabled = browserAccessValue;
@@ -1145,7 +1155,7 @@ export default function S3AccountsPage() {
       const expirationDays = Number(adminBucketNoncurrentExpirationDays);
       if (!Number.isInteger(expirationDays) || expirationDays < 1) {
         setPortalSettingsMessage(null);
-        setPortalSettingsError("Non-current version expiration must be a positive integer.");
+        setPortalSettingsError("Version history retention must be a positive integer.");
         return;
       }
     }
@@ -2046,6 +2056,26 @@ export default function S3AccountsPage() {
                     )}
                     {portalAccountSettings && effectivePortalSettings && (
                       <div className="space-y-4">
+                        <PortalSettingsSection title="DELEGATION" layout="grid">
+                          <PortalSettingsItem
+                            title="Portal manager settings"
+                            description="Allow Portal managers for this project to edit the shared Portal overrides from Portal settings."
+                            action={
+                              <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={portalSettingsDelegated}
+                                  onChange={(event) => setPortalSettingsDelegated(event.target.checked)}
+                                  className={uiCheckboxClass}
+                                  disabled={portalSettingsLoading || portalSettingsSaving}
+                                  aria-label="Delegate Portal overrides to Portal managers"
+                                />
+                                <span>{portalSettingsDelegated ? "Delegated" : "Administrator only"}</span>
+                              </label>
+                            }
+                          />
+                        </PortalSettingsSection>
+
                         <PortalSettingsSection title="UI" layout="grid">
                           <PortalSettingsItem
                             title="Browser workspace access"
@@ -2194,7 +2224,7 @@ export default function S3AccountsPage() {
                             }
                           />
                           <PortalSettingsItem
-                            title="Non-current version expiration"
+                            title="Version history retention"
                             description={`Effective for new Storage Spaces: ${effectivePortalSettings.bucket_defaults.noncurrent_version_expiration_days} days. Existing buckets are unchanged.`}
                             action={
                               <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
@@ -2204,7 +2234,7 @@ export default function S3AccountsPage() {
                                   onChange={(e) => setAdminBucketNoncurrentExpirationOverride(e.target.checked)}
                                   className={uiCheckboxClass}
                                   disabled={portalSettingsLoading || portalSettingsSaving}
-                                  aria-label="Override non-current version expiration"
+                                  aria-label="Override version history retention"
                                 />
                                 <span>Override</span>
                               </label>
@@ -2223,7 +2253,7 @@ export default function S3AccountsPage() {
                                 portalSettingsLoading ||
                                 portalSettingsSaving
                               }
-                              aria-label="Account non-current version expiration days"
+                              aria-label="Account version history retention days"
                             />
                           </PortalSettingsItem>
                           <PortalSettingsItem

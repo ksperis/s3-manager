@@ -44,6 +44,10 @@ export type PortalSettingsOverride = {
   bucket_defaults?: PortalBucketDefaultsOverride | null;
 };
 
+export type PortalSettingsAdminUpdate = PortalSettingsOverride & {
+  delegated_to_portal_managers?: boolean | null;
+};
+
 export type GeneralSettings = {
   manager_enabled: boolean;
   ceph_admin_enabled: boolean;

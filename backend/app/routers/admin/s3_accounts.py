@@ -172,13 +172,17 @@ def update_account_portal_settings(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
     service = get_portal_service(db)
-    override = PortalSettingsOverride.model_validate(
-        payload.model_dump(
-            exclude={"delegated_to_portal_managers"},
-            exclude_unset=True,
-            exclude_none=False,
+    override_fields = payload.model_fields_set - {"delegated_to_portal_managers"}
+    if not override_fields and "delegated_to_portal_managers" in payload.model_fields_set:
+        override = service.get_portal_account_settings(account).admin_override
+    else:
+        override = PortalSettingsOverride.model_validate(
+            payload.model_dump(
+                exclude={"delegated_to_portal_managers"},
+                exclude_unset=True,
+                exclude_none=False,
+            )
         )
-    )
     try:
         updated = service.update_admin_portal_settings_override(
             account,

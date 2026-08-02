@@ -8,6 +8,7 @@ import {
   createPortalStorageSpacePublicLink,
   deletePortalStorageSpace,
   fetchPortalStorageSpaceAccessSummary,
+  fetchPortalStorageSpaceSettings,
   grantPortalStorageSpaceShare,
   listPortalStorageSpaceShareCandidates,
   portalStorageSpaceVersionCleanupConfirmationPhrase,
@@ -17,6 +18,7 @@ import {
   streamPortalStorageSpaceVersionCleanup,
   takePortalStorageSpaceOwnership,
   updatePortalStorageSpace,
+  updatePortalStorageSpaceSettings,
   updatePortalStorageSpaceShare,
   type PortalDeletedPrefixRestoreProgress,
   type PortalDeletedPrefixRestoreResult,
@@ -28,6 +30,7 @@ import {
   type PortalStorageSpaceGrantRole,
   type PortalStorageSpaceShare,
   type PortalStorageSpaceShareCandidate,
+  type PortalStorageSpaceSettings,
 } from "../../api/portal";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -47,6 +50,7 @@ import {
   cx,
   uiButtonBaseClass,
   uiButtonVariants,
+  uiCheckboxClass,
   uiMutedTextClass,
   uiPanelMutedClass,
   uiTitleTextClass,
@@ -170,6 +174,14 @@ export default function PortalStorageSpaceDetailPage() {
   const [metadataName, setMetadataName] = useState("");
   const [metadataDescription, setMetadataDescription] = useState("");
   const [metadataBusy, setMetadataBusy] = useState(false);
+  const [spaceSettings, setSpaceSettings] = useState<PortalStorageSpaceSettings | null>(null);
+  const [spaceVersioningEnabled, setSpaceVersioningEnabled] = useState(false);
+  const [spaceLifecycleEnabled, setSpaceLifecycleEnabled] = useState(false);
+  const [spaceVersionHistoryRetentionDays, setSpaceVersionHistoryRetentionDays] = useState("");
+  const [spaceSettingsLoading, setSpaceSettingsLoading] = useState(false);
+  const [spaceSettingsSaving, setSpaceSettingsSaving] = useState(false);
+  const [spaceSettingsError, setSpaceSettingsError] = useState<string | null>(null);
+  const [spaceSettingsMessage, setSpaceSettingsMessage] = useState<string | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [historyCleanupConfirmOpen, setHistoryCleanupConfirmOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
@@ -282,6 +294,50 @@ export default function PortalStorageSpaceDetailPage() {
   }, [space, spaceAccessMode]);
 
   useEffect(() => {
+    let cancelled = false;
+    const canReadSettings = Boolean(space && (space.role === "Owner" || space.role === "Manager"));
+    setSpaceSettings(null);
+    setSpaceSettingsError(null);
+    setSpaceSettingsMessage(null);
+    if (!space || !accountIdForApi || !canReadSettings || activeTab !== "settings") {
+      setSpaceSettingsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setSpaceSettingsLoading(true);
+    fetchPortalStorageSpaceSettings(accountIdForApi, space.id)
+      .then((settings) => {
+        if (cancelled) return;
+        setSpaceSettings(settings);
+        setSpaceVersioningEnabled(settings.versioning_enabled);
+        setSpaceLifecycleEnabled(settings.lifecycle_enabled);
+        setSpaceVersionHistoryRetentionDays(String(settings.version_history_retention_days));
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setSpaceSettingsError(
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load version history settings.",
+                fr: "Impossible de charger les paramètres d’historique des versions.",
+                de: "Einstellungen für den Versionsverlauf konnten nicht geladen werden.",
+              }),
+            ),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSpaceSettingsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, activeTab, space, t]);
+
+  useEffect(() => {
     if (requestedTab === "trash") {
       setActiveTab("files");
       const params = new URLSearchParams(location.search);
@@ -392,6 +448,57 @@ export default function PortalStorageSpaceDetailPage() {
       setMessage(extractApiError(err, t({ en: "Unable to update this space.", fr: "Impossible de mettre à jour cet espace.", de: "Dieser Bereich kann nicht aktualisiert werden." })));
     } finally {
       setMetadataBusy(false);
+    }
+  };
+
+  const handleSaveSpaceSettings = async () => {
+    if (!space || !accountIdForApi || !spaceSettings?.can_update || spaceSettingsSaving) return;
+    const retentionDays = Number(spaceVersionHistoryRetentionDays);
+    if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+      setSpaceSettingsMessage(null);
+      setSpaceSettingsError(
+        t({
+          en: "Version history retention must be a positive integer.",
+          fr: "La conservation de l’historique des versions doit être un entier positif.",
+          de: "Die Aufbewahrung des Versionsverlaufs muss eine positive ganze Zahl sein.",
+        }),
+      );
+      return;
+    }
+    setSpaceSettingsSaving(true);
+    setSpaceSettingsError(null);
+    setSpaceSettingsMessage(null);
+    try {
+      const updated = await updatePortalStorageSpaceSettings(accountIdForApi, space.id, {
+        versioning_enabled: spaceVersioningEnabled,
+        lifecycle_enabled: spaceLifecycleEnabled,
+        version_history_retention_days: retentionDays,
+      });
+      setSpaceSettings(updated);
+      setSpaceVersioningEnabled(updated.versioning_enabled);
+      setSpaceLifecycleEnabled(updated.lifecycle_enabled);
+      setSpaceVersionHistoryRetentionDays(String(updated.version_history_retention_days));
+      setSpaceSettingsMessage(
+        t({
+          en: "Version history settings saved.",
+          fr: "Paramètres d’historique des versions enregistrés.",
+          de: "Einstellungen für den Versionsverlauf gespeichert.",
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      setSpaceSettingsError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to update version history settings.",
+            fr: "Impossible de modifier les paramètres d’historique des versions.",
+            de: "Einstellungen für den Versionsverlauf konnten nicht aktualisiert werden.",
+          }),
+        ),
+      );
+    } finally {
+      setSpaceSettingsSaving(false);
     }
   };
 
@@ -1046,6 +1153,142 @@ export default function PortalStorageSpaceDetailPage() {
     </UiCard>
   ) : null;
 
+  const versionHistorySettingsCard = hasFullAccess ? (
+    <UiCard
+      title={t({
+        en: "Version history settings",
+        fr: "Paramètres de l’historique des versions",
+        de: "Einstellungen für den Versionsverlauf",
+      })}
+      description={t({
+        en: "Configure Versioning, Lifecycle and how long older file versions are retained for this Storage Space.",
+        fr: "Configurez le Versioning, le Lifecycle et la durée de conservation des anciennes versions de fichiers pour cet espace.",
+        de: "Konfigurieren Sie Versioning, Lifecycle und die Aufbewahrungsdauer älterer Dateiversionen für diesen Bereich.",
+      })}
+      actions={
+        spaceSettings?.can_update ? (
+          <UiButton
+            size="sm"
+            disabled={spaceSettingsLoading || spaceSettingsSaving}
+            onClick={handleSaveSpaceSettings}
+          >
+            {spaceSettingsSaving
+              ? t({ en: "Saving...", fr: "Enregistrement...", de: "Speichern..." })
+              : t({ en: "Save settings", fr: "Enregistrer", de: "Einstellungen speichern" })}
+          </UiButton>
+        ) : undefined
+      }
+    >
+      <div className="space-y-4">
+        {spaceSettingsLoading ? (
+          <PageBanner tone="info">
+            {t({
+              en: "Loading version history settings...",
+              fr: "Chargement des paramètres d’historique des versions...",
+              de: "Einstellungen für den Versionsverlauf werden geladen...",
+            })}
+          </PageBanner>
+        ) : null}
+        {spaceSettingsError ? <PageBanner tone="warning">{spaceSettingsError}</PageBanner> : null}
+        {spaceSettingsMessage ? <PageBanner tone="success">{spaceSettingsMessage}</PageBanner> : null}
+        {spaceSettings && !spaceSettings.can_update ? (
+          <PageBanner tone={isArchived ? "warning" : "info"}>
+            {isArchived
+              ? t({
+                  en: "Archived spaces keep their settings but cannot be changed.",
+                  fr: "Les espaces archivés conservent leurs paramètres mais ne peuvent pas être modifiés.",
+                  de: "Archivierte Bereiche behalten ihre Einstellungen, können aber nicht geändert werden.",
+                })
+              : t({
+                  en: "Owners can review these values. Only a project Portal Manager can change them.",
+                  fr: "Les Owners peuvent consulter ces valeurs. Seul un Portal Manager du projet peut les modifier.",
+                  de: "Eigentümer können diese Werte einsehen. Nur ein Portal Manager des Projekts kann sie ändern.",
+                })}
+          </PageBanner>
+        ) : null}
+        {spaceSettings ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-md border border-[color:var(--ui-border-soft)] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className={cx("text-xs font-bold", uiTitleTextClass)}>Versioning</div>
+                  <div className={cx("mt-1 text-[11px] font-semibold", uiMutedTextClass)}>
+                    {t({ en: "S3 status", fr: "Statut S3", de: "S3-Status" })}: {spaceSettings.versioning_status}
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 text-xs font-semibold">
+                  <input
+                    type="checkbox"
+                    className={uiCheckboxClass}
+                    checked={spaceVersioningEnabled}
+                    disabled={!spaceSettings.can_update || spaceSettingsSaving}
+                    onChange={(event) => setSpaceVersioningEnabled(event.target.checked)}
+                    aria-label="Versioning"
+                  />
+                  {spaceVersioningEnabled
+                    ? t({ en: "Enabled", fr: "Activé", de: "Aktiviert" })
+                    : t({ en: "Disabled", fr: "Désactivé", de: "Deaktiviert" })}
+                </label>
+              </div>
+            </div>
+            <div className="rounded-md border border-[color:var(--ui-border-soft)] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className={cx("text-xs font-bold", uiTitleTextClass)}>Lifecycle</div>
+                  <div className={cx("mt-1 text-[11px] font-semibold", uiMutedTextClass)}>
+                    {t({
+                      en: "Portal-managed history rules only",
+                      fr: "Règles d’historique gérées par le Portal uniquement",
+                      de: "Nur vom Portal verwaltete Verlaufsregeln",
+                    })}
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 text-xs font-semibold">
+                  <input
+                    type="checkbox"
+                    className={uiCheckboxClass}
+                    checked={spaceLifecycleEnabled}
+                    disabled={!spaceSettings.can_update || spaceSettingsSaving}
+                    onChange={(event) => setSpaceLifecycleEnabled(event.target.checked)}
+                    aria-label="Lifecycle"
+                  />
+                  {spaceLifecycleEnabled
+                    ? t({ en: "Enabled", fr: "Activé", de: "Aktiviert" })
+                    : t({ en: "Disabled", fr: "Désactivé", de: "Deaktiviert" })}
+                </label>
+              </div>
+            </div>
+            <div className="rounded-md border border-[color:var(--ui-border-soft)] p-3">
+              <label className={cx("text-xs font-bold", uiTitleTextClass)} htmlFor="space-version-history-retention">
+                {t({
+                  en: "Version history retention",
+                  fr: "Conservation de l’historique des versions",
+                  de: "Aufbewahrung des Versionsverlaufs",
+                })}
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <UiInput
+                  id="space-version-history-retention"
+                  type="number"
+                  min={1}
+                  step={1}
+                  size="compact"
+                  className="w-24"
+                  value={spaceVersionHistoryRetentionDays}
+                  disabled={!spaceSettings.can_update || spaceSettingsSaving || !spaceLifecycleEnabled}
+                  onChange={(event) => setSpaceVersionHistoryRetentionDays(event.target.value)}
+                />
+                <span className={cx("text-xs font-semibold", uiMutedTextClass)}>
+                  {t({ en: "days", fr: "jours", de: "Tage" })}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </UiCard>
+  ) : null;
+
   const filesSection = (
     <section id="space-files" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1648,6 +1891,7 @@ export default function PortalStorageSpaceDetailPage() {
       {activeTab === "settings" ? (
         <PortalTabPanel idPrefix="portal-space-detail" tabId="settings">
           {storageSpaceSettingsCard}
+          {versionHistorySettingsCard}
           {historyCleanupCard}
           {externalToolsCard}
         </PortalTabPanel>

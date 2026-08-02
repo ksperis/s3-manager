@@ -138,7 +138,7 @@ Managed from Admin UI:
 - Authentication settings (`allow_login_access_keys`, endpoint selection for access-key login, custom login endpoints, and private S3 connections for UI users).
 - Quota supervision toggles (`quota_alerts_enabled`, `usage_history_enabled`).
 - Browser sub-flags (`browser_root_enabled`, `browser_manager_enabled`, `browser_portal_enabled`, `browser_ceph_admin_enabled`).
-- Portal settings (`portal`): standalone Browser access (`browser_access_enabled`, disabled by default), IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, and bucket defaults. Portal settings can be overridden per account by a super-admin. `bucket_defaults.noncurrent_version_expiration_days` is a positive integer (90 by default) and is applied only when provisioning a new Storage Space with the default lifecycle enabled; existing buckets are not reconciled automatically.
+- Portal settings (`portal`): standalone Browser access (`browser_access_enabled`, disabled by default), IAM key availability, private Storage Space creation, portal user access-key creation, server access log retention for newly created technical log buckets, max portal user keys, and bucket defaults. Portal settings can be overridden per account by a super-admin. The per-account `portal_settings_delegated` flag is disabled by default; when enabled, project Portal Managers can edit the same shared override from `/portal/settings`. Disabling delegation keeps the stored override effective but read-only in Portal. `bucket_defaults.noncurrent_version_expiration_days` is the internal key for **Version history retention**; it is a positive integer (90 by default) and applies only when provisioning a new Storage Space with the default lifecycle enabled. Existing buckets are not reconciled automatically.
 - Manager tool flags and behavior: bucket migration, compare, integrity check,
   purge, usage stats, Ceph S3 User key management, and migration parallelism.
 - Quota notification policy (`quota_notifications`: threshold, SMTP non-secret fields, contact-email option).
@@ -152,6 +152,13 @@ spaces (`/portal/storage-spaces/:spaceId`) by default. Portal projects do not
 appear in the root Browser until `portal.browser_access_enabled` is enabled
 globally or by account override. Manager and Ceph Admin Browser integrations
 remain disabled until explicitly enabled.
+
+The Settings tab of an existing Storage Space is separate from project
+defaults. Owners and Portal Managers can read the bucket's Versioning,
+Lifecycle, and version history retention values. Only a project Portal Manager
+can update an active space. These calls use the manager's personal IAM identity
+and manage only the Portal lifecycle rules `ExpireDeleteMarkers` and
+`ExpireOldVersions`; unrelated lifecycle rules are preserved.
 
 Superadmins manage login behavior and UI-managed OIDC/LDAP providers from Admin
 **Settings > Authentication**. The four access-key login options remain in

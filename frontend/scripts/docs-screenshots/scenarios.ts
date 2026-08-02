@@ -15,7 +15,7 @@ const superAdminUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_manager", account_admin: true },
+    { account_id: 101, role: "portal_manager", account_role: "portal_manager", account_admin: true },
   ],
   s3_user_details: [{ id: 901, name: "helios-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -36,7 +36,7 @@ const adminUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_manager", account_admin: true },
+    { account_id: 101, role: "portal_manager", account_role: "portal_manager", account_admin: true },
   ],
   s3_user_details: [{ id: 903, name: "platform-admin" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -63,7 +63,7 @@ const storageUser = {
   },
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_user", account_admin: false },
+    { account_id: 101, role: "portal_user", account_role: "portal_user", account_admin: false },
   ],
   s3_user_details: [{ id: 904, name: "storage-user-helios" }],
   s3_connection_details: [{ id: 701, name: "BlueHarbor Shared Connection", access_manager: true, access_browser: true }],
@@ -1037,7 +1037,7 @@ export const scenarios: DocScreenshotScenario[] = [
     outputBasename: "portal-settings",
     waitFor: "h1:has-text('Settings')",
     storage: { ...baseStorage(storageUser), selectedWorkspace: "portal" },
-    actions: [{ type: "wait", selector: "text=Workspace access" }],
+    actions: [{ type: "wait", selector: "text=Version history retention" }],
     mockRules: withBaseRules(),
   },
   {

@@ -21,6 +21,7 @@ when needed.
 | Add existing storage | **Spaces > Add existing space** | Portal managers can expose existing buckets as spaces and choose the initial access mode. Selected people imports can include collaborators immediately. The added space opens with the same file and collaborator next steps. |
 | Choose a space icon | **Spaces > Icon** | Portal managers can choose a pictogram or upload a PNG/JPEG image up to 1 MiB. The icon is shared by the Portal and Browser space lists. |
 | Archive a space | Space actions | Archived spaces keep their bucket and metadata but suspend browsing, sharing, and public links. This is reversible. |
+| Configure version history | Space details > **Settings** | Owners can review Versioning, Lifecycle, and version history retention. A project Portal Manager can modify these values on an active space. |
 | Delete a space | Space settings > **Delete space** | Private owners and Portal managers can permanently delete active, archived, and imported spaces only after current files and file history have been removed. |
 | Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, the private owner or project managers, covered member count, direct collaborators, and public-link count. |
 | Connect an external S3 tool | Space details > Connect external tools | Copy the space-to-bucket mapping, then open External tools with the space preselected. |
@@ -48,6 +49,21 @@ Private and team modes cannot be changed after creation. Team spaces never have
 an owner; Portal managers administer them for the project.
 
 When a Portal manager creates or imports a Selected people space, selected collaborators are saved with the space. If a searched person is not already available in the current project, ask an admin to add that external collaborator first.
+
+## Version history settings
+
+Open the Space **Settings** tab to review three bucket-level values:
+
+- **Versioning** shows whether new file versions are being created. Turning it
+  off suspends Versioning; it does not delete existing versions.
+- **Lifecycle** enables or removes only the two Portal-managed history rules.
+- **Version history retention** is the number of days older versions are kept
+  by the Portal lifecycle rule.
+
+Owners see these values in read-only mode. Only a project Portal Manager can
+save them, and an archived space remains read-only. On an imported bucket,
+Portal preserves every lifecycle rule it does not own. Disabling Lifecycle
+removes only `ExpireDeleteMarkers` and `ExpireOldVersions`.
 
 ## Archiving and permanent deletion
 

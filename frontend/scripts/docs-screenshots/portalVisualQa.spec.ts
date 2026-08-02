@@ -11,7 +11,7 @@ const portalUser = {
   can_access_ceph_admin: false,
   authType: "password",
   account_links: [
-    { account_id: 101, account_role: "portal_user", account_admin: false },
+    { account_id: 101, role: "portal_user", account_role: "portal_user", account_admin: false },
   ],
   capabilities: {
     can_manage_buckets: true,
@@ -37,6 +37,14 @@ const portalRoutes = [
       en: "sample_001.fastq.gz",
       fr: "sample_001.fastq.gz",
       de: "sample_001.fastq.gz",
+    },
+  },
+  {
+    path: "/portal/storage-spaces/genomics-2026?tab=settings",
+    expected: {
+      en: "Version history settings",
+      fr: "Paramètres de l’historique des versions",
+      de: "Einstellungen für den Versionsverlauf",
     },
   },
   {
@@ -179,7 +187,8 @@ test.describe("Portal visual QA", () => {
             ).toHaveCount(0);
             if (
               route.path.startsWith("/portal/storage-spaces/") &&
-              !route.path.includes("/objects/")
+              !route.path.includes("/objects/") &&
+              !route.path.includes("tab=settings")
             ) {
               await expect(
                 main.getByRole("button", { name: "Selected storage space" }),

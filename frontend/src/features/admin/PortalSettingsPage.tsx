@@ -155,7 +155,7 @@ export default function PortalSettingsPage() {
       !Number.isInteger(settings.portal.bucket_defaults.noncurrent_version_expiration_days) ||
       settings.portal.bucket_defaults.noncurrent_version_expiration_days < 1
     ) {
-      setError("Non-current version expiration must be a positive integer.");
+      setError("Version history retention must be a positive integer.");
       return;
     }
     setSaving(true);
@@ -372,8 +372,8 @@ export default function PortalSettingsPage() {
               }
             />
             <SettingsItem
-              title="Non-current version expiration"
-              description="Retention for non-current versions on new Storage Spaces. Existing buckets are unchanged."
+              title="Version history retention"
+              description="Retention for older versions on new Storage Spaces. Existing buckets are unchanged."
               action={
                 <input
                   type="number"
@@ -384,7 +384,7 @@ export default function PortalSettingsPage() {
                     handleBucketDefault("noncurrent_version_expiration_days", Number(e.target.value))
                   }
                   disabled={!settings || !bucketLifecycleEnabled}
-                  aria-label="Non-current version expiration days"
+                  aria-label="Version history retention days"
                   className={`w-28 ${settingsCompactInputClassName}`}
                 />
               }

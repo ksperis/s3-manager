@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { timeoutForRequestProfile } from "./client";
-import type { PortalSettingsOverride } from "./appSettings";
+import type { PortalSettingsAdminUpdate } from "./appSettings";
 import type { PortalAccountSettings } from "./portal";
 import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
@@ -175,7 +175,7 @@ export async function fetchAccountPortalSettings(accountId: number): Promise<Por
 
 export async function updateAccountPortalSettings(
   accountId: number,
-  payload: PortalSettingsOverride
+  payload: PortalSettingsAdminUpdate
 ): Promise<PortalAccountSettings> {
   const { data } = await client.put<PortalAccountSettings>(`/admin/accounts/${accountId}/portal-settings`, payload);
   return data;

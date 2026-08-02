@@ -46,6 +46,7 @@ const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
     },
   },
   admin_override: {},
+  delegated_to_portal_managers: false,
   ...overrides,
 });
 
@@ -596,6 +597,7 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.change(screen.getByLabelText("Browser workspace access override"), {
       target: { value: "enabled" },
     });
+    fireEvent.click(screen.getByLabelText("Delegate Portal overrides to Portal managers"));
     const storageSpaceCreation = screen
       .getByText("Private Storage Space creation")
       .closest("div")?.parentElement?.parentElement;
@@ -609,14 +611,15 @@ describe("AccountsPage modal tabs", () => {
     });
     fireEvent.change(within(namedBucketCreation as HTMLElement).getByRole("combobox"), { target: { value: "enabled" } });
     fireEvent.change(within(historyCleanup as HTMLElement).getByRole("combobox"), { target: { value: "disabled" } });
-    fireEvent.click(screen.getByLabelText("Override non-current version expiration"));
-    fireEvent.change(screen.getByLabelText("Account non-current version expiration days"), {
+    fireEvent.click(screen.getByLabelText("Override version history retention"));
+    fireEvent.change(screen.getByLabelText("Account version history retention days"), {
       target: { value: "45" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
+        delegated_to_portal_managers: true,
         browser_access_enabled: true,
         allow_private_storage_space_create: false,
         allow_portal_named_bucket_create: true,
@@ -634,15 +637,15 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
-    await screen.findByText("Non-current version expiration");
+    await screen.findByText("Version history retention");
 
-    fireEvent.click(screen.getByLabelText("Override non-current version expiration"));
-    fireEvent.change(screen.getByLabelText("Account non-current version expiration days"), {
+    fireEvent.click(screen.getByLabelText("Override version history retention"));
+    fireEvent.change(screen.getByLabelText("Account version history retention days"), {
       target: { value: "0" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save overrides" }));
 
-    expect(await screen.findByText("Non-current version expiration must be a positive integer.")).toBeInTheDocument();
+    expect(await screen.findByText("Version history retention must be a positive integer.")).toBeInTheDocument();
     expect(updateAccountPortalSettingsMock).not.toHaveBeenCalled();
   });
 

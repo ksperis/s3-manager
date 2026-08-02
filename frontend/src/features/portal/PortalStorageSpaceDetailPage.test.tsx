@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   createPortalRequestMock: vi.fn(),
   deleteStorageSpaceMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
+  fetchStorageSpaceSettingsMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
   revokeShareMock: vi.fn(),
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   streamDeletedPrefixRestoreMock: vi.fn(),
   restoreObjectMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
+  updateStorageSpaceSettingsMock: vi.fn(),
   updateShareMock: vi.fn(),
   usePortalWorkspaceDataMock: vi.fn(),
   generalSettings: {
@@ -122,6 +124,7 @@ vi.mock("../../api/portal", () => ({
   createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
+  fetchPortalStorageSpaceSettings: (...args: unknown[]) => mocks.fetchStorageSpaceSettingsMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
@@ -131,6 +134,7 @@ vi.mock("../../api/portal", () => ({
     mocks.streamDeletedPrefixRestoreMock(...args),
   streamPortalStorageSpaceVersionCleanup: (...args: unknown[]) => mocks.streamHistoryCleanupMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
+  updatePortalStorageSpaceSettings: (...args: unknown[]) => mocks.updateStorageSpaceSettingsMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 
@@ -241,6 +245,20 @@ describe("PortalStorageSpaceDetailPage", () => {
       can_manage_access: true,
       can_create_public_links: true,
     });
+    mocks.fetchStorageSpaceSettingsMock.mockResolvedValue({
+      versioning_enabled: true,
+      versioning_status: "Enabled",
+      lifecycle_enabled: true,
+      version_history_retention_days: 90,
+      can_update: true,
+    });
+    mocks.updateStorageSpaceSettingsMock.mockResolvedValue({
+      versioning_enabled: false,
+      versioning_status: "Suspended",
+      lifecycle_enabled: true,
+      version_history_retention_days: 45,
+      can_update: true,
+    });
     mocks.restoreObjectMock.mockResolvedValue({
       key: "reports/deleted.csv",
       restored_from_version_id: "v1",
@@ -315,6 +333,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].visibility = "shared";
     mocks.hookResult.workspace.spaces[0].canTakeOwnership = false;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
+    mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";
     mocks.hookResult.workspace.spaces[0].access = "Shared";
@@ -350,6 +369,7 @@ describe("PortalStorageSpaceDetailPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Version history settings" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
 
     const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
@@ -378,6 +398,63 @@ describe("PortalStorageSpaceDetailPage", () => {
       complete: expect.any(Function),
       fail: expect.any(Function),
     });
+  });
+
+  it("lets a Portal Manager configure Versioning, Lifecycle and version history retention", async () => {
+    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+
+    const versioning = await screen.findByRole("checkbox", { name: "Versioning" });
+    const lifecycle = screen.getByRole("checkbox", { name: "Lifecycle" });
+    fireEvent.click(versioning);
+    expect(lifecycle).toBeChecked();
+    fireEvent.change(screen.getByLabelText("Version history retention"), { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceSettingsMock).toHaveBeenCalledWith("101", "research-data", {
+        versioning_enabled: false,
+        lifecycle_enabled: true,
+        version_history_retention_days: 45,
+      });
+    });
+    expect(await screen.findByText("Version history settings saved.")).toBeInTheDocument();
+  });
+
+  it("shows Storage Space settings read-only to an Owner", async () => {
+    mocks.hookResult.workspace.spaces[0].role = "Owner";
+    mocks.fetchStorageSpaceSettingsMock.mockResolvedValueOnce({
+      versioning_enabled: true,
+      versioning_status: "Enabled",
+      lifecycle_enabled: true,
+      version_history_retention_days: 90,
+      can_update: false,
+    });
+
+    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+
+    expect(await screen.findByRole("checkbox", { name: "Versioning" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Lifecycle" })).toBeDisabled();
+    expect(screen.getByLabelText("Version history retention")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Only a project Portal Manager can change them/)).toBeInTheDocument();
+  });
+
+  it("keeps archived Storage Space settings read-only", async () => {
+    mocks.hookResult.workspace.spaces[0].status = "Archived";
+    mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
+    mocks.fetchStorageSpaceSettingsMock.mockResolvedValueOnce({
+      versioning_enabled: true,
+      versioning_status: "Enabled",
+      lifecycle_enabled: true,
+      version_history_retention_days: 90,
+      can_update: false,
+    });
+
+    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+
+    expect(await screen.findByText("Archived spaces keep their settings but cannot be changed.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Versioning" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
   });
 
   it("maps the legacy trash URL to the mixed Browser view and restores a deleted file", async () => {

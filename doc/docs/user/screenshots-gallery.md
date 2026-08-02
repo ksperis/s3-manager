@@ -216,9 +216,9 @@ Each carousel uses synthetic documentation data and focuses on the screens that 
   </figure>
   <figure data-thumb-label="Settings">
     <div class="docs-themed-shot" data-docs-themed-shot>
-      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with the selected project context" loading="lazy">
-      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-settings.dark.png" alt="Portal Settings page with the selected project context" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--light" data-docs-shot-variant="light" src="../../assets/screenshots/user/portal-settings.light.png" alt="Portal Settings page with project context and effective settings" loading="lazy">
+      <img class="docs-themed-shot__image docs-themed-shot__image--dark" data-docs-shot-variant="dark" src="../../assets/screenshots/user/portal-settings.dark.png" alt="Portal Settings page with project context and effective settings" loading="lazy">
     </div>
-    <figcaption><strong>Settings.</strong> Portal settings show the selected project, access level, storage service, and current usage.</figcaption>
+    <figcaption><strong>Settings.</strong> Portal settings show the selected project, effective values, and delegated override controls when allowed.</figcaption>
   </figure>
 </div>

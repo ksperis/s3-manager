@@ -102,6 +102,24 @@ def test_owner_reads_storage_space_settings_without_update_rights(monkeypatch, d
     assert settings.can_update is False
 
 
+def test_missing_versioning_configuration_is_reported_as_disabled(monkeypatch, db_session):
+    account, owner, _metadata = _setup(db_session)
+    service = PortalService(db_session)
+    _prepare_service(monkeypatch, service)
+    _install_s3_state(monkeypatch, versioning=None, rules=[])
+
+    settings = service.get_storage_space_settings(
+        owner,
+        _access(account, owner, AccountRole.PORTAL_USER.value),
+        "research-data",
+    )
+
+    assert settings.versioning_enabled is False
+    assert settings.versioning_status == "Disabled"
+    assert settings.lifecycle_enabled is False
+    assert settings.version_history_retention_days > 0
+
+
 def test_manager_updates_managed_rules_and_preserves_foreign_lifecycle(monkeypatch, db_session):
     account, manager, _metadata = _setup(db_session)
     service = PortalService(db_session)
@@ -233,3 +251,4 @@ def test_only_portal_manager_iam_policy_can_change_space_settings(db_session):
     assert "s3:PutLifecycleConfiguration" in manager_actions
     assert "s3:PutBucketVersioning" in service._storage_space_policy_actions()
     assert "s3:PutLifecycleConfiguration" in service._storage_space_policy_actions()
+    assert "s3:GetLifecycleConfiguration" in service._storage_space_policy_actions()

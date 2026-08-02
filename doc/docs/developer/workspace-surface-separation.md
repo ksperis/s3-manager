@@ -123,9 +123,12 @@ labels.
   `portal-manager` IAM group carries both the minimal global bootstrap actions
   (`s3:ListAllMyBuckets`, `sts:GetSessionToken`) and the explicit Manager
   data-plane action set on that account's bucket and object ARNs. Do not
-  reintroduce `iam:*`, `s3:*`, `s3:CreateBucket`, or mutating
-  bucket-configuration actions. Technical buckets must override this group
-  access with a resource-policy `Deny` for manager IAM user principals.
+  reintroduce `iam:*`, `s3:*`, or `s3:CreateBucket`. The only mutating bucket
+  configuration actions in this group are the least-privilege
+  `s3:PutBucketVersioning` and `s3:PutLifecycleConfiguration` permissions used
+  by the Portal Storage Space settings workflow. Technical buckets must
+  override this group access with a resource-policy `Deny` for manager IAM user
+  principals.
 - Keep Portal authorization backed by Portal database metadata and grants.
   Storage IAM policies are synchronized projections for personal S3 keys and
   external enforcement; they must not be read back as the Portal source of
@@ -165,7 +168,7 @@ The Admin counterpart for storage-admin triage is `/admin/portal-requests`.
 ## Portal Backend Cleanup Notes
 
 Portal uses Storage Space, file, share, activity, transfer, usage, alert,
-billing-source, health, request, and simple settings endpoints only. Legacy
+billing-source, health, request, and delegated settings endpoints only. Legacy
 backend routes that exposed bucket-centric or advanced identity concepts have
 been removed from the Portal router and API client:
 
@@ -174,17 +177,26 @@ been removed from the Portal router and API client:
 - `/portal/users*` bucket-grant and Portal user-management routes;
 - `/portal/account-settings`;
 - `/portal/iam-compliance*`.
-- `/portal/settings` advanced Portal settings payloads.
 
 Use `/portal/storage-spaces*` and `/portal/storage-spaces/{spaceId}/shares*`
-for end-user collaboration workflows. Use `/admin/accounts/{accountId}/portal-settings`
-for super-admin-only Portal override governance. Portal managers cannot manage
-or apply account Portal overrides. Native IAM, policy compliance, access-key, and
-bucket administration workflows belong outside the Portal user surface. Personal
-Portal preferences belong to `/portal/profile` and use the simple `/users/me`
-`ui_preferences` contract, not the advanced Portal settings payload. The
-`/portal/settings` page remains project-scoped. Stored preferences such as theme
-and default Portal account are UI defaults only; they never grant account access.
+for end-user collaboration workflows. The shared project override is governed
+through `/admin/accounts/{accountId}/portal-settings`; its delegation flag is
+disabled by default. `GET /portal/settings` exposes the effective values to all
+project members. When delegation is enabled, `PUT /portal/settings` lets only
+the project's `portal_manager` update that same override; disabling delegation
+makes an existing override read-only without deleting or deactivating it.
+
+`GET /portal/storage-spaces/{spaceId}/settings` exposes Versioning, the Portal
+Lifecycle baseline, and version history retention to Storage Space Owners and
+Portal Managers. Only a project `portal_manager` may call the corresponding
+`PUT`, using the actor's personal Portal IAM identity. The workflow owns only
+the `ExpireDeleteMarkers` and `ExpireOldVersions` lifecycle rules and must
+preserve every foreign lifecycle rule, including on imported buckets. Archived
+spaces remain read-only. Native IAM, policy compliance, access-key, and all
+other bucket administration workflows belong outside the Portal user surface.
+Personal Portal preferences belong to `/portal/profile` and use the simple
+`/users/me` `ui_preferences` contract. Stored preferences such as theme and
+default Portal account are UI defaults only; they never grant account access.
 
 ### Breaking API Notes
 
@@ -208,6 +220,10 @@ Use these replacement surfaces instead:
   `/admin/portal-requests*` for Admin review, messages, approval, and rejection.
 - Super-admin Portal override governance:
   `/admin/accounts/{accountId}/portal-settings`.
+- Project settings visibility and delegated shared override editing:
+  `GET/PUT /portal/settings`.
+- Storage Space Versioning, Lifecycle, and version history retention:
+  `GET/PUT /portal/storage-spaces/{spaceId}/settings`.
 
 Native IAM access keys, IAM compliance remediation, bucket-user grants, and
 bucket-centric administration should be implemented in Manager or Admin when
@@ -320,6 +336,7 @@ viewports:
 - `/portal`
 - `/portal/storage-spaces`
 - `/portal/storage-spaces/genomics-2026?prefix=raw-data%2F2024%2F03%2F`
+- `/portal/storage-spaces/genomics-2026?tab=settings`
 - `/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz`
 - `/portal/shares`
 - `/portal/history`

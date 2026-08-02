@@ -136,7 +136,6 @@ def test_admin_can_delegate_shared_portal_overrides(client, db_session):
     response = client.put(
         f"/api/admin/accounts/{account.id}/portal-settings",
         json={
-            "allow_private_storage_space_create": False,
             "delegated_to_portal_managers": True,
         },
     )

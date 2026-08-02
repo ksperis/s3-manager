@@ -198,6 +198,19 @@ export type PortalStorageObjectDownload = {
 
 export type PortalStorageSpaceVersioningStatus = "Enabled" | "Suspended" | "Disabled";
 
+export type PortalStorageSpaceSettings = {
+  versioning_enabled: boolean;
+  versioning_status: PortalStorageSpaceVersioningStatus;
+  lifecycle_enabled: boolean;
+  version_history_retention_days: number;
+  can_update: boolean;
+};
+
+export type PortalStorageSpaceSettingsUpdate = Pick<
+  PortalStorageSpaceSettings,
+  "versioning_enabled" | "lifecycle_enabled" | "version_history_retention_days"
+>;
+
 export type PortalStorageObjectVersion = {
   key: string;
   version_id: string;
@@ -495,6 +508,14 @@ export type PortalAlert = {
 export type PortalAccountSettings = {
   effective: PortalSettings;
   admin_override: PortalSettingsOverride;
+  delegated_to_portal_managers: boolean;
+};
+
+export type PortalProjectSettings = {
+  effective: PortalSettings;
+  project_override: PortalSettingsOverride;
+  delegated_to_portal_managers: boolean;
+  can_update: boolean;
 };
 
 export async function listPortalAccounts(options?: { signal?: AbortSignal }): Promise<S3Account[]> {
@@ -507,6 +528,23 @@ export async function listPortalAccounts(options?: { signal?: AbortSignal }): Pr
 
 export async function fetchPortalState(accountId: S3AccountSelector): Promise<PortalState> {
   const { data } = await client.get<PortalState>("/portal/state", { params: withS3AccountParam(undefined, accountId) });
+  return data;
+}
+
+export async function fetchPortalProjectSettings(accountId: S3AccountSelector): Promise<PortalProjectSettings> {
+  const { data } = await client.get<PortalProjectSettings>("/portal/settings", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function updatePortalProjectSettings(
+  accountId: S3AccountSelector,
+  payload: PortalSettingsOverride
+): Promise<PortalProjectSettings> {
+  const { data } = await client.put<PortalProjectSettings>("/portal/settings", payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 
@@ -767,6 +805,30 @@ export async function updatePortalStorageSpace(
 ): Promise<PortalStorageSpace> {
   const { data } = await client.patch<PortalStorageSpace>(
     `/portal/storage-spaces/${encodeURIComponent(spaceId)}`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function fetchPortalStorageSpaceSettings(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpaceSettings> {
+  const { data } = await client.get<PortalStorageSpaceSettings>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/settings`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function updatePortalStorageSpaceSettings(
+  accountId: S3AccountSelector,
+  spaceId: string,
+  payload: PortalStorageSpaceSettingsUpdate
+): Promise<PortalStorageSpaceSettings> {
+  const { data } = await client.put<PortalStorageSpaceSettings>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/settings`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );

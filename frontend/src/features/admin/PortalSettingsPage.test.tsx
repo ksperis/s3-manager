@@ -152,10 +152,10 @@ describe("PortalSettingsPage", () => {
     expect(payload.portal.server_access_log_retention_days).toBe(45);
   });
 
-  it("sends non-current version expiration days in save payload", async () => {
+  it("sends version history retention days in save payload", async () => {
     render(<PortalSettingsPage />);
 
-    const input = (await screen.findByLabelText("Non-current version expiration days")) as HTMLInputElement;
+    const input = (await screen.findByLabelText("Version history retention days")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "45" } });
 
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
@@ -167,14 +167,14 @@ describe("PortalSettingsPage", () => {
     expect(payload.portal.bucket_defaults.noncurrent_version_expiration_days).toBe(45);
   });
 
-  it("rejects a non-positive non-current version expiration", async () => {
+  it("rejects a non-positive version history retention", async () => {
     render(<PortalSettingsPage />);
 
-    const input = (await screen.findByLabelText("Non-current version expiration days")) as HTMLInputElement;
+    const input = (await screen.findByLabelText("Version history retention days")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-    expect(await screen.findByText("Non-current version expiration must be a positive integer.")).toBeInTheDocument();
+    expect(await screen.findByText("Version history retention must be a positive integer.")).toBeInTheDocument();
     expect(updateAppSettingsMock).not.toHaveBeenCalled();
   });
 

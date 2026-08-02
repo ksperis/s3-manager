@@ -713,6 +713,30 @@ const PORTAL_STATE = {
   can_manage_portal_users: false,
 };
 
+const PORTAL_PROJECT_SETTINGS = {
+  effective: {
+    allow_portal_key: false,
+    browser_access_enabled: true,
+    allow_private_storage_space_create: true,
+    allow_portal_named_bucket_create: false,
+    allow_portal_user_access_key_create: true,
+    server_access_logging_enabled: true,
+    server_access_log_retention_days: 30,
+    storage_space_version_cleanup_enabled: true,
+    max_portal_user_access_keys: 2,
+    bucket_defaults: {
+      versioning: true,
+      enable_lifecycle: true,
+      noncurrent_version_expiration_days: 90,
+      enable_cors: false,
+      cors_allowed_origins: ["https://portal.docs.example.com"],
+    },
+  },
+  project_override: {},
+  delegated_to_portal_managers: false,
+  can_update: false,
+};
+
 const PORTAL_ACCESS_KEYS_STATE = {
   iam_user: PORTAL_STATE.iam_user,
   s3_endpoint: PORTAL_STATE.s3_endpoint,
@@ -1621,6 +1645,19 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "workspace-access",
+      path: /^\/me\/workspace-access$/,
+      body: {
+        admin: { available: false, context_count: 0 },
+        ceph_admin: { available: false, context_count: 0 },
+        storage_ops: { available: false, context_count: 0 },
+        manager: { available: false, context_count: 0 },
+        browser: { available: true, context_count: 1 },
+        portal: { available: true, context_count: 1 },
+        default_workspace: "portal",
+      },
+    },
+    {
       id: "manager-context",
       path: /^\/manager\/context$/,
       body: ({ url }) => {
@@ -1912,6 +1949,11 @@ export function buildBaseRules(): MockRule[] {
       body: PORTAL_STATE,
     },
     {
+      id: "portal-project-settings",
+      path: /^\/portal\/settings$/,
+      body: PORTAL_PROJECT_SETTINGS,
+    },
+    {
       id: "portal-usage",
       path: /^\/portal\/usage$/,
       body: {
@@ -2001,6 +2043,17 @@ export function buildBaseRules(): MockRule[] {
       body: ({ url }) => {
         const spaceId = parseStorageSpaceId(url.pathname);
         return PORTAL_STORAGE_SPACES.find((space) => space.id === spaceId) ?? PORTAL_STORAGE_SPACES[0];
+      },
+    },
+    {
+      id: "portal-storage-space-settings",
+      path: /^\/portal\/storage-spaces\/[^/]+\/settings$/,
+      body: {
+        versioning_enabled: true,
+        versioning_status: "Enabled",
+        lifecycle_enabled: true,
+        version_history_retention_days: 90,
+        can_update: false,
       },
     },
     {

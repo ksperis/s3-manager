@@ -52,7 +52,7 @@ simple preferences.
 | Follow admin-help requests | [Portal: Help Requests](portal-requests.md) | Missing collaborators, user removal, storage-limit changes, statuses, and admin messages. |
 | Review recent changes | [Portal: Activity](portal-activity.md) | Portal-visible space and file events. |
 | Follow file operations | [Portal: Transfers](portal-transfers.md) | Queued, running, completed, and failed transfers. |
-| Review project settings | [Portal: Settings](portal-settings.md) | Read-only project context, access level, storage service, and usage. |
+| Review project settings | [Portal: Settings](portal-settings.md) | Effective project settings are visible to every member; delegated Portal Managers can edit the shared project override. |
 
 ## Portal model in one minute
 

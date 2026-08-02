@@ -149,6 +149,7 @@ class PortalIamMixin:
         return [
             "s3:GetBucketLocation",
             "s3:GetBucketVersioning",
+            "s3:GetLifecycleConfiguration",
             "s3:ListBucket",
             "s3:ListBucketVersions",
             "s3:GetObject",
