@@ -35,8 +35,6 @@ function renderSelector(params: {
       onContextChange={onContextChange}
       selectedLabel="Selected context"
       identityLabel={null}
-      defaultEndpointId={null}
-      defaultEndpointName="Default"
     />
   );
 }
@@ -188,8 +186,6 @@ describe("TopbarContextAccountSelector", () => {
         onContextChange={() => undefined}
         selectedLabel="Alpha"
         identityLabel={null}
-        defaultEndpointId={null}
-        defaultEndpointName="Default"
         triggerMode="icon"
         icon={<svg data-testid="account-trigger-icon" aria-hidden="true" />}
       />

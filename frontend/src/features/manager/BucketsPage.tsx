@@ -50,7 +50,7 @@ import { formatBytes, formatNumber } from "../../utils/format";
 import { stableSignature } from "../../utils/stableSignature";
 import { compareByNullableField, type SortableField } from "../../utils/sortValues";
 import { getManagerToolAccess, readStoredUser } from "../../utils/workspaces";
-import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { formatAccountLabel } from "../shared/storageEndpointLabel";
 import BucketPurgeRunModal from "../shared/BucketPurgeRunModal";
 import { BucketFeatureSummaryChip, BucketSummaryTooltip } from "../shared/BucketFeatureSummaryTooltip";
 import type { BucketFeatureTooltipState } from "../shared/BucketFeatureSummaryTooltip";
@@ -237,7 +237,6 @@ export default function BucketsPage() {
   const { generalSettings } = useGeneralSettings();
   const storedUser = readStoredUser();
   const managerToolAccess = getManagerToolAccess(storedUser);
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const [buckets, setBuckets] = useState<BucketListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -322,7 +321,7 @@ export default function BucketsPage() {
     [snsFeatureEnabled, staticWebsiteFeatureEnabled]
   );
   const accountLabel = selectedS3Account
-    ? formatAccountLabel(selectedS3Account, defaultEndpointId, defaultEndpointName)
+    ? formatAccountLabel(selectedS3Account)
     : requiresS3AccountSelection
       ? "Not selected"
       : sessionS3AccountName || "S3 session";

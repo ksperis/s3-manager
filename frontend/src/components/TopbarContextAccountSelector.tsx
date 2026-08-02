@@ -73,8 +73,6 @@ type TopbarContextAccountSelectorProps = {
   onContextChange: (selectedValue: string) => void;
   selectedLabel: string;
   identityLabel: string | null;
-  defaultEndpointId: number | null;
-  defaultEndpointName: string | null;
   widthClassName?: string;
   searchThreshold?: number;
   openInPortal?: boolean;
@@ -89,8 +87,6 @@ export default function TopbarContextAccountSelector({
   onContextChange,
   selectedLabel,
   identityLabel,
-  defaultEndpointId,
-  defaultEndpointName,
   widthClassName = TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS,
   searchThreshold = 6,
   openInPortal = true,
@@ -103,11 +99,7 @@ export default function TopbarContextAccountSelector({
     () =>
       contexts
         .map((context) => {
-          const label = formatAccountLabel(
-            context,
-            defaultEndpointId,
-            defaultEndpointName,
-          );
+          const label = formatAccountLabel(context);
           const description =
             context.kind === "connection"
               ? "Private connection"
@@ -184,8 +176,6 @@ export default function TopbarContextAccountSelector({
         }),
     [
       contexts,
-      defaultEndpointId,
-      defaultEndpointName,
       showSelectorTags,
       showTriggerTags,
       triggerMode,

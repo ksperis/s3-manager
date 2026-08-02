@@ -36,10 +36,6 @@ vi.mock("./useIamOverview", () => ({
 
 vi.mock("../shared/storageEndpointLabel", () => ({
   formatAccountLabel: () => "Account Alpha",
-  useDefaultStorageEndpoint: () => ({
-    defaultEndpointId: null,
-    defaultEndpointName: "Default",
-  }),
 }));
 
 vi.mock("../../components/GeneralSettingsContext", () => ({

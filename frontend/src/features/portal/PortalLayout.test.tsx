@@ -67,10 +67,6 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 vi.mock("../shared/storageEndpointLabel", () => ({
-  useDefaultStorageEndpoint: () => ({
-    defaultEndpointId: 11,
-    defaultEndpointName: "Default",
-  }),
   formatAccountLabel: (account: { name: string }) => account.name,
 }));
 

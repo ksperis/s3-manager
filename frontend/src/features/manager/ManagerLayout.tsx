@@ -9,7 +9,7 @@ import TopbarContextAccountSelector, {
 } from "../../components/TopbarContextAccountSelector";
 import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 import { SidebarSection } from "../../components/Sidebar";
-import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { formatAccountLabel } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
@@ -54,7 +54,6 @@ function ManagerShell() {
   const [searchParams] = useSearchParams();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const storedUser = readStoredUser();
   const userCapabilities = (storedUser?.capabilities as SessionCapabilities | undefined) ?? null;
   const contextCapabilities = (selected?.capabilities as Partial<SessionCapabilities> | undefined) ?? null;
@@ -115,7 +114,7 @@ function ManagerShell() {
       : null;
 
   const selectedLabel = selected
-    ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
+    ? formatAccountLabel(selected)
     : "No account selected";
 
   const handleS3AccountChange = (selectedValue: string) => {
@@ -178,8 +177,6 @@ function ManagerShell() {
             onContextChange={handleS3AccountChange}
             selectedLabel={selectedLabel}
             identityLabel={identityLabel}
-            defaultEndpointId={defaultEndpointId}
-            defaultEndpointName={defaultEndpointName}
             widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             icon={<AccountControlIcon className="h-4 w-4" />}
             triggerMode={mode}

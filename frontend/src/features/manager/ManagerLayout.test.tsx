@@ -80,7 +80,6 @@ vi.mock("../../components/TopbarContextAccountSelector", () => ({
 
 vi.mock("../shared/storageEndpointLabel", () => ({
   formatAccountLabel: () => "Context",
-  useDefaultStorageEndpoint: () => ({ defaultEndpointId: null, defaultEndpointName: null }),
 }));
 
 function buildContext(overrides?: Record<string, unknown>) {

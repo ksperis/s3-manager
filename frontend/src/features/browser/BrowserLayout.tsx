@@ -13,7 +13,7 @@ import TopbarContextAccountSelector, {
 } from "../../components/TopbarContextAccountSelector";
 import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
 import { fetchManagerContext } from "../../api/managerContext";
-import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { formatAccountLabel } from "../shared/storageEndpointLabel";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 import {
   TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH,
@@ -52,14 +52,13 @@ function BrowserShell() {
   const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
   const showSelector = requiresContextSelection && visibleContexts.length > 0;
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
       ? `S3 Identity: ${iamIdentity}`
       : `IAM Identity: ${iamIdentity}`
     : null;
   const selectedLabel = selected
-    ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
+    ? formatAccountLabel(selected)
     : requiresContextSelection
       ? "No account selected"
       : sessionAccountName || "S3 session";
@@ -151,8 +150,6 @@ function BrowserShell() {
             onContextChange={handleS3AccountChange}
             selectedLabel={selectedLabel}
             identityLabel={identityLabel}
-            defaultEndpointId={defaultEndpointId}
-            defaultEndpointName={defaultEndpointName}
             widthClassName={mode === "icon" ? TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS}
             icon={<AccountControlIcon className="h-4 w-4" />}
             triggerMode={mode}

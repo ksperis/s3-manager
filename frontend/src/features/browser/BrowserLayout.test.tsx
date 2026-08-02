@@ -70,7 +70,6 @@ vi.mock("../../components/TopbarContextAccountSelector", () => ({
 
 vi.mock("../shared/storageEndpointLabel", () => ({
   formatAccountLabel: (account: { display_name?: string; name?: string }) => account.display_name ?? account.name ?? "Context",
-  useDefaultStorageEndpoint: () => ({ defaultEndpointId: null, defaultEndpointName: null }),
 }));
 
 function buildBrowserContext(overrides?: Record<string, unknown>) {

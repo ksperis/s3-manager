@@ -73,7 +73,7 @@ import {
   UploadIcon,
   UserIcon,
 } from "../browser/browserIcons";
-import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { formatAccountLabel } from "../shared/storageEndpointLabel";
 import { BucketUsageStatsDataTypesCard } from "../shared/BucketUsageStatsVisuals";
 import { useIamOverview } from "./useIamOverview";
 import { useManagerStats } from "./useManagerStats";
@@ -798,7 +798,6 @@ export default function ManagerDashboard() {
     managerStatsMessage,
     managerBrowserEnabled,
   } = useS3AccountContext();
-  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date());
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
@@ -1052,7 +1051,7 @@ export default function ManagerDashboard() {
   }, [accountIdForApi, canLoadUsageStatsDataTypes, refreshNonce]);
 
   const accountLabel = selected
-    ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
+    ? formatAccountLabel(selected)
     : sessionS3AccountName ?? "S3 session";
   const noContextReason = !hasContext ? "Select an account to display live values." : null;
   const metricsUnavailableReason =

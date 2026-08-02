@@ -23,10 +23,7 @@ import {
   PortalAccountProvider,
   usePortalAccountContext,
 } from "./PortalAccountContext";
-import {
-  formatAccountLabel,
-  useDefaultStorageEndpoint,
-} from "../shared/storageEndpointLabel";
+import { formatAccountLabel } from "../shared/storageEndpointLabel";
 
 function usePortalNavSections(): SidebarSection[] {
   const { t } = useI18n();
@@ -120,15 +117,8 @@ function PortalAccountTopbarSelector({
     setSelectedAccountId,
     loading,
   } = usePortalAccountContext();
-  const { defaultEndpointId, defaultEndpointName } =
-    useDefaultStorageEndpoint();
   const selectedLabel = selectedAccount
-    ? formatAccountLabel(
-        selectedAccount,
-        defaultEndpointId,
-        defaultEndpointName,
-        false,
-      )
+    ? formatAccountLabel(selectedAccount, false)
     : loading
       ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
       : t({
@@ -138,12 +128,7 @@ function PortalAccountTopbarSelector({
         });
   const options: TopbarDropdownOption[] = accounts.map((account) => ({
     value: String(account.id),
-    label: formatAccountLabel(
-      account,
-      defaultEndpointId,
-      defaultEndpointName,
-      false,
-    ),
+    label: formatAccountLabel(account, false),
     searchText: [
       account.name,
       account.storage_endpoint_name,
@@ -235,15 +220,8 @@ function PortalShell() {
   const { t } = useI18n();
   const portalNavSections = usePortalNavSections();
   const { selectedAccount, loading } = usePortalAccountContext();
-  const { defaultEndpointId, defaultEndpointName } =
-    useDefaultStorageEndpoint();
   const selectedLabel = selectedAccount
-    ? formatAccountLabel(
-        selectedAccount,
-        defaultEndpointId,
-        defaultEndpointName,
-        false,
-      )
+    ? formatAccountLabel(selectedAccount, false)
     : loading
       ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
       : t({
