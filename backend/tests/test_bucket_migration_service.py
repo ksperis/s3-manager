@@ -36,10 +36,8 @@ from app.services.bucket_migration._shared import (
     _VersionedObjectDetails,
 )
 from app.services.bucket_migration.webhooks import _BucketMigrationWebhookDispatcher
-from app.services.bucket_migration_service import (
-    BucketMigrationService,
-    BucketMigrationWorker,
-)
+from app.services.bucket_migration.worker import BucketMigrationWorker
+from app.services.bucket_migration_service import BucketMigrationService
 
 
 def _create_user(db_session) -> User:

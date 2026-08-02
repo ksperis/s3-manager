@@ -73,7 +73,7 @@ from app.routers.manager import migrations as manager_migrations
 from app.routers.manager import integrity as manager_integrity
 from app.routers.manager import purge as manager_purge
 from app.routers.manager import usage_stats as manager_usage_stats
-from app.services.bucket_migration_service import get_bucket_migration_worker
+from app.services.bucket_migration.worker import get_bucket_migration_worker
 from app.routers.dependencies import (
     require_browser_enabled,
     require_ceph_admin_enabled,

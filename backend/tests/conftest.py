@@ -10,10 +10,8 @@ from app.db import Base, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.services.bucket_listing_cache import invalidate_bucket_listing_cache
-from app.services.bucket_migration_service import (
-    reset_bucket_migration_webhook_dispatcher_for_tests,
-    reset_bucket_migration_worker_for_tests,
-)
+from app.services.bucket_migration.webhooks import reset_bucket_migration_webhook_dispatcher_for_tests
+from app.services.bucket_migration.worker import reset_bucket_migration_worker_for_tests
 
 
 @pytest.fixture(scope="session")

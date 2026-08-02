@@ -28,7 +28,8 @@ from app.routers.dependencies import (
 )
 from app.routers.http_errors import raise_http_exception_from_exception, sanitized_error_log_detail
 from app.services.audit_service import AuditService
-from app.services.bucket_migration_service import BucketMigrationService, get_bucket_migration_worker
+from app.services.bucket_migration.worker import get_bucket_migration_worker
+from app.services.bucket_migration_service import BucketMigrationService
 from app.services.mappers.bucket_migration import (
     bucket_migration_to_detail as _migration_to_detail,
     bucket_migration_to_view as _migration_to_view,
