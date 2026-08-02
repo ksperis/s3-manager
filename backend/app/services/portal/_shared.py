@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import secrets
-import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Tuple, TYPE_CHECKING
@@ -93,15 +92,15 @@ from app.models.portal import (
     PortalUsage,
     PortalUsageStorageSpace,
 )
-from app.services.app_settings_service import load_app_settings as _load_app_settings
+from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
-from app.services.s3_client import get_s3_client as _get_s3_client
+from app.services.s3_client import get_s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.services.user_avatar_service import UserAvatarService
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
-from app.utils.s3_endpoint import resolve_s3_client_options as _resolve_s3_client_options, resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.normalize import normalize_string_list
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.usage_stats import extract_usage_stats
@@ -112,38 +111,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-def _facade_override(name: str):
-    facade = sys.modules.get("app.services.portal_service")
-    if facade is None:
-        return None
-    override = getattr(facade, name, None)
-    current = globals().get(name)
-    if callable(override) and override is not current:
-        return override
-    return None
-
-
-def load_app_settings():
-    override = _facade_override("load_app_settings")
-    if override is not None:
-        return override()
-    return _load_app_settings()
-
-
-def get_s3_client(*args, **kwargs):
-    override = _facade_override("get_s3_client")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _get_s3_client(*args, **kwargs)
-
-
-def resolve_s3_client_options(*args, **kwargs):
-    override = _facade_override("resolve_s3_client_options")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _resolve_s3_client_options(*args, **kwargs)
 
 
 def _parse_positive_limit(value: Any) -> Optional[int]:

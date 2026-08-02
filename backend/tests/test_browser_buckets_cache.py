@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.db import S3Account, StorageEndpoint
 from app.services import browser_service
+from app.services.browser import buckets as browser_buckets
 
 
 def _account() -> S3Account:
@@ -88,8 +89,8 @@ def test_bucket_cache_invalidated_after_bucket_mutation(monkeypatch):
     service = browser_service.BrowserService()
     monkeypatch.setattr(service, "_client", lambda _account: FakeClient())
     monkeypatch.setattr(service, "_resolve_s3_credentials", lambda _account: ("ak", "sk", None))
-    monkeypatch.setattr(browser_service, "s3_create_bucket", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(browser_service, "s3_set_bucket_versioning", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(browser_buckets, "s3_create_bucket", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(browser_buckets, "s3_set_bucket_versioning", lambda *_args, **_kwargs: None)
 
     service.search_buckets(_account(), page=1, page_size=10)
     service.create_bucket("new-bucket", _account(), versioning=False)

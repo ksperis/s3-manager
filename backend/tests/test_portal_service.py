@@ -3571,7 +3571,7 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
 
     captured = {}
     monkeypatch.setattr(
-        "app.services.portal_service.resolve_s3_client_options",
+        "app.services.portal.objects.resolve_s3_client_options",
         lambda acc: ("https://s3.example.test", "eu-west-3", True, False),
     )
 
@@ -3581,7 +3581,7 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
         captured["kwargs"] = kwargs
         return object()
 
-    monkeypatch.setattr("app.services.portal_service.get_s3_client", fake_get_s3_client)
+    monkeypatch.setattr("app.services.portal.objects.get_s3_client", fake_get_s3_client)
 
     client = PortalService(db_session)._portal_object_client(user, account)
 

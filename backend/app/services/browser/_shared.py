@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import sys
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -61,71 +60,18 @@ from app.models.browser import (
     StsStatus,
 )
 from app.services.s3_client import (
-    _delete_objects as _s3_delete_objects,
-    create_bucket as _s3_create_bucket,
-    get_s3_client as _get_s3_client,
-    set_bucket_versioning as _s3_set_bucket_versioning,
+    _delete_objects,
+    create_bucket as s3_create_bucket,
+    get_s3_client,
+    set_bucket_versioning as s3_set_bucket_versioning,
 )
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services.sts_service import get_session_token as _get_session_token
-from app.utils.s3_endpoint import resolve_s3_client_options as _resolve_s3_client_options
+from app.services.sts_service import get_session_token
+from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-def _facade_override(name: str):
-    facade = sys.modules.get("app.services.browser_service")
-    if facade is None:
-        return None
-    override = getattr(facade, name, None)
-    current = globals().get(name)
-    if callable(override) and override is not current:
-        return override
-    return None
-
-
-def _delete_objects(*args, **kwargs):
-    override = _facade_override("_delete_objects")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _s3_delete_objects(*args, **kwargs)
-
-
-def s3_create_bucket(*args, **kwargs):
-    override = _facade_override("s3_create_bucket")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _s3_create_bucket(*args, **kwargs)
-
-
-def get_s3_client(*args, **kwargs):
-    override = _facade_override("get_s3_client")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _get_s3_client(*args, **kwargs)
-
-
-def s3_set_bucket_versioning(*args, **kwargs):
-    override = _facade_override("s3_set_bucket_versioning")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _s3_set_bucket_versioning(*args, **kwargs)
-
-
-def get_session_token(*args, **kwargs):
-    override = _facade_override("get_session_token")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _get_session_token(*args, **kwargs)
-
-
-def resolve_s3_client_options(*args, **kwargs):
-    override = _facade_override("resolve_s3_client_options")
-    if override is not None:
-        return override(*args, **kwargs)
-    return _resolve_s3_client_options(*args, **kwargs)
 
 STS_SESSION_DURATION_SECONDS = 3600
 STS_CACHE_TTL_BUFFER = timedelta(minutes=5)

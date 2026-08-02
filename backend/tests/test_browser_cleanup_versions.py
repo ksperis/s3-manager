@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from app.db import S3Account
 from app.models.browser import CleanupObjectVersionsPayload
 from app.services import browser_service
+from app.services.browser import versions as browser_versions
 
 
 def _account() -> S3Account:
@@ -52,7 +53,7 @@ def test_cleanup_keep_last_never_deletes_current_version(monkeypatch):
         "_client",
         lambda _account, request_profile="interactive": profiles.append(request_profile) or FakeClient(),
     )
-    monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
+    monkeypatch.setattr(browser_versions, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(
         "bucket-a",
@@ -106,7 +107,7 @@ def test_cleanup_older_than_never_deletes_current_version(monkeypatch):
 
     service = browser_service.BrowserService()
     monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
-    monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
+    monkeypatch.setattr(browser_versions, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(
         "bucket-a",
@@ -166,7 +167,7 @@ def test_cleanup_batches_large_version_deletions_and_orphan_markers(monkeypatch)
 
     service = browser_service.BrowserService()
     monkeypatch.setattr(service, "_client", lambda _account, request_profile="interactive": FakeClient())
-    monkeypatch.setattr(browser_service, "_delete_objects", fake_delete_objects)
+    monkeypatch.setattr(browser_versions, "_delete_objects", fake_delete_objects)
 
     result = service.cleanup_object_versions(
         "bucket-a",

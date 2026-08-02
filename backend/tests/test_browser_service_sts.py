@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.db import S3Account, StorageEndpoint, StorageProvider
 from app.services import browser_service
+from app.services.browser import context as browser_context
 
 
 def _account_with_sts_endpoint() -> S3Account:
@@ -35,7 +36,7 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
             datetime.now(tz=timezone.utc) + timedelta(hours=1),
         )
 
-    monkeypatch.setattr(browser_service, "get_session_token", fake_get_session_token)
+    monkeypatch.setattr(browser_context, "get_session_token", fake_get_session_token)
     captured = {}
 
     def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None, **kwargs):
@@ -46,7 +47,7 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
         captured["extra"] = kwargs
         return object()
 
-    monkeypatch.setattr(browser_service, "get_s3_client", fake_get_s3_client)
+    monkeypatch.setattr(browser_context, "get_s3_client", fake_get_s3_client)
 
     service = browser_service.BrowserService()
     service._client(account)
@@ -66,7 +67,7 @@ def test_browser_service_falls_back_on_sts_error(monkeypatch):
     def fake_get_session_token(*args, **kwargs):
         raise RuntimeError("STS unavailable")
 
-    monkeypatch.setattr(browser_service, "get_session_token", fake_get_session_token)
+    monkeypatch.setattr(browser_context, "get_session_token", fake_get_session_token)
     captured = {}
 
     def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None, **kwargs):
@@ -77,7 +78,7 @@ def test_browser_service_falls_back_on_sts_error(monkeypatch):
         captured["extra"] = kwargs
         return object()
 
-    monkeypatch.setattr(browser_service, "get_s3_client", fake_get_s3_client)
+    monkeypatch.setattr(browser_context, "get_s3_client", fake_get_s3_client)
 
     service = browser_service.BrowserService()
     service._client(account)
