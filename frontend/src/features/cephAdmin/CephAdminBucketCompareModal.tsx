@@ -46,8 +46,8 @@ import {
   renderCompareObjectDetails,
   renderDiffLines,
   runWithConcurrencySettled,
-  triggerDownload,
 } from "../shared/bucketCompareShared";
+import { triggerDownload } from "../../utils/download";
 
 type CompareMapping = {
   sourceBucket: string;

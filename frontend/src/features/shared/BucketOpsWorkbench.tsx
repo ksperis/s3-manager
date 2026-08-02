@@ -253,6 +253,7 @@ import {
   type SortField,
 } from "./bucketOpsListState";
 import { extractApiError } from "../../utils/apiError";
+import { triggerDownload } from "../../utils/download";
 import { formatBytes, formatNumber } from "../../utils/format";
 import {
   CORS_TYPE_OPTIONS,
@@ -317,32 +318,31 @@ import {
   type QuotaSizeUnit,
   type SelectionExportFormat,
 } from "./bucketBulkOperationsModel";
+import {
+  areStringMapEqual,
+  buildBucketUiTagKey,
+  csvEscape,
+  formatBucketNamesPreview,
+  formatOptionalBytes,
+  formatOptionalCount,
+  formatOwnerSuspended,
+  formatQuotaBytes,
+  formatQuotaObjects,
+  formatQuotaUsageValue,
+  formatVersioningStatus,
+  getBucketDisplayName,
+  getStorageOpsBucketName,
+  getStorageOpsContextId,
+  getTagColors,
+  isStatsSortField,
+  normalizeBucketName,
+  normalizeVersioningStatus,
+  ownerFilterFromSearch,
+  sanitizeExportFilenamePart,
+} from "./bucketOpsPresentation";
 
 const extractError = (err: unknown): string => {
   return extractApiError(err, "Unexpected error");
-};
-
-const isStatsSortField = (field: SortField) => field === "used_bytes" || field === "object_count";
-
-const sanitizeExportFilenamePart = (value?: string | null) => {
-  const normalized = (value ?? "").trim();
-  const cleaned = normalized.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
-  return cleaned || "buckets";
-};
-
-const csvEscape = (value: string) => `"${value.replace(/"/g, "\"\"")}"`;
-
-const triggerDownload = (filename: string, content: string, mimeType: string) => {
-  if (typeof window === "undefined") return;
-  const blob = new Blob([content], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
 };
 
 const toAnchorRef = (node: HTMLElement | null): RefObject<HTMLElement | null> => ({ current: node });
@@ -361,149 +361,17 @@ function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-const normalizeVersioningStatus = (status?: string | null): boolean | null => {
-  if (!status || !status.trim()) return false;
-  const normalized = status.trim().toLowerCase();
-  if (normalized === "enabled") return true;
-  if (normalized === "suspended" || normalized === "disabled") return false;
-  return null;
-};
-
-const formatVersioningStatus = (status?: string | null) => {
-  if (!status || !status.trim()) return "Disabled";
-  const normalized = status.trim().toLowerCase();
-  if (normalized === "enabled") return "Enabled";
-  if (normalized === "suspended") return "Suspended";
-  if (normalized === "disabled") return "Disabled";
-  return status;
-};
-
-const computeQuotaUsagePercent = (used?: number | null, quota?: number | null) => {
-  const normalizedQuota = normalizeQuotaLimit(quota);
-  if (normalizedQuota === null) return null;
-  const safeUsed = Math.max(0, used ?? 0);
-  if (normalizedQuota <= 0) return null;
-  const percent = (safeUsed / normalizedQuota) * 100;
-  if (!Number.isFinite(percent)) return null;
-  return Math.max(0, percent);
-};
-
-const formatQuotaPercent = (value?: number | null) => {
-  if (value === null || value === undefined) return null;
-  if (value >= 100) return `${Math.round(value)}%`;
-  if (value >= 10) return `${value.toFixed(1)}%`;
-  return `${value.toFixed(2)}%`;
-};
-
-const formatOptionalBytes = (value?: number | null) => {
-  if (value === null || value === undefined) return "-";
-  return formatBytes(value);
-};
-
-const formatOptionalCount = (value?: number | null) => {
-  if (value === null || value === undefined) return "-";
-  return formatNumber(value);
-};
-
-const formatQuotaBytes = (value?: number | null) => {
-  const quota = normalizeQuotaLimit(value);
-  return quota !== null ? formatBytes(quota) : "-";
-};
-
-const formatQuotaObjects = (value?: number | null) => {
-  const quota = normalizeQuotaLimit(value);
-  return quota !== null ? formatNumber(quota) : "-";
-};
-
-const formatQuotaUsageValue = (used?: number | null, quota?: number | null) => {
-  const percent = computeQuotaUsagePercent(used, quota);
-  return percent !== null ? (formatQuotaPercent(percent) ?? "-") : "-";
-};
-
-const formatOwnerSuspended = (value?: boolean | null) => {
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  return "-";
-};
-
 type OwnerTooltipState =
   | { status: "loading" }
   | { status: "ready"; ownerName: string | null }
   | { status: "error"; message: string };
 
-const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 type OrphanedTagBucketDetail = {
   key: string;
   endpointId: number;
   name: string;
   tenant: string | null;
   tags: string[];
-};
-
-const buildBucketUiTagKey = (bucketName: string, tenant?: string | null) => {
-  const normalizedName = bucketName.trim();
-  const normalizedTenant = (tenant ?? "").trim();
-  return `${normalizedTenant}${BUCKET_UI_TAG_KEY_SEPARATOR}${normalizedName}`;
-};
-
-const formatBucketNamesPreview = (names: string[], max: number = 8) => {
-  if (names.length <= max) return names.join(", ");
-  return `${names.slice(0, max).join(", ")} (+${names.length - max} more)`;
-};
-
-const getBucketDisplayName = (bucket: CephAdminBucket, useExplicitBucketName: boolean): string => {
-  if (useExplicitBucketName) {
-    const raw = (bucket as { bucket_name?: string | null }).bucket_name;
-    if (typeof raw === "string" && raw.trim().length > 0) {
-      return raw.trim();
-    }
-  }
-  return bucket.name;
-};
-
-const getStorageOpsContextId = (bucket: CephAdminBucket): string => {
-  const raw = (bucket as { context_id?: string | null }).context_id;
-  if (typeof raw === "string" && raw.trim().length > 0) {
-    return raw.trim();
-  }
-  return decodeStorageOpsBucketRef(bucket.name)?.contextId ?? "";
-};
-
-const getStorageOpsBucketName = (bucket: CephAdminBucket): string => {
-  const raw = (bucket as { bucket_name?: string | null }).bucket_name;
-  if (typeof raw === "string" && raw.trim().length > 0) {
-    return raw.trim();
-  }
-  return decodeStorageOpsBucketRef(bucket.name)?.bucketName ?? bucket.name;
-};
-
-const normalizeBucketName = (value: string) => value.trim().toLowerCase();
-const areStringMapEqual = (a: Record<string, string>, b: Record<string, string>) => {
-  const aKeys = Object.keys(a).sort((x, y) => x.localeCompare(y));
-  const bKeys = Object.keys(b).sort((x, y) => x.localeCompare(y));
-  if (aKeys.length !== bKeys.length) return false;
-  for (let i = 0; i < aKeys.length; i += 1) {
-    const key = aKeys[i];
-    if (key !== bKeys[i]) return false;
-    if ((a[key] ?? "") !== (b[key] ?? "")) return false;
-  }
-  return true;
-};
-const ownerFilterFromSearch = (search: string) => {
-  if (!search) return null;
-  const value = new URLSearchParams(search).get("owner");
-  if (!value) return null;
-  const trimmed = value.trim();
-  return trimmed || null;
-};
-
-const getTagColors = (tag: string) => {
-  const hue = Array.from(tag).reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
-  return {
-    background: `hsl(${hue} 70% 90% / 0.9)`,
-    text: `hsl(${hue} 60% 30%)`,
-    border: `hsl(${hue} 60% 70% / 0.7)`,
-  };
 };
 
 type BucketOpsWorkbenchProps = {

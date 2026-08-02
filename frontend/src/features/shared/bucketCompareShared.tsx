@@ -386,21 +386,3 @@ export const parseRawMappingText = (value: string): ParsedRawMappingResult => {
     });
   return { mapping, invalidLines };
 };
-
-export const triggerDownload = (filename: string, content: string, mimeType: string) => {
-  if (typeof window === "undefined") return;
-  const blob = new Blob([content], { type: mimeType });
-  triggerBlobDownload(filename, blob);
-};
-
-export const triggerBlobDownload = (filename: string, blob: Blob) => {
-  if (typeof window === "undefined") return;
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-};

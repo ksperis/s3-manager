@@ -49,10 +49,12 @@ import {
   parseRawMappingText,
   renderCompareObjectDetails,
   renderDiffLines,
-  triggerBlobDownload,
   runWithConcurrencySettled,
-  triggerDownload,
 } from "../shared/bucketCompareShared";
+import {
+  triggerBlobDownload,
+  triggerDownload,
+} from "../../utils/download";
 
 type CompareMapping = {
   sourceBucket: string;

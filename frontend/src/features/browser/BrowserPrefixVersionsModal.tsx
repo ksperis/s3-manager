@@ -4,6 +4,7 @@
  */
 import Modal from "../../components/Modal";
 import UiInlineMessage from "../../components/ui/UiInlineMessage";
+import { triggerDownload } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import { bulkActionClasses, bulkDangerClasses, toolbarButtonClasses } from "./browserConstants";
 import { formatDateTime } from "./browserUtils";
@@ -41,19 +42,6 @@ export default function BrowserPrefixVersionsModal({
   const sanitizeFilename = (value: string) => {
     const cleaned = value.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
     return cleaned || "prefix-versions";
-  };
-
-  const triggerDownload = (filename: string, content: string, mimeType: string) => {
-    if (typeof window === "undefined") return;
-    const blob = new Blob([content], { type: mimeType });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
   };
 
   const buildExportRows = () =>
