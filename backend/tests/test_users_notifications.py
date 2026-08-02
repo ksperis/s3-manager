@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import json
 
+import pytest
+
 from app.db import (
     AccountRole,
     S3Account,
@@ -19,6 +21,7 @@ from app.db import (
 )
 from app.main import app
 from app.routers import dependencies
+from app.services.user_notifications_service import _parse_notification_payload
 
 
 def _seed_endpoint(db_session) -> StorageEndpoint:
@@ -111,6 +114,14 @@ def _seed_notification(
     db_session.commit()
     db_session.refresh(notification)
     return notification
+
+
+def test_notification_payload_requires_a_json_object():
+    assert _parse_notification_payload('{"ratio":90}') == {"ratio": 90}
+    with pytest.raises(ValueError):
+        _parse_notification_payload("[]")
+    with pytest.raises(json.JSONDecodeError):
+        _parse_notification_payload("{")
 
 
 def test_list_notifications_filters_by_current_account_access(client, db_session):

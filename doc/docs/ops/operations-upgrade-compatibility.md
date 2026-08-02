@@ -1,5 +1,15 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical user notification payloads
+
+Migration `0080_canonical_user_notification_payloads` rewrites notification
+payloads as JSON objects, replaces null or malformed values with `{}`, and makes
+`user_notifications.payload_json` non-nullable with the same database default.
+
+Deploy the migration and backend together. Notification serialization now
+rejects non-object or malformed payloads instead of silently returning an empty
+object. Downgrade makes the column nullable again but keeps canonicalized data.
+
 ## 2026-08 canonical user UI preferences
 
 Migration `0079_canonical_user_ui_preferences` rewrites every persisted user UI

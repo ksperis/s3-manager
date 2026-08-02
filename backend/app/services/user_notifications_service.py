@@ -16,6 +16,13 @@ from app.services.effective_access_service import EffectiveAccessService
 from app.utils.time import utcnow
 
 
+def _parse_notification_payload(raw: str) -> dict[str, Any]:
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("User notification payload must be a JSON object")
+    return payload
+
+
 class UserNotificationsService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -148,14 +155,6 @@ class UserNotificationsService:
         return query.filter(or_(*visibility_filters))
 
     def _to_out(self, row: UserNotification) -> UserNotificationOut:
-        payload: dict[str, Any] = {}
-        if row.payload_json:
-            try:
-                parsed = json.loads(row.payload_json)
-                if isinstance(parsed, dict):
-                    payload = parsed
-            except (TypeError, ValueError, json.JSONDecodeError):
-                payload = {}
         return UserNotificationOut(
             id=int(row.id),
             type=row.notification_type,
@@ -166,7 +165,7 @@ class UserNotificationsService:
             storage_endpoint_id=row.storage_endpoint_id,
             s3_account_id=row.s3_account_id,
             s3_user_id=row.s3_user_id,
-            payload=payload,
+            payload=_parse_notification_payload(row.payload_json),
             created_at=row.created_at,
             read_at=row.read_at,
         )
