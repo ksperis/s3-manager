@@ -6,20 +6,28 @@ import json
 from datetime import timedelta
 from types import SimpleNamespace
 
+import pytest
+
 from app.db import (
     AccountRole,
     S3Account,
     S3Connection,
     S3User,
     StorageEndpoint,
+    UiGroup,
+    UiGroupS3Account,
     User,
     UserRole,
     UserS3Account,
     UserS3Connection,
     UserS3User,
+    UserUiGroup,
 )
 from app.routers import execution_contexts
 from app.models.app_settings import AppSettings, GeneralSettings
+from app.services import app_settings_service
+from app.services.portal import settings as portal_settings_module
+from app.services.portal_service import PortalService
 from app.utils.time import utcnow
 
 
@@ -288,7 +296,25 @@ def test_browser_workspace_rejects_shared_and_expired_connections(db_session):
     assert f"conn-{expired.id}" not in context_ids
 
 
-def test_browser_workspace_never_returns_portal_account_context(db_session, monkeypatch):
+def _configure_portal_browser_catalog(monkeypatch, *, enabled: bool) -> AppSettings:
+    settings = AppSettings(
+        general=GeneralSettings(
+            browser_enabled=True,
+            browser_root_enabled=True,
+            portal_enabled=True,
+            browser_portal_enabled=True,
+        )
+    )
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(
+        PortalService,
+        "get_effective_portal_settings",
+        lambda self, account, **kwargs: SimpleNamespace(browser_access_enabled=enabled),
+    )
+    return settings
+
+
+def test_browser_workspace_omits_portal_account_when_project_access_is_disabled(db_session, monkeypatch):
     user = _create_user(db_session)
     endpoint = _create_endpoint(db_session, name="portal-browser-endpoint")
     account = _create_account(
@@ -307,17 +333,173 @@ def test_browser_workspace_never_returns_portal_account_context(db_session, monk
     )
     db_session.commit()
 
-    monkeypatch.setattr(
-        execution_contexts,
-        "load_app_settings",
-        lambda: SimpleNamespace(
-            general=SimpleNamespace(
-                browser_enabled=True,
-                portal_enabled=True,
-                browser_portal_enabled=True,
-            )
-        ),
+    _configure_portal_browser_catalog(monkeypatch, enabled=False)
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert contexts == []
+
+
+@pytest.mark.parametrize(
+    ("role", "expected_portal_role"),
+    [
+        (AccountRole.PORTAL_USER.value, AccountRole.PORTAL_USER.value),
+        (AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_MANAGER.value),
+        (AccountRole.ACCOUNT_ADMINISTRATOR.value, AccountRole.PORTAL_MANAGER.value),
+    ],
+)
+def test_browser_workspace_returns_enabled_portal_account_roles(
+    db_session,
+    monkeypatch,
+    role,
+    expected_portal_role,
+):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name=f"portal-browser-{role}")
+    account = _create_account(
+        db_session,
+        name=f"portal-browser-{role}",
+        rgw_account_id=f"RGW-{role}",
+        storage_endpoint=endpoint,
     )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            is_root=False,
+            role=role,
+        )
+    )
+    db_session.commit()
+    _configure_portal_browser_catalog(monkeypatch, enabled=True)
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert context.id == str(account.id)
+    assert context.kind == "portal_account"
+    assert context.role == expected_portal_role
+    assert context.manager_account_is_admin is (
+        role == AccountRole.ACCOUNT_ADMINISTRATOR.value
+    )
+    assert context.capabilities.can_manage_iam is False
+    assert context.capabilities.admin_api_capable is False
+
+
+def test_browser_workspace_returns_enabled_group_portal_account(db_session, monkeypatch):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="portal-browser-group")
+    account = _create_account(
+        db_session,
+        name="portal-browser-group",
+        rgw_account_id="RGW-PORTAL-GROUP",
+        storage_endpoint=endpoint,
+    )
+    group = UiGroup(name="Portal Browser members")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add_all(
+        [
+            UserUiGroup(user_id=user.id, group_id=group.id),
+            UiGroupS3Account(
+                group_id=group.id,
+                account_id=account.id,
+                role=AccountRole.PORTAL_USER.value,
+            ),
+        ]
+    )
+    db_session.commit()
+    _configure_portal_browser_catalog(monkeypatch, enabled=True)
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert [(context.id, context.kind, context.role) for context in contexts] == [
+        (str(account.id), "portal_account", AccountRole.PORTAL_USER.value)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("global_enabled", "account_override", "expected"),
+    [
+        (False, True, True),
+        (True, False, False),
+        (False, None, False),
+        (True, None, True),
+    ],
+)
+def test_browser_workspace_applies_effective_project_override(
+    db_session,
+    monkeypatch,
+    global_enabled,
+    account_override,
+    expected,
+):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name=f"portal-override-{global_enabled}-{account_override}")
+    account = _create_account(
+        db_session,
+        name="portal-override-account",
+        rgw_account_id="RGW-PORTAL-OVERRIDE",
+        storage_endpoint=endpoint,
+    )
+    if account_override is not None:
+        account.portal_settings_override = json.dumps(
+            {"admin": {"browser_access_enabled": account_override}}
+        )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+
+    settings = AppSettings(
+        general=GeneralSettings(
+            browser_enabled=True,
+            browser_root_enabled=True,
+            portal_enabled=True,
+            browser_portal_enabled=True,
+        )
+    )
+    settings.portal.browser_access_enabled = global_enabled
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(portal_settings_module, "load_app_settings", lambda: settings)
+
+    contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+
+    assert (str(account.id) in {context.id for context in contexts}) is expected
+
+
+@pytest.mark.parametrize(
+    "disabled_gate",
+    ["browser_enabled", "browser_root_enabled", "portal_enabled", "browser_portal_enabled"],
+)
+def test_browser_workspace_global_gates_override_enabled_project(
+    db_session,
+    monkeypatch,
+    disabled_gate,
+):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name=f"portal-gate-{disabled_gate}")
+    account = _create_account(
+        db_session,
+        name="portal-gated-account",
+        rgw_account_id="RGW-PORTAL-GATED",
+        storage_endpoint=endpoint,
+    )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+    settings = _configure_portal_browser_catalog(monkeypatch, enabled=True)
+    setattr(settings.general, disabled_gate, False)
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
@@ -445,6 +627,34 @@ def test_workspace_access_defaults_to_browser_for_private_connection_only(db_ses
     assert access.browser.context_count == 1
     assert access.portal.available is False
     assert access.default_workspace == "browser"
+
+
+def test_workspace_access_counts_enabled_portal_project_and_keeps_portal_default(db_session, monkeypatch):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="portal-workspace-access")
+    account = _create_account(
+        db_session,
+        name="portal-workspace-access",
+        rgw_account_id="RGW-PORTAL-WORKSPACE",
+        storage_endpoint=endpoint,
+    )
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            role=AccountRole.PORTAL_USER.value,
+        )
+    )
+    db_session.commit()
+    settings = _configure_portal_browser_catalog(monkeypatch, enabled=True)
+    monkeypatch.setattr(execution_contexts, "load_app_settings", lambda: settings)
+
+    access = execution_contexts.get_workspace_access(user=user, db=db_session)
+
+    assert access.portal.available is True
+    assert access.browser.available is True
+    assert access.browser.context_count == 1
+    assert access.default_workspace == "portal"
 
 
 def test_workspace_access_excludes_portal_role_on_incompatible_account(db_session, monkeypatch):

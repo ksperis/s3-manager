@@ -6,6 +6,7 @@ import client, { timeoutForRequestProfile } from "./client";
 
 export type PortalSettings = {
   allow_portal_key: boolean;
+  browser_access_enabled: boolean;
   allow_private_storage_space_create: boolean;
   allow_portal_named_bucket_create: boolean;
   allow_portal_user_access_key_create: boolean;
@@ -34,6 +35,7 @@ export type PortalBucketDefaultsOverride = {
 
 export type PortalSettingsOverride = {
   allow_portal_key?: boolean | null;
+  browser_access_enabled?: boolean | null;
   allow_private_storage_space_create?: boolean | null;
   allow_portal_named_bucket_create?: boolean | null;
   allow_portal_user_access_key_create?: boolean | null;

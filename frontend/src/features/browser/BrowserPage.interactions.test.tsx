@@ -948,7 +948,11 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByRole("button", { name: "Search options" })).not.toBeInTheDocument();
     expect(within(rowA).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
     expect(within(rowA).getByRole("button", { name: "Open file a.txt" })).toBeInTheDocument();
-    expect(within(rowA).queryByRole("button", { name: "Create public link" })).not.toBeInTheDocument();
+    expect(
+      within(rowA).queryByRole("button", {
+        name: "Create public link a.txt",
+      }),
+    ).not.toBeInTheDocument();
     expect(within(rowA).getByRole("button", { name: "More actions for a.txt" })).toBeInTheDocument();
 
     fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
@@ -1069,18 +1073,26 @@ describe("BrowserPage interactions", () => {
       }),
     ).toBeDisabled();
     expect(
-      within(deletedFileRow).queryByRole("button", { name: "Download" }),
+      within(deletedFileRow).queryByRole("button", {
+        name: "Download removed.txt",
+      }),
     ).not.toBeInTheDocument();
     expect(
-      within(deletedFileRow).queryByRole("button", { name: "Delete" }),
+      within(deletedFileRow).queryByRole("button", {
+        name: "Delete removed.txt",
+      }),
     ).not.toBeInTheDocument();
+    expect(
+      within(deletedFileRow).getByRole("button", {
+        name: "Restore removed.txt",
+      }),
+    ).toBeInTheDocument();
     fireEvent.click(
       within(deletedFileRow).getByRole("button", {
-        name: "More actions for removed.txt",
+        name: "Restore removed.txt",
       }),
     );
-    const deletedActions = await screen.findByRole("menu");
-    fireEvent.click(within(deletedActions).getByRole("button", { name: "Restore" }));
+    expect(restoreDeletedObject).toHaveBeenCalledTimes(1);
     expect(restoreDeletedObject).toHaveBeenCalledWith(
       expect.objectContaining({
         bucketName: "portal-bucket",
@@ -1088,6 +1100,16 @@ describe("BrowserPage interactions", () => {
         deleteMarkerVersionId: "delete-1",
       }),
     );
+
+    fireEvent.click(
+      within(deletedFileRow).getByRole("button", {
+        name: "More actions for removed.txt",
+      }),
+    );
+    const deletedActions = await screen.findByRole("menu");
+    expect(
+      within(deletedActions).getByRole("button", { name: "Restore" }),
+    ).toBeInTheDocument();
 
     expect(listObjectVersionsMock).toHaveBeenCalledTimes(2);
     expect(listObjectVersionsMock).toHaveBeenNthCalledWith(
@@ -1236,7 +1258,57 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Buckets", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("runs the Portal public-link action for a selected Browser file", async () => {
+  it.each(["standard", "advanced"] as const)(
+    "exposes direct Download and Delete actions in the %s profile without selecting the row",
+    async (functionalProfile) => {
+      const user = userEvent.setup();
+      const windowOpenSpy = vi
+        .spyOn(window, "open")
+        .mockImplementation(() => null);
+      renderPage({ functionalProfile });
+
+      const rowA = await findRowByLabel("a.txt");
+      const selectA = within(rowA).getByRole("checkbox", {
+        name: "Select a.txt",
+      });
+      expect(selectA).not.toBeChecked();
+      expect(
+        within(rowA).queryByRole("button", {
+          name: "Create public link a.txt",
+        }),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        within(rowA).getByRole("button", { name: "Download a.txt" }),
+      );
+      await waitFor(() => expect(presignObjectMock).toHaveBeenCalledTimes(1));
+      expect(selectA).not.toBeChecked();
+
+      await user.click(
+        within(rowA).getByRole("button", { name: "Delete a.txt" }),
+      );
+      expect(
+        await screen.findByRole("dialog", { name: "Delete objects" }),
+      ).toBeInTheDocument();
+      expect(selectA).not.toBeChecked();
+      expect(deleteObjectsMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await user.click(
+        within(rowA).getByRole("button", { name: "More actions for a.txt" }),
+      );
+      const rowActions = await screen.findByRole("menu");
+      expect(
+        within(rowActions).getByRole("button", { name: "Download" }),
+      ).toBeInTheDocument();
+      expect(
+        within(rowActions).getByRole("button", { name: "Delete" }),
+      ).toBeInTheDocument();
+      windowOpenSpy.mockRestore();
+    },
+  );
+
+  it("runs the direct Portal public-link action and keeps it in More", async () => {
     const user = userEvent.setup();
     const createPublicLinkForObject = vi.fn();
     renderPage({
@@ -1250,14 +1322,26 @@ describe("BrowserPage interactions", () => {
     });
 
     const rowA = await findRowByLabel("a.txt");
-    await user.click(within(rowA).getByRole("button", { name: "More actions for a.txt" }));
-    const rowActions = await screen.findByRole("menu");
-    await user.click(within(rowActions).getByRole("button", { name: "Create public link" }));
+    await user.click(
+      within(rowA).getByRole("button", {
+        name: "Create public link a.txt",
+      }),
+    );
+    expect(createPublicLinkForObject).toHaveBeenCalledTimes(1);
     expect(createPublicLinkForObject).toHaveBeenCalledWith({
       bucketName: "portal-bucket",
       key: "a.txt",
       name: "a.txt",
     });
+
+    await user.click(
+      within(rowA).getByRole("button", { name: "More actions for a.txt" }),
+    );
+    const rowActions = await screen.findByRole("menu");
+    expect(
+      within(rowActions).getByRole("button", { name: "Create public link" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
 
     fireEvent.contextMenu(rowA, { clientX: 40, clientY: 40 });
     const nativeContextMenu = await screen.findByRole("menu");
@@ -2498,6 +2582,15 @@ describe("BrowserPage interactions", () => {
       expect(screen.getByLabelText("Objects list")).toHaveClass(
         "overflow-x-hidden",
       );
+      expect(
+        within(row).queryByRole("button", { name: "Download a.txt" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(row).queryByRole("button", { name: "Delete a.txt" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(row).getByRole("button", { name: "More actions for a.txt" }),
+      ).toBeInTheDocument();
 
       await user.click(row);
       const toolbar = screen.getByRole("toolbar", {

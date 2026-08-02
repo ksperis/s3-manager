@@ -25,8 +25,9 @@ simple preferences.
    simple alerts.
 4. Use **Spaces** to create or open a space, browse files when content access
    is available, upload, download, and invite collaborators.
-   You can also open `/browser` with the selected project context for a
-   Dropbox-like spaces sidebar; internal bucket names stay hidden.
+   When an administrator enables Browser workspace access for the project, you
+   can also open `/browser` with that project context; internal bucket names
+   stay hidden.
 5. Use **External tools** to generate S3 credentials for external tools. The
    Portal runtime key is not shown in this list.
 6. Use **Collaborators** to review workspace members, spaces shared with you,
@@ -71,7 +72,9 @@ simple preferences.
   they can access; undisclosed usage can appear only as the anonymous `Other`
   aggregate.
 - File browsing inside a space uses a locked Portal profile of Browser. Advanced object inspection stays in Browser or Manager.
-- `/browser` can also run with a Portal project context when Portal Browser is enabled. It still uses Portal wording and permissions instead of management controls.
+- `/browser` can also run with a Portal project context when the effective
+  project setting `browser_access_enabled` is enabled. It still uses the
+  personal IAM identity and Portal permissions instead of management controls.
 - Portal roles come from a private owner, the manager project role, the team access mode, and
   collaborator grants managed in Portal. External S3 keys are synchronized from
   those records; IAM is not the source of Portal listings or roles.
@@ -97,8 +100,9 @@ collaborator grants as their source of truth.
 !!! note
     Portal requires `portal_enabled` and an explicit project link. File browsing
     inside spaces also requires `browser_enabled` and
-    `browser_portal_enabled`. Advanced object inspection belongs in `/browser`,
-    not inside Portal.
+    `browser_portal_enabled`. Standalone `/browser` access additionally requires
+    the project's effective `browser_access_enabled` setting, which is disabled
+    by default and does not affect file browsing inside Portal.
 
 ## Related pages
 

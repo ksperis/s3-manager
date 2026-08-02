@@ -57,6 +57,12 @@ export default function PortalSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_private_storage_space_create: value } } : prev));
   };
 
+  const handleToggleBrowserAccess = (value: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, portal: { ...prev.portal, browser_access_enabled: value } } : prev
+    );
+  };
+
   const handleToggleAllowPortalNamedBucketCreate = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, allow_portal_named_bucket_create: value } } : prev
@@ -193,6 +199,7 @@ export default function PortalSettingsPage() {
   };
 
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_private_storage_space_create);
+  const portalBrowserAccessEnabled = Boolean(settings?.portal.browser_access_enabled);
   const portalNamedBucketCreateEnabled = Boolean(settings?.portal.allow_portal_named_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
   const portalServerAccessLoggingEnabled = Boolean(settings?.portal.server_access_logging_enabled);
@@ -228,6 +235,18 @@ export default function PortalSettingsPage() {
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         <SettingsCard>
           <SettingsSection title="UI" description="Portal UI switches and account defaults." layout="grid">
+            <SettingsItem
+              title="Browser workspace access"
+              description="Allow Portal projects to appear in the standalone /browser workspace. Portal file browsing remains available when disabled."
+              action={
+                <SettingsToggleAction
+                  checked={portalBrowserAccessEnabled}
+                  onChange={(value) => handleToggleBrowserAccess(value)}
+                  disabled={!settings}
+                  ariaLabel="Portal Browser workspace access"
+                />
+              }
+            />
             <SettingsItem
               title="Private Storage Space creation"
               description="Allow Portal users and Portal managers to create private Storage Spaces. Team Storage Spaces remain manager-only."

@@ -117,7 +117,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
       setSearchParams(nextParams, { replace: true });
-      setAccessError("The previously selected Browser connection is no longer authorized. Select a private connection.");
+      setAccessError("The previously selected Browser account is no longer authorized. Select an available account.");
       return;
     }
     if (nextId !== selectedContextId) {

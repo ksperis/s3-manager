@@ -359,6 +359,45 @@ class EffectiveAccessService:
         )
         return [account for account in accounts if self.portal_account_is_compatible(account)]
 
+    def list_browser_portal_accounts(
+        self,
+        user: User,
+        *,
+        resolved: ResolvedUserAccess | None = None,
+    ) -> list[tuple[S3Account, EffectiveAccountLink]]:
+        """Return Portal identities explicitly exposed in standalone Browser."""
+        from app.services.app_settings_service import load_app_settings
+        from app.services.portal_service import PortalService
+
+        settings = load_app_settings()
+        if not (
+            settings.general.browser_enabled
+            and settings.general.browser_root_enabled
+            and settings.general.portal_enabled
+            and settings.general.browser_portal_enabled
+        ):
+            return []
+
+        effective = resolved or self.resolve_user(user)
+        links_by_account_id = {
+            link.account_id: link
+            for link in effective.account_links
+            if link.portal_role is not None
+        }
+        if not links_by_account_id:
+            return []
+
+        portal_service = PortalService(self.db)
+        return [
+            (account, links_by_account_id[account.id])
+            for account in self.list_portal_accounts(user, resolved=effective)
+            if account.id in links_by_account_id
+            and portal_service.get_effective_portal_settings(
+                account,
+                base_settings=settings.portal,
+            ).browser_access_enabled
+        ]
+
     @staticmethod
     def manager_account_allowed(role_or_link: object) -> bool:
         role = getattr(role_or_link, "role", role_or_link)

@@ -47,6 +47,7 @@ function buildSettings(overrides: Partial<AppSettings["general"]> = {}): AppSett
     },
     portal: {
       allow_portal_key: false,
+      browser_access_enabled: false,
       allow_private_storage_space_create: true,
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,

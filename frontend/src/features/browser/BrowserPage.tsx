@@ -572,7 +572,20 @@ const NAME_COLUMN_DEFINITION: ResizableColumnDefinition = {
   maxWidthPx: 640,
 };
 const SELECTION_COLUMN_WIDTH_PX = 36;
-const ACTIONS_COLUMN_WIDTH_PX = 176;
+const MIN_ACTIONS_COLUMN_WIDTH_PX = 108;
+const ROW_ACTION_TARGET_SIZE_PX = 44;
+const ROW_ACTION_GAP_PX = 4;
+const ROW_ACTION_CELL_HORIZONTAL_PADDING_PX = 16;
+const DIRECT_ITEM_ACTION_IDS: readonly BrowserActionId[] = [
+  "download",
+  "delete",
+];
+const DIRECT_PORTAL_ITEM_ACTION_IDS: readonly BrowserActionId[] = [
+  "download",
+  "createPublicLink",
+  "delete",
+];
+const DIRECT_DELETED_ITEM_ACTION_IDS: readonly BrowserActionId[] = ["restore"];
 const COLUMN_RESIZER_HITBOX_WIDTH_PX = 12;
 const COLUMN_DEFINITIONS: ColumnDefinition[] = [
   {
@@ -1028,6 +1041,21 @@ export default function BrowserPage({
     [capabilityFactsOverride, onCreatePublicLinkForObject],
   );
   const isPortalProfile = resolvedFunctionalProfile === "portal";
+  const maximumDirectItemActionCount =
+    1 +
+    Number(resolvedCapabilityFacts.canDeleteObjects) +
+    Number(
+      isPortalProfile &&
+        resolvedCapabilityFacts.canCreatePublicLinks &&
+        canCreateRoutedPublicLink,
+    );
+  const actionsColumnButtonCount = 1 + maximumDirectItemActionCount;
+  const actionsColumnWidthPx = Math.max(
+    MIN_ACTIONS_COLUMN_WIDTH_PX,
+    ROW_ACTION_CELL_HORIZONTAL_PADDING_PX +
+      actionsColumnButtonCount * ROW_ACTION_TARGET_SIZE_PX +
+      (actionsColumnButtonCount - 1) * ROW_ACTION_GAP_PX,
+  );
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -4582,13 +4610,18 @@ export default function BrowserPage({
         720,
         SELECTION_COLUMN_WIDTH_PX +
           nameColumnWidthPx +
-          ACTIONS_COLUMN_WIDTH_PX +
+          actionsColumnWidthPx +
           visibleColumnDefinitions.reduce(
             (sum, definition) => sum + visibleColumnWidthsPx[definition.id],
             0,
           ),
       ),
-    [nameColumnWidthPx, visibleColumnDefinitions, visibleColumnWidthsPx],
+    [
+      actionsColumnWidthPx,
+      nameColumnWidthPx,
+      visibleColumnDefinitions,
+      visibleColumnWidthsPx,
+    ],
   );
   const lazyMetadataColumnsVisible =
     visibleColumnSet.has("contentType") ||
@@ -5242,6 +5275,42 @@ export default function BrowserPage({
       resolvedCapabilityFacts,
       resolvedFunctionalProfile,
       selectionItems,
+      sseActive,
+    ],
+  );
+  const resolveItemActionStates = useCallback(
+    (item: BrowserItem) =>
+      resolveBrowserActions({
+        scope: "item",
+        items: [item],
+        bucketName,
+        hasS3AccountContext,
+        versioningEnabled: isVersioningEnabled,
+        canPaste: canPasteInFunctionalProfile,
+        clipboardMode: clipboard?.mode ?? null,
+        copyUrlDisabled: sseActive,
+        copyUrlDisabledReason,
+        publicLinkAvailable: canCreateRoutedPublicLink,
+        restoreAvailable: Boolean(deletedObjectsOptions?.onRestoreObject),
+        inspectorAvailable:
+          canUseInspectorPanel || canOpenRoutedObjectDetails,
+        functionalProfile: resolvedFunctionalProfile,
+        capabilityFacts: resolvedCapabilityFacts,
+        previewAvailable: isBrowserItemPreviewAvailable(item),
+      }),
+    [
+      bucketName,
+      canCreateRoutedPublicLink,
+      canOpenRoutedObjectDetails,
+      canPasteInFunctionalProfile,
+      canUseInspectorPanel,
+      clipboard?.mode,
+      copyUrlDisabledReason,
+      deletedObjectsOptions?.onRestoreObject,
+      hasS3AccountContext,
+      isVersioningEnabled,
+      resolvedCapabilityFacts,
+      resolvedFunctionalProfile,
       sseActive,
     ],
   );
@@ -11232,27 +11301,36 @@ export default function BrowserPage({
     });
   };
 
+  const runItemAction = (item: BrowserItem, actionId: BrowserActionId) => {
+    const itemActions = resolveItemActionStates(item);
+    const result = runBrowserAction(itemActions[actionId], {
+      details: () => openItemDetails(item),
+      versions: () => openObjectVersionsModal(item),
+      properties: () => openPropertiesForItem(item),
+      open: () => handleOpenItem(item),
+      preview: () => handlePreviewItem(item),
+      download: () => handleDownloadTarget(item),
+      createPublicLink: () => createPublicLinkForItem(item),
+      restore: () => restoreDeletedItem(item),
+      copyUrl: () => handleCopyUrl(item),
+      copy: () => handleCopyItems([item]),
+      cut: () => handleCutItems([item]),
+      bulkAttributes: () => openBulkAttributesModal([item]),
+      restoreToDate: () => openBulkRestoreModal([item]),
+      advanced: () => openAdvancedForItem(item),
+      delete: () => handleDeleteItems([item]),
+    });
+    if (!result.executed) {
+      setWarningMessage(result.reason);
+    }
+  };
+
   const runInspectedFullDetailsAction = () => {
     if (!inspectedItem || inspectedItem.type !== "file") return;
     const actionId: BrowserActionId = inspectedItem.isDeleted
       ? "versions"
       : "properties";
-    const itemActions = resolveBrowserActions({
-      scope: "item",
-      items: [inspectedItem],
-      bucketName,
-      hasS3AccountContext,
-      versioningEnabled: isVersioningEnabled,
-      canPaste: canPasteInFunctionalProfile,
-      clipboardMode: clipboard?.mode ?? null,
-      functionalProfile: resolvedFunctionalProfile,
-      capabilityFacts: resolvedCapabilityFacts,
-      previewAvailable: isBrowserItemPreviewAvailable(inspectedItem),
-    });
-    runBrowserAction(itemActions[actionId], {
-      properties: () => openObjectDetails(inspectedItem, "properties"),
-      versions: () => openObjectDetails(inspectedItem, "versions"),
-    });
+    runItemAction(inspectedItem, actionId);
   };
 
   const activeOperations = useMemo(
@@ -12269,12 +12347,43 @@ export default function BrowserPage({
     preview: <EyeIcon className="h-3.5 w-3.5" />,
     download: <DownloadIcon className="h-3.5 w-3.5" />,
     createPublicLink: <LinkIcon className="h-3.5 w-3.5" />,
+    restore: <HistoryIcon className="h-3.5 w-3.5" />,
     copyUrl: <LinkIcon className="h-3.5 w-3.5" />,
     copy: <CopyIcon className="h-3.5 w-3.5" />,
     cut: <CutIcon className="h-3.5 w-3.5" />,
     bulkAttributes: <SlidersIcon className="h-3.5 w-3.5" />,
     advanced: <SettingsIcon className="h-3.5 w-3.5" />,
     delete: <TrashIcon className="h-3.5 w-3.5" />,
+  };
+  const renderDirectItemActionButton = (
+    item: BrowserItem,
+    action: BrowserActionState,
+  ) => {
+    const accessibleLabel = `${action.label} ${item.name}`;
+    const disabledLabel =
+      !action.enabled && action.disabledReason
+        ? `${accessibleLabel}. Unavailable: ${action.disabledReason}`
+        : accessibleLabel;
+    return (
+      <button
+        key={action.id}
+        type="button"
+        className={`${rowActionButtonClasses} min-h-11 min-w-11 ${
+          action.id === "delete"
+            ? "text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
+            : ""
+        }`}
+        aria-label={disabledLabel}
+        title={action.enabled ? action.label : action.disabledReason}
+        disabled={!action.enabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          runItemAction(item, action.id);
+        }}
+      >
+        {browserActionIconById[action.id]}
+      </button>
+    );
   };
   const renderToolbarMoreActionButton = (
     action: BrowserActionState,
@@ -13744,7 +13853,7 @@ export default function BrowserPage({
                           }}
                         />
                       ))}
-                      <col style={{ width: `${ACTIONS_COLUMN_WIDTH_PX}px` }} />
+                      <col style={{ width: `${actionsColumnWidthPx}px` }} />
                     </colgroup>
                     <thead
                       className="sticky top-0 z-[1] border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
@@ -13891,6 +14000,15 @@ export default function BrowserPage({
                         const isSelected = selectedSet.has(item.id);
                         const isDeleted = Boolean(item.isDeleted);
                         const isHistorical = Boolean(item.isHistorical);
+                        const itemActionStates = resolveItemActionStates(item);
+                        const directItemActions = getVisibleBrowserActions(
+                          itemActionStates,
+                          isDeleted
+                            ? DIRECT_DELETED_ITEM_ACTION_IDS
+                            : isPortalProfile
+                              ? DIRECT_PORTAL_ITEM_ACTION_IDS
+                              : DIRECT_ITEM_ACTION_IDS,
+                        );
                         return (
                           <tr
                             key={item.id}
@@ -14059,17 +14177,22 @@ export default function BrowserPage({
                             <td
                               className={`px-2 ${rowCellClasses} !align-middle text-right`}
                             >
-                              <button
-                                type="button"
-                                className={`${rowActionButtonClasses} min-h-11 min-w-11`}
-                                aria-label={`More actions for ${item.name}`}
-                                title="More"
-                                onClick={(event) =>
-                                  handleItemActionsButtonClick(event, item)
-                                }
-                              >
-                                <MoreIcon />
-                              </button>
+                              <div className="flex items-center justify-end gap-1">
+                                {directItemActions.map((action) =>
+                                  renderDirectItemActionButton(item, action),
+                                )}
+                                <button
+                                  type="button"
+                                  className={`${rowActionButtonClasses} min-h-11 min-w-11`}
+                                  aria-label={`More actions for ${item.name}`}
+                                  title="More"
+                                  onClick={(event) =>
+                                    handleItemActionsButtonClick(event, item)
+                                  }
+                                >
+                                  <MoreIcon />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -14861,12 +14984,9 @@ export default function BrowserPage({
         versioningEnabled={isVersioningEnabled}
         showFolderItems={showFolderItems}
         showDeletedObjects={showDeletedObjects}
-        allowInspectorPanel={canUseInspectorPanel || canOpenRoutedObjectDetails}
         canPaste={canPasteInFunctionalProfile}
         copyUrlDisabled={sseActive}
         copyUrlDisabledReason={copyUrlDisabledReason}
-        publicLinkAvailable={canCreateRoutedPublicLink}
-        restoreAvailable={Boolean(deletedObjectsOptions?.onRestoreObject)}
         multipartUploadsAvailable={resolvedFunctionalProfile === "advanced"}
         bucketConfigurationAvailable={bucketConfigurationEnabled}
         functionalProfile={resolvedFunctionalProfile}
@@ -14881,10 +15001,8 @@ export default function BrowserPage({
         onOpenCleanupVersions={openCleanupModal}
         onOpenMultipartUploads={openMultipartUploadsModal}
         onConfigureBucket={() => openBucketConfigurationModal(bucketName)}
-        onDownloadTarget={handleDownloadTarget}
-        onCreatePublicLink={createPublicLinkForItem}
-        onRestoreDeletedItem={restoreDeletedItem}
-        onPreviewItem={handlePreviewItem}
+        onResolveItemActions={resolveItemActionStates}
+        onRunItemAction={runItemAction}
         onCopyUrl={handleCopyUrl}
         onCopyPath={(path) => {
           void handleCopyPath(path);
@@ -14893,14 +15011,11 @@ export default function BrowserPage({
         onCutItems={handleCutItems}
         onOpenBulkAttributes={openBulkAttributesModal}
         onOpenBulkRestore={openBulkRestoreModal}
-        onOpenObjectVersions={openObjectVersionsModal}
         onOpenAdvanced={openAdvancedForItem}
-        onOpenProperties={openPropertiesForItem}
         onDeleteItems={handleDeleteItems}
         onDownloadFolder={handleDownloadFolder}
         onDownloadItems={handleDownloadItems}
         onOpenItem={handleOpenItem}
-        onOpenDetails={openItemDetails}
         onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
         onToggleShowDeleted={() =>
           setDeletedObjectsVisibility(!showDeletedObjects)

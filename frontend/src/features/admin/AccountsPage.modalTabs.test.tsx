@@ -29,6 +29,7 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
 const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
   effective: {
     allow_portal_key: false,
+    browser_access_enabled: false,
     allow_private_storage_space_create: true,
     allow_portal_named_bucket_create: false,
     allow_portal_user_access_key_create: true,
@@ -592,6 +593,9 @@ describe("AccountsPage modal tabs", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "Portal overrides" }));
     await screen.findByText("Private Storage Space creation");
 
+    fireEvent.change(screen.getByLabelText("Browser workspace access override"), {
+      target: { value: "enabled" },
+    });
     const storageSpaceCreation = screen
       .getByText("Private Storage Space creation")
       .closest("div")?.parentElement?.parentElement;
@@ -613,6 +617,7 @@ describe("AccountsPage modal tabs", () => {
 
     await waitFor(() => {
       expect(updateAccountPortalSettingsMock).toHaveBeenCalledWith(1, {
+        browser_access_enabled: true,
         allow_private_storage_space_create: false,
         allow_portal_named_bucket_create: true,
         storage_space_version_cleanup_enabled: false,

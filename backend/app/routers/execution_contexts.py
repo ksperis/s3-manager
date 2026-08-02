@@ -86,6 +86,42 @@ def _build_account_context(
     )
 
 
+def _build_portal_account_context(
+    account: S3Account,
+    *,
+    tags_service: TagsService,
+    role: str,
+    manager_account_is_admin: bool,
+) -> ExecutionContext:
+    endpoint = account.storage_endpoint
+    endpoint_caps = (
+        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
+        if endpoint
+        else None
+    )
+    return ExecutionContext(
+        kind="portal_account",
+        id=str(account.id),
+        display_name=account.name,
+        role=role,
+        manager_account_is_admin=manager_account_is_admin,
+        rgw_account_id=account.rgw_account_id,
+        endpoint_id=endpoint.id if endpoint else None,
+        endpoint_name=endpoint.name if endpoint else None,
+        endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
+        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
+        endpoint_url=endpoint.endpoint_url if endpoint else None,
+        storage_endpoint_capabilities=endpoint_caps,
+        tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
+        capabilities=ExecutionContextCapabilities(
+            can_manage_iam=False,
+            sts_capable=False,
+            admin_api_capable=False,
+        ),
+    )
+
+
 def _build_legacy_user_context(
     s3_user: S3User,
     quota_max_size_gb: Optional[float],
@@ -239,6 +275,22 @@ def list_execution_contexts(
                     tags_service=tags_service,
                 )
             )
+    elif workspace == "browser":
+        for account, link in access_service.list_browser_portal_accounts(
+            user,
+            resolved=effective,
+        ):
+            portal_role = link.portal_role
+            if portal_role is None:  # pragma: no cover - filtered by the service
+                continue
+            results.append(
+                _build_portal_account_context(
+                    account,
+                    tags_service=tags_service,
+                    role=portal_role,
+                    manager_account_is_admin=access_service.manager_account_allowed(link.role),
+                )
+            )
     if workspace in {None, "manager"}:
         for s3_user in s3_users:
             results.append(
@@ -279,7 +331,9 @@ def get_workspace_access(
     ) + len(effective.s3_user_ids) + len(
         service.list_workspace_connections(user, workspace="manager", resolved=effective)
     )
-    browser_count = len(service.list_workspace_connections(user, workspace="browser", resolved=effective))
+    browser_count = len(
+        service.list_workspace_connections(user, workspace="browser", resolved=effective)
+    ) + len(service.list_browser_portal_accounts(user, resolved=effective))
     portal_count = len(service.list_portal_accounts(user, resolved=effective))
     admin_available = is_admin_ui_role(user.role)
     ceph_admin_available = bool(settings.ceph_admin_enabled and effective.can_access_ceph_admin)

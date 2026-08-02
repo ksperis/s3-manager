@@ -87,6 +87,7 @@ type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
 type PortalAccountRole = "portal_user" | "portal_manager" | "account_administrator";
 type PortalOverrideFormSnapshot = {
+  browserAccess: TriState;
   bucketCreate: TriState;
   namedBucketCreate: TriState;
   accessKeyCreate: TriState;
@@ -197,6 +198,7 @@ export default function S3AccountsPage() {
   const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
   const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
+  const [adminPortalBrowserAccessOverride, setAdminPortalBrowserAccessOverride] = useState<TriState>("inherit");
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalNamedBucketCreateOverride, setAdminPortalNamedBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
@@ -475,6 +477,7 @@ export default function S3AccountsPage() {
 
   useEffect(() => {
     if (!portalAccountSettings) {
+      setAdminPortalBrowserAccessOverride("inherit");
       setAdminPortalBucketCreateOverride("inherit");
       setAdminPortalNamedBucketCreateOverride("inherit");
       setAdminPortalAccessKeyCreateOverride("inherit");
@@ -491,6 +494,7 @@ export default function S3AccountsPage() {
     }
     const override = portalAccountSettings.admin_override;
     const effective = portalAccountSettings.effective;
+    const browserAccess = resolveTriState(override.browser_access_enabled);
     const bucketCreate = resolveTriState(override.allow_private_storage_space_create);
     const namedBucketCreate = resolveTriState(override.allow_portal_named_bucket_create);
     const accessKeyCreate = resolveTriState(override.allow_portal_user_access_key_create);
@@ -510,6 +514,7 @@ export default function S3AccountsPage() {
       ? (bucketDefaultsOverride?.cors_allowed_origins ?? []).join("\n")
       : (effective.bucket_defaults.cors_allowed_origins || []).join("\n");
 
+    setAdminPortalBrowserAccessOverride(browserAccess);
     setAdminPortalBucketCreateOverride(bucketCreate);
     setAdminPortalNamedBucketCreateOverride(namedBucketCreate);
     setAdminPortalAccessKeyCreateOverride(accessKeyCreate);
@@ -524,6 +529,7 @@ export default function S3AccountsPage() {
     setAdminBucketCorsOriginsText(corsOriginsText);
     setPortalInitialSignature(
       buildPortalOverrideFormSignature({
+        browserAccess,
         bucketCreate,
         namedBucketCreate,
         accessKeyCreate,
@@ -962,6 +968,7 @@ export default function S3AccountsPage() {
   const portalCurrentSignature = useMemo(
     () =>
       buildPortalOverrideFormSignature({
+        browserAccess: adminPortalBrowserAccessOverride,
         bucketCreate: adminPortalBucketCreateOverride,
         namedBucketCreate: adminPortalNamedBucketCreateOverride,
         accessKeyCreate: adminPortalAccessKeyCreateOverride,
@@ -985,6 +992,7 @@ export default function S3AccountsPage() {
       adminBucketNoncurrentExpirationDays,
       adminBucketNoncurrentExpirationOverride,
       adminBucketVersioningOverride,
+      adminPortalBrowserAccessOverride,
       adminPortalNamedBucketCreateOverride,
       adminPortalAccessKeyCreateOverride,
       adminPortalBucketCreateOverride,
@@ -1080,6 +1088,10 @@ export default function S3AccountsPage() {
 
   const buildAdminPortalOverridePayload = (): PortalSettingsOverride => {
     const payload: PortalSettingsOverride = {};
+    const browserAccessValue = toOverrideValue(adminPortalBrowserAccessOverride);
+    if (browserAccessValue !== undefined) {
+      payload.browser_access_enabled = browserAccessValue;
+    }
     const allowBucketCreateValue = toOverrideValue(adminPortalBucketCreateOverride);
     if (allowBucketCreateValue !== undefined) {
       payload.allow_private_storage_space_create = allowBucketCreateValue;
@@ -2035,6 +2047,25 @@ export default function S3AccountsPage() {
                     {portalAccountSettings && effectivePortalSettings && (
                       <div className="space-y-4">
                         <PortalSettingsSection title="UI" layout="grid">
+                          <PortalSettingsItem
+                            title="Browser workspace access"
+                            description={`Effective for this project: ${
+                              effectivePortalSettings.browser_access_enabled ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalBrowserAccessOverride}
+                                onChange={(e) => setAdminPortalBrowserAccessOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                                aria-label="Browser workspace access override"
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
                           <PortalSettingsItem
                             title="Private Storage Space creation"
                             description={`Effective for Portal users and managers: ${

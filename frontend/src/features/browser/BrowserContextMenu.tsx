@@ -35,10 +35,10 @@ import {
   CONTEXT_MENU_PATH_LAYOUT_ACTION_IDS,
   CONTEXT_MENU_SELECTION_ACTION_IDS,
   getVisibleBrowserActions,
-  isBrowserItemPreviewAvailable,
   resolveBrowserActions,
   runBrowserAction,
   type BrowserActionId,
+  type BrowserActionMap,
   type BrowserCapabilityFacts,
   type BrowserFunctionalProfile,
 } from "./browserActions";
@@ -58,12 +58,9 @@ type BrowserContextMenuProps = {
   versioningEnabled: boolean;
   showFolderItems: boolean;
   showDeletedObjects: boolean;
-  allowInspectorPanel?: boolean;
   canPaste: boolean;
   copyUrlDisabled?: boolean;
   copyUrlDisabledReason?: string;
-  publicLinkAvailable?: boolean;
-  restoreAvailable?: boolean;
   multipartUploadsAvailable?: boolean;
   bucketConfigurationAvailable?: boolean;
   functionalProfile: BrowserFunctionalProfile;
@@ -78,24 +75,19 @@ type BrowserContextMenuProps = {
   onOpenCleanupVersions: () => void;
   onOpenMultipartUploads: () => void;
   onConfigureBucket: () => void;
-  onDownloadTarget: (item: BrowserItem) => void;
-  onCreatePublicLink: (item: BrowserItem) => void;
-  onRestoreDeletedItem?: (item: BrowserItem) => void;
-  onPreviewItem: (item: BrowserItem) => void;
+  onResolveItemActions: (item: BrowserItem) => BrowserActionMap;
+  onRunItemAction: (item: BrowserItem, actionId: BrowserActionId) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
   onCopyPath: (path: string) => void;
   onCopyItems: (items: BrowserItem[]) => void;
   onCutItems: (items: BrowserItem[]) => void;
   onOpenBulkAttributes: (items: BrowserItem[]) => void;
   onOpenBulkRestore: (items: BrowserItem[]) => void;
-  onOpenObjectVersions: (item: BrowserItem) => void;
   onOpenAdvanced: (item: BrowserItem) => void;
-  onOpenProperties: (item: BrowserItem) => void;
   onDeleteItems: (items: BrowserItem[]) => void;
   onDownloadFolder: (item: BrowserItem) => void;
   onDownloadItems: (items: BrowserItem[]) => void;
   onOpenItem: (item: BrowserItem) => void;
-  onOpenDetails: (item: BrowserItem) => void;
   onToggleShowFolders: () => void;
   onToggleShowDeleted: () => void;
   isMainBrowserPath?: boolean;
@@ -116,12 +108,9 @@ export default function BrowserContextMenu({
   versioningEnabled,
   showFolderItems,
   showDeletedObjects,
-  allowInspectorPanel = true,
   canPaste,
   copyUrlDisabled = false,
   copyUrlDisabledReason,
-  publicLinkAvailable = false,
-  restoreAvailable = false,
   multipartUploadsAvailable = false,
   bucketConfigurationAvailable = false,
   functionalProfile,
@@ -136,24 +125,19 @@ export default function BrowserContextMenu({
   onOpenCleanupVersions,
   onOpenMultipartUploads,
   onConfigureBucket,
-  onDownloadTarget,
-  onCreatePublicLink,
-  onRestoreDeletedItem,
-  onPreviewItem,
+  onResolveItemActions,
+  onRunItemAction,
   onCopyUrl,
   onCopyPath,
   onCopyItems,
   onCutItems,
   onOpenBulkAttributes,
   onOpenBulkRestore,
-  onOpenObjectVersions,
   onOpenAdvanced,
-  onOpenProperties,
   onDeleteItems,
   onDownloadFolder,
   onDownloadItems,
   onOpenItem,
-  onOpenDetails,
   onToggleShowFolders,
   onToggleShowDeleted,
   isMainBrowserPath = false,
@@ -183,23 +167,7 @@ export default function BrowserContextMenu({
     bucketConfigurationAvailable,
   });
   const itemActionStates = contextItem
-    ? resolveBrowserActions({
-          scope: "item",
-          items: [contextItem],
-          bucketName,
-          hasS3AccountContext,
-          versioningEnabled,
-          canPaste,
-          clipboardMode: clipboard?.mode ?? null,
-          copyUrlDisabled,
-          copyUrlDisabledReason,
-          publicLinkAvailable,
-          restoreAvailable,
-          inspectorAvailable: allowInspectorPanel,
-          functionalProfile,
-          capabilityFacts,
-          previewAvailable: isBrowserItemPreviewAvailable(contextItem),
-        })
+    ? onResolveItemActions(contextItem)
     : null;
   const selectionItems = contextMenu.kind === "selection" ? contextMenu.items ?? [] : [];
   const selectionActionStates = contextMenu.kind === "selection"
@@ -245,23 +213,7 @@ export default function BrowserContextMenu({
   const runItemAction = (actionId: BrowserActionId) => {
     if (!contextItem || !itemActionStates) return;
     onClose();
-    runBrowserAction(itemActionStates[actionId], {
-      details: () => onOpenDetails(contextItem),
-      versions: () => onOpenObjectVersions(contextItem),
-      properties: () => onOpenProperties(contextItem),
-      open: () => onOpenItem(contextItem),
-      preview: () => onPreviewItem(contextItem),
-      download: () => onDownloadTarget(contextItem),
-      createPublicLink: () => onCreatePublicLink(contextItem),
-      restore: () => onRestoreDeletedItem?.(contextItem),
-      copyUrl: () => onCopyUrl(contextItem),
-      copy: () => onCopyItems([contextItem]),
-      cut: () => onCutItems([contextItem]),
-      bulkAttributes: () => onOpenBulkAttributes([contextItem]),
-      restoreToDate: () => onOpenBulkRestore([contextItem]),
-      advanced: () => onOpenAdvanced(contextItem),
-      delete: () => onDeleteItems([contextItem]),
-    });
+    onRunItemAction(contextItem, actionId);
   };
 
   const runSelectionAction = (actionId: BrowserActionId) => {

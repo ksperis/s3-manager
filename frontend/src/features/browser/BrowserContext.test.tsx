@@ -96,6 +96,24 @@ describe("BrowserContextProvider", () => {
     expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("conn-1");
   });
 
+  it("accepts a Portal account returned by the Browser catalogue", async () => {
+    listExecutionContextsMock.mockResolvedValueOnce([
+      ...CONTEXTS,
+      {
+        kind: "portal_account",
+        id: "101",
+        display_name: "Portal project",
+        role: "portal_user",
+        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
+      },
+    ]);
+
+    renderProvider("/browser?ctx=101");
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("101"));
+    expect(localStorage.getItem("selectedBrowserExecutionContextId")).toBe("101");
+  });
+
   it("clears a forbidden remembered selection without falling back", async () => {
     localStorage.setItem("selectedBrowserExecutionContextId", "conn-forbidden");
 

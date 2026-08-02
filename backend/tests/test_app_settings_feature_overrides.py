@@ -237,6 +237,7 @@ def test_endpoint_status_and_usage_history_default_enabled():
 def test_portal_browser_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.browser_portal_enabled is True
+    assert settings.portal.browser_access_enabled is False
 
 
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path, db_session):

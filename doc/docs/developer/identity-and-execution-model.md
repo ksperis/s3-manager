@@ -59,15 +59,17 @@ execution of a selected context.
 | Workspace | Allowed UI-user contexts |
 |---|---|
 | Manager | `account_administrator` accounts, assigned RGW users, assigned shared Manager connections, and the owner's active private Manager connections. |
-| Browser | Only the owner's active, unexpired, non-temporary private connections with `access_browser = true`. |
+| Browser | The owner's active, unexpired, non-temporary private connections with `access_browser = true`, plus compatible Portal projects whose effective `portal.browser_access_enabled` setting is true. Portal project execution uses the personal Portal IAM identity and Portal profile. |
 | Portal | Compatible account membership projected to `portal_user` or `portal_manager`; account administrators project to Portal manager. Execution always uses the user's personal Portal IAM identity. |
 | Ceph Admin Browser | The explicit endpoint-wide Ceph Admin branch. |
 | Direct S3 session | The explicit session principal and its session capabilities. |
 
-Accounts, RGW users, shared connections, and Portal contexts are rejected by
-standard Browser before credential resolution, including forged context IDs.
-The embedded Manager Browser uses the same independent private-connection
-policy; it does not reuse the active Manager identity.
+Generic account contexts, RGW users, and shared connections are rejected by
+standard Browser before credential resolution. An enabled Portal project is
+published as the distinct `portal_account` context and resolved through the
+Portal authorization branch, never through account administrator credentials.
+The embedded Manager Browser keeps its independent private-connection policy;
+it does not reuse the active Manager identity.
 
 `GET /api/me/workspace-access` returns availability, context counts, and the
 backend-selected default workspace. Password login, LDAP, OIDC, redirects, and

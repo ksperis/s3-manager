@@ -8,12 +8,13 @@ Use **Browser** for direct bucket/object operations.
 
 - Browser feature enabled.
 - At least one active, unexpired private S3 connection that you own and that
-  has Browser access enabled.
+  has Browser access enabled, or a Portal project whose Browser workspace
+  access is enabled by an administrator.
 
 ## Steps
 
 1. Open `/browser`.
-2. Select a private connection in the top selector.
+2. Select a private connection or an enabled Portal project in the top selector.
    - The selected context is recorded in `?ctx=` and remains independent in
      each open tab.
    - If you enabled **Show tags in top selectors** from [User profile](profile.md), compact color-coded `Standard` context and endpoint tags are shown directly in the selector. `Administrative` tags remain limited to management surfaces.
@@ -54,8 +55,9 @@ Use **Browser** for direct bucket/object operations.
   Embedded Browser surfaces receive these settings explicitly and never read or
   write the root Browser preferences.
 - On `/browser`, buckets that cannot be listed are dimmed in the left panel and remain selectable so the backend error can be inspected explicitly.
-- Accounts, assigned RGW users, shared connections, and Portal accounts are not
-  standard Browser contexts. Use Portal Storage Spaces for Portal file access.
+- Assigned RGW users, shared connections, and generic account contexts are not
+  standard Browser contexts. Enabled Portal projects appear separately and use
+  the Portal profile, personal IAM identity, and visible Storage Spaces only.
 - If a remembered selection becomes invalid, Browser clears it, removes the
   `ctx` query parameter, warns you, and waits for an explicit selection.
 - Some actions depend on the current state. Examples: `Open` is available for a single folder selection, and deleted entries must be restored through versioning flows before direct object operations resume.
@@ -69,7 +71,10 @@ You can perform day-to-day object operations directly from the UI.
 ## Limits / feature flags
 
 !!! note
-    Browser availability depends on `browser_enabled` and workspace-specific flags like `browser_root_enabled`.
+    Browser availability depends on `browser_enabled` and `browser_root_enabled`.
+    Portal projects additionally require `portal_enabled`,
+    `browser_portal_enabled`, and effective project setting
+    `portal.browser_access_enabled`.
 
 !!! note
     If no eligible private connection exists, Browser links to **Profile >

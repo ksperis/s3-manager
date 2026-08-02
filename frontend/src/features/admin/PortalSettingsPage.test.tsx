@@ -47,6 +47,7 @@ function buildSettings(): AppSettings {
     },
     portal: {
       allow_portal_key: false,
+      browser_access_enabled: false,
       allow_private_storage_space_create: true,
       allow_portal_named_bucket_create: false,
       allow_portal_user_access_key_create: true,
@@ -122,6 +123,18 @@ describe("PortalSettingsPage", () => {
     });
     const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
     expect(payload.portal.max_portal_user_access_keys).toBe(5);
+  });
+
+  it("saves standalone Browser workspace access disabled by default", async () => {
+    render(<PortalSettingsPage />);
+
+    const toggle = await screen.findByLabelText("Portal Browser workspace access");
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(updateAppSettingsMock).toHaveBeenCalledTimes(1));
+    expect(updateAppSettingsMock.mock.calls[0][0].portal.browser_access_enabled).toBe(true);
   });
 
   it("sends server access log retention in save payload", async () => {

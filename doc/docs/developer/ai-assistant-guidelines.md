@@ -192,10 +192,12 @@ flows unless the pathway is explicit, authorized, and audited.
   read them.
 - Delete associations that grant no right. Do not preserve them as nullable
   roles, sentinels, or hidden compatibility rows.
-- Standard Browser and embedded Manager Browser accept only active, unexpired,
-  owned private connections with Browser access. Reject Accounts, RGW users,
-  shared connections, Portal contexts, and forged IDs before resolving
-  credentials.
+- Standard Browser accepts active, unexpired owned private connections with
+  Browser access and explicit `portal_account` contexts enabled by the
+  effective project Portal setting. Portal contexts must keep the Portal
+  profile and personal IAM identity. Embedded Manager Browser remains limited
+  to private connections. Reject generic Accounts, RGW users, shared
+  connections, and forged catalogue IDs before resolving credentials.
 - Portal, direct S3 sessions, and Ceph Admin Browser remain explicit separate
   authorization branches. Portal always executes with the user's personal IAM
   identity, including when an account administrator projects to Portal manager.

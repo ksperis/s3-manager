@@ -36,7 +36,7 @@ on its job.
 
 | Browser surface or profile | Execution identity | Current gate | Already disabled or restricted today | Decision notes |
 | --- | --- | --- | --- | --- |
-| `/browser` standalone | An active, unexpired private S3 connection owned by the current user with `access_browser = true`. | `browser_enabled`, `browser_root_enabled`, ownership, private visibility, activity, expiry, and the Browser flag. User or group `browser_advanced_features_enabled` controls both the Advanced functional profile and access to Workbench. | Accounts, RGW users, shared connections, Portal contexts, and forged IDs are rejected before credential resolution. An invalid remembered context is cleared without fallback. | Without the advanced flag the route uses Standard, Standard layout, and comfortable density. Advanced users may choose Standard or Workbench and their density. |
+| `/browser` standalone | An active, unexpired private S3 connection owned by the current user with `access_browser = true`, or the user's personal Portal IAM identity for an explicitly enabled project. | Private contexts use ownership, activity, expiry, and the Browser flag. Portal contexts additionally require `portal_enabled`, `browser_portal_enabled`, a compatible Portal role, and effective project setting `portal.browser_access_enabled = true`. All root contexts require `browser_enabled` and `browser_root_enabled`. | RGW users, shared connections, generic account contexts, and forged catalogue IDs are rejected. Portal projects use the restricted Portal profile and only visible Storage Spaces. An invalid remembered context is cleared without fallback. | Private connections use Standard or Advanced according to user/group capability. Portal projects always use the Portal functional profile and personal IAM credentials. |
 | `/manager/browser` embedded Browser | Its own standard Browser private-connection selection, independent of the active Manager context. | `browser_enabled`, `browser_manager_enabled`, plus the same ownership/activity/expiry/Browser policy as `/browser`. | Disabled by default. Even when enabled, it uses embedded compact chrome and never reuses Account, RGW-user, or shared Manager credentials. | Object browsing can remain visually embedded without widening the Manager execution identity. |
 | `/portal/storage-spaces/:spaceId` locked Browser | Portal execution identity resolved for the selected account and DB-backed Storage Space. | `browser_enabled`, `browser_portal_enabled`, `portal_enabled`, Portal account role, `X-S3-Workspace: portal`, active Storage Space visibility, DB grant role, and the explicit Portal profile. | Enabled by default but locked to one active Storage Space. Bucket switching and technical S3 tools are hidden. The Portal passes already-resolved capability facts for upload, folder creation, deletion, restore, and sharing; Browser never reconstructs authorization from raw roles. Viewer capabilities remain read-only. Details and deleted-object history route to Portal pages. | This is the end-user file profile. Archived Storage Spaces remain blocked even if older credentials still have storage-side access. Backend Portal checks use DB metadata and grants; IAM policies are projection/enforcement for S3 keys, not the source for listings or roles. |
 | `/ceph-admin/browser` embedded Browser | Endpoint-wide Ceph Admin credentials for the selected Ceph endpoint. | `browser_enabled`, `browser_ceph_admin_enabled`, `ceph_admin_enabled`, admin UI role, endpoint admin access, Ceph provider check, and an explicit risk acknowledgement dialog. | Disabled by default. It uses embedded compact chrome and requires endpoint admin access. The UI warns that operations may execute with an owner identity different from the tenant owner. | Keep disabled for regular object work. Prefer S3 Connections with the expected owner when tenant ownership matters. |
@@ -66,10 +66,11 @@ downloads it can observe. Presigned downloads opened directly by the browser are
 not marked completed locally because the web app cannot observe the final file
 save.
 
-Portal identities never appear in root `/browser`. Portal object operations run
-only from the Portal Storage Space surfaces with the personal IAM identity.
-Internal bucket names remain execution identifiers and must not appear in
-Portal-facing labels.
+Portal identities appear in root `/browser` only when the effective project
+setting `portal.browser_access_enabled` is true. They still run with the
+personal IAM identity and remain limited to visible Storage Spaces. Internal
+bucket names remain execution identifiers and must not appear in Portal-facing
+labels.
 
 ## Portal Rules
 
@@ -79,8 +80,9 @@ Portal-facing labels.
 - Do not add a `/portal/browser` route. Portal may embed the main Browser on
   `/portal/storage-spaces/:spaceId`, in a locked Storage Space context with the
   Portal functional profile, Standard layout, compact density, resolved
-  capability facts, and `X-S3-Workspace: portal`. Portal accounts
-  must never be added to the standard Browser catalogue.
+  capability facts, and `X-S3-Workspace: portal`. Root `/browser` may publish
+  the same identity as a distinct `portal_account` context only when the
+  effective project setting explicitly enables it.
 - Do not use Portal as a shortcut to Manager configuration.
 - Do not expose policy documents, principals, ARNs, advanced ACLs, object
   diagnostics, bucket defaults, lifecycle, CORS, replication, or versioning in

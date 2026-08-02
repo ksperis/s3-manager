@@ -74,6 +74,8 @@ class PortalSettingsMixin:
     ) -> None:
         if override.allow_portal_key is not None:
             portal_settings.allow_portal_key = override.allow_portal_key
+        if override.browser_access_enabled is not None:
+            portal_settings.browser_access_enabled = override.browser_access_enabled
         if override.allow_private_storage_space_create is not None:
             portal_settings.allow_private_storage_space_create = override.allow_private_storage_space_create
         if override.allow_portal_named_bucket_create is not None:
@@ -97,8 +99,13 @@ class PortalSettingsMixin:
         self._apply_admin_overrides(effective, admin_override)
         return effective
 
-    def get_effective_portal_settings(self, account: S3Account) -> PortalSettings:
-        return self._effective_portal_settings(account)
+    def get_effective_portal_settings(
+        self,
+        account: S3Account,
+        *,
+        base_settings: Optional[PortalSettings] = None,
+    ) -> PortalSettings:
+        return self._effective_portal_settings(account, base_settings=base_settings)
 
     def get_portal_account_settings(self, account: S3Account) -> PortalAccountSettings:
         base = self._portal_settings()
