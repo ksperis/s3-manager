@@ -2,7 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+from typing import Optional
+
+from app.db import BucketMigration, BucketMigrationItem
+from app.utils.time import utcnow
+from ._shared import (
+    _DB_ERROR_MESSAGE_MAX_CHARS,
+    _RUNNABLE_MIGRATION_STATUSES,
+    _ResolvedContext,
+    _truncate_db_text,
+    _truncate_optional_db_text,
+)
 
 
 class BucketMigrationRollbackMixin:
