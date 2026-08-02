@@ -2,7 +2,55 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import secrets
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Optional
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.core.config import get_settings
+from app.db import (
+    AccountRole,
+    PortalExternalAccessCredential,
+    PortalPublicLink as DBPortalPublicLink,
+    PortalStorageSpaceGrant,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    UiGroupS3Account,
+    User,
+    UserS3Account,
+    UserUiGroup,
+)
+from app.models.portal import (
+    PortalCollaborator,
+    PortalCollaboratorAccessReview,
+    PortalCollaboratorStorageSpaceAccess,
+    PortalCollaboratorSummary,
+    PortalCollaboratorTrend,
+    PortalCollaboratorsResponse,
+    PortalPublicLink,
+    PortalStorageSpaceAccessPerson,
+    PortalStorageSpaceAccessSummary,
+    PortalStorageSpaceCollaboratorPreview,
+    PortalStorageSpaceGrantRole,
+    PortalStorageSpaceInitialShare,
+    PortalStorageSpaceRole,
+    PortalStorageSpaceShare,
+    PortalStorageSpaceShareCandidate,
+    PortalStorageSpaceShareScope,
+    PortalStorageSpaceSummary,
+    PortalStorageSpaceVisibility,
+)
+from app.services.s3_client import get_s3_client
+from app.services.user_avatar_service import UserAvatarService
+from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.time import utcnow
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+
+settings = get_settings()
 
 
 COLLABORATOR_TREND_WINDOWS: tuple[tuple[str, str, int], ...] = (
