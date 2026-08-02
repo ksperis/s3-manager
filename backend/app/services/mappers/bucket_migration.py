@@ -15,13 +15,12 @@ from app.models.bucket_migration import (
 
 
 def load_migration_json(value: Optional[str]) -> Optional[dict]:
-    if not value:
+    if value is None:
         return None
-    try:
-        parsed = json.loads(value)
-    except Exception:
-        return None
-    return parsed if isinstance(parsed, dict) else {"value": parsed}
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError("Persisted bucket migration JSON must be an object")
+    return parsed
 
 
 def bucket_migration_item_to_view(item: BucketMigrationItem) -> BucketMigrationItemView:

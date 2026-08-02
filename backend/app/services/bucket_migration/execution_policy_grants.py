@@ -448,7 +448,9 @@ class BucketMigrationPolicyGrantsMixin:
 
     def _apply_read_only_policy(self, source_account: S3Account, source_bucket: str, item: BucketMigrationItem) -> None:
         existing_policy = self._buckets.get_policy(source_bucket, source_account)
-        item.source_policy_backup_json = _json_dumps(existing_policy)
+        item.source_policy_backup_json = (
+            _json_dumps(existing_policy) if isinstance(existing_policy, dict) else None
+        )
         policy_doc = self._build_read_only_policy(
             source_bucket,
             existing_policy if isinstance(existing_policy, dict) else None,
@@ -477,7 +479,9 @@ class BucketMigrationPolicyGrantsMixin:
 
     def _apply_target_write_lock_policy(self, target_ctx: _ResolvedContext, target_bucket: str, item: BucketMigrationItem) -> None:
         existing_policy = self._buckets.get_policy(target_bucket, target_ctx.account)
-        item.target_policy_backup_json = _json_dumps(existing_policy)
+        item.target_policy_backup_json = (
+            _json_dumps(existing_policy) if isinstance(existing_policy, dict) else None
+        )
         lock_policy_doc = self._build_target_write_lock_policy(
             target_bucket,
             existing_policy if isinstance(existing_policy, dict) else None,

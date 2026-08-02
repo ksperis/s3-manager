@@ -259,10 +259,7 @@ def _json_dumps(value: Any) -> str:
 def _json_loads(value: Optional[str]) -> Any:
     if value is None:
         return None
-    try:
-        return json.loads(value)
-    except Exception:
-        return None
+    return json.loads(value)
 
 
 def _truncate_db_text(value: Any, *, max_chars: int) -> str:

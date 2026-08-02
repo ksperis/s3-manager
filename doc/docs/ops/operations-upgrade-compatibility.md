@@ -1,5 +1,19 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical bucket migration JSON state
+
+Migration `0090_canonical_bucket_migration_json` rewrites persisted bucket
+migration reports, snapshots, plans, replication state, policy backups, diff
+samples, and event metadata to JSON objects or SQL `NULL`. Invalid operational
+state becomes `NULL`, forcing safe recomputation or a new precheck. Historical
+diff and event values remain available under `value` or `unparsed` envelopes.
+The absence of an original bucket policy is now stored directly as SQL `NULL`
+instead of the JSON scalar `null`.
+
+Deploy the migration and backend together. Worker and API readers now reject
+malformed or non-object persisted JSON rather than silently treating it as
+missing state. The cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical custom S3 connection endpoints
 
 Migration `0089_canonical_s3_connection_endpoints` rewrites every manual S3
