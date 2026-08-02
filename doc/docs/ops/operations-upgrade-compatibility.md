@@ -1,5 +1,17 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical persisted application settings
+
+Migration `0082_canonical_app_settings_payload` rewrites every database-backed
+application settings payload as a JSON object and replaces malformed or
+non-object values with `{}`. Valid object fields remain unchanged.
+
+Deploy the migration and backend together. Once settings have been imported to
+the database, loading now uses the strict `AppSettings` contract and exposes
+invalid values instead of reverting silently to defaults. The optional disk
+bootstrap keeps its independent missing/invalid-file fallback. Data cleanup is
+not reversed on downgrade.
+
 ## 2026-08 canonical Portal request JSON
 
 Migration `0081_canonical_portal_request_json` rewrites every Portal request

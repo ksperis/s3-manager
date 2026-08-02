@@ -47,16 +47,8 @@ def _open_settings_session():
     return SessionLocal()
 
 
-def _parse_settings_payload(payload: str | None) -> AppSettings:
-    if not payload:
-        return AppSettings()
-    try:
-        data = json.loads(payload)
-        if isinstance(data, dict):
-            return AppSettings(**data)
-    except Exception:
-        return AppSettings()
-    return AppSettings()
+def _parse_settings_payload(payload: str) -> AppSettings:
+    return AppSettings.model_validate_json(payload)
 
 
 def _settings_to_json(settings: AppSettings) -> str:

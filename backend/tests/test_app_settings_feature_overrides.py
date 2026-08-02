@@ -134,6 +134,17 @@ def test_app_settings_db_errors_are_not_hidden_by_disk_fallback(monkeypatch):
         app_settings_service.save_app_settings(AppSettings())
 
 
+def test_app_settings_db_payload_is_parsed_strictly():
+    with pytest.raises(ValidationError):
+        app_settings_service._parse_settings_payload("{")
+    with pytest.raises(ValidationError):
+        app_settings_service._parse_settings_payload("[]")
+    with pytest.raises(ValidationError):
+        app_settings_service._parse_settings_payload(
+            '{"branding":{"primary_color":"blue"}}'
+        )
+
+
 def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
     monkeypatch.setattr(
         app_settings_service,
