@@ -41,13 +41,36 @@ from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
-from ._shared import _extract_account_limit
-
 if TYPE_CHECKING:
     from app.models.access_context import AccountAccess
 
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_positive_limit(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        parsed = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            parsed = int(float(normalized))
+        except ValueError:
+            return None
+    else:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
 
 
 class PortalIamMixin:
