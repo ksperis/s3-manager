@@ -2,56 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import hashlib
 import json
-import logging
-import os
-import queue
-import re
-import socket
-import threading
-import time
-import uuid
-from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import ExitStack, contextmanager
-from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
-from typing import Any, Callable, Optional
-
-import requests
-from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import or_
-from sqlalchemy.orm import Session, sessionmaker
+from datetime import datetime
+from typing import Any, Optional
 
 from app.core.config import get_settings
-from app.db import (
-    BucketMigration,
-    BucketMigrationEvent,
-    BucketMigrationItem,
-    S3Account,
-    S3Connection,
-    S3User,
-    User,
-)
-from app.models.bucket_migration import BucketMigrationCreateRequest
-from app.services.app_settings_service import load_app_settings
-from app.services.buckets_service import BucketsService
-from app.services.bucket_migration.precheck import (
-    BucketMigrationInspector,
-    BucketMigrationPrecheckPlanner,
-)
-from app.services.object_diff_common import compare_object_entries
-from app.services.effective_access_service import EffectiveAccessService
-from app.services.s3_execution_context import S3ExecutionContext, S3ExecutionTarget
-from app.services.s3_client import _delete_objects_count, get_s3_client, purge_bucket_contents
-from app.utils.rgw import resolve_admin_uid
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.network_targets import validate_outbound_url
-from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
-from app.utils.time import utcnow
 
-logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _READ_ONLY_POLICY_SID = "S3ManagerMigrationReadOnlyDeny"
@@ -86,6 +45,8 @@ _FINAL_MIGRATION_STATUSES = (
     "canceled",
     "rolled_back",
 )
+
+
 class _WorkerLeaseLostError(RuntimeError):
     """Raised when a worker loses ownership of a migration lease."""
 
