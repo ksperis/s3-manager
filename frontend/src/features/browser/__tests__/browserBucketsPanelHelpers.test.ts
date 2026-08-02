@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractBucketListError,
   normalizeBrowserListingIssue,
   resolveBucketAccessEntry,
   sanitizeBucketAccessEntries,
@@ -67,5 +68,22 @@ describe("browserBucketsPanelHelpers", () => {
       description: "Retry in a moment.",
       technicalDetail: "Fallback message",
     });
+  });
+
+  it("rephrases bucket-list access denial using the active vocabulary", () => {
+    const error = new Error("AccessDenied while calling ListBuckets");
+
+    expect(extractBucketListError(error, false)).toContain(
+      "not allowed to list buckets",
+    );
+    expect(extractBucketListError(error, true)).toContain(
+      "not allowed to list Storage Spaces",
+    );
+  });
+
+  it("preserves unrelated bucket-list errors", () => {
+    expect(extractBucketListError(new Error("Network unavailable"), false)).toBe(
+      "Network unavailable",
+    );
   });
 });

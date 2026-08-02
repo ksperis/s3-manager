@@ -331,6 +331,7 @@ import {
   type PathSuggestion,
 } from "./browserPathSuggestions";
 import {
+  extractBucketListError,
   normalizeBrowserListingIssue,
   resolveBucketAccessEntry,
   sanitizeBucketAccessEntries,
@@ -339,6 +340,12 @@ import {
   type BrowserListingIssue,
   type BucketAccessEntry,
 } from "./browserBucketsPanelHelpers";
+import {
+  getMultipartUploadEntryId,
+  mergeDeletedObjectsWithLimit,
+  mergeUniqueStringsWithLimit,
+} from "./browserListingState";
+import { resolveBrowserWorkspaceContext } from "./browserPageContextModel";
 import type {
   BrowserItem,
   BulkMetadataDraft,
@@ -496,10 +503,6 @@ const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
 const CORS_DIRECT_TRANSFER_WARNING =
   "Direct download/upload is not allowed on this bucket.";
-const BUCKET_LIST_ACCESS_DENIED_MESSAGE =
-  "The current account is not allowed to list buckets. You can still open a bucket you have access to directly, or ask an administrator to update your permissions.";
-const STORAGE_SPACE_LIST_ACCESS_DENIED_MESSAGE =
-  "The current account is not allowed to list Storage Spaces. Ask an administrator to update your access.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
@@ -507,64 +510,6 @@ const LAZY_COLUMN_CONCURRENCY = 4;
 const LAZY_COLUMN_BATCH_SIZE = 24;
 const LAZY_COLUMN_ROOT_MARGIN = "200px";
 
-function isBucketListAccessDeniedMessage(message: string): boolean {
-  const normalized = message.toLowerCase();
-  const compact = normalized.replace(/\s+/g, "");
-  const hasAccessDenied = compact.includes("accessdenied");
-  const hasListBucketsContext =
-    compact.includes("listbuckets") ||
-    normalized.includes("list buckets") ||
-    normalized.includes("unable to list buckets");
-  return hasAccessDenied && hasListBucketsContext;
-}
-
-function extractBucketListError(error: unknown, isPortalContext: boolean): string {
-  const message = extractApiError(error, "Unable to list buckets for this account.");
-  if (isBucketListAccessDeniedMessage(message)) {
-    return isPortalContext
-      ? STORAGE_SPACE_LIST_ACCESS_DENIED_MESSAGE
-      : BUCKET_LIST_ACCESS_DENIED_MESSAGE;
-  }
-  return message;
-}
-
-const getDeletedObjectEntryId = (
-  value: Pick<BrowserObject, "key" | "version_id">,
-) => `${value.key}::${value.version_id ?? "null"}`;
-
-const mergeUniqueStringsWithLimit = (
-  base: string[],
-  incoming: string[],
-  limit: number,
-) => {
-  if (base.length >= limit || incoming.length === 0) {
-    return { items: base.slice(0, limit), limitReached: base.length >= limit };
-  }
-  const merged = Array.from(new Set([...base, ...incoming]));
-  return {
-    items: merged.slice(0, limit),
-    limitReached: merged.length > limit,
-  };
-};
-
-const mergeDeletedObjectsWithLimit = (
-  base: BrowserObject[],
-  incoming: BrowserObject[],
-  limit: number,
-) => {
-  const byId = new Map<string, BrowserObject>();
-  base.forEach((item) => byId.set(getDeletedObjectEntryId(item), item));
-  incoming.forEach((item) => {
-    if (byId.size < limit || byId.has(getDeletedObjectEntryId(item))) {
-      byId.set(getDeletedObjectEntryId(item), item);
-    }
-  });
-  const items = Array.from(byId.values());
-  return {
-    items: items.slice(0, limit),
-    limitReached: items.length > limit || byId.size > limit,
-  };
-};
 const browserSectionEyebrowClasses =
   cx("ui-caption font-semibold", uiMutedTextClass);
 const browserShellClasses =
@@ -615,9 +560,6 @@ const inspectorSectionTitleClasses =
   "ui-caption font-semibold text-slate-500 dark:text-slate-400";
 const inspectorEmptyStateClasses =
   "rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-4 ui-caption text-[var(--ui-text-muted)]";
-const getMultipartUploadEntryId = (
-  upload: Pick<MultipartUploadItem, "key" | "upload_id">,
-) => `${upload.key}::${upload.upload_id}`;
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   hasContext: hasContextOverride,
@@ -649,16 +591,32 @@ export default function BrowserPage({
   const selectedContext = browserContext.selectedContext;
   const location = useLocation();
   const navigate = useNavigate();
-  const normalizedPath = location.pathname.replace(/\/+$/, "");
   const workspaceSurface =
     workspaceSurfaceOverride ??
     (selectedContext?.kind === "portal_account" ? "portal" : "browser");
+  const {
+    normalizedPath,
+    isPortalBrowserSurface,
+    isMainBrowserPath,
+    isEmbeddedBrowserPath,
+    usePortalWorkspaceLabels,
+    workspaceNoun,
+    workspaceNounCapitalized,
+    selectorWorkspaceNoun,
+    selectorWorkspaceNounPlural,
+    selectorWorkspaceNounTitle,
+    workspaceObjectNounPlural,
+    resolvedLockedBucketName,
+    showWorkspaceSidebar,
+  } = resolveBrowserWorkspaceContext({
+    pathname: location.pathname,
+    workspaceSurface,
+    lockedBucketName,
+  });
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
-  const isPortalBrowserSurface = workspaceSurface === "portal";
   const canOpenRoutedObjectDetails = Boolean(onOpenObjectDetailsRoute);
   const canCreateRoutedPublicLink = Boolean(onCreatePublicLinkForObject);
-  const resolvedLockedBucketName = lockedBucketName?.trim() ?? "";
   const browserRequestOptions = useMemo<BrowserRequestOptions | undefined>(
     () =>
       workspaceSurface === "portal"
@@ -666,20 +624,6 @@ export default function BrowserPage({
         : undefined,
     [workspaceSurface],
   );
-  const isMainBrowserPath = normalizedPath === "/browser";
-  const isEmbeddedBrowserPath =
-    normalizedPath.endsWith("/manager/browser") ||
-    normalizedPath.endsWith("/ceph-admin/browser") ||
-    (isPortalBrowserSurface && !isMainBrowserPath);
-  const usePortalWorkspaceLabels = isPortalBrowserSurface && !isMainBrowserPath;
-  const workspaceNoun = usePortalWorkspaceLabels ? "storage space" : "bucket";
-  const workspaceNounCapitalized = usePortalWorkspaceLabels ? "Storage Space" : "Bucket";
-  const selectorWorkspaceNoun = isPortalBrowserSurface ? "storage space" : workspaceNoun;
-  const selectorWorkspaceNounPlural = `${selectorWorkspaceNoun}s`;
-  const selectorWorkspaceNounTitle = isPortalBrowserSurface ? "Storage Spaces" : "Buckets";
-  const workspaceObjectNoun = usePortalWorkspaceLabels ? "file" : "object";
-  const workspaceObjectNounPlural = `${workspaceObjectNoun}s`;
-  const showWorkspaceSidebar = isMainBrowserPath && !resolvedLockedBucketName;
   const browserRootContextId =
     accountIdForApi == null ? null : String(accountIdForApi);
   const bucketAccessContextKey =
