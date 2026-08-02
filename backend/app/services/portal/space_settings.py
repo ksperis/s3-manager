@@ -2,7 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+from typing import Optional, TYPE_CHECKING
+
+from app.db import AccountRole, S3Account, User
+from app.models.portal import PortalStorageSpaceSettings, PortalStorageSpaceSettingsUpdate
+from app.services import s3_client
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+logger = logging.getLogger(__name__)
 
 
 _PORTAL_LIFECYCLE_RULE_IDS = {"ExpireDeleteMarkers", "ExpireOldVersions"}
