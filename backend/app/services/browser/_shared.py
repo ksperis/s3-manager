@@ -4,74 +4,27 @@ import base64
 import hashlib
 import json
 import logging
-import os
-import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 from time import monotonic
 from typing import Callable, Generic, Optional, TypeVar
-from urllib.parse import unquote, urlencode
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ClientError
 
-from app.core.config import get_settings
-from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.browser import (
     BrowserBucket,
-    BrowserObjectLazyColumn,
+    BrowserObject,
     BrowserObjectSortBy,
     BrowserObjectSortDir,
-    BrowserObject,
-    BrowserObjectVersion,
-    BrowserStsCredentials,
-    BucketCorsRule,
-    BucketCorsStatus,
-    CleanupObjectVersionsPayload,
-    CleanupObjectVersionsResponse,
-    CompleteMultipartUploadRequest,
-    CopyObjectPayload,
-    DeleteObjectsPayload,
     ListBrowserObjectsResponse,
-    ListMultipartUploadsResponse,
-    ListObjectVersionsResponse,
-    ListPartsResponse,
-    MultipartPart,
-    MultipartUploadInitRequest,
-    MultipartUploadInitResponse,
-    MultipartUploadItem,
-    ObjectMetadata,
-    ObjectAcl,
-    ObjectColumnValues,
-    ObjectColumnsResponse,
-    ObjectLegalHold,
-    ObjectMetadataUpdate,
-    ObjectRetention,
-    ObjectRestoreRequest,
-    ObjectTag,
-    ObjectTags,
-    PaginatedBrowserBucketsResponse,
-    PresignPartRequest,
-    PresignPartResponse,
-    PresignRequest,
-    PresignedUrl,
-    SseCustomerContext,
-    StsStatus,
-)
-from app.services.s3_client import (
-    _delete_objects,
-    create_bucket as s3_create_bucket,
-    get_s3_client,
-    set_bucket_versioning as s3_set_bucket_versioning,
 )
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services.sts_service import get_session_token
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.s3_endpoint import resolve_s3_client_options
-from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 STS_SESSION_DURATION_SECONDS = 3600
 STS_CACHE_TTL_BUFFER = timedelta(minutes=5)
