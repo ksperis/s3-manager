@@ -144,6 +144,13 @@ function PortalAccountTopbarSelector({
       defaultEndpointName,
       false,
     ),
+    searchText: [
+      account.name,
+      account.storage_endpoint_name,
+      account.storage_endpoint_url,
+    ]
+      .filter(Boolean)
+      .join(" "),
     icon: <AccountControlIcon className="h-4 w-4" />,
   }));
 
@@ -166,6 +173,24 @@ function PortalAccountTopbarSelector({
             : TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS
         }
         menuMinWidthClassName="min-w-[18rem]"
+        search={{
+          threshold: 6,
+          ariaLabel: t({
+            en: "Search projects",
+            fr: "Rechercher des projets",
+            de: "Projekte durchsuchen",
+          }),
+          placeholder: t({
+            en: "Search project...",
+            fr: "Rechercher un projet...",
+            de: "Projekt durchsuchen...",
+          }),
+          emptyMessage: t({
+            en: "No project matches your search.",
+            fr: "Aucun projet ne correspond à votre recherche.",
+            de: "Kein Projekt entspricht Ihrer Suche.",
+          }),
+        }}
         icon={<AccountControlIcon className="h-4 w-4" />}
         disabled={loading}
         triggerMode={mode}

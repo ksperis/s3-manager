@@ -9,11 +9,48 @@ const options = [
   { value: "portal", label: "Portal" },
 ];
 
+const searchableOptions = [
+  ...options,
+  { value: "browser", label: "Browser" },
+  { value: "storage", label: "Storage Ops" },
+  { value: "ceph", label: "Ceph Admin" },
+  {
+    value: "metrics",
+    label: "Metrics",
+    searchText: "observability special target",
+  },
+];
+
+const search = {
+  threshold: 6,
+  ariaLabel: "Search workspaces",
+  placeholder: "Search workspace...",
+  emptyMessage: "No workspace matches your search.",
+};
+
 describe("TopbarDropdownSelect", () => {
   it("passes a11y checks [a11y]", async () => {
     const { container } = render(
       <TopbarDropdownSelect value="manager" options={options} onChange={() => undefined} ariaLabel="Select workspace" />
     );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("passes a11y checks with the searchable menu open [a11y]", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <TopbarDropdownSelect
+        value="manager"
+        options={searchableOptions}
+        onChange={() => undefined}
+        ariaLabel="Select workspace"
+        search={search}
+        openInPortal={false}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select workspace" }));
+
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -95,5 +132,69 @@ describe("TopbarDropdownSelect", () => {
     const listbox = screen.getByRole("listbox", { name: "Select workspace" });
     expect(within(listbox).getByText("inline-tag")).toBeInTheDocument();
     expect(within(listbox).getByText("primary-tag")).toBeInTheDocument();
+  });
+
+  it("keeps opt-in search hidden at the configured threshold", async () => {
+    const user = userEvent.setup();
+    render(
+      <TopbarDropdownSelect
+        value="manager"
+        options={options}
+        onChange={() => undefined}
+        ariaLabel="Select workspace"
+        search={search}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select workspace" }));
+
+    expect(
+      screen.queryByRole("searchbox", { name: "Search workspaces" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("filters optional search text, selects filtered results, and resets its query", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <TopbarDropdownSelect
+        value="manager"
+        options={searchableOptions}
+        onChange={onChange}
+        ariaLabel="Select workspace"
+        search={search}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Select workspace" });
+    await user.click(trigger);
+    const searchbox = screen.getByRole("searchbox", {
+      name: "Search workspaces",
+    });
+    await user.type(searchbox, "SPECIAL");
+
+    const listbox = screen.getByRole("listbox", { name: "Select workspace" });
+    expect(within(listbox).getAllByRole("option")).toHaveLength(1);
+    expect(within(listbox).getByRole("option")).toHaveTextContent("Metrics");
+
+    fireEvent.keyDown(listbox, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("metrics");
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const reopenedSearchbox = screen.getByRole("searchbox", {
+      name: "Search workspaces",
+    });
+    expect(reopenedSearchbox).toHaveValue("");
+    await user.type(reopenedSearchbox, "missing");
+    expect(
+      screen.getByText("No workspace matches your search.")
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(reopenedSearchbox, { key: "Escape" });
+    expect(
+      screen.queryByRole("listbox", { name: "Select workspace" })
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 });

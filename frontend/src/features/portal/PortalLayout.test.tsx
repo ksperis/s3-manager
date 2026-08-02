@@ -9,6 +9,10 @@ import PortalLayout from "./PortalLayout";
 
 const mocks = vi.hoisted(() => ({
   setSelectedAccountId: vi.fn(),
+  portalAccounts: [
+    { id: "101", name: "Helios Retail", tags: [] },
+    { id: "102", name: "Northwind Ops", tags: [] },
+  ],
   getWorkspaceAccess: vi.fn().mockResolvedValue({
     admin: { available: true, context_count: 1 },
     ceph_admin: { available: false, context_count: 0 },
@@ -53,10 +57,7 @@ vi.mock("./PortalAccountContext", () => ({
     <>{children}</>
   ),
   usePortalAccountContext: () => ({
-    accounts: [
-      { id: "101", name: "Helios Retail", tags: [] },
-      { id: "102", name: "Northwind Ops", tags: [] },
-    ],
+    accounts: mocks.portalAccounts,
     selectedAccountId: "101",
     selectedAccount: { id: "101", name: "Helios Retail", tags: [] },
     setSelectedAccountId: mocks.setSelectedAccountId,
@@ -87,6 +88,12 @@ describe("PortalLayout", () => {
   afterEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();
+    mocks.portalAccounts.splice(
+      0,
+      mocks.portalAccounts.length,
+      { id: "101", name: "Helios Retail", tags: [] },
+      { id: "102", name: "Northwind Ops", tags: [] },
+    );
   });
 
   it("uses the shared shell with workspace and project selectors in the topbar", async () => {
@@ -170,13 +177,71 @@ describe("PortalLayout", () => {
       ...TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS.split(" "),
     );
     await user.click(accountSelector);
+    expect(
+      screen.queryByRole("searchbox", { name: "Search projects" }),
+    ).not.toBeInTheDocument();
     await user.click(
       await screen.findByRole("option", { name: "Northwind Ops" }),
     );
     expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("102");
   });
 
+  it("searches projects locally when the selector exceeds the shared threshold", async () => {
+    const user = userEvent.setup();
+    mocks.portalAccounts.splice(
+      0,
+      mocks.portalAccounts.length,
+      { id: "101", name: "Helios Retail", tags: [] },
+      { id: "102", name: "Northwind Ops", tags: [] },
+      { id: "103", name: "Atlas Research", tags: [] },
+      { id: "104", name: "Borealis", tags: [] },
+      { id: "105", name: "Cirrus", tags: [] },
+      { id: "106", name: "Delta", tags: [] },
+      { id: "107", name: "Epsilon", tags: [] },
+    );
+    window.localStorage.setItem(
+      "user",
+      JSON.stringify({
+        id: 1,
+        email: "laurent@example.com",
+        display_name: "Laurent",
+        role: "ui_admin",
+        authType: "password",
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={["/portal"]}>
+        <PortalLayout />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select project" }));
+    const searchbox = screen.getByRole("searchbox", {
+      name: "Search projects",
+    });
+    await user.type(searchbox, "atlas");
+
+    const listbox = screen.getByRole("listbox", { name: "Select project" });
+    expect(within(listbox).getAllByRole("option")).toHaveLength(1);
+    await user.click(
+      within(listbox).getByRole("option", { name: "Atlas Research" }),
+    );
+    expect(mocks.setSelectedAccountId).toHaveBeenCalledWith("103");
+  });
+
   it("renders portal navigation in French when the session language is French", async () => {
+    const user = userEvent.setup();
+    mocks.portalAccounts.splice(
+      0,
+      mocks.portalAccounts.length,
+      { id: "101", name: "Helios Retail", tags: [] },
+      { id: "102", name: "Northwind Ops", tags: [] },
+      { id: "103", name: "Atlas Research", tags: [] },
+      { id: "104", name: "Borealis", tags: [] },
+      { id: "105", name: "Cirrus", tags: [] },
+      { id: "106", name: "Delta", tags: [] },
+      { id: "107", name: "Epsilon", tags: [] },
+    );
     window.localStorage.setItem(
       "user",
       JSON.stringify({
@@ -221,5 +286,11 @@ describe("PortalLayout", () => {
     expect(
       await screen.findByRole("button", { name: "Switch workspace" }),
     ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Sélectionner un projet" }),
+    );
+    expect(
+      screen.getByRole("searchbox", { name: "Rechercher des projets" }),
+    ).toHaveAttribute("placeholder", "Rechercher un projet...");
   });
 });
