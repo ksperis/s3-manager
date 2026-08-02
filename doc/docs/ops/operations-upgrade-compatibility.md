@@ -1,5 +1,13 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 schema index reconciliation
+
+Migration `0076_remove_redundant_provider_indexes` removes the non-unique LDAP
+and OIDC `provider_id` indexes that duplicated the existing unique constraints.
+It does not rewrite provider data or weaken uniqueness. The SQLAlchemy metadata
+now also reflects the indexes already installed by earlier migrations, and the
+full Alembic head is checked against that metadata in the backend test suite.
+
 ## 2026-08 canonical S3 session capabilities
 
 Migration `0075_canonical_s3_session_capabilities` materializes a complete

@@ -24,7 +24,7 @@ Legend: {
   style.stroke: "#cbd5e1"
   "tag_definitions": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_tag_definitions_domain_owner(domain_kind, owner_user_id) [index]; ix_tag_definitions_id(id) [index]; uq_tag_definitions_domain_global_label(domain_kind, label_key) [unique]; uq_tag_definitions_domain_owner_label(domain_kind, owner_user_id, label_key) [unique]"
+    tooltip: "PK: id\nIndexes: ix_tag_definitions_domain_owner(domain_kind, owner_user_id) [index]; uq_tag_definitions_domain_global_label(domain_kind, label_key) [unique]; uq_tag_definitions_domain_owner_label(domain_kind, owner_user_id, label_key) [unique]"
     "id": "INTEGER [PK, NN]"
     "domain_kind": "VARCHAR [NN]"
     "owner_user_id": "INTEGER [FK]"
@@ -37,7 +37,7 @@ Legend: {
   }
   "storage_endpoint_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_definition(tag_definition_id) [index]; ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]; ix_storage_endpoint_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_storage_endpoint_tag(storage_endpoint_id, tag_definition_id)\nIndexes: ix_storage_endpoint_tags_definition(tag_definition_id) [index]; ix_storage_endpoint_tags_endpoint_position(storage_endpoint_id, position) [index]"
     "id": "INTEGER [PK, NN]"
     "storage_endpoint_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -47,7 +47,7 @@ Legend: {
   }
   "s3_account_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_definition(tag_definition_id) [index]; ix_s3_account_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_account_tag(account_id, tag_definition_id)\nIndexes: ix_s3_account_tags_account_position(account_id, position) [index]; ix_s3_account_tags_definition(tag_definition_id) [index]"
     "id": "INTEGER [PK, NN]"
     "account_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -57,7 +57,7 @@ Legend: {
   }
   "s3_user_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_definition(tag_definition_id) [index]; ix_s3_user_tags_id(id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_user_tag(s3_user_id, tag_definition_id)\nIndexes: ix_s3_user_tags_definition(tag_definition_id) [index]; ix_s3_user_tags_user_position(s3_user_id, position) [index]"
     "id": "INTEGER [PK, NN]"
     "s3_user_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"
@@ -67,7 +67,7 @@ Legend: {
   }
   "s3_connection_tags": {
     class: table
-    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_definition(tag_definition_id) [index]; ix_s3_connection_tags_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_s3_connection_tag(s3_connection_id, tag_definition_id)\nIndexes: ix_s3_connection_tags_connection_position(s3_connection_id, position) [index]; ix_s3_connection_tags_definition(tag_definition_id) [index]"
     "id": "INTEGER [PK, NN]"
     "s3_connection_id": "INTEGER [FK, NN]"
     "tag_definition_id": "INTEGER [FK, NN]"

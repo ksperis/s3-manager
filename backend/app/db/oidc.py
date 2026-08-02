@@ -24,7 +24,7 @@ class OidcProvider(Base):
     __tablename__ = "oidc_providers"
 
     id = Column(Integer, primary_key=True, index=True)
-    provider_id = Column(String, unique=True, nullable=False, index=True)
+    provider_id = Column(String, unique=True, nullable=False)
     display_name = Column(String, nullable=False)
     discovery_url = Column(String, nullable=False)
     client_id = Column(String, nullable=False)

@@ -13,7 +13,7 @@ class LdapProvider(Base):
     __tablename__ = "ldap_providers"
 
     id = Column(Integer, primary_key=True, index=True)
-    provider_id = Column(String, unique=True, nullable=False, index=True)
+    provider_id = Column(String, unique=True, nullable=False)
     display_name = Column(String, nullable=False)
     url = Column(String, nullable=False)
     bind_dn = Column(String, nullable=True)

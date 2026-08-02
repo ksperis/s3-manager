@@ -39,6 +39,7 @@ class PortalStorageSpaceMetadata(Base):
             name="ck_portal_storage_space_metadata_private_owner",
         ),
         Index("ix_portal_storage_space_metadata_account", "account_id"),
+        Index("ix_portal_storage_space_metadata_owner_user", "owner_user_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

@@ -35,7 +35,7 @@ class TagDefinition(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     domain_kind = Column(String, nullable=False)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     label = Column(String, nullable=False)
@@ -56,7 +56,7 @@ class StorageEndpointTag(Base):
         Index("ix_storage_endpoint_tags_definition", "tag_definition_id"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
@@ -75,7 +75,7 @@ class S3AccountTag(Base):
         Index("ix_s3_account_tags_definition", "tag_definition_id"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     account_id = Column(Integer, ForeignKey("s3_accounts.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
@@ -94,7 +94,7 @@ class S3UserTag(Base):
         Index("ix_s3_user_tags_definition", "tag_definition_id"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     s3_user_id = Column(Integer, ForeignKey("s3_users.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)
@@ -113,7 +113,7 @@ class S3ConnectionTag(Base):
         Index("ix_s3_connection_tags_definition", "tag_definition_id"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id", ondelete="CASCADE"), nullable=False)
     tag_definition_id = Column(Integer, ForeignKey("tag_definitions.id", ondelete="CASCADE"), nullable=False)
     position = Column(Integer, nullable=False, default=0)

@@ -24,6 +24,11 @@ DEFAULT_SCOPE = "endpoint"
 DEFAULT_ROLLUP_RESOLUTION_SECONDS = 300
 
 
+def _legacy_naive_utcnow() -> datetime:
+    # These pre-0074 columns stored naive UTC values; revision 0074 converts them.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _coerce_mode(value: Any) -> str:
     return "s3" if str(value or "").strip().lower() == "s3" else "http"
 
@@ -116,7 +121,7 @@ def upgrade() -> None:
 
     segment_rows: list[dict[str, Any]] = []
     rollup_rows: list[dict[str, Any]] = []
-    now = datetime.utcnow()
+    now = _legacy_naive_utcnow()
 
     def flush_segment(key: tuple[int, str], end_time: datetime | None) -> None:
         state = active_segment_by_key.pop(key, None)

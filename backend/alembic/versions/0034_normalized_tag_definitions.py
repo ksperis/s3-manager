@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from alembic import op
@@ -24,6 +24,11 @@ DEFAULT_TAG_COLOR_KEY = "neutral"
 TAG_DOMAIN_ENDPOINT = "endpoint"
 TAG_DOMAIN_ADMIN_MANAGED = "admin_managed"
 TAG_DOMAIN_PRIVATE_CONNECTION_USER = "private_connection_user"
+
+
+def _legacy_naive_utcnow() -> datetime:
+    # These pre-0074 columns stored naive UTC values; revision 0074 converts them.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 tag_definitions = sa.table(
@@ -149,7 +154,7 @@ def _insert_tag_definition(bind, *, domain_kind: str, owner_user_id: Optional[in
     if found is not None:
         cache[cache_key] = int(found)
         return int(found)
-    now = datetime.utcnow()
+    now = _legacy_naive_utcnow()
     result = bind.execute(
         tag_definitions.insert().values(
             domain_kind=domain_kind,
@@ -335,7 +340,7 @@ def upgrade() -> None:
             link_key = (int(row.id), int(tag_definition_id))
             if link_key in existing_storage_endpoint_links:
                 continue
-            now = datetime.utcnow()
+            now = _legacy_naive_utcnow()
             bind.execute(
                 storage_endpoint_tags.insert().values(
                     storage_endpoint_id=row.id,
@@ -360,7 +365,7 @@ def upgrade() -> None:
             link_key = (int(row.id), int(tag_definition_id))
             if link_key in existing_account_links:
                 continue
-            now = datetime.utcnow()
+            now = _legacy_naive_utcnow()
             bind.execute(
                 s3_account_tags.insert().values(
                     account_id=row.id,
@@ -385,7 +390,7 @@ def upgrade() -> None:
             link_key = (int(row.id), int(tag_definition_id))
             if link_key in existing_user_links:
                 continue
-            now = datetime.utcnow()
+            now = _legacy_naive_utcnow()
             bind.execute(
                 s3_user_tags.insert().values(
                     s3_user_id=row.id,
@@ -412,7 +417,7 @@ def upgrade() -> None:
             link_key = (int(row.id), int(tag_definition_id))
             if link_key in existing_connection_links:
                 continue
-            now = datetime.utcnow()
+            now = _legacy_naive_utcnow()
             bind.execute(
                 s3_connection_tags.insert().values(
                     s3_connection_id=row.id,

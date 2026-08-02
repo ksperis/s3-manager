@@ -142,7 +142,7 @@ Legend: {
   }
   "oidc_providers": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_oidc_providers_id(id) [index]; ix_oidc_providers_provider_id(provider_id) [unique]"
+    tooltip: "PK: id\nUnique: unnamed(provider_id)\nIndexes: ix_oidc_providers_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "provider_id": "VARCHAR [NN, UQ]"
     "display_name": "VARCHAR [NN]"
@@ -171,7 +171,7 @@ Legend: {
   }
   "ldap_providers": {
     class: table
-    tooltip: "PK: id\nIndexes: ix_ldap_providers_id(id) [index]; ix_ldap_providers_provider_id(provider_id) [unique]"
+    tooltip: "PK: id\nUnique: unnamed(provider_id)\nIndexes: ix_ldap_providers_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "provider_id": "VARCHAR [NN, UQ]"
     "display_name": "VARCHAR [NN]"

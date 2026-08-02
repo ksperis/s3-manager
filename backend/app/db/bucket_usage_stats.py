@@ -43,6 +43,6 @@ class BucketUsageStatsSnapshot(Base):
     current_noncurrent_distribution_json = Column(Text, nullable=False)
     warnings_json = Column(Text, nullable=True)
 
-    calculated_at = Column(UTCDateTime(), default=utcnow, nullable=False, index=True)
+    calculated_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)

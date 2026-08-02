@@ -145,7 +145,7 @@ Legend: {
   }
   "bucket_usage_stats_snapshots": {
     class: table
-    tooltip: "PK: id\nUnique: uq_bucket_usage_stats_scope_bucket(scope_kind, scope_id, bucket_name)\nIndexes: ix_bucket_usage_stats_calculated_at(calculated_at) [index]; ix_bucket_usage_stats_scope(scope_kind, scope_id) [index]; ix_bucket_usage_stats_snapshots_calculated_at(calculated_at) [index]; ix_bucket_usage_stats_snapshots_id(id) [index]"
+    tooltip: "PK: id\nUnique: uq_bucket_usage_stats_scope_bucket(scope_kind, scope_id, bucket_name)\nIndexes: ix_bucket_usage_stats_calculated_at(calculated_at) [index]; ix_bucket_usage_stats_scope(scope_kind, scope_id) [index]; ix_bucket_usage_stats_snapshots_id(id) [index]"
     "id": "INTEGER [PK, NN]"
     "scope_kind": "VARCHAR [NN]"
     "scope_id": "VARCHAR [NN]"
