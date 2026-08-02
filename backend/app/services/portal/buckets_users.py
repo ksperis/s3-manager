@@ -2,7 +2,16 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+from typing import Optional, TYPE_CHECKING
+
+from app.db import AccountIAMUser, AccountRole, S3Account, User
+from app.models.app_settings import PortalSettings
+from app.models.bucket import Bucket
+from app.services import s3_client
+from app.services.rgw_iam import RGWIAMService
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
 
 
 class PortalBucketsUsersMixin:
