@@ -37,18 +37,18 @@ from app.routers.ceph_admin.listing_common import (
     ListingProgressSnapshot as _common_ListingProgressSnapshot,
     apply_advanced_filter as _common_apply_advanced_filter,
     apply_simple_search as _common_apply_simple_search,
-    coerce_number as _common_coerce_number,
+    coerce_number as _coerce_number,
     collect_filter_fields as _common_collect_filter_fields,
-    fields_set as _common_fields_set,
+    fields_set as _fields_set,
     get_or_set_cache as _common_get_or_set_cache,
     invalidate_cache as _common_invalidate_cache,
-    normalize_optional_str as _common_normalize_optional_str,
-    normalize_text as _common_normalize_text,
+    normalize_optional_str as _normalize_optional_str,
+    normalize_text as _normalize_text,
     paginate as _common_paginate,
     parse_filter_query as _common_parse_filter_query,
-    parse_includes as _common_parse_includes,
-    parse_int as _common_parse_int,
-    serialize_filter as _common_serialize_filter,
+    parse_includes as _parse_includes,
+    parse_int as _parse_int,
+    serialize_filter as _serialize_filter,
     sort_value as _common_sort_value,
     interpolate_progress_percent as _common_interpolate_progress_percent,
     invoke_cancel_check as _common_invoke_cancel_check,
@@ -97,14 +97,6 @@ def _extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:
     return access_key, secret_key
 
 
-def _parse_includes(include: list[str]) -> set[str]:
-    return _common_parse_includes(include)
-
-
-def _normalize_optional_str(value: Any) -> Optional[str]:
-    return _common_normalize_optional_str(value)
-
-
 def _optional_account_lookup_enabled(ctx: CephAdminContext) -> bool | None:
     try:
         return resolve_feature_flags(ctx.endpoint).account_enabled
@@ -146,18 +138,6 @@ def _parse_suspended(raw: Any) -> Optional[bool]:
     return None
 
 
-def _parse_int(value: Any) -> Optional[int]:
-    return _common_parse_int(value)
-
-
-def _fields_set(model: Any) -> set[str]:
-    return _common_fields_set(model)
-
-
-def _serialize_filter(query: CephAdminUserFilterQuery | None) -> str | None:
-    return _common_serialize_filter(query)
-
-
 def _clone_user(user: CephAdminRgwUserSummary) -> CephAdminRgwUserSummary:
     return user.model_copy(deep=True)
 
@@ -181,14 +161,6 @@ def _clear_optional_user_details(item: CephAdminRgwUserSummary) -> None:
 
 def _parse_advanced_filter(raw: str | None) -> CephAdminUserFilterQuery | None:
     return _common_parse_filter_query(raw, query_cls=CephAdminUserFilterQuery)
-
-
-def _normalize_text(value: str) -> str:
-    return _common_normalize_text(value)
-
-
-def _coerce_number(value: object) -> float | None:
-    return _common_coerce_number(value)
 
 
 def _coerce_bool(value: object) -> bool | None:

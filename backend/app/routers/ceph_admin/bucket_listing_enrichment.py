@@ -24,8 +24,8 @@ from app.routers.ceph_admin.listing_common import (
     ListingProgressEmitter as _BucketListingProgressEmitter,
     interpolate_progress_percent as _common_interpolate_progress_percent,
     invoke_cancel_check as _invoke_cancel_check,
-    normalize_optional_str as _common_normalize_optional_str,
-    normalize_text as _common_normalize_text,
+    normalize_optional_str as _normalize_optional_str,
+    normalize_text as _normalize_text,
 )
 from app.services.bucket_listing_shared import _filter_requires_stats as _shared_filter_requires_stats
 from app.services.bucket_notification_state import (
@@ -140,10 +140,6 @@ def _split_tenant_uid(value: str) -> tuple[str | None, str]:
         tenant, uid = value.split("$", 1)
         return (tenant.strip() or None), uid.strip()
     return None, value.strip()
-
-
-def _normalize_optional_str(value: object) -> str | None:
-    return _common_normalize_optional_str(value)
 
 
 def _owner_kind_from_owner(owner_id: str | None) -> Literal["account", "user"] | None:
@@ -394,10 +390,6 @@ def _resolve_owner_names_for_buckets(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         return dict(executor.map(resolve_owner_target, owner_targets.items()))
-
-
-def _normalize_text(value: str) -> str:
-    return _common_normalize_text(value)
 
 
 def _coerce_number(value: object) -> float | None:

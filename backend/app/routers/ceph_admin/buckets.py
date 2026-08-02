@@ -105,9 +105,7 @@ from app.routers.ceph_admin.listing_common import (
     ListingProgressSnapshot as _BucketListingProgressSnapshot,
     interpolate_progress_percent as _common_interpolate_progress_percent,
     invoke_cancel_check as _invoke_cancel_check,
-    normalize_optional_str as _common_normalize_optional_str,
-    normalize_text as _common_normalize_text,
-    serialize_filter as _common_serialize_filter,
+    serialize_filter as _serialize_filter,
     stream_listing_response as _common_stream_listing_response,
 )
 from app.routers.http_errors import raise_bad_gateway_from_runtime, raise_bad_request_from_value_error
@@ -170,10 +168,6 @@ def _build_endpoint_account_from_credentials(endpoint_id: int, endpoint, access_
     account.storage_endpoint = endpoint  # type: ignore[assignment]
     account.set_session_credentials(access_key, secret_key)
     return account
-
-
-def _serialize_filter(query: CephAdminBucketFilterQuery | None) -> str | None:
-    return _common_serialize_filter(query)
 
 
 def _sync_bucket_listing_cache_clock() -> None:
