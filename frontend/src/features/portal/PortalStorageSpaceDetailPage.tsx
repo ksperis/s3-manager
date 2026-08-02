@@ -39,6 +39,7 @@ import Modal from "../../components/Modal";
 import WorkflowPage, { WorkflowActions, workflowPageHostClass } from "../../components/WorkflowPage";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import StorageSpaceIcon from "../../components/StorageSpaceIcon";
 import UiBadge from "../../components/ui/UiBadge";
 import UiButton from "../../components/ui/UiButton";
 import UiCard from "../../components/ui/UiCard";
@@ -92,6 +93,7 @@ import {
   portalStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
+import StorageSpaceIconPickerModal from "./StorageSpaceIconPickerModal";
 
 function decodeRouteValue(value?: string): string {
   if (!value) return "";
@@ -189,6 +191,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [spaceSettingsError, setSpaceSettingsError] = useState<string | null>(null);
   const [spaceSettingsMessage, setSpaceSettingsMessage] = useState<string | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [iconDialogOpen, setIconDialogOpen] = useState(false);
   const [historyCleanupConfirmOpen, setHistoryCleanupConfirmOpen] = useState(false);
   const [historyCleanupDialogOpen, setHistoryCleanupDialogOpen] = useState(false);
   const [historyCleanupRunning, setHistoryCleanupRunning] = useState(false);
@@ -855,6 +858,7 @@ export default function PortalStorageSpaceDetailPage() {
   const isArchived = space.status === "Archived";
   const canBrowse = Boolean(space.canBrowse) && !isArchived;
   const hasFullAccess = space.role === "Owner" || space.role === "Manager";
+  const canConfigureIcon = state?.account_role === "portal_manager";
   const canRename = hasFullAccess && space.nameEditable;
   const canModifyObjects = canBrowse && (hasFullAccess || space.role === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
@@ -1091,6 +1095,11 @@ export default function PortalStorageSpaceDetailPage() {
           <UiButton size="sm" variant="secondary" disabled={metadataBusy} onClick={() => setSettingsDialogOpen(true)}>
             {t({ en: "Edit details", fr: "Modifier", de: "Details bearbeiten" })}
           </UiButton>
+          {canConfigureIcon ? (
+            <UiButton size="sm" variant="secondary" onClick={() => setIconDialogOpen(true)}>
+              {t({ en: "Change icon", fr: "Modifier l’icône", de: "Symbol ändern" })}
+            </UiButton>
+          ) : null}
           {isArchived ? (
             <UiButton size="sm" variant="secondary" disabled={metadataBusy} onClick={handleRestore}>
               {t({ en: "Restore", fr: "Restaurer", de: "Wiederherstellen" })}
@@ -1121,7 +1130,10 @@ export default function PortalStorageSpaceDetailPage() {
           <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
             {t({ en: "Space name", fr: "Nom de l'espace", de: "Name des Bereichs" })}
           </dt>
-          <dd className={cx("mt-1 text-sm font-bold", uiTitleTextClass)}>{space.name}</dd>
+          <dd className={cx("mt-1 flex items-center gap-2 text-sm font-bold", uiTitleTextClass)}>
+            <StorageSpaceIcon icon={space.icon} name={space.name} size="sm" decorative />
+            <span>{space.name}</span>
+          </dd>
         </div>
         <div>
           <dt className={cx("text-[11px] font-semibold uppercase", uiMutedTextClass)}>
@@ -1162,7 +1174,16 @@ export default function PortalStorageSpaceDetailPage() {
         de: "Konfigurieren Sie Versioning, Lifecycle und die Aufbewahrungsdauer älterer Dateiversionen für diesen Bereich.",
       })}
       actions={
-        spaceSettings?.can_update ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <UiButton
+            size="sm"
+            variant="danger"
+            disabled={!canCleanHistory || historyCleanupRunning}
+            onClick={openHistoryCleanupDialog}
+          >
+            {t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
+          </UiButton>
+          {spaceSettings?.can_update ? (
           <UiButton
             size="sm"
             disabled={spaceSettingsLoading || spaceSettingsSaving}
@@ -1172,7 +1193,8 @@ export default function PortalStorageSpaceDetailPage() {
               ? t({ en: "Saving...", fr: "Enregistrement...", de: "Speichern..." })
               : t({ en: "Save settings", fr: "Enregistrer", de: "Einstellungen speichern" })}
           </UiButton>
-        ) : undefined
+          ) : null}
+        </div>
       }
     >
       <div className="space-y-4">
@@ -1281,6 +1303,33 @@ export default function PortalStorageSpaceDetailPage() {
             </div>
           </div>
         ) : null}
+        <div className="border-t border-[color:var(--ui-border-soft)] pt-4">
+          {!historyCleanupEnabled ? (
+            <PageBanner tone="info">
+              {t({
+                en: "History cleanup is disabled for this project.",
+                fr: "Le nettoyage de l'historique est désactivé pour ce projet.",
+                de: "Die Historienbereinigung ist für dieses Projekt deaktiviert.",
+              })}
+            </PageBanner>
+          ) : isArchived ? (
+            <PageBanner tone="warning">
+              {t({
+                en: "Restore this space before running history cleanup.",
+                fr: "Restaurez cet espace avant de nettoyer son historique.",
+                de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen.",
+              })}
+            </PageBanner>
+          ) : (
+            <p className={cx("ui-caption", uiMutedTextClass)}>
+              {t({
+                en: "Current files stay available. The cleanup only removes older file history and leftover deletion records.",
+                fr: "Les fichiers courants restent disponibles. Le nettoyage retire uniquement l'ancien historique des fichiers et les traces de suppression restantes.",
+                de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt nur ältere Dateihistorie und verbliebene Löschvermerke.",
+              })}
+            </p>
+          )}
+        </div>
       </div>
     </UiCard>
   ) : null;
@@ -1521,55 +1570,6 @@ export default function PortalStorageSpaceDetailPage() {
       </p>
     </UiCard>
   );
-
-  const historyCleanupCard = hasFullAccess ? (
-    <UiCard
-      title={t({ en: "History cleanup", fr: "Nettoyage de l'historique", de: "Historie bereinigen" })}
-      description={t({
-        en: "Remove older file history and leftover deletion records when a space needs to reclaim storage.",
-        fr: "Supprimez l'ancien historique des fichiers et les traces de suppression restantes lorsqu'un espace doit récupérer du stockage.",
-        de: "Entfernen Sie ältere Dateihistorie und verbliebene Löschvermerke, wenn ein Bereich Speicher zurückgewinnen muss.",
-      })}
-      actions={
-        <UiButton
-          size="sm"
-          variant="danger"
-          disabled={!canCleanHistory || historyCleanupRunning}
-          onClick={openHistoryCleanupDialog}
-        >
-          {t({ en: "Clean up history", fr: "Nettoyer l'historique", de: "Historie bereinigen" })}
-        </UiButton>
-      }
-    >
-      <div className="space-y-3">
-        {!historyCleanupEnabled ? (
-          <PageBanner tone="info">
-            {t({
-              en: "History cleanup is disabled for this project.",
-              fr: "Le nettoyage de l'historique est désactivé pour ce projet.",
-              de: "Die Historienbereinigung ist für dieses Projekt deaktiviert.",
-            })}
-          </PageBanner>
-        ) : isArchived ? (
-          <PageBanner tone="warning">
-            {t({
-              en: "Restore this space before running history cleanup.",
-              fr: "Restaurez cet espace avant de nettoyer son historique.",
-              de: "Stellen Sie diesen Bereich wieder her, bevor Sie die Historie bereinigen.",
-            })}
-          </PageBanner>
-        ) : (
-          <p className={cx("ui-caption", uiMutedTextClass)}>
-            {t({
-              en: "Current files stay available. The cleanup only removes older file history and leftover deletion records.",
-              fr: "Les fichiers courants restent disponibles. Le nettoyage retire uniquement l'ancien historique des fichiers et les traces de suppression restantes.",
-              de: "Aktuelle Dateien bleiben verfügbar. Die Bereinigung entfernt nur ältere Dateihistorie und verbliebene Löschvermerke.",
-            })}
-          </p>
-        )}
-      </div>
-    </UiCard>
-  ) : null;
 
   return (
     <div
@@ -1861,7 +1861,6 @@ export default function PortalStorageSpaceDetailPage() {
         <PortalTabPanel idPrefix="portal-space-detail" tabId="settings">
           {storageSpaceSettingsCard}
           {versionHistorySettingsCard}
-          {historyCleanupCard}
           {externalToolsCard}
         </PortalTabPanel>
       ) : null}
@@ -2569,6 +2568,15 @@ export default function PortalStorageSpaceDetailPage() {
             </div>
           </div>
         </Modal>
+      ) : null}
+
+      {iconDialogOpen && canConfigureIcon ? (
+        <StorageSpaceIconPickerModal
+          accountId={accountIdForApi}
+          space={space}
+          onClose={() => setIconDialogOpen(false)}
+          onSaved={refreshWorkspaceData}
+        />
       ) : null}
 
       {pendingAccessChange ? (

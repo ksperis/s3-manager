@@ -72,7 +72,6 @@ import {
   portalStatusLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
-import StorageSpaceIconPickerModal from "./StorageSpaceIconPickerModal";
 
 type SpacesTab = "active" | "archived";
 
@@ -126,7 +125,6 @@ export default function PortalStorageSpacesPage() {
     accountLoading,
     accountIdForApi,
     state,
-    refreshWorkspaceData,
   } = usePortalWorkspaceData({
     includeArchived: true,
     includeUsage: true,
@@ -142,7 +140,6 @@ export default function PortalStorageSpacesPage() {
   const [activeTab, setActiveTab] = useState<SpacesTab>("active");
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [iconSpace, setIconSpace] = useState<PortalWorkspaceSpace | null>(null);
   const [startGuideDismissed, setStartGuideDismissed] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -222,7 +219,6 @@ export default function PortalStorageSpacesPage() {
     });
   }, [normalizedQuery, roleFilter, sort, statusFilter, t, visibleSpaces]);
   const tableStatus = filteredSpaces.length === 0 ? "empty" : "ready";
-  const canConfigureIcons = state?.account_role === "portal_manager";
   const storageSpaceColumns = useMemo<DataTableColumn<PortalWorkspaceSpace>[]>(
     () => [
       {
@@ -329,15 +325,6 @@ export default function PortalStorageSpacesPage() {
         mobileRole: "actions",
         render: (space) => (
           <div className="flex justify-end gap-2">
-            {canConfigureIcons ? (
-              <button
-                type="button"
-                className={tableActionButtonClasses}
-                onClick={() => setIconSpace(space)}
-              >
-                {t({ en: "Icon", fr: "Icône", de: "Symbol" })}
-              </button>
-            ) : null}
             <Link
               to={storageSpacePath(space)}
               className={tableActionButtonClasses}
@@ -348,7 +335,7 @@ export default function PortalStorageSpacesPage() {
         ),
       },
     ],
-    [canConfigureIcons, t],
+    [t],
   );
 
   const canCreatePrivate = Boolean(state?.can_create_private_storage_spaces);
@@ -1352,14 +1339,6 @@ export default function PortalStorageSpacesPage() {
           </div>
         </UiCard>
       </PortalTabPanel>
-      {iconSpace ? (
-        <StorageSpaceIconPickerModal
-          accountId={accountIdForApi}
-          space={iconSpace}
-          onClose={() => setIconSpace(null)}
-          onSaved={refreshWorkspaceData}
-        />
-      ) : null}
     </div>
   );
 }

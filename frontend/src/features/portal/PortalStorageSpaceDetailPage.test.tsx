@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   restoreObjectMock: vi.fn(),
   updateStorageSpaceMock: vi.fn(),
   updateStorageSpaceSettingsMock: vi.fn(),
+  updateStorageSpaceIconMock: vi.fn(),
+  uploadStorageSpaceIconMock: vi.fn(),
   updateShareMock: vi.fn(),
   usePortalWorkspaceDataMock: vi.fn(),
   generalSettings: {
@@ -39,6 +41,7 @@ const mocks = vi.hoisted(() => ({
     accountIdForApi: "101",
     state: {
       account_id: 101,
+      account_role: "portal_manager",
       iam_user: {},
       access_keys: [],
       storage_space_version_cleanup_enabled: true,
@@ -85,6 +88,7 @@ const mocks = vi.hoisted(() => ({
           shareCount: 3,
           origin: "portal_generic",
           nameEditable: true,
+          icon: { source: "preset", preset: "archive" },
         },
       ],
       activity: [
@@ -170,6 +174,8 @@ vi.mock("../../api/portal", () => ({
   streamPortalStorageSpaceVersionCleanup: (...args: unknown[]) => mocks.streamHistoryCleanupMock(...args),
   updatePortalStorageSpace: (...args: unknown[]) => mocks.updateStorageSpaceMock(...args),
   updatePortalStorageSpaceSettings: (...args: unknown[]) => mocks.updateStorageSpaceSettingsMock(...args),
+  updatePortalStorageSpaceIcon: (...args: unknown[]) => mocks.updateStorageSpaceIconMock(...args),
+  uploadPortalStorageSpaceIcon: (...args: unknown[]) => mocks.uploadStorageSpaceIconMock(...args),
   updatePortalStorageSpaceShare: (...args: unknown[]) => mocks.updateShareMock(...args),
 }));
 
@@ -330,6 +336,8 @@ describe("PortalStorageSpaceDetailPage", () => {
       version_history_retention_days: 45,
       can_update: true,
     });
+    mocks.updateStorageSpaceIconMock.mockResolvedValue({ source: "preset", preset: "database" });
+    mocks.uploadStorageSpaceIconMock.mockResolvedValue({ source: "uploaded", url: "/portal/icon?v=1" });
     mocks.restoreObjectMock.mockResolvedValue({
       key: "reports/deleted.csv",
       restored_from_version_id: "v1",
@@ -405,6 +413,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].visibility = "shared";
     mocks.hookResult.workspace.spaces[0].canTakeOwnership = false;
     mocks.hookResult.workspace.spaces[0].nameEditable = true;
+    mocks.hookResult.workspace.spaces[0].icon = { source: "preset", preset: "archive" };
     mocks.hookResult.workspace.spaces[0].contentRole = "Owner";
     mocks.hookResult.workspace.spaces[0].origin = "portal_generic";
     mocks.hookResult.workspace.spaces[0].status = "Active";
@@ -416,6 +425,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].objectCount = 12;
     mocks.hookResult.workspace.spaces[0].usedBytes = 512;
     mocks.hookResult.workspace.spaces[0].shareCount = 3;
+    mocks.hookResult.state.account_role = "portal_manager";
     mocks.hookResult.state.storage_space_version_cleanup_enabled = true;
     mocks.hookResult.refreshWorkspaceData.mockClear();
   });
@@ -596,6 +606,51 @@ describe("PortalStorageSpaceDetailPage", () => {
       });
     });
     expect(await screen.findByText("Version history settings saved.")).toBeInTheDocument();
+  });
+
+  it("lets a Portal Manager change the Storage Space pictogram from settings", async () => {
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Change icon" }));
+    expect(screen.getByRole("dialog", { name: "Storage Space icon" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Database" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save icon" }));
+
+    await waitFor(() => {
+      expect(mocks.updateStorageSpaceIconMock).toHaveBeenCalledWith("101", "research-data", {
+        source: "preset",
+        preset: "database",
+      });
+    });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a Portal Manager upload a custom Storage Space image from settings", async () => {
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+    const image = new File(["png"], "space.png", { type: "image/png" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Change icon" }));
+    fireEvent.change(screen.getByLabelText("Custom image file"), {
+      target: { files: [image] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save icon" }));
+
+    await waitFor(() => {
+      expect(mocks.uploadStorageSpaceIconMock).toHaveBeenCalledWith(
+        "101",
+        "research-data",
+        image,
+      );
+    });
+    expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
+  });
+
+  it("reserves Storage Space icon configuration for Portal Managers", async () => {
+    mocks.hookResult.state.account_role = "portal_user";
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+
+    expect(screen.queryByRole("button", { name: "Change icon" })).not.toBeInTheDocument();
   });
 
   it("shows Storage Space settings read-only to an Owner", async () => {
@@ -1038,7 +1093,12 @@ describe("PortalStorageSpaceDetailPage", () => {
     await renderPage();
 
     await openSettingsTab();
-    fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
+    const versionHistorySection = screen
+      .getByRole("heading", { name: "Version history settings" })
+      .closest("section");
+    if (!versionHistorySection) throw new Error("Version history settings section not found");
+    expect(screen.queryByRole("heading", { name: "History cleanup" })).not.toBeInTheDocument();
+    fireEvent.click(within(versionHistorySection).getByRole("button", { name: "Clean up history" }));
 
     const confirmation = screen.getByRole("dialog", { name: "Clean up history" });
     expect(within(confirmation).getByText(/permanently remove older file history/i)).toBeInTheDocument();
