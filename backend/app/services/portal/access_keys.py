@@ -2,8 +2,38 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
-from app.services.mappers.portal import portal_access_key_from_external_credential, portal_access_key_from_iam_metadata
+import logging
+import re
+import secrets
+from typing import Optional, TYPE_CHECKING
+
+from app.db import PortalExternalAccessCredential, PortalStorageSpaceMetadata, S3Account, User
+from app.models.app_settings import PortalSettings
+from app.models.iam import AccessKey as ModelAccessKey, IAMUser
+from app.models.portal import (
+    PortalAccessKey,
+    PortalAccessKeyCreate,
+    PortalAccessKeysState,
+    PortalIAMUser,
+    PortalState,
+    PortalStorageSpaceRole,
+)
+from app.services.mappers.portal import (
+    portal_access_key_from_external_credential,
+    portal_access_key_from_iam_metadata,
+)
+from app.services.portal.exceptions import (
+    PortalAccessKeyLimitExceeded,
+    PortalAccessKeyManagementDisabled,
+    PortalAccessKeyProtected,
+)
+from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.time import utcnow
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+logger = logging.getLogger(__name__)
 
 
 class PortalAccessKeysMixin:
