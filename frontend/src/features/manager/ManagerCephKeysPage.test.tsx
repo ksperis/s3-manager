@@ -50,7 +50,7 @@ describe("ManagerCephKeysPage", () => {
       },
       {
         access_key_id: "AK-SECONDARY",
-        status: "disabled",
+        status: "enabled",
         created_at: "2026-01-02T00:00:00Z",
         is_ui_managed: false,
         is_active: false,
@@ -106,6 +106,7 @@ describe("ManagerCephKeysPage", () => {
     render(<ManagerCephKeysPage />);
 
     await screen.findByText("AK-SECONDARY");
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create my private access" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("Connection name")).toBeInTheDocument();

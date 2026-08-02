@@ -155,6 +155,21 @@ describe("PortalAccessKeysPage", () => {
     expect(mocks.fetchPortalAccessKeysState).toHaveBeenCalledWith("101");
   });
 
+  it("uses the canonical activity flag instead of the status label", async () => {
+    mocks.state = {
+      ...mocks.state,
+      access_keys: [
+        { access_key_id: "AK-PORTAL", status: "Active", is_active: true, is_portal: true },
+        { access_key_id: "AK-USER", status: "Active", is_active: false },
+      ],
+    };
+
+    renderPage();
+
+    expect(await screen.findByText("Inactive")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
+  });
+
   it("shows the starter guide only before the first tool access and lets users dismiss it", async () => {
     mocks.state = { ...mocks.state, access_keys: [] };
     mocks.listPortalStorageSpaces.mockResolvedValue([]);

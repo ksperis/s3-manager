@@ -36,16 +36,6 @@ function parseError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
 }
 
-function isKeyActive(key: ManagerCephAccessKey): boolean {
-  if (typeof key.is_active === "boolean") {
-    return key.is_active;
-  }
-  const normalized = (key.status || "").toLowerCase();
-  if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
-  if (["active", "enabled"].includes(normalized)) return true;
-  return true;
-}
-
 function formatDate(value?: string | null): string {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -117,7 +107,7 @@ export default function ManagerCephKeysPage() {
 
   const handleToggleKey = async (key: ManagerCephAccessKey) => {
     if (!canManageCephKeys || key.is_ui_managed) return;
-    const currentlyActive = isKeyActive(key);
+    const currentlyActive = key.is_active;
     if (currentlyActive && !confirmAction(`Disable key ${key.access_key_id}?`)) return;
 
     setBusy(`toggle:${key.access_key_id}`);
@@ -155,7 +145,8 @@ export default function ManagerCephKeysPage() {
   const filteredKeys = keys.filter((key) => {
     const needle = keyFilter.trim().toLowerCase();
     if (!needle) return true;
-    return key.access_key_id.toLowerCase().includes(needle) || (key.status ?? "").toLowerCase().includes(needle);
+    const statusLabel = key.is_active ? "active" : "inactive";
+    return key.access_key_id.toLowerCase().includes(needle) || statusLabel.includes(needle);
   });
   const tableStatus = resolveListTableStatus({ loading, error, rowCount: filteredKeys.length });
 
@@ -252,7 +243,7 @@ export default function ManagerCephKeysPage() {
             }}
           >
             {filteredKeys.map((key) => {
-              const active = isKeyActive(key);
+              const active = key.is_active;
               const managedPrivate = Boolean(key.is_private_access_managed);
               const locked = Boolean(key.is_ui_managed || managedPrivate);
               return (
@@ -271,7 +262,7 @@ export default function ManagerCephKeysPage() {
                     </div>
                   </td>
                   <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
-                    {key.status ?? (active ? "Active" : "Inactive")}
+                    {active ? "Active" : "Inactive"}
                   </td>
                   <td className={managerTableCellClass}>{formatDate(key.created_at)}</td>
                   <td className={managerTableActionCellClass}>

@@ -51,16 +51,6 @@ export default function S3UserKeysPage() {
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
   };
 
-  const isKeyActive = (key: S3UserAccessKey): boolean => {
-    if (key.is_active !== undefined && key.is_active !== null) return Boolean(key.is_active);
-    if (key.status) {
-      const normalized = key.status.toLowerCase();
-      if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
-      if (["active", "enabled"].includes(normalized)) return true;
-    }
-    return true;
-  };
-
   const loadUser = useCallback(async () => {
     if (!Number.isFinite(numericUserId)) return;
     try {
@@ -247,12 +237,12 @@ export default function S3UserKeysPage() {
           }}
         >
           {keys.map((k) => {
-            const active = isKeyActive(k);
+            const active = k.is_active;
             return (
               <tr key={k.access_key_id} className={cx("hover:bg-slate-50 dark:hover:bg-slate-800/50", !active && managerTableMutedRowClass)}>
                 <td className={cx(managerTablePrimaryCellClass, "font-mono")}>{k.access_key_id}</td>
                 <td className={cx(managerTableCellClass, "text-slate-700 dark:text-slate-200")}>
-                  {active ? k.status ?? "Active" : k.status ?? "Disabled"}
+                  {active ? "Active" : "Disabled"}
                 </td>
                 <td className={managerTableCellClass}>{formatDate(k.created_at)}</td>
                 <td className={managerTableCellClass}>

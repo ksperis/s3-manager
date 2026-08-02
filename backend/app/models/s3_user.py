@@ -85,7 +85,7 @@ class S3UserAccessKey(BaseModel):
     status: Optional[str] = None
     created_at: Optional[datetime] = None
     is_ui_managed: bool = False
-    is_active: Optional[bool] = None
+    is_active: bool = True
     is_private_access_managed: bool = False
     managed_connection_id: Optional[int] = None
 

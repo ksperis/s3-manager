@@ -69,12 +69,7 @@ export function portalCollaboratorSpaceAccessSourceLabel(
   return t({ en: "Manager role", fr: "Rôle de gestionnaire", de: "Managerrolle" });
 }
 
-export function portalAccessKeyStatusLabel(status: string | null | undefined, active: boolean, t: TFunction): string {
-  const normalized = (status ?? "").toLowerCase();
-  if (normalized === "active" || normalized === "enabled") return t({ en: "Active", fr: "Active", de: "Aktiv" });
-  if (normalized === "inactive" || normalized === "disabled" || normalized === "suspended") {
-    return t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" });
-  }
+export function portalAccessKeyStatusLabel(active: boolean, t: TFunction): string {
   return active ? t({ en: "Active", fr: "Active", de: "Aktiv" }) : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" });
 }
 

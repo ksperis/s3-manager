@@ -428,6 +428,22 @@ def test_list_keys_uses_active_flag_when_status_is_missing(db_session, monkeypat
     assert indexed["AK-DISABLED"].status == "disabled"
 
 
+def test_list_keys_defaults_missing_status_and_active_flag_to_enabled(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="CanonicalKey", uid="canonical-key", storage_endpoint_id=endpoint.id))
+    fake.remote_users["canonical-key"]["keys"] = [
+        {"access_key": "AK-CANONICAL", "secret_key": "SK-CANONICAL"},
+    ]
+
+    [key] = service.list_keys(created.id)
+
+    assert key.is_active is True
+    assert key.status == "enabled"
+
+
 def test_list_keys_preserves_created_at_when_rgw_splits_key_metadata(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()

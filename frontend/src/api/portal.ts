@@ -21,7 +21,7 @@ export type PortalAccessKey = {
   access_key_id: string;
   status?: string | null;
   created_at?: string | null;
-  is_active?: boolean | null;
+  is_active: boolean;
   is_portal?: boolean;
   deletable?: boolean;
   secret_access_key?: string | null;

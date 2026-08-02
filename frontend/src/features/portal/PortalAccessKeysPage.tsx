@@ -55,16 +55,6 @@ type AccessKeysTab = "connect" | "access-list";
 type CreateTarget = "self" | "external";
 type ExternalPermission = "read_only" | "read_write";
 
-function isKeyActive(key: PortalAccessKey): boolean {
-  if (typeof key.is_active === "boolean") {
-    return key.is_active;
-  }
-  const normalized = (key.status || "").toLowerCase();
-  if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
-  if (["active", "enabled"].includes(normalized)) return true;
-  return true;
-}
-
 function keyTargetLabel(key: PortalAccessKey, t: ReturnType<typeof useI18n>["t"]): string {
   if (key.target_type === "external") {
     return key.external_email || t({ en: "External user", fr: "Utilisateur externe", de: "Externer Benutzer" });
@@ -223,7 +213,7 @@ export default function PortalAccessKeysPage() {
     }
     return keys;
   }, [createdKey, state?.access_keys]);
-  const activeKeys = useMemo(() => visibleKeys.filter(isKeyActive), [visibleKeys]);
+  const activeKeys = useMemo(() => visibleKeys.filter((key) => key.is_active), [visibleKeys]);
   const personalKeys = useMemo(
     () => visibleKeys.filter((key) => key.target_type !== "external"),
     [visibleKeys]
@@ -391,7 +381,7 @@ export default function PortalAccessKeysPage() {
 
   const handleToggleKey = (key: PortalAccessKey) => {
     if (!accountIdForApi || !canManageAccessKeys || key.is_portal) return;
-    const active = isKeyActive(key);
+    const active = key.is_active;
     if (active) {
       setPendingAction({ type: "disable", key });
       return;
@@ -479,7 +469,7 @@ export default function PortalAccessKeysPage() {
       id: "status",
       label: t({ en: "Status", fr: "Statut", de: "Status" }),
       cellClassName: "text-slate-700 dark:text-slate-200",
-      render: (key) => portalAccessKeyStatusLabel(key.status, isKeyActive(key), t),
+      render: (key) => portalAccessKeyStatusLabel(key.is_active, t),
     },
     {
       id: "target",
@@ -504,7 +494,7 @@ export default function PortalAccessKeysPage() {
       align: "right",
       mobileRole: "actions",
       render: (key) => {
-        const active = isKeyActive(key);
+        const active = key.is_active;
         const disabled = Boolean(busy) || !canManageAccessKeys;
         return (
           <div className="flex flex-wrap justify-end gap-2">
@@ -955,7 +945,7 @@ export default function PortalAccessKeysPage() {
                 rowClassName={(key) =>
                   cx(
                     "hover:bg-slate-50 dark:hover:bg-slate-800/40",
-                    !isKeyActive(key) && "bg-slate-50/70 dark:bg-slate-900/40"
+                    !key.is_active && "bg-slate-50/70 dark:bg-slate-900/40"
                   )
                 }
                 responsiveCards

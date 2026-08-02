@@ -80,7 +80,7 @@ export type S3UserAccessKey = {
   status?: string | null;
   created_at?: string | null;
   is_ui_managed: boolean;
-  is_active?: boolean | null;
+  is_active: boolean;
 };
 
 export type CreatedS3UserAccessKey = {

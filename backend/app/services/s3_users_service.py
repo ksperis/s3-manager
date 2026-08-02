@@ -973,7 +973,9 @@ class S3UsersService:
             status_value = entry.get("status") or entry.get("key_status") or entry.get("state")
             active_value = self._parse_key_active(entry.get("active"))
             is_active = active_value if active_value is not None else self._is_active_status(status_value)
-            if status_value is None and is_active is not None:
+            if is_active is None:
+                is_active = True
+            if status_value is None:
                 status_value = "enabled" if is_active else "disabled"
             created_source = self._extract_key_created_source(entry)
             result.append(
