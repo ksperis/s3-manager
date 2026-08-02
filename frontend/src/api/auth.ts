@@ -90,20 +90,8 @@ export type LDAPProviderInfo = {
 };
 
 export async function fetchLdapProviders(): Promise<LDAPProviderInfo[]> {
-  const { data } = await client.get("/auth/ldap/providers");
-  if (Array.isArray(data)) {
-    return data as LDAPProviderInfo[];
-  }
-  if (data && typeof data === "object") {
-    const maybeProviders =
-      (data as { providers?: unknown }).providers ??
-      (data as { items?: unknown }).items ??
-      (data as { data?: unknown }).data;
-    if (Array.isArray(maybeProviders)) {
-      return maybeProviders as LDAPProviderInfo[];
-    }
-  }
-  return [];
+  const { data } = await client.get<LDAPProviderInfo[]>("/auth/ldap/providers");
+  return data;
 }
 
 export async function loginWithLdap(
@@ -148,20 +136,8 @@ type OidcCallbackResponse = LoginResponse & {
 };
 
 export async function fetchOidcProviders(): Promise<OidcProviderInfo[]> {
-  const { data } = await client.get("/auth/oidc/providers");
-  if (Array.isArray(data)) {
-    return data as OidcProviderInfo[];
-  }
-  if (data && typeof data === "object") {
-    const maybeProviders =
-      (data as { providers?: unknown }).providers ??
-      (data as { items?: unknown }).items ??
-      (data as { data?: unknown }).data;
-    if (Array.isArray(maybeProviders)) {
-      return maybeProviders as OidcProviderInfo[];
-    }
-  }
-  return [];
+  const { data } = await client.get<OidcProviderInfo[]>("/auth/oidc/providers");
+  return data;
 }
 
 export async function startOidcLogin(providerId: string, redirectPath?: string): Promise<OidcStartResponse> {
