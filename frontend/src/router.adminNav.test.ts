@@ -70,12 +70,18 @@ describe("buildAdminNav", () => {
     expect(disabledLink).toBeUndefined();
   });
 
-  it("groups metrics in overview and billing with audit reporting", () => {
+  it("groups metrics after managed tenant links and billing with audit reporting", () => {
     const adminNav = buildAdminNav(true, true, true, true, false, true);
     const overview = adminNav.find((section) => section.label === "Overview");
+    const managedTenants = adminNav.find((section) => section.label === "Managed Tenants");
     const auditReporting = adminNav.find((section) => section.label === "Audit & Reporting");
 
-    expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard", "Usage & Metrics"]);
+    expect(overview?.links.map((link) => link.label)).toEqual(["Dashboard"]);
+    expect(managedTenants?.links.map((link) => link.label)).toEqual([
+      "RGW Accounts",
+      "RGW Users",
+      "Usage & Metrics",
+    ]);
     expect(auditReporting?.links.map((link) => link.label)).toEqual([
       "Portal Requests",
       "Billing",

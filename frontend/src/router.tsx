@@ -157,10 +157,7 @@ export const buildAdminNav = (
   return [
     {
       label: "Overview",
-      links: [
-        { ...workspacePageLink(ADMIN_PAGE_CONTRACTS.dashboard), end: true },
-        workspacePageLink(ADMIN_PAGE_CONTRACTS.metrics),
-      ],
+      links: [{ ...workspacePageLink(ADMIN_PAGE_CONTRACTS.dashboard), end: true }],
     },
     {
       label: "Platform",
@@ -174,6 +171,7 @@ export const buildAdminNav = (
       links: [
         workspacePageLink(ADMIN_PAGE_CONTRACTS.accounts),
         workspacePageLink(ADMIN_PAGE_CONTRACTS["rgw-users"]),
+        workspacePageLink(ADMIN_PAGE_CONTRACTS.metrics),
       ],
     },
     {
