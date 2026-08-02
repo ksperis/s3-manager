@@ -39,12 +39,13 @@ const CONTEXTS: ExecutionContext[] = [
 ];
 
 function Probe() {
-  const { selectedS3AccountId } = useS3AccountContext();
+  const { selectedS3AccountId, selectedS3AccountType } = useS3AccountContext();
   const location = useLocation();
   const navigate = useNavigate();
   return (
     <>
       <div data-testid="selected">{selectedS3AccountId ?? "null"}</div>
+      <div data-testid="selected-type">{selectedS3AccountType ?? "null"}</div>
       <div data-testid="location">{`${location.pathname}${location.search}`}</div>
       <button type="button" onClick={() => navigate("/manager/next")}>Navigate without context</button>
     </>
@@ -100,6 +101,38 @@ describe("S3AccountProvider", () => {
     renderProvider("/manager");
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-2"));
+  });
+
+  it("uses the context kind instead of a legacy-user ID prefix", async () => {
+    listExecutionContextsMock.mockResolvedValue([
+      {
+        kind: "account",
+        id: "s3u-misleading",
+        display_name: "Canonical account",
+        capabilities: { can_manage_iam: true, sts_capable: true, admin_api_capable: true },
+      },
+    ]);
+
+    renderProvider("/manager");
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("s3u-misleading"));
+    expect(screen.getByTestId("selected-type")).toHaveTextContent("tenant");
+  });
+
+  it("uses the context kind instead of a connection ID prefix", async () => {
+    listExecutionContextsMock.mockResolvedValue([
+      {
+        kind: "legacy_user",
+        id: "conn-misleading",
+        display_name: "Canonical legacy user",
+        capabilities: { can_manage_iam: false, sts_capable: false, admin_api_capable: false },
+      },
+    ]);
+
+    renderProvider("/manager");
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-misleading"));
+    expect(screen.getByTestId("selected-type")).toHaveTextContent("s3_user");
   });
 
   it("prefers ctx query param over the Manager-specific preference", async () => {

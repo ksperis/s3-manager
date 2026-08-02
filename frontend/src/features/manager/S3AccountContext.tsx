@@ -67,10 +67,10 @@ type S3AccountProviderProps = {
 
 function deriveS3AccountType(context: ExecutionContext | null | undefined): string | null {
   if (!context) return null;
-  if (context.kind === "connection" || context.id.startsWith("conn-")) {
+  if (context.kind === "connection") {
     return "connection";
   }
-  if (context.kind === "legacy_user" || context.id.startsWith("s3u-")) {
+  if (context.kind === "legacy_user") {
     return "s3_user";
   }
   return "tenant";

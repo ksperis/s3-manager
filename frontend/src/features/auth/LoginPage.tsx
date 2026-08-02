@@ -85,7 +85,7 @@ export default function LoginPage() {
     fetchOidcProviders()
       .then((providers) => {
         if (isMounted) {
-          setOidcProviders(Array.isArray(providers) ? providers : []);
+          setOidcProviders(providers);
         }
       })
       .catch(() => {
@@ -103,7 +103,7 @@ export default function LoginPage() {
     fetchLdapProviders()
       .then((providers) => {
         if (isMounted) {
-          setLdapProviders(Array.isArray(providers) ? providers : []);
+          setLdapProviders(providers);
         }
       })
       .catch(() => {
@@ -143,8 +143,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!loginSettings) return;
     if (selectedEndpoint || customEndpoint) return;
-    const endpoints = Array.isArray(loginSettings.endpoints) ? loginSettings.endpoints : [];
-    const defaultEndpoint = endpoints.find((endpoint) => endpoint.is_default);
+    const defaultEndpoint = loginSettings.endpoints.find((endpoint) => endpoint.is_default);
     if (defaultEndpoint) {
       setSelectedEndpoint(defaultEndpoint.endpoint_url);
     }
