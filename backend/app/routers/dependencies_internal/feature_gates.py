@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.session import ManagerSessionPrincipal
-from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
 from app.utils.rgw import has_supervision_credentials
@@ -18,7 +17,7 @@ from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_
 
 from .account_context import get_account_context
 from .auth_session import get_current_actor, get_current_storage_ops_admin, get_current_user
-from .service_loaders import get_effective_access_service
+from . import service_loaders, settings_loader
 from .types import AccountCapabilities, BucketMigrationAccessScope, ManagerActor
 
 ManagerToolKey = Literal[
@@ -111,7 +110,7 @@ def _require_supervision_access(
     if caps and not caps.can_manage_buckets:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this account")
     if caps and isinstance(actor, User) and not caps.using_root_key:
-        settings = load_app_settings()
+        settings = settings_loader.load_app_settings()
         if not settings.manager.allow_manager_user_usage_stats:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this profile")
     return actor
@@ -163,7 +162,7 @@ def require_metrics_capable_manager(
 
 
 def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
-    app_settings = load_app_settings()
+    app_settings = settings_loader.load_app_settings()
     global_state = _MANAGER_TOOL_GLOBAL_FIELDS.get(tool)
     if global_state is None:
         return True, ""
@@ -173,7 +172,7 @@ def _manager_tool_global_state(tool: ManagerToolKey) -> tuple[bool, str]:
 
 def user_has_manager_tool_access(user: User, tool: ManagerToolKey, db: Session | None = None) -> bool:
     if db is not None:
-        access = get_effective_access_service(db).resolve_user(user).manager_tool_access
+        access = service_loaders.get_effective_access_service(db).resolve_user(user).manager_tool_access
         return bool(getattr(access, tool, False))
     return bool(getattr(user, _MANAGER_TOOL_ACCESS_FIELDS[tool], False))
 
@@ -202,7 +201,7 @@ def _manager_link_allows_bucket_migration(
 def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
     allowed_context_ids: set[str] = set()
 
-    service = get_effective_access_service(db)
+    service = service_loaders.get_effective_access_service(db)
     effective = service.resolve_user(user)
     for link in effective.account_links:
         if _manager_link_allows_bucket_migration(link):
@@ -220,7 +219,7 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
 
 def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
     admin_account_context_ids: set[str] = set()
-    account_links = get_effective_access_service(db).resolve_user(user).account_links
+    account_links = service_loaders.get_effective_access_service(db).resolve_user(user).account_links
     for link in account_links:
         if _manager_link_allows_bucket_migration(link):
             admin_account_context_ids.add(str(link.account_id))
@@ -262,13 +261,13 @@ def require_bucket_purge_enabled(user: User = Depends(get_current_user), db: Ses
 
 
 def require_bucket_purge_global_enabled() -> None:
-    app_settings = load_app_settings()
+    app_settings = settings_loader.load_app_settings()
     if not bool(app_settings.general.bucket_purge_enabled):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket purge feature is disabled")
 
 
 def require_bucket_usage_stats_enabled(user: User = Depends(get_current_user)) -> User:
-    app_settings = load_app_settings()
+    app_settings = settings_loader.load_app_settings()
     if not bool(app_settings.general.bucket_usage_stats_enabled):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket usage stats feature is disabled")
     if user.role not in _MANAGER_TOOL_ROLES:
@@ -400,36 +399,36 @@ def require_manager_ceph_s3_user_keys(
 
 
 def require_manager_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.manager_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager feature is disabled")
 
 
 def require_ceph_admin_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.ceph_admin_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph admin feature is disabled")
 
 
 def require_storage_ops_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.storage_ops_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Ops feature is disabled")
 
 
 def require_browser_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.browser_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
 
 
 def require_portal_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.portal_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
 
 
 def require_manager_context_enabled() -> None:
-    settings = load_app_settings()
+    settings = settings_loader.load_app_settings()
     if not settings.general.manager_enabled and not settings.general.browser_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access is disabled")

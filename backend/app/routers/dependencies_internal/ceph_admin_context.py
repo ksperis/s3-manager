@@ -9,14 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account, StorageEndpoint, StorageProvider, User, is_admin_ui_role
-from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 
 from .auth_session import get_current_super_admin
-from .service_loaders import get_effective_access_service
+from . import service_loaders, settings_loader
 from .types import AccountCapabilities
 
 
@@ -45,12 +44,12 @@ def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
 def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: int, *, surface: str) -> S3Account:
     if surface != "browser":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin context is only allowed in browser workspace")
-    app_settings = load_app_settings()
+    app_settings = settings_loader.load_app_settings()
     if not app_settings.general.ceph_admin_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin feature is disabled")
     if not app_settings.general.browser_ceph_admin_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Ceph Admin workspace")
-    effective = get_effective_access_service(db).resolve_user(actor)
+    effective = service_loaders.get_effective_access_service(db).resolve_user(actor)
     if not is_admin_ui_role(actor.role) or not effective.can_access_ceph_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for Ceph Admin browser workspace")
 

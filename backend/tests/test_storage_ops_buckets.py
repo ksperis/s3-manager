@@ -16,6 +16,7 @@ from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSum
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
+from app.routers.dependencies_internal import service_loaders, settings_loader
 from app.routers.storage_ops import buckets as storage_ops_router
 from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service
@@ -43,7 +44,7 @@ def _patch_effective_storage_ops_access(monkeypatch):
         def resolve_user(self, user):
             return SimpleNamespace(can_access_storage_ops=bool(user.can_access_storage_ops))
 
-    monkeypatch.setattr(dependencies, "EffectiveAccessService", FakeEffectiveAccessService)
+    monkeypatch.setattr(service_loaders, "EffectiveAccessService", FakeEffectiveAccessService)
 
 
 def test_get_current_storage_ops_admin_rejects_standard_user_without_storage_ops_right(monkeypatch):
@@ -109,7 +110,7 @@ def test_require_storage_ops_bucket_quota_rejects_without_privileged_access(monk
                 manager_tool_access=SimpleNamespace(bucket_quota=False),
             )
 
-    monkeypatch.setattr(dependencies, "EffectiveAccessService", FakeEffectiveAccessService)
+    monkeypatch.setattr(service_loaders, "EffectiveAccessService", FakeEffectiveAccessService)
     user = _admin_user()
     with pytest.raises(HTTPException) as exc:
         dependencies.require_storage_ops_bucket_quota(user=user)
@@ -127,7 +128,7 @@ def test_require_storage_ops_bucket_quota_accepts_privileged_access(monkeypatch)
                 manager_tool_access=SimpleNamespace(bucket_quota=True),
             )
 
-    monkeypatch.setattr(dependencies, "EffectiveAccessService", FakeEffectiveAccessService)
+    monkeypatch.setattr(service_loaders, "EffectiveAccessService", FakeEffectiveAccessService)
     user = _admin_user()
     assert dependencies.require_storage_ops_bucket_quota(user=user).id == user.id
 
@@ -135,7 +136,7 @@ def test_require_storage_ops_bucket_quota_accepts_privileged_access(monkeypatch)
 def test_require_storage_ops_enabled_blocks_when_feature_is_disabled(monkeypatch):
     settings = app_settings_service.load_default_app_settings()
     settings.general.storage_ops_enabled = False
-    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
     with pytest.raises(HTTPException) as exc:
         dependencies.require_storage_ops_enabled()
     assert exc.value.status_code == 403

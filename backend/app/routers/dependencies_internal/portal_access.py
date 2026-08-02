@@ -11,13 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
 from app.routers.http_errors import raise_http_exception_from_exception
-from app.routers.dependencies_internal.settings_loader import load_app_settings
 from app.services.effective_access_service import EffectiveAccountLink
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.account_roles import portal_role_for
 
 from .account_context import _parse_account_selector, _resolve_user_account_link, _resolve_workspace_surface
 from .auth_session import get_current_account_user, settings
+from . import settings_loader
 from .types import AccountAccess, AccountCapabilities
 
 def _portal_membership_capabilities(
@@ -135,7 +135,7 @@ def _resolve_portal_browser_context(
     *,
     request: Request,
 ) -> S3Account:
-    app_settings = load_app_settings()
+    app_settings = settings_loader.load_app_settings()
     if not app_settings.general.portal_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
     if not app_settings.general.browser_portal_enabled:

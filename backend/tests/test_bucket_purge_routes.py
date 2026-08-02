@@ -15,6 +15,7 @@ from app.main import app
 from app.models.app_settings import AppSettings
 from app.models.bucket_purge import BucketPurgeProgress, BucketPurgeRequest, BucketPurgeResult
 from app.routers import dependencies as dependencies_router
+from app.routers.dependencies_internal import settings_loader
 from app.routers.ceph_admin import purge as ceph_purge
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.manager import buckets as manager_buckets
@@ -64,7 +65,7 @@ def _manager_tool_user(*, bucket_purge: bool = True) -> User:
 def test_require_bucket_purge_enabled_blocks_when_feature_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_purge_enabled = False
-    monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_purge_enabled(_manager_tool_user(), db=None)
@@ -76,7 +77,7 @@ def test_require_bucket_purge_enabled_blocks_when_feature_disabled(monkeypatch):
 def test_require_bucket_purge_enabled_blocks_without_user_tool_access(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_purge_enabled = True
-    monkeypatch.setattr(dependencies_router, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_purge_enabled(_manager_tool_user(bucket_purge=False), db=None)

@@ -16,7 +16,7 @@ from app.models.session import ManagerSessionPrincipal
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 
-from .service_loaders import get_effective_access_service
+from . import service_loaders
 from .types import ManagerActor
 
 settings = get_settings()
@@ -72,14 +72,14 @@ def get_current_ui_superadmin(user: User = Depends(get_current_user)) -> User:
 
 
 def get_current_ceph_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-    effective = get_effective_access_service(db).resolve_user(user)
+    effective = service_loaders.get_effective_access_service(db).resolve_user(user)
     if not is_admin_ui_role(user.role) or not effective.can_access_ceph_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
 
 def get_current_storage_ops_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-    effective = get_effective_access_service(db).resolve_user(user)
+    effective = service_loaders.get_effective_access_service(db).resolve_user(user)
     if user.role not in {
         UserRole.UI_SUPERADMIN.value,
         UserRole.UI_ADMIN.value,
