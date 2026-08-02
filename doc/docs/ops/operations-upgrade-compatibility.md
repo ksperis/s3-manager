@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical user UI preferences
+
+Migration `0079_canonical_user_ui_preferences` rewrites every persisted user UI
+preference payload to the current `theme` and `selected_portal_account_id`
+contract. Malformed or invalid payloads become empty preferences, removed fields
+are discarded, and account identifiers are trimmed.
+
+Deploy the migration and backend together. The backend now treats any remaining
+non-canonical payload as data corruption instead of repairing it during profile
+serialization. The data cleanup is intentionally not reversed on downgrade.
+
 ## 2026-08 normalized tags only
 
 Migration `0078_remove_legacy_tags_json` removes the `tags_json` mirrors from

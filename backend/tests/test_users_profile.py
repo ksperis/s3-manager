@@ -3,6 +3,10 @@
 import base64
 import hashlib
 import json
+
+import pytest
+from pydantic import ValidationError
+
 from app.core.security import get_password_hash, verify_password
 from app.db import AccountRole, S3Account, User, UserRole, UserS3Account
 from app.main import app
@@ -199,17 +203,15 @@ def test_update_users_me_updates_quota_alert_toggle(client, db_session):
     assert user.quota_alerts_enabled is False
 
 
-def test_users_me_returns_empty_ui_preferences_for_malformed_storage(client, db_session):
+def test_users_me_rejects_malformed_stored_ui_preferences(client, db_session):
     user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
     user.ui_preferences_json = "not-json"
     db_session.add(user)
     db_session.commit()
     app.dependency_overrides[dependencies.get_current_user] = lambda: user
 
-    response = client.get("/api/users/me")
-
-    assert response.status_code == 200, response.text
-    assert response.json()["ui_preferences"] == {"theme": None, "selected_portal_account_id": None}
+    with pytest.raises(ValidationError):
+        client.get("/api/users/me")
 
 
 def test_update_users_me_updates_ui_preferences(client, db_session):

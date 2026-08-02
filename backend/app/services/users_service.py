@@ -9,7 +9,6 @@ import logging
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import DetachedInstanceError
-from pydantic import ValidationError
 
 from app.core.security import get_password_hash, verify_password
 from app.db import (
@@ -63,19 +62,8 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
-def _parse_ui_preferences(raw: object) -> UiPreferences:
-    if not raw:
-        return UiPreferences()
-    try:
-        payload = json.loads(str(raw))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return UiPreferences()
-    if not isinstance(payload, dict):
-        return UiPreferences()
-    try:
-        return UiPreferences.model_validate(payload)
-    except ValidationError:
-        return UiPreferences()
+def _parse_ui_preferences(raw: str) -> UiPreferences:
+    return UiPreferences.model_validate_json(raw)
 
 
 def _dump_ui_preferences(preferences: UiPreferences) -> str:
