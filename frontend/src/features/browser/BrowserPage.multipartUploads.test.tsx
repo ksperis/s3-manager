@@ -148,6 +148,7 @@ describe("BrowserPage multipart uploads modal", () => {
     const user = userEvent.setup();
     renderPage();
 
+    await screen.findByText("No objects found for this path.");
     const contextToolbar = await screen.findByRole("toolbar", {
       name: "Browser context bar",
     });

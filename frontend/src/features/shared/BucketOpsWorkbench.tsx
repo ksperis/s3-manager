@@ -170,9 +170,13 @@ import {
   buildWebsiteSummaryLines,
 } from "./bucketFeatureSummaries";
 import {
+  buildBucketOpsActiveFilterSummaryItems,
+  buildBucketOpsAdvancedFilterComparison,
+  buildBucketOpsDraftFilterSummaryItems,
+} from "./bucketOpsFilterSummary";
+import {
   clearFeatureDetailField,
   featureDetailSummary,
-  featureDetailSummaryItems,
   type FeatureDetailFilterKey,
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
@@ -189,8 +193,6 @@ import {
   advancedFilterMatchModeButtonClass,
   FILTER_COST_LABEL,
   formatAdvancedFilterSyncLabel,
-  formatTextFilterSummary,
-  formatTextMatchModeLabel,
   advancedFilterSyncBadgeClass,
   advancedFilterRootClass,
   advancedFilterSectionClass,
@@ -213,21 +215,15 @@ import {
   buildAdvancedFilterPayload,
   buildAdvancedFilterSecondarySectionState,
   defaultAdvancedFilter,
-  formatFeatureFilterStateLabel,
   formatStorageOpsContextKindLabel,
   hasAdvancedFilters,
   normalizeAdvancedSelectionValues,
-  parseS3TagExpressions,
-  serializeAdvancedSelectionValues,
-  serializeS3TagExpressions,
   stripUnsupportedAdvancedFeatureFilters,
   toStorageOpsContextKind,
   type ActiveFilterRemoveAction,
-  type ActiveFilterSummaryItem,
   type AdvancedFilterSecondarySectionId,
   type AdvancedFilterSecondarySectionState,
   type AdvancedFilterState,
-  type AdvancedNumericField,
   type AdvancedTextOrNumericField,
   type BooleanFilterState,
   type FeatureFilterState,
@@ -4503,75 +4499,42 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       fieldClass: uiFeatureStateHighlightFieldClasses[tone],
     };
   };
-  const contextAppliedIds = normalizeAdvancedSelectionValues(advancedApplied?.contextIds);
-  const contextAppliedIdsSerialized = serializeAdvancedSelectionValues(contextAppliedIds);
-  const endpointAppliedNames = normalizeAdvancedSelectionValues(advancedApplied?.endpointNames);
-  const endpointAppliedNamesSerialized = serializeAdvancedSelectionValues(endpointAppliedNames);
-  const tenantAppliedValue = (advancedApplied?.tenant ?? "").trim();
-  const ownerAppliedValue = (advancedApplied?.owner ?? "").trim();
-  const ownerNameAppliedValue = (advancedApplied?.ownerName ?? "").trim();
-  const s3TagsAppliedExpressions = parseS3TagExpressions(advancedApplied?.s3Tags ?? "");
-  const s3TagsAppliedSerialized = serializeS3TagExpressions(s3TagsAppliedExpressions);
-  const tenantAppliedMatchMode = advancedApplied?.tenantMatchMode ?? "contains";
-  const ownerAppliedMatchMode = advancedApplied?.ownerMatchMode ?? "contains";
-  const ownerNameAppliedMatchMode = advancedApplied?.ownerNameMatchMode ?? "contains";
-  const s3TagsAppliedMatchMode = advancedApplied?.s3TagsMatchMode ?? "contains";
-  const tenantAppliedParsed = parseExactListInput(advancedApplied?.tenant ?? "");
-  const ownerAppliedParsed = parseExactListInput(advancedApplied?.owner ?? "");
-  const ownerNameAppliedParsed = parseExactListInput(advancedApplied?.ownerName ?? "");
-  const s3TagsAppliedParsed = parseExactListInput(advancedApplied?.s3Tags ?? "");
-  const tenantAppliedForcesExact = tenantAppliedParsed.listProvided && tenantAppliedParsed.values.length > 0;
-  const ownerAppliedForcesExact = ownerAppliedParsed.listProvided && ownerAppliedParsed.values.length > 0;
-  const ownerNameAppliedForcesExact = ownerNameAppliedParsed.listProvided && ownerNameAppliedParsed.values.length > 0;
-  const s3TagsAppliedForcesExact = s3TagsAppliedParsed.listProvided && s3TagsAppliedParsed.values.length > 0;
-  const tenantAppliedEffectiveMatchMode: TextMatchMode = tenantAppliedForcesExact ? "exact" : tenantAppliedMatchMode;
-  const ownerAppliedEffectiveMatchMode: TextMatchMode = ownerAppliedForcesExact ? "exact" : ownerAppliedMatchMode;
-  const ownerNameAppliedEffectiveMatchMode: TextMatchMode = ownerNameAppliedForcesExact ? "exact" : ownerNameAppliedMatchMode;
-  const s3TagsAppliedEffectiveMatchMode: TextMatchMode = s3TagsAppliedForcesExact ? "exact" : s3TagsAppliedMatchMode;
-  const ownerNameAppliedScope = advancedApplied?.ownerNameScope ?? "any";
-  const ownerSuspendedApplied = advancedApplied?.ownerSuspended ?? "any";
-  const contextDraftIds = normalizeAdvancedSelectionValues(advancedDraft.contextIds);
-  const contextDraftIdsSerialized = serializeAdvancedSelectionValues(contextDraftIds);
-  const endpointDraftNames = normalizeAdvancedSelectionValues(advancedDraft.endpointNames);
-  const endpointDraftNamesSerialized = serializeAdvancedSelectionValues(endpointDraftNames);
-  const tenantDraftValue = advancedDraft.tenant.trim();
-  const ownerDraftValue = advancedDraft.owner.trim();
-  const ownerNameDraftValue = advancedDraft.ownerName.trim();
-  const s3TagsDraftExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
-  const s3TagsDraftSerialized = serializeS3TagExpressions(s3TagsDraftExpressions);
-  const tenantDraftMatchMode = advancedDraft.tenantMatchMode;
-  const ownerDraftMatchMode = advancedDraft.ownerMatchMode;
-  const ownerNameDraftMatchMode = advancedDraft.ownerNameMatchMode;
-  const s3TagsDraftMatchMode = advancedDraft.s3TagsMatchMode;
-  const tenantDraftParsed = parseExactListInput(advancedDraft.tenant);
-  const ownerDraftParsed = parseExactListInput(advancedDraft.owner);
-  const ownerNameDraftParsed = parseExactListInput(advancedDraft.ownerName);
-  const s3TagsDraftParsed = parseExactListInput(advancedDraft.s3Tags);
-  const tenantDraftForcesExact = tenantDraftParsed.listProvided && tenantDraftParsed.values.length > 0;
-  const ownerDraftForcesExact = ownerDraftParsed.listProvided && ownerDraftParsed.values.length > 0;
-  const ownerNameDraftForcesExact = ownerNameDraftParsed.listProvided && ownerNameDraftParsed.values.length > 0;
-  const s3TagsDraftForcesExact = s3TagsDraftParsed.listProvided && s3TagsDraftParsed.values.length > 0;
-  const tenantDraftEffectiveMatchMode: TextMatchMode = tenantDraftForcesExact ? "exact" : tenantDraftMatchMode;
-  const ownerDraftEffectiveMatchMode: TextMatchMode = ownerDraftForcesExact ? "exact" : ownerDraftMatchMode;
-  const ownerNameDraftEffectiveMatchMode: TextMatchMode = ownerNameDraftForcesExact ? "exact" : ownerNameDraftMatchMode;
-  const s3TagsDraftEffectiveMatchMode: TextMatchMode = s3TagsDraftForcesExact ? "exact" : s3TagsDraftMatchMode;
-  const ownerNameDraftScope = advancedDraft.ownerNameScope;
-  const ownerSuspendedDraft = advancedDraft.ownerSuspended;
-  const contextPending =
-    contextDraftIdsSerialized !== contextAppliedIdsSerialized;
-  const endpointPending = endpointDraftNamesSerialized !== endpointAppliedNamesSerialized;
-  const tenantPending =
-    tenantDraftValue !== tenantAppliedValue || (tenantDraftValue.length > 0 && tenantDraftEffectiveMatchMode !== tenantAppliedEffectiveMatchMode);
-  const ownerPending =
-    ownerDraftValue !== ownerAppliedValue || (ownerDraftValue.length > 0 && ownerDraftEffectiveMatchMode !== ownerAppliedEffectiveMatchMode);
-  const ownerNamePending =
-    ownerNameDraftValue !== ownerNameAppliedValue ||
-    ownerNameDraftScope !== ownerNameAppliedScope ||
-    (ownerNameDraftValue.length > 0 && ownerNameDraftEffectiveMatchMode !== ownerNameAppliedEffectiveMatchMode);
-  const ownerSuspendedPending = ownerSuspendedDraft !== ownerSuspendedApplied;
-  const s3TagsPending =
-    s3TagsDraftSerialized !== s3TagsAppliedSerialized ||
-    (s3TagsDraftExpressions.length > 0 && s3TagsDraftEffectiveMatchMode !== s3TagsAppliedEffectiveMatchMode);
+  const {
+    contextAppliedIds,
+    endpointAppliedNames,
+    tenantAppliedValue,
+    ownerAppliedValue,
+    ownerNameAppliedValue,
+    s3TagsAppliedExpressions,
+    ownerNameAppliedScope,
+    ownerSuspendedApplied,
+    contextDraftIds,
+    endpointDraftNames,
+    tenantDraftValue,
+    ownerDraftValue,
+    ownerNameDraftValue,
+    s3TagsDraftExpressions,
+    tenantDraftEffectiveMatchMode,
+    tenantDraftForcesExact,
+    ownerDraftEffectiveMatchMode,
+    ownerDraftForcesExact,
+    ownerNameDraftEffectiveMatchMode,
+    ownerNameDraftForcesExact,
+    s3TagsDraftEffectiveMatchMode,
+    s3TagsDraftForcesExact,
+    ownerNameDraftScope,
+    ownerSuspendedDraft,
+    contextPending,
+    endpointPending,
+    tenantPending,
+    ownerPending,
+    ownerNamePending,
+    ownerSuspendedPending,
+    s3TagsPending,
+  } = useMemo(
+    () => buildBucketOpsAdvancedFilterComparison(advancedApplied, advancedDraft),
+    [advancedApplied, advancedDraft],
+  );
   const contextFieldState = fieldHighlight(
     contextAppliedIds.length > 0,
     contextPending
@@ -4842,195 +4805,31 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
     }
     clearAdvancedFeatureField(action.feature);
   };
-  const activeFilterSummaryItems = useMemo(() => {
-    const items: ActiveFilterSummaryItem[] = [];
-    const quick = quickFilterActive ? filterValue.trim() : "";
-    if (quickFilterActive && quick) {
-      const quickLabel = formatTextFilterSummary("Name", filterValue, effectiveQuickFilterMode);
-      if (quickLabel) {
-        items.push({
-          id: "quick",
-          label: quickLabel,
-          remove: { type: "quick" },
-        });
-      }
-    }
-
-    const normalizedActiveTags = normalizeUiTagValues(tagFilters);
-    if (normalizedActiveTags.length > 0) {
-      if (normalizedActiveTags.length > 1) {
-        items.push({
-          id: "tag-mode",
-          label: `UI tags mode: ${tagFilterMode === "all" ? "AND" : "OR"}`,
-          remove: { type: "tag_mode" },
-        });
-      }
-      normalizedActiveTags.forEach((tag) => {
-        items.push({
-          id: `tag-${tag.toLowerCase()}`,
-          label: `UI tag: ${tag}`,
-          remove: { type: "tag", tag },
-        });
-      });
-    }
-
-    if (advancedApplied && hasAdvancedFilters(advancedApplied, isStorageOps, usageFeatureEnabled, featureSupport)) {
-      if (isStorageOps) {
-        if (contextAppliedIds.length > 0) {
-          const labels = contextAppliedIds.map((id) => storageOpsContextLabelById.get(id) ?? id);
-          items.push({
-            id: "context-ids",
-            label: `Contexts: ${formatBucketNamesPreview(labels, 2)}`,
-            remove: { type: "advanced_context_ids" },
-          });
-        }
-        if (endpointAppliedNames.length > 0) {
-          items.push({
-            id: "endpoint-names",
-            label: `Endpoints: ${formatBucketNamesPreview(endpointAppliedNames, 2)}`,
-            remove: { type: "advanced_endpoint_names" },
-          });
-        }
-      }
-
-      const tenant = advancedApplied.tenant.trim();
-      if (tenant) {
-        const label = formatTextFilterSummary("Tenant", advancedApplied.tenant, tenantAppliedEffectiveMatchMode);
-        if (label) {
-          items.push({
-            id: "tenant",
-            label,
-            remove: { type: "advanced_text", field: "tenant" },
-          });
-        }
-      }
-
-      const owner = advancedApplied.owner.trim();
-      if (owner) {
-        const label = formatTextFilterSummary("Owner", advancedApplied.owner, ownerAppliedEffectiveMatchMode);
-        if (label) {
-          items.push({
-            id: "owner",
-            label,
-            remove: { type: "advanced_text", field: "owner" },
-          });
-        }
-      }
-      const ownerName = advancedApplied.ownerName.trim();
-      if (ownerName) {
-        const label = formatTextFilterSummary("Owner name", advancedApplied.ownerName, ownerNameAppliedEffectiveMatchMode);
-        if (label) {
-          items.push({
-            id: "owner-name",
-            label,
-            remove: { type: "advanced_text", field: "ownerName" },
-          });
-        }
-      }
-      if (advancedApplied.ownerNameScope !== "any") {
-        items.push({
-          id: "owner-kind",
-          label: `Owner kind: ${advancedApplied.ownerNameScope === "account" ? "Accounts" : "Users"}`,
-          remove: { type: "advanced_owner_scope" },
-        });
-      }
-      if (advancedApplied.ownerSuspended !== "any") {
-        items.push({
-          id: "owner-suspended",
-          label: `Owner suspended: ${advancedApplied.ownerSuspended === "true" ? "Yes" : "No"}`,
-          remove: { type: "advanced_owner_suspended" },
-        });
-      }
-      const s3TagExpressions = parseS3TagExpressions(advancedApplied.s3Tags);
-      if (s3TagExpressions.length > 0) {
-        const preview = formatBucketNamesPreview(s3TagExpressions, 2);
-        items.push({
-          id: "s3-tags",
-          label: `S3 tags ${formatTextMatchModeLabel(s3TagsAppliedEffectiveMatchMode)}: ${preview}`,
-          remove: { type: "advanced_text", field: "s3Tags" },
-        });
-      }
-
-      const numericFilters: Array<{ id: AdvancedNumericField; label: string; format?: "number" | "percent" }> = [
-        { id: "minOwnerQuotaBytes", label: "Owner quota bytes >=" },
-        { id: "maxOwnerQuotaBytes", label: "Owner quota bytes <=" },
-        { id: "minOwnerQuotaObjects", label: "Owner quota objects >=" },
-        { id: "maxOwnerQuotaObjects", label: "Owner quota objects <=" },
-      ];
-      if (usageFeatureEnabled) {
-        numericFilters.unshift(
-          { id: "minUsedBytes", label: "Used bytes >=" },
-          { id: "maxUsedBytes", label: "Used bytes <=" },
-          { id: "minObjects", label: "Objects >=" },
-          { id: "maxObjects", label: "Objects <=" },
-          { id: "minQuotaBytes", label: "Quota bytes >=" },
-          { id: "maxQuotaBytes", label: "Quota bytes <=" },
-          { id: "minQuotaObjects", label: "Quota objects >=" },
-          { id: "maxQuotaObjects", label: "Quota objects <=" },
-          { id: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
-          { id: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
-          { id: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
-          { id: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
-          { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
-          { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
-          { id: "minOwnerObjects", label: "Owner objects >=" },
-          { id: "maxOwnerObjects", label: "Owner objects <=" },
-          { id: "minOwnerQuotaUsageSizePercent", label: "Owner quota usage size % >=", format: "percent" },
-          { id: "maxOwnerQuotaUsageSizePercent", label: "Owner quota usage size % <=", format: "percent" },
-          { id: "minOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % >=", format: "percent" },
-          { id: "maxOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % <=", format: "percent" }
-        );
-      }
-      numericFilters.forEach(({ id, label, format }) => {
-        const value = (advancedApplied[id] as string).trim();
-        if (!value) return;
-        const asNumber = Number(value);
-        const display = Number.isFinite(asNumber) ? (format === "percent" ? `${asNumber}%` : formatNumber(asNumber)) : value;
-        items.push({
-          id: `num-${id}`,
-          label: `${label} ${display}`,
-          remove: { type: "advanced_numeric", field: id },
-        });
-      });
-
-      (Object.keys(advancedApplied.features) as FeatureKey[]).forEach((feature) => {
-        if (featureSupport[feature] === false) return;
-        const state = advancedApplied.features[feature];
-        if (state === "any") return;
-        items.push({
-          id: `feature-${feature}`,
-          label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
-          remove: { type: "advanced_feature", feature },
-        });
-      });
-      featureDetailSummaryItems(advancedApplied.featureDetails).forEach((entry) => {
-        items.push({
-          id: `feature-detail-${entry.field}`,
-          label: entry.label,
-          remove: { type: "advanced_feature_detail", field: entry.field },
-        });
-      });
-    }
-
-    return items;
-  }, [
-    quickFilterActive,
-    filterValue,
-    effectiveQuickFilterMode,
-    tagFilters,
-    tagFilterMode,
-    advancedApplied,
-    isStorageOps,
-    usageFeatureEnabled,
-    featureSupport,
-    contextAppliedIds,
-    endpointAppliedNames,
-    storageOpsContextLabelById,
-    tenantAppliedEffectiveMatchMode,
-    ownerAppliedEffectiveMatchMode,
-    ownerNameAppliedEffectiveMatchMode,
-    s3TagsAppliedEffectiveMatchMode,
-  ]);
+  const activeFilterSummaryItems = useMemo(
+    () =>
+      buildBucketOpsActiveFilterSummaryItems({
+        quickFilterValue: filterValue,
+        quickFilterMode: effectiveQuickFilterMode,
+        tagFilters,
+        tagFilterMode,
+        advanced: advancedApplied,
+        isStorageOps,
+        usageFeatureEnabled,
+        featureSupport,
+        contextLabelById: storageOpsContextLabelById,
+      }),
+    [
+      filterValue,
+      effectiveQuickFilterMode,
+      tagFilters,
+      tagFilterMode,
+      advancedApplied,
+      isStorageOps,
+      usageFeatureEnabled,
+      featureSupport,
+      storageOpsContextLabelById,
+    ],
+  );
   const showActiveFiltersCard =
     activeFilterSummaryItems.length > 0 &&
     !(
@@ -5040,118 +4839,22 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       tagFilters.length === 0 &&
       !quickFilterAppliedParsed.listProvided
     );
-  const advancedDraftSummaryItems = useMemo(() => {
-    const items: Array<{ id: string; label: string }> = [];
-    if (isStorageOps) {
-      if (contextDraftIds.length > 0) {
-        const labels = contextDraftIds.map((id) => storageOpsContextLabelById.get(id) ?? id);
-        items.push({ id: "draft-context-ids", label: `Contexts: ${formatBucketNamesPreview(labels, 2)}` });
-      }
-      if (endpointDraftNames.length > 0) {
-        items.push({ id: "draft-endpoint-names", label: `Endpoints: ${formatBucketNamesPreview(endpointDraftNames, 2)}` });
-      }
-    }
-
-    const tenantLabel = formatTextFilterSummary("Tenant", advancedDraft.tenant, tenantDraftEffectiveMatchMode);
-    if (tenantLabel) items.push({ id: "draft-tenant", label: tenantLabel });
-
-    const ownerLabel = formatTextFilterSummary("Owner", advancedDraft.owner, ownerDraftEffectiveMatchMode);
-    if (ownerLabel) items.push({ id: "draft-owner", label: ownerLabel });
-    const ownerNameLabel = formatTextFilterSummary("Owner name", advancedDraft.ownerName, ownerNameDraftEffectiveMatchMode);
-    if (ownerNameLabel) {
-      items.push({
-        id: "draft-owner-name",
-        label: ownerNameLabel,
-      });
-    }
-    if (advancedDraft.ownerNameScope !== "any") {
-      items.push({
-        id: "draft-owner-kind",
-        label: `Owner kind: ${advancedDraft.ownerNameScope === "account" ? "Accounts" : "Users"}`,
-      });
-    }
-    if (advancedDraft.ownerSuspended !== "any") {
-      items.push({
-        id: "draft-owner-suspended",
-        label: `Owner suspended: ${advancedDraft.ownerSuspended === "true" ? "Yes" : "No"}`,
-      });
-    }
-    const s3TagExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
-    if (s3TagExpressions.length > 0) {
-      items.push({
-        id: "draft-s3-tags",
-        label: `S3 tags ${formatTextMatchModeLabel(s3TagsDraftEffectiveMatchMode)}: ${formatBucketNamesPreview(s3TagExpressions, 2)}`,
-      });
-    }
-
-    const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string; format?: "number" | "percent" }> = [
-      { id: "minOwnerQuotaBytes", label: "Owner quota bytes >=" },
-      { id: "maxOwnerQuotaBytes", label: "Owner quota bytes <=" },
-      { id: "minOwnerQuotaObjects", label: "Owner quota objects >=" },
-      { id: "maxOwnerQuotaObjects", label: "Owner quota objects <=" },
-    ];
-    if (usageFeatureEnabled) {
-      numericFilters.unshift(
-        { id: "minUsedBytes", label: "Used bytes >=" },
-        { id: "maxUsedBytes", label: "Used bytes <=" },
-        { id: "minObjects", label: "Objects >=" },
-        { id: "maxObjects", label: "Objects <=" },
-        { id: "minQuotaBytes", label: "Quota bytes >=" },
-        { id: "maxQuotaBytes", label: "Quota bytes <=" },
-        { id: "minQuotaObjects", label: "Quota objects >=" },
-        { id: "maxQuotaObjects", label: "Quota objects <=" },
-        { id: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
-        { id: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
-        { id: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
-        { id: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
-        { id: "minOwnerUsedBytes", label: "Owner used bytes >=" },
-        { id: "maxOwnerUsedBytes", label: "Owner used bytes <=" },
-        { id: "minOwnerObjects", label: "Owner objects >=" },
-        { id: "maxOwnerObjects", label: "Owner objects <=" },
-        { id: "minOwnerQuotaUsageSizePercent", label: "Owner quota usage size % >=", format: "percent" },
-        { id: "maxOwnerQuotaUsageSizePercent", label: "Owner quota usage size % <=", format: "percent" },
-        { id: "minOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % >=", format: "percent" },
-        { id: "maxOwnerQuotaUsageObjectPercent", label: "Owner quota usage objects % <=", format: "percent" }
-      );
-    }
-    numericFilters.forEach(({ id, label, format }) => {
-      const value = (advancedDraft[id] as string).trim();
-      if (!value) return;
-      const asNumber = Number(value);
-      const display = Number.isFinite(asNumber) ? (format === "percent" ? `${asNumber}%` : formatNumber(asNumber)) : value;
-      items.push({ id: `draft-num-${id}`, label: `${label} ${display}` });
-    });
-
-    (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
-      if (featureSupport[feature] === false) return;
-      const state = advancedDraft.features[feature];
-      if (state === "any") return;
-      items.push({
-        id: `draft-feature-${feature}`,
-        label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
-      });
-    });
-    featureDetailSummaryItems(advancedDraft.featureDetails).forEach((entry) => {
-      items.push({
-        id: `draft-feature-detail-${entry.field}`,
-        label: entry.label,
-      });
-    });
-
-    return items;
-  }, [
-    advancedDraft,
-    isStorageOps,
-    usageFeatureEnabled,
-    featureSupport,
-    contextDraftIds,
-    endpointDraftNames,
-    storageOpsContextLabelById,
-    tenantDraftEffectiveMatchMode,
-    ownerDraftEffectiveMatchMode,
-    ownerNameDraftEffectiveMatchMode,
-    s3TagsDraftEffectiveMatchMode,
-  ]);
+  const advancedDraftSummaryItems = useMemo(
+    () =>
+      buildBucketOpsDraftFilterSummaryItems(advancedDraft, {
+        isStorageOps,
+        usageFeatureEnabled,
+        featureSupport,
+        contextLabelById: storageOpsContextLabelById,
+      }),
+    [
+      advancedDraft,
+      isStorageOps,
+      usageFeatureEnabled,
+      featureSupport,
+      storageOpsContextLabelById,
+    ],
+  );
   const clearOrphanedTags = () => {
     if (orphanedTagBuckets.length === 0) return;
     removeUiTagTargets(orphanedTagBuckets);
