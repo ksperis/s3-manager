@@ -217,13 +217,8 @@ import { resolveBrowserContextQuotas } from "./browserQuota";
 import {
   BUCKET_MENU_LIMIT,
   COMPLETED_OPERATIONS_LIMIT,
-  DEFAULT_DIRECT_DOWNLOAD_PARALLELISM,
-  DEFAULT_DIRECT_UPLOAD_PARALLELISM,
   DELETED_RESULTS_TARGET,
   DELETED_VERSIONS_SCAN_LIMIT,
-  DEFAULT_OTHER_OPERATIONS_PARALLELISM,
-  DEFAULT_PROXY_DOWNLOAD_PARALLELISM,
-  DEFAULT_PROXY_UPLOAD_PARALLELISM,
   DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
   MULTIPART_UPLOADS_HARD_LIMIT,
@@ -257,7 +252,6 @@ import {
   buildUploadGrouping,
   buildVersionRows,
   chunkItems,
-  clampParallelism,
   collectDroppedFiles,
   findTreeNodeByPrefix,
   formatDateTime,
@@ -277,6 +271,14 @@ import {
   toIsoString,
   updateTreeNodes,
 } from "./browserUtils";
+import {
+  CORS_DIRECT_TRANSFER_WARNING,
+  buildBrowserTransferWarnings,
+  isStsCredentialsExpiring,
+  resolveBrowserTransferAccessBadge,
+  resolveBrowserTransferParallelism,
+  resolveLegacyStsTooltip,
+} from "./browserTransferPresentation";
 import {
   BROWSER_QUERY_DEBOUNCE_MS,
   isStaleRequest,
@@ -501,8 +503,6 @@ const PATH_SUGGESTIONS_API_LIMIT = 50;
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
-const CORS_DIRECT_TRANSFER_WARNING =
-  "Direct download/upload is not allowed on this bucket.";
 const TREE_PREFIXES_PAGE_BUDGET = 50;
 const BUCKET_ACCESS_PROBE_CONCURRENCY = 4;
 const BUCKET_ACCESS_ROOT_MARGIN = "120px";
@@ -1876,34 +1876,17 @@ export default function BrowserPage({
     () => (typeof window === "undefined" ? undefined : window.location.origin),
     [],
   );
-  const uploadParallelism = useMemo(() => {
-    const direct =
-      browserSettings?.direct_upload_parallelism ??
-      DEFAULT_DIRECT_UPLOAD_PARALLELISM;
-    const proxy =
-      browserSettings?.proxy_upload_parallelism ??
-      DEFAULT_PROXY_UPLOAD_PARALLELISM;
-    const fallback = useProxyTransfers
-      ? DEFAULT_PROXY_UPLOAD_PARALLELISM
-      : DEFAULT_DIRECT_UPLOAD_PARALLELISM;
-    return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
-  }, [browserSettings, useProxyTransfers]);
+  const transferParallelism = useMemo(
+    () =>
+      resolveBrowserTransferParallelism(browserSettings, useProxyTransfers),
+    [browserSettings, useProxyTransfers],
+  );
+  const uploadParallelism = transferParallelism.upload;
   const uploadParallelismRef = useRef(uploadParallelism);
   useEffect(() => {
     uploadParallelismRef.current = uploadParallelism;
   }, [uploadParallelism]);
-  const downloadParallelism = useMemo(() => {
-    const direct =
-      browserSettings?.direct_download_parallelism ??
-      DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
-    const proxy =
-      browserSettings?.proxy_download_parallelism ??
-      DEFAULT_PROXY_DOWNLOAD_PARALLELISM;
-    const fallback = useProxyTransfers
-      ? DEFAULT_PROXY_DOWNLOAD_PARALLELISM
-      : DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
-    return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
-  }, [browserSettings, useProxyTransfers]);
+  const downloadParallelism = transferParallelism.download;
   const downloadParallelismRef = useRef(downloadParallelism);
   useEffect(() => {
     downloadParallelismRef.current = downloadParallelism;
@@ -1911,23 +1894,12 @@ export default function BrowserPage({
   useEffect(() => {
     stsCredentialsRef.current = stsCredentials;
   }, [stsCredentials]);
-  const otherOperationsParallelism = useMemo(() => {
-    const value =
-      browserSettings?.other_operations_parallelism ??
-      DEFAULT_OTHER_OPERATIONS_PARALLELISM;
-    return clampParallelism(value, DEFAULT_OTHER_OPERATIONS_PARALLELISM);
-  }, [browserSettings]);
+  const otherOperationsParallelism = transferParallelism.otherOperations;
   const otherOperationsParallelismRef = useRef(otherOperationsParallelism);
   useEffect(() => {
     otherOperationsParallelismRef.current = otherOperationsParallelism;
   }, [otherOperationsParallelism]);
   const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
-  const isStsCredentialsExpiring = (value: StsCredentials | null) => {
-    if (!value?.expiration) return true;
-    const expiresAt = new Date(value.expiration).getTime();
-    if (Number.isNaN(expiresAt)) return true;
-    return expiresAt - Date.now() <= 2 * 60 * 1000;
-  };
   const ensureStsCredentials = useCallback(
     async (force = false) => {
       if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
@@ -1936,7 +1908,11 @@ export default function BrowserPage({
         return null;
       }
       const current = stsCredentialsRef.current;
-      if (!force && current && !isStsCredentialsExpiring(current)) {
+      if (
+        !force &&
+        current &&
+        !isStsCredentialsExpiring(current.expiration)
+      ) {
         return current;
       }
       if (stsRefreshRef.current) {
@@ -2058,32 +2034,23 @@ export default function BrowserPage({
       useStsPresigner,
     ],
   );
-  const warnings = useMemo(() => {
-    const items: string[] = [];
-    if (warningMessage) {
-      items.push(warningMessage);
-    }
-    if (corsFixError) {
-      items.push(corsFixError);
-    }
-    if (stsCredentialsError) {
-      items.push(stsCredentialsError);
-    }
-    const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
-    if (corsDisabled) {
-      items.push(CORS_DIRECT_TRANSFER_WARNING);
-      if (!proxyAllowed) {
-        items.push("Proxy transfers are disabled in settings.");
-      }
-    }
-    return items;
-  }, [
-    corsFixError,
-    corsStatus,
-    proxyAllowed,
-    stsCredentialsError,
-    warningMessage,
-  ]);
+  const warnings = useMemo(
+    () =>
+      buildBrowserTransferWarnings({
+        warningMessage,
+        corsFixError,
+        stsCredentialsError,
+        corsEnabled: corsStatus?.enabled ?? null,
+        proxyAllowed,
+      }),
+    [
+      corsFixError,
+      corsStatus?.enabled,
+      proxyAllowed,
+      stsCredentialsError,
+      warningMessage,
+    ],
+  );
   const hasCorsAction = Boolean(
     !isPortalProfile && corsStatus && !corsStatus.enabled && uiOrigin,
   );
@@ -2092,75 +2059,37 @@ export default function BrowserPage({
     const formatted = formatDateTime(stsCredentials.expiration);
     return formatted === "-" ? "" : formatted;
   }, [stsCredentials?.expiration]);
-  const legacyStsTooltip = useMemo(() => {
-    if (!isLegacyContext) return "";
-    return isLegacyConnectionContext
-      ? "STS is not available for legacy S3 connections. Presigned URLs are used instead."
-      : "STS is not available for legacy S3 users. Presigned URLs are used instead.";
-  }, [isLegacyConnectionContext, isLegacyContext]);
-  const accessBadge = useMemo(() => {
-    if (!hasS3AccountContext) return null;
-    const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
-    const transfersBlocked = corsDisabled && !proxyAllowed;
-    if (transfersBlocked) {
-      return {
-        label: "Unavailable",
-        title:
-          "Download/Upload unavailable: CORS is disabled and proxy transfers are disabled.",
-        tone: "danger" as const,
-        indicatorClassName:
-          "border-rose-200/70 bg-rose-200/60 dark:border-rose-400/40 dark:bg-rose-400/25",
-      };
-    }
-    if (useProxyTransfers) {
-      return {
-        label: "Proxy",
-        title: "Download/Upload mode: Backend proxy transfers are active.",
-        tone: "warning" as const,
-        indicatorClassName:
-          "border-amber-200/70 bg-amber-200/60 dark:border-amber-400/40 dark:bg-amber-400/25",
-      };
-    }
-    if (sseActive) {
-      return {
-        label: "SSE-C",
-        title:
-          "Download/Upload mode: SSE-C customer key is active for this bucket.",
-        tone: "info" as const,
-        indicatorClassName:
-          "border-sky-200/70 bg-sky-200/60 dark:border-sky-400/40 dark:bg-sky-400/25",
-      };
-    }
-    if (stsCredentials) {
-      return {
-        label: "STS",
-        title: stsExpirationLabel
-          ? `Download/Upload mode: STS credentials active (expires at ${stsExpirationLabel}).`
-          : "Download/Upload mode: STS credentials are active.",
-        tone: "success" as const,
-        indicatorClassName:
-          "border-emerald-200/70 bg-emerald-200/60 dark:border-emerald-400/40 dark:bg-emerald-400/25",
-      };
-    }
-    return {
-      label: "Presign",
-      title: legacyStsTooltip
-        ? `Download/Upload mode: Presigned URLs are active. ${legacyStsTooltip}`
-        : "Download/Upload mode: Presigned URLs are active.",
-      tone: "success" as const,
-      indicatorClassName:
-        "border-emerald-200/70 bg-emerald-200/60 dark:border-emerald-400/40 dark:bg-emerald-400/25",
-    };
-  }, [
-    corsStatus,
-    hasS3AccountContext,
-    legacyStsTooltip,
-    proxyAllowed,
-    sseActive,
-    stsCredentials,
-    stsExpirationLabel,
-    useProxyTransfers,
-  ]);
+  const legacyStsTooltip = useMemo(
+    () =>
+      resolveLegacyStsTooltip({
+        isLegacyContext,
+        isLegacyConnectionContext,
+      }),
+    [isLegacyConnectionContext, isLegacyContext],
+  );
+  const accessBadge = useMemo(
+    () =>
+      resolveBrowserTransferAccessBadge({
+        hasContext: hasS3AccountContext,
+        corsEnabled: corsStatus?.enabled ?? null,
+        proxyAllowed,
+        useProxyTransfers,
+        sseActive,
+        hasStsCredentials: Boolean(stsCredentials),
+        stsExpirationLabel,
+        legacyStsTooltip,
+      }),
+    [
+      corsStatus?.enabled,
+      hasS3AccountContext,
+      legacyStsTooltip,
+      proxyAllowed,
+      sseActive,
+      stsCredentials,
+      stsExpirationLabel,
+      useProxyTransfers,
+    ],
+  );
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const clampContextMenuPosition = useCallback(
     (
