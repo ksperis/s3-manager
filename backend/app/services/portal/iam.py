@@ -2,9 +2,52 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import copy
+import logging
+from typing import TYPE_CHECKING, Any, Optional, Tuple
+
+from sqlalchemy.exc import IntegrityError
+
+from app.db import (
+    AccountIAMUser,
+    AccountRole,
+    PortalExternalAccessCredential,
+    PortalStorageSpaceGrant,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    StorageEndpoint,
+    UiGroupS3Account,
+    User,
+    UserS3Account,
+    UserUiGroup,
+)
+from app.models.app_settings import PortalSettings
+from app.models.iam import AccessKey as ModelAccessKey, IAMUser
+from app.models.portal import (
+    PortalAccessKey,
+    PortalStorageSpaceRole,
+    PortalStorageSpaceShareScope,
+    PortalStorageSpaceVisibility,
+)
+from app.services import s3_client
 from app.services.mappers.portal import portal_access_key_from_active_link, portal_access_key_from_iam_metadata
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.account_roles import portal_role_for
+from app.utils.normalize import normalize_string_list
+from app.utils.quota_stats import extract_quota_limits
+from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
+from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.usage_stats import extract_usage_stats
+
+from ._shared import _extract_account_limit
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+
+logger = logging.getLogger(__name__)
 
 
 class PortalIamMixin:
