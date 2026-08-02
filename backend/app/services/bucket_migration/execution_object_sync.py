@@ -2,7 +2,50 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import hashlib
+import logging
+import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, wait
+from contextlib import ExitStack
+from datetime import datetime, timezone
+from typing import Any, Callable, Optional
+from urllib.parse import urlencode
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.db import BucketMigration, BucketMigrationItem
+from app.services.object_diff_common import compare_object_entries
+from app.services.s3_client import _delete_objects_count
+from app.services.s3_execution_context import S3ExecutionTarget
+from app.utils.s3_endpoint import normalize_s3_endpoint
+from app.utils.time import utcnow
+
+from ._shared import (
+    _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS,
+    _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER,
+    _RUN_ACTIONS_WAIT_TIMEOUT_SECONDS,
+    _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS,
+    _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD,
+    _VERSION_CHECKSUM_FIELDS,
+    _BucketDiffEntry,
+    _BucketObjectEntry,
+    _BucketVersionEntry,
+    _MigrationControlRequested,
+    _ResolvedContext,
+    _SyncDiff,
+    _VersionAwareDiff,
+    _VersionedObjectDetails,
+    _VersionReplayWatermarkBuilder,
+    _VersionTimelineComparison,
+    _VersionTimelineDiffKey,
+    _WorkerLeaseLostError,
+    _chunked,
+    _json_loads,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BucketMigrationObjectSyncMixin:
