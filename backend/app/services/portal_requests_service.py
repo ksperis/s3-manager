@@ -604,14 +604,11 @@ class PortalRequestsService:
         return json.dumps(payload, ensure_ascii=True, sort_keys=True)
 
     @staticmethod
-    def _decode_json(raw: Optional[str]) -> dict[str, Any]:
-        if not raw:
-            return {}
-        try:
-            parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {"value": parsed}
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return {}
+    def _decode_json(raw: str) -> dict[str, Any]:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("Portal request JSON must be an object")
+        return parsed
 
 
 def get_portal_requests_service(db: Session) -> PortalRequestsService:

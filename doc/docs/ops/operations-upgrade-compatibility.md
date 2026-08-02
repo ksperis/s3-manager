@@ -1,5 +1,15 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical Portal request JSON
+
+Migration `0081_canonical_portal_request_json` rewrites every Portal request
+payload and non-null result as a JSON object. Malformed and non-object values
+become `{}` while an absent result remains `NULL` for undecided requests.
+
+Deploy the migration and backend together. Portal request execution and API
+serialization now reject any remaining malformed or non-object JSON instead of
+repairing it at runtime. The data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical user notification payloads
 
 Migration `0080_canonical_user_notification_payloads` rewrites notification

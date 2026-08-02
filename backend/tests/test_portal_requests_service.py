@@ -38,6 +38,16 @@ class FakeAccountsService:
         return None
 
 
+def test_portal_request_json_requires_an_object():
+    assert PortalRequestsService._decode_json('{"status":"ok"}') == {
+        "status": "ok"
+    }
+    with pytest.raises(ValueError):
+        PortalRequestsService._decode_json("[]")
+    with pytest.raises(ValueError):
+        PortalRequestsService._decode_json("{")
+
+
 def _seed_account(db_session, *, name="Research Account") -> S3Account:
     account = S3Account(name=name, rgw_account_id="RGW00000000000000042")
     db_session.add(account)
