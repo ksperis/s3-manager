@@ -2,10 +2,49 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import logging
+import re
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import quote
 
-from ._shared import *
+from app.db import (
+    AccountRole,
+    PortalExternalAccessCredential,
+    PortalPublicLink as DBPortalPublicLink,
+    PortalStorageSpaceGrant,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    User,
+)
+from app.models.bucket import Bucket
+from app.models.portal import (
+    PortalStorageSpace,
+    PortalStorageSpaceCollaboratorPreview,
+    PortalStorageSpaceIcon,
+    PortalStorageSpaceIconPreset,
+    PortalStorageSpaceIconSource,
+    PortalStorageSpaceInitialShare,
+    PortalStorageSpaceNamingMode,
+    PortalStorageSpaceRole,
+    PortalStorageSpaceShareScope,
+    PortalStorageSpaceSummary,
+    PortalStorageSpaceVisibility,
+)
+from app.services import s3_client
 from app.services.avatar_image_service import ALLOWED_AVATAR_CONTENT_TYPES, validate_avatar_image
+from app.services.portal.exceptions import PortalStorageSpaceNotEmpty
+from app.services.rgw_admin import RGWAdminError
+from app.utils.rgw import resolve_admin_uid
+from app.utils.time import normalize_utc, utcnow
+from app.utils.usage_stats import extract_usage_stats
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+
+logger = logging.getLogger(__name__)
 
 
 STORAGE_SPACE_ICON_PRESETS = {"bucket", "folder", "archive", "database", "media"}
