@@ -70,6 +70,7 @@ from app.services.bucket_usage_stats_service import BucketUsageStatsService
 from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.traffic_service import TrafficWindow
 from app.utils.time import utcnow
+from tests.s3_account_factory import make_s3_account
 
 
 def _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False):
@@ -265,7 +266,7 @@ def test_strict_storage_space_access_migration_purges_old_state_and_enforces_rol
 
 
 def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(monkeypatch, db_session):
-    account = S3Account(name="portal-account-manager", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-manager", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -354,7 +355,7 @@ def test_portal_bucket_creation_uses_backend_credentials_without_legacy_policy(m
 
 
 def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(monkeypatch, db_session):
-    account = S3Account(name="portal-account-user", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-user", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -483,7 +484,7 @@ def test_portal_manager_group_policy_uses_fixed_account_access(db_session):
 
 def test_manager_group_access_is_protected_before_policy_update(monkeypatch, db_session):
     service = PortalService(db_session)
-    account = S3Account(name="ordering")
+    account = make_s3_account(db_session, name="ordering")
     events = []
 
     class FakeIAM:
@@ -539,7 +540,7 @@ def test_manager_demotion_removes_manager_group_before_adding_user_group(monkeyp
 
 
 def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkeypatch, db_session):
-    account = S3Account(name="portal-account-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -572,7 +573,7 @@ def test_portal_bucket_creation_rejects_unauthorized_role_before_s3_calls(monkey
 
 
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
-    account = S3Account(name="portal-account-read-only", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-read-only", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-readonly@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -606,7 +607,7 @@ def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
 
 
 def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-account-with-bucket-limit",
         rgw_account_id="tenant-a",
         rgw_access_key="ROOT-AK",
@@ -646,7 +647,7 @@ def test_get_state_does_not_load_dynamic_quota_limits(monkeypatch, db_session):
 
 
 def test_get_state_keeps_bucket_quota_null_when_limit_is_absent(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-account-without-bucket-limit",
         rgw_account_id="tenant-no-limit",
         rgw_access_key="ROOT-AK",
@@ -671,7 +672,7 @@ def test_get_state_keeps_bucket_quota_null_when_limit_is_absent(monkeypatch, db_
 
 
 def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, db_session):
-    account = S3Account(name="portal-traffic-scope", rgw_account_id="tenant-traffic")
+    account = make_s3_account(db_session, name="portal-traffic-scope", rgw_account_id="tenant-traffic")
     user = User(email="portal-traffic@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -725,7 +726,7 @@ def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, 
 
 
 def test_portal_traffic_filters_to_requested_visible_bucket(monkeypatch, db_session):
-    account = S3Account(name="portal-traffic-bucket", rgw_account_id="tenant-traffic-bucket")
+    account = make_s3_account(db_session, name="portal-traffic-bucket", rgw_account_id="tenant-traffic-bucket")
     user = User(email="portal-traffic-bucket@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -768,7 +769,7 @@ def test_portal_traffic_filters_to_requested_visible_bucket(monkeypatch, db_sess
 
 
 def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_session):
-    account = S3Account(name="portal-account-no-keys", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-no-keys", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-nokeys@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -799,7 +800,7 @@ def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_sessio
 
 
 def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
-    account = S3Account(name="portal-account-bootstrap", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-bootstrap", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-bootstrap@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -849,7 +850,7 @@ def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
 
 
 def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session):
-    account = S3Account(name="portal-account-user-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-user-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-visibility@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -898,7 +899,7 @@ def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_s
         endpoint_url="https://portal-keys.example.test",
         force_path_style=True,
     )
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-account-keys-state",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
@@ -951,7 +952,7 @@ def test_access_keys_state_hides_portal_key_and_exposes_policy(monkeypatch, db_s
 
 
 def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_session):
-    account = S3Account(name="portal-account-manager-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-manager-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-manager-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -999,7 +1000,7 @@ def test_get_state_does_not_list_buckets_for_portal_manager(monkeypatch, db_sess
 
 
 def test_get_state_does_not_list_buckets_for_portal_user(monkeypatch, db_session):
-    account = S3Account(name="portal-account-user-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-user-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1062,7 +1063,7 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
     monkeypatch,
     db_session,
 ):
-    account = S3Account(name="portal-account-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-create-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1080,7 +1081,7 @@ def test_get_state_disables_storage_space_creation_for_portal_user_when_setting_
 
 
 def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, db_session):
-    account = S3Account(name="portal-account-server-logs-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-server-logs-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-server-logs-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1096,7 +1097,7 @@ def test_get_state_exposes_effective_server_access_logging_setting(monkeypatch, 
 
 
 def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session):
-    account = S3Account(name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-empty-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1153,7 +1154,7 @@ def test_get_state_ignores_bucket_scope_for_portal_state(monkeypatch, db_session
 
 
 def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_session):
-    account = S3Account(name="portal-storage-spaces", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-spaces", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-spaces@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1184,7 +1185,7 @@ def test_list_storage_spaces_maps_visible_metadata_to_workspace_summary(db_sessi
 
 
 def test_storage_space_metadata_filters_sorting_and_archive(db_session):
-    account = S3Account(name="portal-storage-metadata", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-metadata", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-metadata@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1222,7 +1223,7 @@ def test_storage_space_metadata_filters_sorting_and_archive(db_session):
 
 
 def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_session):
-    account = S3Account(name="portal-private-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-private-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private@example.com", hashed_password="x", role="ui_user")
     other = User(email="other-private@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-private@example.com", hashed_password="x", role="ui_user")
@@ -1263,7 +1264,7 @@ def test_private_storage_space_is_visible_only_to_owner_and_portal_managers(db_s
 
 
 def test_portal_manager_can_take_private_storage_space_ownership(monkeypatch, db_session):
-    account = S3Account(name="take-private-owner")
+    account = make_s3_account(db_session, name="take-private-owner")
     previous_owner = User(email="previous-owner@example.test", hashed_password="x", role="ui_user")
     manager = User(email="taking-manager@example.test", hashed_password="x", role="ui_user")
     db_session.add_all([account, previous_owner, manager])
@@ -1309,7 +1310,7 @@ def test_portal_manager_can_take_private_storage_space_ownership(monkeypatch, db
 
 
 def test_private_owner_cannot_lose_final_portal_role(db_session):
-    account = S3Account(name="owned-role-guard")
+    account = make_s3_account(db_session, name="owned-role-guard")
     owner = User(email="guarded-owner@example.test", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1331,7 +1332,7 @@ def test_private_owner_cannot_lose_final_portal_role(db_session):
 
 
 def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(monkeypatch, db_session):
-    account = S3Account(name="portal-delete-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-space", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete@example.com", hashed_password="x", role="ui_user")
     delegated_owner = User(email="delegated-delete@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="viewer-delete@example.com", hashed_password="x", role="ui_user")
@@ -1450,7 +1451,7 @@ def test_delete_storage_space_removes_empty_imported_bucket_and_access_state(mon
 
 
 def test_delete_storage_space_allows_portal_manager_on_private_space(monkeypatch, db_session):
-    account = S3Account(name="portal-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-denied@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-delete-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, manager])
@@ -1479,7 +1480,7 @@ def test_delete_storage_space_allows_portal_manager_on_private_space(monkeypatch
 
 @pytest.mark.parametrize("role", ["Editor", "Viewer"])
 def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_session, role):
-    account = S3Account(name=f"portal-delete-{role.lower()}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name=f"portal-delete-{role.lower()}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email=f"owner-delete-{role.lower()}@example.com", hashed_password="x", role="ui_user")
     participant = User(email=f"{role.lower()}-delete@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, participant])
@@ -1524,7 +1525,7 @@ def test_delete_storage_space_rejects_non_owner_content_roles(monkeypatch, db_se
     ],
 )
 def test_delete_storage_space_requires_zero_known_stats(monkeypatch, db_session, usage, expected_message):
-    account = S3Account(name=f"portal-delete-stats-{usage}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name=f"portal-delete-stats-{usage}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email=f"owner-delete-stats-{usage}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1549,7 +1550,7 @@ def test_delete_storage_space_requires_zero_known_stats(monkeypatch, db_session,
 
 
 def test_delete_storage_space_maps_delete_bucket_race_without_force(monkeypatch, db_session):
-    account = S3Account(name="portal-delete-race", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-race", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-race@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1576,7 +1577,7 @@ def test_delete_storage_space_maps_delete_bucket_race_without_force(monkeypatch,
 
 
 def test_delete_storage_space_finalizes_archived_metadata_when_bucket_is_already_absent(monkeypatch, db_session):
-    account = S3Account(name="portal-delete-archived", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-archived", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-archived@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1603,7 +1604,7 @@ def test_delete_storage_space_finalizes_archived_metadata_when_bucket_is_already
 
 
 def test_delete_storage_space_retry_finishes_after_partial_external_iam_cleanup(monkeypatch, db_session):
-    account = S3Account(name="portal-delete-iam-retry", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-iam-retry", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-iam-retry@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1660,7 +1661,7 @@ def test_delete_storage_space_retry_finishes_after_partial_external_iam_cleanup(
 
 
 def test_delete_storage_space_route_returns_no_content_and_audits_without_secrets(db_session):
-    account = S3Account(name="portal-delete-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1706,7 +1707,7 @@ def test_delete_storage_space_route_returns_no_content_and_audits_without_secret
 
 
 def test_delete_storage_space_route_maps_non_empty_to_conflict(db_session):
-    account = S3Account(name="portal-delete-route-conflict", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-delete-route-conflict", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-delete-route-conflict@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -1728,7 +1729,7 @@ def test_delete_storage_space_route_maps_non_empty_to_conflict(db_session):
 
 
 def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
-    account = S3Account(name="portal-avatar-previews", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-avatar-previews", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(
         email="owner-avatar@example.com",
         full_name="Owner Avatar",
@@ -1786,7 +1787,7 @@ def test_storage_space_list_includes_collaborator_avatar_previews(db_session):
 
 
 def test_portal_manager_content_access_is_carried_only_by_the_manager_group(monkeypatch, db_session):
-    account = S3Account(name="portal-manager-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-manager-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-content@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, manager])
@@ -1845,7 +1846,7 @@ def test_portal_manager_content_access_is_carried_only_by_the_manager_group(monk
 
 
 def test_portal_manager_can_read_and_modify_private_storage_space_content_owned_by_others(monkeypatch, db_session):
-    account = S3Account(name="portal-manager-private-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-manager-private-content", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private-content@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-private-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, manager])
@@ -1884,7 +1885,7 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     from fastapi import Request
     from app.routers.dependencies_internal import portal_access as portal_access_deps
 
-    account = S3Account(name="portal-browser-content", rgw_account_id="tenant-browser")
+    account = make_s3_account(db_session, name="portal-browser-content", rgw_account_id="tenant-browser")
     user = User(email="portal-browser-content@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -1955,7 +1956,7 @@ def _storage_space_policy_principals(statement: dict) -> set[str]:
 
 
 def test_storage_space_bucket_policy_preserves_external_statements_and_private_owner_guard(db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-policy-space",
         rgw_account_id="rgw-policy-account",
         rgw_access_key="ROOT-AK",
@@ -2026,7 +2027,7 @@ def test_storage_space_bucket_policy_preserves_external_statements_and_private_o
 
 
 def test_account_scope_bucket_policy_allows_effective_portal_members(db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-policy-account-scope",
         rgw_account_id="rgw-policy-account",
         rgw_access_key="ROOT-AK",
@@ -2080,7 +2081,7 @@ def test_account_scope_bucket_policy_allows_effective_portal_members(db_session)
 
 
 def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-policy-restricted",
         rgw_account_id="rgw-policy-account",
         rgw_access_key="ROOT-AK",
@@ -2138,7 +2139,7 @@ def test_restricted_bucket_policy_allows_owner_and_real_grants_only(db_session):
 
 
 def test_storage_space_bucket_policy_denies_everyone_without_projectable_principals(db_session):
-    account = S3Account(name="portal-policy-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-policy-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-policy-empty@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -2160,7 +2161,7 @@ def test_storage_space_bucket_policy_denies_everyone_without_projectable_princip
 
 
 def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-space-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-space-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-space-scope@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2199,13 +2200,15 @@ def test_get_storage_space_keeps_bucket_scope_and_returns_none_when_hidden(monke
 
 
 def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-generic", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-generic", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-generic@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     created_buckets = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
@@ -2247,13 +2250,14 @@ def test_create_storage_space_generic_uses_uuid_bucket_and_editable_name(monkeyp
 
 
 def test_create_storage_space_configures_server_access_logging(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-logging", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-logging", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-logging@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     portal_settings = PortalSettings(server_access_logging_enabled=True)
     logging_calls = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -2347,7 +2351,7 @@ def test_storage_space_version_cleanup_confirmation_phrase_uses_displayed_upperc
 
 
 def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkeypatch, db_session):
-    account = S3Account(name="portal-cleanup-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-cleanup-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-cleanup-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2379,7 +2383,7 @@ def test_prepare_storage_space_version_cleanup_requires_effective_setting(monkey
 
 
 def test_prepare_storage_space_version_cleanup_uses_long_running_profile(monkeypatch, db_session):
-    account = S3Account(name="portal-cleanup-profile", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-cleanup-profile", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-cleanup-profile@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2416,13 +2420,15 @@ def test_prepare_storage_space_version_cleanup_uses_long_running_profile(monkeyp
 
 
 def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-user-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-user-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-user-create@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_USER.value, can_manage_buckets=False)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     portal_settings = PortalSettings(allow_private_storage_space_create=True)
     created_buckets = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -2461,7 +2467,7 @@ def test_portal_user_can_create_storage_space_when_setting_is_enabled(monkeypatc
 
 
 def test_portal_user_cannot_create_shared_storage_space(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-user-shared-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-user-shared-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-user-shared-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2481,7 +2487,7 @@ def test_portal_user_cannot_create_shared_storage_space(monkeypatch, db_session)
 
 
 def test_portal_user_cannot_create_storage_space_when_setting_is_disabled(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-user-create-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-user-create-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2496,13 +2502,14 @@ def test_portal_user_cannot_create_storage_space_when_setting_is_disabled(monkey
 
 
 def test_portal_manager_needs_private_create_setting_but_can_always_create_team_space(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-manager-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-manager-create", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-manager-create@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     portal_settings = PortalSettings(allow_private_storage_space_create=False)
     created_buckets: list[str] = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
@@ -2528,7 +2535,7 @@ def test_portal_manager_needs_private_create_setting_but_can_always_create_team_
 
 
 def test_create_restricted_storage_space_persists_initial_shares_atomically(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-initial-shares", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-initial-shares", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-initial@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="viewer-initial@example.com", hashed_password="x", role="ui_user")
     editor = User(email="editor-initial@example.com", hashed_password="x", role="ui_user")
@@ -2544,6 +2551,7 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings(allow_private_storage_space_create=True))
     monkeypatch.setattr(service, "list_storage_spaces", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "_unique_uuid_storage_space_bucket_name", lambda _existing: "restricted-bucket")
@@ -2591,7 +2599,7 @@ def test_create_restricted_storage_space_persists_initial_shares_atomically(monk
     ],
 )
 def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_bucket(monkeypatch, db_session, shares, message):
-    account = S3Account(name=f"portal-storage-invalid-initial-{message}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name=f"portal-storage-invalid-initial-{message}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email=f"owner-invalid-{message}@example.com", hashed_password="x", role="ui_user")
     viewer = User(email=f"viewer-invalid-{message}@example.com", hashed_password="x", role="ui_user")
     outsider = User(email=f"outsider-invalid-{message}@example.com", hashed_password="x", role="ui_user")
@@ -2625,7 +2633,7 @@ def test_create_restricted_storage_space_rejects_invalid_initial_shares_before_b
 
 
 def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_fails(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-initial-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-initial-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-initial-rollback@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="viewer-initial-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
@@ -2635,6 +2643,7 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
 
     access = _portal_access(account, owner, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
     created_buckets: list[str] = []
     deleted_buckets: list[str] = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: PortalSettings())
@@ -2665,7 +2674,7 @@ def test_create_restricted_storage_space_rolls_back_bucket_and_grants_when_sync_
 
 
 def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-named", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-named", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-named@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2675,6 +2684,8 @@ def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monke
     portal_settings.allow_portal_named_bucket_create = True
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "sync_storage_space_server_access_logging", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     created_buckets = []
     monkeypatch.setattr(service, "_effective_portal_settings", lambda _account: portal_settings)
     monkeypatch.setattr(
@@ -2724,7 +2735,7 @@ def test_create_storage_space_named_bucket_uses_legacy_slug_and_locks_name(monke
 
 
 def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-named-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-named-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-named-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2744,7 +2755,7 @@ def test_create_storage_space_named_bucket_requires_effective_setting(monkeypatc
 
 
 def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-import", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-import", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-import@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2795,7 +2806,7 @@ def test_import_storage_space_uses_existing_bucket_name_and_locks_name(monkeypat
 
 
 def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-import-restricted", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-import-restricted", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-import-restricted@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="viewer-import-restricted@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
@@ -2846,7 +2857,7 @@ def test_import_restricted_storage_space_persists_initial_shares(monkeypatch, db
 
 def test_update_storage_space_locked_names_reject_rename_but_accept_description(monkeypatch, db_session):
     origin = "imported"
-    account = S3Account(name=f"portal-storage-update-{origin}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name=f"portal-storage-update-{origin}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email=f"portal-storage-update-{origin}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2864,6 +2875,7 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: f"{origin}-bucket")
     monkeypatch.setattr(
         service,
@@ -2888,7 +2900,7 @@ def test_update_storage_space_locked_names_reject_rename_but_accept_description(
 
 
 def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-update-editable", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-update-editable", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-storage-update-editable@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -2905,6 +2917,7 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
 
     access = _portal_access(account, user, role=AccountRole.PORTAL_MANAGER.value, can_manage_buckets=True)
     service = PortalService(db_session)
+    monkeypatch.setattr(service, "_sync_storage_space_access_projection", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(service, "_resolve_storage_space_bucket_name", lambda *_args, **_kwargs: "uuid-bucket")
     monkeypatch.setattr(
         service,
@@ -2926,7 +2939,7 @@ def test_update_storage_space_allows_rename_when_name_is_editable(monkeypatch, d
 
 
 def test_update_storage_space_restores_archived_space_without_deleting_links(monkeypatch, db_session):
-    account = S3Account(name="portal-storage-restore", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-storage-restore", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="portal-storage-restore@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -2981,7 +2994,7 @@ def test_update_storage_space_restores_archived_space_without_deleting_links(mon
 
 
 def test_portal_account_override_uses_canonical_payload(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-storage-override",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
@@ -3046,7 +3059,7 @@ def test_portal_account_override_uses_canonical_payload(monkeypatch, db_session)
 
 
 def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-policy",
         rgw_account_id="rgw-policy-account",
         rgw_access_key="ROOT-AK",
@@ -3111,7 +3124,7 @@ def test_portal_server_access_log_bucket_policy_preserves_existing_statements(db
 
 
 def test_portal_server_access_log_bucket_policy_removes_manager_deny_when_no_manager_remains(db_session):
-    account = S3Account(name="portal-log-policy-user", rgw_account_id="rgw-policy-user")
+    account = make_s3_account(db_session, name="portal-log-policy-user", rgw_account_id="rgw-policy-user")
     db_session.add(account)
     db_session.commit()
     service = PortalService(db_session)
@@ -3138,7 +3151,7 @@ def test_portal_server_access_log_bucket_policy_removes_manager_deny_when_no_man
 
 
 def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-retention",
         rgw_account_id="rgw-log-retention",
         rgw_access_key="ROOT-AK",
@@ -3179,7 +3192,7 @@ def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monke
             {
                 "access_key": "ROOT-AK",
                 "secret_key": "ROOT-SK",
-                "endpoint": None,
+                "endpoint": "https://s3.test.invalid",
                 "region": None,
                 "force_path_style": False,
                 "verify_tls": True,
@@ -3200,7 +3213,7 @@ def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monke
                 ],
                 "access_key": "ROOT-AK",
                 "secret_key": "ROOT-SK",
-                "endpoint": None,
+                "endpoint": "https://s3.test.invalid",
                 "region": None,
                 "force_path_style": False,
                 "verify_tls": True,
@@ -3210,7 +3223,7 @@ def test_portal_server_access_log_bucket_creation_sets_retention_lifecycle(monke
 
 
 def test_portal_server_access_log_existing_bucket_keeps_retention_unchanged(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-retention-existing",
         rgw_account_id="rgw-log-retention-existing",
         rgw_access_key="ROOT-AK",
@@ -3246,7 +3259,7 @@ def test_portal_server_access_log_existing_bucket_keeps_retention_unchanged(monk
 
 
 def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-read",
         rgw_account_id="rgw-log-read",
         rgw_access_key="ROOT-AK",
@@ -3351,7 +3364,7 @@ def test_portal_server_access_logs_parse_all_standard_records_and_filters(monkey
 
 
 def test_portal_server_access_logs_require_portal_manager(db_session):
-    account = S3Account(name="portal-log-denied", rgw_account_id="rgw-log-denied")
+    account = make_s3_account(db_session, name="portal-log-denied", rgw_account_id="rgw-log-denied")
     user = User(email="portal-log-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -3370,7 +3383,7 @@ def test_portal_server_access_logs_require_portal_manager(db_session):
             date_to="2026-07-08",
         )
 def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-identities",
         rgw_account_id="rgw-log-identities",
         rgw_access_key="ROOT-AK",
@@ -3491,7 +3504,7 @@ def test_portal_server_access_logs_resolve_requester_identities(monkeypatch, db_
 
 
 def test_reconcile_portal_server_access_logging_enables_and_disables_managed_buckets(monkeypatch, db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-log-reconcile",
         rgw_account_id="rgw-log-reconcile",
         rgw_access_key="ROOT-AK",
@@ -3540,7 +3553,7 @@ def test_reconcile_portal_server_access_logging_enables_and_disables_managed_buc
 
 
 def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_session):
-    account = S3Account(name="portal-object-credentials", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-object-credentials", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-credentials@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -3586,7 +3599,7 @@ def test_portal_object_client_uses_existing_portal_credentials(monkeypatch, db_s
 
 
 def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypatch, db_session):
-    account = S3Account(name="portal-role-matrix", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-role-matrix", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     actor = User(email="matrix-actor@example.com", hashed_password="x", role="ui_user")
     target = User(email="matrix-target@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, actor, target])
@@ -3614,6 +3627,8 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     db_session.commit()
 
     service = PortalService(db_session)
+    monkeypatch.setattr(s3_client, "get_bucket_policy", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(s3_client, "put_bucket_policy", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         service,
         "list_storage_spaces",
@@ -3730,7 +3745,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
 
 
 def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_session):
-    account = S3Account(name="portal-object-detail", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-object-detail", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-detail@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -3805,7 +3820,7 @@ def test_object_detail_and_delete_use_safe_portal_operations(monkeypatch, db_ses
 
 
 def test_portal_object_history_lists_versions_and_delete_markers(monkeypatch, db_session):
-    account = S3Account(name="portal-object-history")
+    account = make_s3_account(db_session, name="portal-object-history")
     user = User(email="history@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -3867,7 +3882,7 @@ def test_portal_object_history_lists_versions_and_delete_markers(monkeypatch, db
 
 
 def test_portal_trash_lists_only_current_delete_markers(monkeypatch, db_session):
-    account = S3Account(name="portal-trash")
+    account = make_s3_account(db_session, name="portal-trash")
     user = User(email="trash@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -3920,7 +3935,7 @@ def test_portal_trash_lists_only_current_delete_markers(monkeypatch, db_session)
 
 
 def test_portal_restore_deleted_object_creates_new_current_version(monkeypatch, db_session):
-    account = S3Account(name="portal-trash-restore")
+    account = make_s3_account(db_session, name="portal-trash-restore")
     user = User(email="trash-restore@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -4151,7 +4166,7 @@ def test_portal_restore_deleted_prefix_can_cancel_during_listing(db_session):
 
 
 def test_portal_viewer_cannot_restore_object_version(monkeypatch, db_session):
-    account = S3Account(name="portal-history-viewer")
+    account = make_s3_account(db_session, name="portal-history-viewer")
     user = User(email="history-viewer@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -4224,7 +4239,7 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
 
 def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
-    account = S3Account(name="portal-share-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-share-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="viewer@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
@@ -4281,7 +4296,7 @@ def test_list_storage_space_shares_uses_db_grants(monkeypatch, db_session):
 
 
 def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
-    account = S3Account(name="portal-account-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-account-scope@example.com", hashed_password="x", role="ui_user")
     member = User(email="member-account-scope@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-account-scope@example.com", hashed_password="x", role="ui_user")
@@ -4335,7 +4350,7 @@ def test_account_scope_storage_space_grants_dynamic_member_access(db_session):
 
 
 def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch, db_session):
-    account = S3Account(name="portal-share-candidates", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-share-candidates", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-candidates@example.com", hashed_password="x", role="ui_user")
     direct = User(email="direct-candidates@example.com", hashed_password="x", role="ui_user")
     grouped = User(email="grouped-candidates@example.com", hashed_password="x", role="ui_user")
@@ -4394,7 +4409,7 @@ def test_storage_space_share_candidates_use_effective_portal_members(monkeypatch
 
 def test_portal_collaborators_summarize_effective_members_and_visible_external_access(monkeypatch, db_session):
     now = utcnow()
-    account = S3Account(name="portal-collaborators", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-collaborators", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     actor = User(email="actor-collab@example.com", display_name="Actor", hashed_password="x", role="ui_user")
     direct = User(email="direct-collab@example.com", display_name="Direct", hashed_password="x", role="ui_user")
     grouped = User(email="grouped-collab@example.com", display_name="Grouped", hashed_password="x", role="ui_user")
@@ -4545,8 +4560,8 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
 
 
 def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_scope(db_session):
-    account = S3Account(name="portal-access-review", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    other_account = S3Account(name="portal-access-review-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
+    account = make_s3_account(db_session, name="portal-access-review", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = make_s3_account(db_session, name="portal-access-review-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
     manager = User(email="manager-review@example.com", display_name="Manager", hashed_password="x", role="ui_user")
     member = User(email="member-review@example.com", display_name="Member", hashed_password="x", role="ui_user")
     outsider = User(email="outsider-review@example.com", hashed_password="x", role="ui_user")
@@ -4641,8 +4656,8 @@ def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_
 
 
 def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolates_projects(db_session):
-    account = S3Account(name="portal-access-review-auth", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    other_account = S3Account(name="portal-access-review-auth-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
+    account = make_s3_account(db_session, name="portal-access-review-auth", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = make_s3_account(db_session, name="portal-access-review-auth-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
     manager = User(email="manager-review-auth@example.com", hashed_password="x", role="ui_user")
     member = User(email="member-review-auth@example.com", hashed_password="x", role="ui_user")
     peer = User(email="peer-review-auth@example.com", hashed_password="x", role="ui_user")
@@ -4690,7 +4705,7 @@ def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolat
 
 
 def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(monkeypatch, db_session):
-    account = S3Account(name="portal-access-summary", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-access-summary", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-access-summary@example.com", display_name="Owner Summary", hashed_password="x", role="ui_user")
     member = User(email="member-access-summary@example.com", hashed_password="x", role="ui_user")
     manager = User(email="manager-access-summary@example.com", hashed_password="x", role="ui_user")
@@ -4807,7 +4822,7 @@ def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(m
 
 
 def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db_session):
-    account = S3Account(name="portal-share-member-required", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-share-member-required", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-member-required@example.com", hashed_password="x", role="ui_user")
     target = User(email="target-member-required@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
@@ -4844,7 +4859,7 @@ def test_set_storage_space_share_requires_existing_portal_member(monkeypatch, db
 
 
 def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monkeypatch, db_session):
-    account = S3Account(name="portal-share-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-share-rollback", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-rollback@example.com", hashed_password="x", role="ui_user")
     target = User(email="target-rollback@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
@@ -4899,7 +4914,7 @@ def test_set_storage_space_share_rolls_back_db_grant_when_projection_fails(monke
 
 
 def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_session):
-    account = S3Account(name="portal-share-policy-sync", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-share-policy-sync", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-policy-sync@example.com", hashed_password="x", role="ui_user")
     target = User(email="target-policy-sync@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
@@ -4956,7 +4971,7 @@ def test_storage_space_share_mutations_resync_bucket_policy(monkeypatch, db_sess
 
 
 def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session):
-    account = S3Account(name="portal-public-links", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-public-links", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-public@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -5026,7 +5041,7 @@ def test_public_links_are_scoped_expirable_and_revocable(monkeypatch, db_session
 
 
 def test_public_link_creation_rejects_missing_objects(monkeypatch, db_session):
-    account = S3Account(name="portal-public-link-missing-object", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-public-link-missing-object", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-public-missing@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -5080,7 +5095,7 @@ def test_public_link_creation_rejects_missing_objects(monkeypatch, db_session):
 
 
 def test_private_storage_space_blocks_new_shares_and_public_links(monkeypatch, db_session):
-    account = S3Account(name="portal-private-share", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-private-share", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-private-share@example.com", hashed_password="x", role="ui_user")
     target = User(email="target-private-share@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, target])
@@ -5128,7 +5143,7 @@ def test_private_storage_space_blocks_new_shares_and_public_links(monkeypatch, d
 
 
 def test_archived_storage_space_suspends_public_link_download(db_session):
-    account = S3Account(name="portal-archived-link", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-archived-link", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-archived-link@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner])
     db_session.commit()
@@ -5161,7 +5176,7 @@ def test_archived_storage_space_suspends_public_link_download(db_session):
 
 
 def test_portal_governance_activity_is_filtered_by_visible_storage_spaces(monkeypatch, db_session):
-    account = S3Account(name="portal-activity", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-activity", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="activity@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5216,7 +5231,7 @@ def test_portal_governance_activity_is_filtered_by_visible_storage_spaces(monkey
 
 
 def test_portal_user_governance_activity_uses_visible_space_access(db_session):
-    account = S3Account(name="portal-activity-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-activity-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="activity-privacy@example.com", hashed_password="x", role="ui_user")
     hidden_owner = User(email="hidden-activity-owner@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user, hidden_owner])
@@ -5278,7 +5293,7 @@ def test_portal_user_governance_activity_uses_visible_space_access(db_session):
 
 
 def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch, db_session):
-    account = S3Account(name="portal-usage", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-usage", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="usage@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5335,7 +5350,7 @@ def test_portal_usage_exposes_quota_and_real_storage_space_breakdown(monkeypatch
 
 
 def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_session):
-    account = S3Account(name="portal-usage-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-usage-privacy", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="usage-privacy@example.com", hashed_password="x", role="ui_user")
     hidden_owner = User(email="hidden-owner@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user, hidden_owner])
@@ -5395,7 +5410,7 @@ def test_portal_user_usage_aggregates_hidden_storage_as_other(monkeypatch, db_se
 
 
 def test_portal_user_usage_omits_other_when_all_usage_is_visible(monkeypatch, db_session):
-    account = S3Account(name="portal-usage-no-other", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-usage-no-other", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="usage-no-other@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5449,14 +5464,14 @@ def test_portal_usage_trends_exposes_scoped_account_baselines(monkeypatch, db_se
             "    enabled: true\n"
         ),
     )
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-trends",
         rgw_account_id="portal-trends",
         rgw_access_key="ROOT-AK",
         rgw_secret_key="ROOT-SK",
         storage_endpoint=endpoint,
     )
-    other_account = S3Account(
+    other_account = make_s3_account(db_session,
         name="portal-trends-other",
         rgw_account_id="portal-trends-other",
         rgw_access_key="OTHER-AK",
@@ -5516,7 +5531,7 @@ def test_portal_usage_trends_return_empty_when_history_disabled(monkeypatch, db_
             "    enabled: true\n"
         ),
     )
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-trends-disabled",
         rgw_account_id="portal-trends-disabled",
         rgw_access_key="ROOT-AK",
@@ -5544,7 +5559,7 @@ def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_sessi
             "    enabled: true\n"
         ),
     )
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-trends-empty",
         rgw_account_id="portal-trends-empty",
         rgw_access_key="ROOT-AK",
@@ -5562,7 +5577,7 @@ def test_portal_usage_trends_return_empty_without_baseline(monkeypatch, db_sessi
 
 def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
-    account = S3Account(name="portal-usage-stats", rgw_account_id="portal-usage-stats")
+    account = make_s3_account(db_session, name="portal-usage-stats", rgw_account_id="portal-usage-stats")
     user = User(email="usage-stats@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5614,7 +5629,7 @@ def test_portal_usage_stats_latest_filters_to_visible_storage_spaces(monkeypatch
 
 def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
-    account = S3Account(name="portal-usage-stats-disabled", rgw_account_id="portal-usage-stats-disabled")
+    account = make_s3_account(db_session, name="portal-usage-stats-disabled", rgw_account_id="portal-usage-stats-disabled")
     user = User(email="usage-stats-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5632,7 +5647,7 @@ def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session
 
 def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
-    account = S3Account(name="portal-space-stats", rgw_account_id="portal-space-stats")
+    account = make_s3_account(db_session, name="portal-space-stats", rgw_account_id="portal-space-stats")
     user = User(email="space-stats@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5686,7 +5701,7 @@ def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch
 
 def test_portal_storage_space_usage_stats_returns_empty_without_snapshot(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
-    account = S3Account(name="portal-space-stats-empty", rgw_account_id="portal-space-stats-empty")
+    account = make_s3_account(db_session, name="portal-space-stats-empty", rgw_account_id="portal-space-stats-empty")
     user = User(email="space-stats-empty@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5731,7 +5746,7 @@ def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
     expected_status,
 ):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
-    account = S3Account(name="portal-space-stats-denied", rgw_account_id="portal-space-stats-denied")
+    account = make_s3_account(db_session, name="portal-space-stats-denied", rgw_account_id="portal-space-stats-denied")
     user = User(email="space-stats-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5765,7 +5780,7 @@ def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
 
 def test_portal_storage_space_usage_stats_respects_feature_flag(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
-    account = S3Account(name="portal-space-stats-disabled", rgw_account_id="portal-space-stats-disabled")
+    account = make_s3_account(db_session, name="portal-space-stats-disabled", rgw_account_id="portal-space-stats-disabled")
     user = User(email="space-stats-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5789,12 +5804,12 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
         endpoint_url="https://portal-history.example.test",
         provider="ceph",
     )
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-history",
         rgw_account_id="portal-history",
         storage_endpoint=endpoint,
     )
-    other_account = S3Account(
+    other_account = make_s3_account(db_session,
         name="portal-history-other",
         rgw_account_id="portal-history-other",
         storage_endpoint=endpoint,
@@ -5853,7 +5868,7 @@ def test_portal_usage_history_trends_exposes_account_history(monkeypatch, db_ses
 
 def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatch, db_session):
     monkeypatch.setattr(portal_router, "load_app_settings", lambda: _usage_history_settings(False))
-    account = S3Account(name="portal-history-disabled", rgw_account_id="portal-history-disabled")
+    account = make_s3_account(db_session, name="portal-history-disabled", rgw_account_id="portal-history-disabled")
     user = User(email="usage-history-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5869,7 +5884,7 @@ def test_portal_usage_history_trends_return_unavailable_when_disabled(monkeypatc
 
 
 def test_portal_alerts_are_derived_from_quota_and_public_sharing(monkeypatch, db_session):
-    account = S3Account(name="portal-alerts", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-alerts", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="alerts@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -5940,7 +5955,7 @@ def test_portal_alert_deduplication_keeps_highest_severity():
 
 def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session):
     endpoint = StorageEndpoint(name="endpoint-alert", endpoint_url="https://s3.example.test")
-    account = S3Account(name="portal-health", storage_endpoint=endpoint)
+    account = make_s3_account(db_session, name="portal-health", storage_endpoint=endpoint)
     user = User(email="health@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([endpoint, account, user])
     db_session.commit()
@@ -5972,8 +5987,8 @@ def test_portal_endpoint_alerts_report_degraded_endpoint(monkeypatch, db_session
 
 
 def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch, db_session):
-    account = S3Account(name="portal-alert-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    other_account = S3Account(name="portal-alert-other", rgw_access_key="ROOT-AK2", rgw_secret_key="ROOT-SK2")
+    account = make_s3_account(db_session, name="portal-alert-empty", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = make_s3_account(db_session, name="portal-alert-other", rgw_access_key="ROOT-AK2", rgw_secret_key="ROOT-SK2")
     user = User(email="empty-alerts@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, other_account, user])
     db_session.commit()
@@ -6002,7 +6017,7 @@ def test_portal_alerts_are_empty_for_isolated_tenant_and_no_signals(monkeypatch,
 
 
 def test_download_storage_space_object_streams_visible_object(monkeypatch, db_session):
-    account = S3Account(name="portal-object-download", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-object-download", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-download@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6061,7 +6076,7 @@ def test_download_storage_space_object_streams_visible_object(monkeypatch, db_se
 
 
 def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_session):
-    account = S3Account(name="portal-object-hidden", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-object-hidden", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-hidden@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6075,7 +6090,7 @@ def test_portal_object_access_rejects_hidden_storage_space(monkeypatch, db_sessi
 
 
 def test_portal_object_download_route_does_not_require_application_audit(db_session):
-    account = S3Account(name="portal-object-download-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-object-download-route", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-object-download-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6101,7 +6116,7 @@ def test_portal_object_download_route_does_not_require_application_audit(db_sess
 
 
 def test_portal_object_restore_route_does_not_require_application_audit(db_session):
-    account = S3Account(name="portal-object-restore-route")
+    account = make_s3_account(db_session, name="portal-object-restore-route")
     user = User(email="portal-object-restore-route@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6141,7 +6156,7 @@ def test_portal_object_restore_route_does_not_require_application_audit(db_sessi
 
 
 def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_session):
-    account = S3Account(name="portal-account-key-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6155,7 +6170,7 @@ def test_create_access_key_rejects_when_management_disabled(monkeypatch, db_sess
 
 
 def test_access_key_mutations_reject_portal_key(monkeypatch, db_session):
-    account = S3Account(name="portal-account-key-protected", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-protected", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-protected@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6184,7 +6199,7 @@ def test_access_key_mutations_reject_portal_key(monkeypatch, db_session):
 
 
 def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
-    account = S3Account(name="portal-account-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-limit", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-limit@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6242,7 +6257,7 @@ def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):
 
 
 def test_create_access_key_allows_when_below_limit(monkeypatch, db_session):
-    account = S3Account(name="portal-account-key-limit-ok", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-limit-ok", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-limit-ok@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6310,7 +6325,7 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     expected_actions,
     blocked_actions,
 ):
-    account = S3Account(name=f"portal-account-ext-{permission}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name=f"portal-account-ext-{permission}", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email=f"portal-owner-{permission}@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6410,7 +6425,7 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
 
 
 def test_create_external_access_key_requires_content_owner(monkeypatch, db_session):
-    account = S3Account(name="portal-account-ext-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-ext-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="portal-owner-ext-denied@example.com", hashed_password="x", role="ui_user")
     viewer = User(email="portal-viewer-ext-denied@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, owner, viewer])
@@ -6452,7 +6467,7 @@ def test_create_external_access_key_requires_content_owner(monkeypatch, db_sessi
 
 
 def test_external_access_key_status_and_delete_resync_policy(monkeypatch, db_session):
-    account = S3Account(name="portal-account-ext-lifecycle", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-ext-lifecycle", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-owner-ext-lifecycle@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6526,7 +6541,7 @@ def test_external_access_key_status_and_delete_resync_policy(monkeypatch, db_ses
 
 
 def test_bucket_policy_principals_include_active_external_credentials(db_session):
-    account = S3Account(
+    account = make_s3_account(db_session,
         name="portal-account-ext-policy",
         rgw_account_id="RGW1",
         rgw_access_key="ROOT-AK",
@@ -6577,7 +6592,7 @@ def test_bucket_policy_principals_include_active_external_credentials(db_session
 
 
 def test_list_external_access_key_exposes_bucket_without_secret(db_session):
-    account = S3Account(name="portal-account-ext-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-ext-list", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-owner-ext-list@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6614,7 +6629,7 @@ def test_list_external_access_key_exposes_bucket_without_secret(db_session):
 
 
 def test_portal_access_key_routes_record_audit(db_session):
-    account = S3Account(name="portal-account-key-routes", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-routes", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-routes@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6676,7 +6691,7 @@ def test_portal_access_key_routes_record_audit(db_session):
 
 
 def test_portal_access_key_route_audits_external_metadata_without_secret(db_session):
-    account = S3Account(name="portal-account-key-route-external", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-route-external", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-route-external@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
@@ -6731,7 +6746,7 @@ def test_portal_access_key_route_audits_external_metadata_without_secret(db_sess
 
 
 def test_portal_access_key_routes_translate_disabled_management(db_session):
-    account = S3Account(name="portal-account-key-route-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    account = make_s3_account(db_session, name="portal-account-key-route-disabled", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-key-route-disabled@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()

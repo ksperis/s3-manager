@@ -30,7 +30,7 @@ describe("long-running API operations", () => {
     await runManagerBucketCompareAction(1, {} as Parameters<typeof runManagerBucketCompareAction>[1]);
     await backupCephAdminBucketConfigs(7, {} as Parameters<typeof backupCephAdminBucketConfigs>[1]);
     await compareCephAdminBucketPair(7, {} as Parameters<typeof compareCephAdminBucketPair>[1]);
-    await importS3Accounts([{ rgw_account_id: "RGW-1" }]);
+    await importS3Accounts([{ rgw_account_id: "RGW-1", storage_endpoint_id: 7 }]);
     await rotateS3Keys({ endpoint_ids: [7], key_types: ["ceph_admin"] });
 
     expect(mocks.post).toHaveBeenCalledTimes(6);

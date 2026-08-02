@@ -11,6 +11,7 @@ from app.main import app
 from app.routers import dependencies
 from app.routers import auth as auth_router
 from app.services import session_service as session_module
+from tests.s3_account_factory import make_s3_account
 
 
 def _enable_access_key_login(
@@ -173,7 +174,8 @@ def _setup_account(db_session) -> S3Account:
         .first()
     )
     if not account:
-        account = S3Account(
+        account = make_s3_account(
+            db_session,
             name="tenant-alpha",
             rgw_account_id="RGW00000000000000001",
             rgw_access_key="AKIA",

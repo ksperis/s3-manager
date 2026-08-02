@@ -98,7 +98,7 @@ def _seed_account(db_session, endpoint_id: int | None, *, name: str = "acc", rgw
 
 def _service(db_session, fake_admin: _FakeRGWAdmin | None = None) -> tuple[S3AccountsService, _FakeRGWAdmin]:
     admin = fake_admin or _FakeRGWAdmin()
-    return S3AccountsService(db_session, rgw_admin_client=admin), admin
+    return S3AccountsService(db_session), admin
 
 
 def test_resolve_storage_endpoint_errors_and_success(db_session):
@@ -118,8 +118,6 @@ def test_topic_parsing_helpers_and_account_topics_fallbacks(db_session):
     service, admin = _service(db_session)
 
     assert service._normalize_account_key("RGW1") == "rgw1"
-    assert service._derive_account_from_uid("RGW123-admin") == "RGW123"
-    assert service._derive_account_from_uid("tenant$alice") == "tenant"
     assert service._root_uid("RGW99") == "rgw99-admin"
     assert service._root_display_name("My account", "RGW99") == "My account"
 
@@ -134,14 +132,17 @@ def test_topic_parsing_helpers_and_account_topics_fallbacks(db_session):
     assert names == ["RGW1:topic-c", "arn:aws:sns:region:RGW1:topic-b", "topic-a"]
 
     admin.raise_topics = RGWAdminError("405 methodNotAllowed")
-    assert service._account_topics_info("RGW1", admin) == (0, [])
+    assert service._account_topics_info("RGW1", admin, 1) == (0, [])
     # Cache hit
-    assert service._account_topics_info("RGW1", admin) == (0, [])
+    assert service._account_topics_info("RGW1", admin, 1) == (0, [])
 
     service._topics_cache.clear()
     admin.raise_topics = None
     admin.topics_by_account = {None: [{"TopicArn": "arn:aws:sns:region:RGW2:topic-z"}], "RGW2": None}
-    assert service._account_topics_info("RGW2", admin) == (1, ["arn:aws:sns:region:RGW2:topic-z"])
+    assert service._account_topics_info("RGW2", admin, 1) == (1, ["arn:aws:sns:region:RGW2:topic-z"])
+
+    admin.topics_by_account = {None: [{"TopicArn": "arn:aws:sns:region:RGW2:topic-y"}], "RGW2": None}
+    assert service._account_topics_info("RGW2", admin, 2) == (1, ["arn:aws:sns:region:RGW2:topic-y"])
 
 
 def test_account_rgw_users_paths(db_session):
@@ -333,7 +334,7 @@ def test_list_accounts_and_minimal_are_sorted_case_insensitive(db_session):
     _seed_account(db_session, endpoint.id, name="same", rgw_account_id="RGW-SORT-04")
     _seed_account(db_session, endpoint.id, name="Same", rgw_account_id="RGW-SORT-05")
 
-    service = S3AccountsService(db_session, allow_missing_admin=True)
+    service = S3AccountsService(db_session)
     listed = service.list_accounts(
         include_usage_stats=False,
         include_quota=False,
@@ -343,28 +344,3 @@ def test_list_accounts_and_minimal_are_sorted_case_insensitive(db_session):
 
     assert [entry.name for entry in listed] == ["alpha", "Beta", "Same", "same", "Zulu"]
     assert [entry.name for entry in minimal] == ["alpha", "Beta", "Same", "same", "Zulu"]
-
-
-def test_list_accounts_and_minimal_keep_legacy_accounts_without_endpoint(db_session):
-    legacy = _seed_account(db_session, None, name="legacy", rgw_account_id="RGW-LEGACY-01")
-
-    service = S3AccountsService(db_session, allow_missing_admin=True)
-    listed = service.list_accounts(
-        include_usage_stats=False,
-        include_quota=False,
-        include_rgw_details=False,
-    )
-    minimal = service.list_accounts_minimal()
-
-    assert len(listed) == 1
-    assert listed[0].db_id == legacy.id
-    assert listed[0].storage_endpoint_id is None
-    assert listed[0].storage_endpoint_name is None
-    assert listed[0].storage_endpoint_url is None
-    assert listed[0].storage_endpoint_capabilities is None
-
-    assert len(minimal) == 1
-    assert minimal[0].db_id == legacy.id
-    assert minimal[0].storage_endpoint_id is None
-    assert minimal[0].storage_endpoint_name is None
-    assert minimal[0].storage_endpoint_capabilities is None

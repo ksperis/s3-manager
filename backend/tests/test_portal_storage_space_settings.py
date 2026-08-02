@@ -9,10 +9,12 @@ from app.models.portal import PortalStorageSpaceSettingsUpdate
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.services import s3_client
 from app.services.portal_service import PortalService
+from tests.s3_account_factory import make_s3_account
 
 
 def _setup(db_session, *, archived: bool = False):
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-space-settings",
         rgw_account_id="RGW-SPACE-SETTINGS",
     )

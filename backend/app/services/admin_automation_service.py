@@ -368,6 +368,9 @@ class AdminAutomationService:
                 if not name:
                     raise ValueError("s3_accounts.spec.name is required to create a new account")
                 endpoint = self._resolve_storage_endpoint(spec.storage_endpoint_id, spec.storage_endpoint_name, spec.storage_endpoint_url)
+                if endpoint is None:
+                    raise ValueError("storage_endpoint_id/name/url is required to create an account")
+                self._require_ceph_endpoint(endpoint)
                 if dry_run:
                     return self._created("s3_account", key, dry_run=dry_run)
                 created = self.s3_accounts.create_account_with_manager(
@@ -377,9 +380,7 @@ class AdminAutomationService:
                         quota_max_size_gb=spec.quota_max_size_gb,
                         quota_max_size_unit=spec.quota_max_size_unit,
                         quota_max_objects=spec.quota_max_objects,
-                        storage_endpoint_id=endpoint.id if endpoint else None,
-                        storage_endpoint_name=endpoint.name if endpoint else None,
-                        storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                        storage_endpoint_id=endpoint.id,
                     )
                 )
                 db_id = int(created.db_id) if created.db_id is not None else None

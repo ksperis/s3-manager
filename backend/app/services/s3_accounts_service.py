@@ -1,8 +1,10 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.utils.time import utcnow
-from sqlalchemy.orm import Session
 import logging
+import random
+from typing import Any, Optional
+
+from sqlalchemy.orm import Session
 
 from app.db import (
     AccountIAMUser,
@@ -13,6 +15,7 @@ from app.db import (
     UiGroup,
     UiGroupS3Account,
     User,
+    UserRole,
     UserS3Account,
     UserUiGroup,
     is_admin_ui_role,
@@ -34,7 +37,6 @@ from app.services.portal_role_sync import (
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
-from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
 from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.services.user_avatar_service import UserAvatarService
@@ -44,18 +46,18 @@ from app.utils.storage_endpoint_features import (
     resolve_admin_endpoint,
     resolve_feature_flags,
 )
-from app.db import UserRole
-import random
-from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
 from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.utils.account_roles import require_account_role
+from app.utils.time import utcnow
 
 
 logger = logging.getLogger(__name__)
+
+
 def _parse_positive_limit(value: Any) -> Optional[int]:
     if value is None:
         return None
@@ -86,72 +88,23 @@ def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
 class S3AccountsService:
     _ROOT_UID_SUFFIX = "-admin"
 
-    def __init__(
-        self,
-        db: Session,
-        rgw_admin_client: Optional[RGWAdminClient] = None,
-        allow_missing_admin: bool = False,
-    ) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
-        self.storage_endpoints = StorageEndpointsService(db)
         self.tags = TagsService(db)
-        if rgw_admin_client is not None:
-            self.rgw_admin = rgw_admin_client
-        elif allow_missing_admin:
-            self.rgw_admin = None
-        else:
-            self.rgw_admin = self._default_admin_client()
-        self._topics_cache: dict[str, tuple[Optional[int], Optional[list[str]]]] = {}
-        self._topics_global_cache: Optional[dict[str, list[str]]] = None
+        self._topics_cache: dict[tuple[int, str], tuple[Optional[int], Optional[list[str]]]] = {}
+        self._topics_global_cache: dict[int, Optional[dict[str, list[str]]]] = {}
 
-    def _default_admin_client(self) -> Optional[RGWAdminClient]:
-        try:
-            self.storage_endpoints.ensure_default_endpoint()
-            endpoint = (
-                self.db.query(StorageEndpoint)
-                .filter(StorageEndpoint.is_default.is_(True))
-                .order_by(StorageEndpoint.id.asc())
-                .first()
-            )
-            if not endpoint:
-                return None
-            return self._admin_for_endpoint(endpoint, allow_missing=True)
-        except Exception as exc:
-            logger.warning("RGW admin client unavailable: %s", exc)
-            return None
-
-    def _endpoint_capabilities(self, endpoint: Optional[StorageEndpoint]) -> Optional[dict[str, bool]]:
-        if not endpoint:
-            return None
+    def _endpoint_capabilities(self, endpoint: StorageEndpoint) -> dict[str, bool]:
         features = normalize_features_config(endpoint.provider, endpoint.features_config)
         return features_to_capabilities(features)
 
-    def _resolve_storage_endpoint(self, storage_endpoint_id: Optional[int], require_ceph: bool = False) -> StorageEndpoint:
-        if storage_endpoint_id:
-            endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
-            if not endpoint:
-                raise ValueError("Storage endpoint not found.")
-            if require_ceph and StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-                raise ValueError("This endpoint is not a Ceph endpoint.")
-            return endpoint
-        # Ensure default exists, then fetch it
-        self.storage_endpoints.ensure_default_endpoint()
-        endpoint = (
-            self.db.query(StorageEndpoint)
-            .filter(StorageEndpoint.is_default.is_(True))
-            .order_by(StorageEndpoint.id.asc())
-            .first()
-        )
+    def _resolve_storage_endpoint(self, storage_endpoint_id: int, require_ceph: bool = False) -> StorageEndpoint:
+        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
         if not endpoint:
-            raise ValueError("No default storage endpoint is available.")
+            raise ValueError("Storage endpoint not found.")
         if require_ceph and StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-            raise ValueError("No Ceph endpoint available.")
+            raise ValueError("This endpoint is not a Ceph endpoint.")
         return endpoint
-
-    def _get_linked_storage_endpoint(self, storage_endpoint_id: Optional[int]) -> Optional[StorageEndpoint]:
-        if not storage_endpoint_id:
-            return None
-        return self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint, allow_missing: bool = False) -> Optional[RGWAdminClient]:
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
@@ -178,14 +131,7 @@ class S3AccountsService:
             raise
 
     def _admin_for_account(self, account: S3Account, allow_missing: bool = False) -> Optional[RGWAdminClient]:
-        endpoint = None
-        try:
-            endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
-        except Exception as exc:
-            if allow_missing:
-                logger.warning("Unable to resolve endpoint for account %s: %s", account.id, exc)
-                return None
-            raise
+        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         return self._admin_for_endpoint(endpoint, allow_missing=allow_missing)
 
     def _apply_account_quota(
@@ -218,11 +164,8 @@ class S3AccountsService:
             raise ValueError("RGW account quota update is not supported on this cluster.")
 
     def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
-        try:
-            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
-            if not resolve_feature_flags(endpoint).metrics_enabled:
-                return None, None, None
-        except Exception:
+        endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+        if not resolve_feature_flags(endpoint).metrics_enabled:
             return None, None, None
         admin = self._admin_for_account(acc, allow_missing=True)
         if not admin:
@@ -330,50 +273,6 @@ class S3AccountsService:
         base = (account_name or account_identifier or "").strip()
         return base or "s3-manager admin user"
 
-    def _derive_account_from_uid(self, uid: str) -> Optional[str]:
-        if not uid:
-            return None
-        if "$" in uid:
-            candidate = uid.split("$", 1)[0]
-            return candidate or None
-        if "-" in uid:
-            candidate = uid.split("-", 1)[0]
-            if candidate and candidate.upper().startswith("RGW"):
-                return candidate
-        return None
-
-    def _rgw_account_users(self) -> Optional[dict[str, list[str]]]:
-        if not self.rgw_admin:
-            return None
-        try:
-            users = self.rgw_admin.list_users()
-        except Exception as exc:
-            logger.debug("Unable to list RGW users for account metadata: %s", exc)
-            return None
-
-        result: dict[str, list[str]] = {}
-        for entry in users:
-            uid_raw = entry.get("user") or entry.get("user_id") or entry.get("uid")
-            if not uid_raw:
-                continue
-            uid = str(uid_raw)
-            tenant_raw = entry.get("tenant") or entry.get("account_id")
-            tenant = str(tenant_raw).strip() if isinstance(tenant_raw, str) else tenant_raw
-            tenant_id = tenant if tenant else self._derive_account_from_uid(uid)
-            key = self._normalize_account_key(tenant_id)
-            if not key:
-                continue
-            tenant_value = tenant_id or ""
-            normalized_tenant = normalize_rgw_identifier(tenant_value) if tenant_value else None
-            if normalized_tenant and uid.lower() == f"{normalized_tenant.lower()}{self._ROOT_UID_SUFFIX}":
-                continue
-            result.setdefault(key, []).append(uid)
-
-        for key in list(result.keys()):
-            result[key] = sorted(set(result[key]))
-
-        return result
-
     def _topic_entry_metadata(self, topic: Any) -> tuple[Optional[str], Optional[str]]:
         name: Optional[str] = None
         account: Optional[str] = None
@@ -412,19 +311,21 @@ class S3AccountsService:
         deduped = sorted(set(names))
         return (len(deduped), deduped)
 
-    def _all_topics_by_account(self) -> Optional[dict[str, list[str]]]:
-        if not self.rgw_admin:
-            return None
-        if self._topics_global_cache is not None:
-            return self._topics_global_cache
+    def _all_topics_by_account(
+        self,
+        admin: RGWAdminClient,
+        storage_endpoint_id: int,
+    ) -> Optional[dict[str, list[str]]]:
+        if storage_endpoint_id in self._topics_global_cache:
+            return self._topics_global_cache[storage_endpoint_id]
         try:
-            topics = self.rgw_admin.list_topics(None)
+            topics = admin.list_topics(None)
         except RGWAdminError as exc:
             logger.debug("Unable to list global topics: %s", exc)
-            self._topics_global_cache = None
+            self._topics_global_cache[storage_endpoint_id] = None
             return None
         if topics is None:
-            self._topics_global_cache = None
+            self._topics_global_cache[storage_endpoint_id] = None
             return None
         mapping: dict[str, list[str]] = {}
         for topic in topics:
@@ -435,20 +336,22 @@ class S3AccountsService:
             mapping.setdefault(norm_key, []).append(name)
         for key in list(mapping.keys()):
             mapping[key] = sorted(set(mapping[key]))
-        self._topics_global_cache = mapping
+        self._topics_global_cache[storage_endpoint_id] = mapping
         return mapping
 
     def _account_topics_info(
         self,
         account_identifier: Optional[str],
         admin: Optional[RGWAdminClient],
+        storage_endpoint_id: int,
     ) -> tuple[Optional[int], Optional[list[str]]]:
         if not account_identifier or not admin:
             return None, None
         normalized_key = self._normalize_account_key(account_identifier)
         if not normalized_key:
             return None, None
-        cached = self._topics_cache.get(normalized_key)
+        cache_key = (storage_endpoint_id, normalized_key)
+        cached = self._topics_cache.get(cache_key)
         if cached is not None:
             return cached
         topics_response: Optional[list[Any]]
@@ -459,18 +362,18 @@ class S3AccountsService:
             if any(code in str(exc).lower() for code in ("405", "methodnotallowed")):
                 logger.debug("Topic API unavailable for %s: treating as zero topics", account_identifier)
                 result = (0, [])
-                self._topics_cache[normalized_key] = result
+                self._topics_cache[cache_key] = result
                 return result
             logger.debug("Unable to list topics for account %s: %s", account_identifier, exc)
         result = self._topics_from_response(topics_response)
         if result is None:
-            global_topics = self._all_topics_by_account()
+            global_topics = self._all_topics_by_account(admin, storage_endpoint_id)
             if global_topics is not None:
                 names = list(global_topics.get(normalized_key, []))
                 result = (len(names), names)
             else:
                 result = (0, [])
-        self._topics_cache[normalized_key] = result
+        self._topics_cache[cache_key] = result
         return result
 
     def _account_rgw_users(
@@ -618,7 +521,7 @@ class S3AccountsService:
 
         results: list[S3AccountSchema] = []
         for acc in db_accounts:
-            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
+            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
             endpoint_capabilities = self._endpoint_capabilities(endpoint)
             root_meta = roots_by_account.get(acc.rgw_account_id or str(acc.id))
             used_bytes = None
@@ -645,7 +548,11 @@ class S3AccountsService:
                     admin,
                     endpoint_capabilities=endpoint_capabilities,
                 )
-                rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
+                rgw_topic_count, rgw_topics = self._account_topics_info(
+                    account_identifier,
+                    admin,
+                    acc.storage_endpoint_id,
+                )
             results.append(
                 s3_account_from_db(
                     acc,
@@ -679,7 +586,7 @@ class S3AccountsService:
         group_ids_by_account, group_links_by_account = self._load_group_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
-            endpoint = self._get_linked_storage_endpoint(acc.storage_endpoint_id)
+            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
             summaries.append(
                 s3_account_summary_from_db(
                     acc,
@@ -719,7 +626,7 @@ class S3AccountsService:
         admin = self._admin_for_account(account, allow_missing=True)
         rgw_user_count = rgw_user_uids = rgw_topic_count = rgw_topics = None
         quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
-        endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
+        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         endpoint_capabilities = self._endpoint_capabilities(endpoint)
         if admin:
             rgw_user_count, rgw_user_uids = self._account_rgw_users(
@@ -728,7 +635,11 @@ class S3AccountsService:
                 admin,
                 endpoint_capabilities=endpoint_capabilities,
             )
-            rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
+            rgw_topic_count, rgw_topics = self._account_topics_info(
+                account_identifier,
+                admin,
+                account.storage_endpoint_id,
+            )
         return s3_account_from_db(
             account,
             public_id=account_identifier,
@@ -824,7 +735,7 @@ class S3AccountsService:
                 rgw_secret_key=secret_key,
                 rgw_user_uid=root_uid,
                 email=item.email,
-                storage_endpoint_id=endpoint.id if endpoint else None,
+                storage_endpoint_id=endpoint.id,
             )
             self.db.add(account)
             self.db.flush()
@@ -854,7 +765,7 @@ class S3AccountsService:
             raise ValueError("S3Account already exists")
 
         endpoint = self._resolve_storage_endpoint(payload.storage_endpoint_id, require_ceph=True)
-        endpoint_capabilities = self._endpoint_capabilities(endpoint) or {}
+        endpoint_capabilities = self._endpoint_capabilities(endpoint)
         if not endpoint_capabilities.get("account", False):
             raise ValueError("Selected endpoint does not support RGW account API (/admin/account).")
         admin = self._admin_for_endpoint(endpoint)
@@ -1114,7 +1025,7 @@ class S3AccountsService:
         group_ids_by_account, group_links_by_account = self._load_group_links([account.id])
         group_ids = group_ids_by_account.get(account.id) or []
         group_links = group_links_by_account.get(account.id) or []
-        endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
+        endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
         return s3_account_from_db(
@@ -1142,7 +1053,7 @@ class S3AccountsService:
                 raise ValueError("Unable to delete RGW tenant: rgw_account_id is missing for this account.")
             admin = self._admin_for_account(account, allow_missing=False)
             account_identifier = account.rgw_account_id
-            endpoint = self._get_linked_storage_endpoint(account.storage_endpoint_id)
+            endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
             endpoint_capabilities = self._endpoint_capabilities(endpoint)
 
             # Safety: only allow RGW deletion when we can prove the tenant is empty.
@@ -1157,7 +1068,11 @@ class S3AccountsService:
             )
             if rgw_user_count is None:
                 raise ValueError("Unable to verify RGW users; cannot delete the RGW tenant.")
-            rgw_topic_count, _ = self._account_topics_info(account_identifier, admin)
+            rgw_topic_count, _ = self._account_topics_info(
+                account_identifier,
+                admin,
+                account.storage_endpoint_id,
+            )
             if rgw_topic_count is None:
                 raise ValueError("Unable to verify RGW notification topics; cannot delete the RGW tenant.")
             if bucket_count > 0 or rgw_user_count > 0 or rgw_topic_count > 0:
@@ -1220,9 +1135,5 @@ class S3AccountsService:
         self.db.commit()
 
 
-def get_s3_accounts_service(
-    db: Session,
-    rgw_admin_client: Optional[RGWAdminClient] = None,
-    allow_missing_admin: bool = False,
-) -> S3AccountsService:
-    return S3AccountsService(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=allow_missing_admin)
+def get_s3_accounts_service(db: Session) -> S3AccountsService:
+    return S3AccountsService(db)

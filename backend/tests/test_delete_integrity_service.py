@@ -189,7 +189,7 @@ def test_unlink_account_cleans_links_and_purges_derived_rows(db_session):
     )
     db_session.commit()
 
-    S3AccountsService(db_session, allow_missing_admin=True).unlink_account(account.id)
+    S3AccountsService(db_session).unlink_account(account.id)
 
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None

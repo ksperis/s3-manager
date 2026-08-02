@@ -25,6 +25,7 @@ from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
+from tests.s3_account_factory import make_s3_account
 
 
 def _request(path: str, headers: dict | None = None, method: str = "GET"):
@@ -151,7 +152,8 @@ def test_manager_workspace_rejects_portal_role_without_account_admin(db_session)
         is_active=True,
         role=UserRole.UI_USER.value,
     )
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-role-not-manager-account",
         rgw_account_id="RGWPORTALROLE0001",
         rgw_access_key="AK-ROOT",
@@ -195,7 +197,8 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         is_active=True,
         role=UserRole.UI_USER.value,
     )
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-browser-account",
         rgw_account_id="RGWPORTALBROWSER0001",
         rgw_access_key="AK-ROOT",
@@ -263,7 +266,8 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
         is_active=True,
         role=UserRole.UI_USER.value,
     )
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-browser-archive-account",
         rgw_account_id="RGWPORTALBROWSERARCHIVE",
         rgw_access_key="AK-ROOT",
@@ -385,7 +389,8 @@ def test_manager_context_ignores_legacy_access_mode_header(db_session):
         is_active=True,
         role=UserRole.UI_USER.value,
     )
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="manager-toggle-account",
         rgw_account_id="RGWTOGGLE0001",
         rgw_access_key="AK-TOGGLE",
@@ -844,7 +849,8 @@ def test_browser_workspace_rejects_forged_account_and_shared_connection(db_sessi
         is_active=True,
         role=UserRole.UI_USER.value,
     )
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="browser-forged-admin-account",
         rgw_account_id="RGWFORGEDBROWSER",
         rgw_access_key="AK-FORGED-ACCOUNT",

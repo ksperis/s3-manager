@@ -13,14 +13,13 @@ from typing import Optional
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
 from app.core.db_init import init_db
-from app.db import AccountRole, S3Account
+from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.user import UserCreate
 from app.services.buckets_service import BucketsService
 from app.services.objects_service import ObjectsService
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.users_service import UsersService
-from app.services.rgw_admin import get_rgw_admin_client
 from app.services.rgw_iam import get_iam_service
 from app.services import s3_client
 from app.models.iam import AccessKey as IAMAccessKey
@@ -402,6 +401,7 @@ def ensure_account(
     name: str,
     email: str,
     quota_gb: Optional[int],
+    storage_endpoint_id: int,
 ) -> S3Account:
     db = accounts_service.db
     existing = db.query(S3Account).filter(S3Account.name == name).first()
@@ -423,6 +423,7 @@ def ensure_account(
         email=email,
         quota_max_size_gb=quota_gb,
         quota_max_objects=None,
+        storage_endpoint_id=storage_endpoint_id,
     )
     created = accounts_service.create_account_with_manager(payload)
     account = None
@@ -471,8 +472,15 @@ def create_account_data(
     objects_service: ObjectsService,
     users_service: UsersService,
     plan: AccountPlan,
+    storage_endpoint_id: int,
 ) -> None:
-    account = ensure_account(accounts_service, plan.name, plan.email, plan.quota_gb)
+    account = ensure_account(
+        accounts_service,
+        plan.name,
+        plan.email,
+        plan.quota_gb,
+        storage_endpoint_id,
+    )
     if not account:
         logger.error("Unable to load account %s after creation", plan.name)
         return
@@ -616,17 +624,18 @@ def main() -> None:
     init_db(engine, SessionLocal)
     db = SessionLocal()
     try:
-        admin_client = None
-        admin_access = settings.seed_rgw_admin_access_key or settings.seed_s3_access_key
-        admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
-        if admin_access and admin_secret:
-            admin_client = get_rgw_admin_client(
-                access_key=admin_access,
-                secret_key=admin_secret,
-                endpoint=endpoint,
+        storage_endpoint = (
+            db.query(StorageEndpoint)
+            .filter(
+                StorageEndpoint.is_default.is_(True),
+                StorageEndpoint.provider == StorageProvider.CEPH.value,
             )
-            logger.info("Using RGW admin credentials from seed settings.")
-        accounts_service = get_s3_accounts_service(db, rgw_admin_client=admin_client)
+            .order_by(StorageEndpoint.id.asc())
+            .first()
+        )
+        if storage_endpoint is None:
+            raise SystemExit("A default Ceph storage endpoint is required to seed demo data.")
+        accounts_service = get_s3_accounts_service(db)
         buckets_service = BucketsService()
         objects_service = ObjectsService()
         users_service = UsersService(db)
@@ -639,6 +648,7 @@ def main() -> None:
                 objects_service,
                 users_service,
                 plan,
+                storage_endpoint.id,
             )
     finally:
         db.close()

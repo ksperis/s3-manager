@@ -47,6 +47,7 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
             "email": "quota@example.com",
             "quota_max_size_gb": 500,
             "quota_max_objects": 1000000,
+            "storage_endpoint_id": 1,
         },
     )
 
@@ -61,6 +62,35 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
         "quota_max_size_gb": 500,
         "quota_max_objects": 1000000,
     }
+
+
+def test_admin_account_mutations_require_a_canonical_endpoint(client: TestClient):
+    create_response = client.post(
+        "/api/admin/accounts",
+        json={"name": "missing-endpoint"},
+    )
+    import_response = client.post(
+        "/api/admin/accounts/import",
+        json=[{"rgw_account_id": "RGW00000000000000101"}],
+    )
+    update_response = client.put(
+        "/api/admin/accounts/1",
+        json={"storage_endpoint_id": None},
+    )
+    removed_create_fields_response = client.post(
+        "/api/admin/accounts",
+        json={
+            "name": "legacy-endpoint-fields",
+            "storage_endpoint_id": 1,
+            "storage_endpoint_name": "removed",
+            "storage_endpoint_url": "https://removed.example.test",
+        },
+    )
+
+    assert create_response.status_code == 422
+    assert import_response.status_code == 422
+    assert update_response.status_code == 422
+    assert removed_create_fields_response.status_code == 422
 
 
 def test_admin_unlink_account_endpoint_calls_service(client: TestClient):

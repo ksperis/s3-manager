@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.db import AccountRole, S3Account, UiGroup, UiGroupS3Account, User, UserRole, UserS3Account
 from app.services.tags_service import TagsService
+from tests.s3_account_factory import make_s3_account
 
 
 def _seed_account(
@@ -12,7 +13,8 @@ def _seed_account(
     name: str,
     rgw_account_id: str | None,
 ) -> S3Account:
-    row = S3Account(
+    row = make_s3_account(
+        db_session,
         name=name,
         rgw_account_id=rgw_account_id,
         rgw_access_key=f"AK-{name}",

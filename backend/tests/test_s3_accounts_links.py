@@ -52,7 +52,7 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
     )
     db_session.commit()
 
-    service = S3AccountsService(db_session, allow_missing_admin=True)
+    service = S3AccountsService(db_session)
     accounts = service.list_accounts(
         include_usage_stats=False,
         include_quota=False,
@@ -67,9 +67,20 @@ def test_list_accounts_exposes_user_email_in_user_links(db_session):
 
 
 def test_accounts_expose_direct_group_links(db_session):
+    endpoint = StorageEndpoint(
+        name="ceph-group-links",
+        endpoint_url="https://ceph-group-links.example.test",
+        provider=StorageProvider.CEPH.value,
+        features_config="features:\n  admin:\n    enabled: true\n",
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
     account = S3Account(
         name="Account With Group",
         rgw_account_id="RGW00000000000000022",
+        storage_endpoint_id=endpoint.id,
     )
     group = UiGroup(name="Platform Operators")
     db_session.add_all([account, group])
@@ -83,7 +94,7 @@ def test_accounts_expose_direct_group_links(db_session):
     )
     db_session.commit()
 
-    service = S3AccountsService(db_session, allow_missing_admin=True)
+    service = S3AccountsService(db_session)
     accounts = service.list_accounts(
         include_usage_stats=False,
         include_quota=False,

@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -11,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import S3Account, StorageEndpoint, StorageProvider, User, is_admin_ui_role
 from app.routers.dependencies_internal.settings_loader import load_app_settings
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -20,7 +19,6 @@ from .auth_session import get_current_super_admin
 from .service_loaders import get_effective_access_service
 from .types import AccountCapabilities
 
-logger = logging.getLogger(__name__)
 
 def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
     account = S3Account(
@@ -126,29 +124,6 @@ def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str,
             detail="RGW admin credentials are not configured",
         )
     return access_key, secret_key, admin_endpoint, endpoint.region, bool(getattr(endpoint, "verify_tls", True))
-
-
-def get_optional_super_admin_rgw_client(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_super_admin),
-) -> Optional[RGWAdminClient]:
-    try:
-        access_key, secret_key, admin_endpoint, region, verify_tls = _resolve_admin_rgw_context(db, user)
-        return get_rgw_admin_client(
-            access_key=access_key,
-            secret_key=secret_key,
-            endpoint=admin_endpoint,
-            region=region,
-            verify_tls=verify_tls,
-        )
-    except RGWAdminError as exc:
-        logger.warning("Unable to build RGW admin client: %s", exc)
-        return None
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            logger.warning("RGW admin client unavailable: %s", exc.detail)
-            return None
-        raise
 
 
 def get_super_admin_rgw_client(

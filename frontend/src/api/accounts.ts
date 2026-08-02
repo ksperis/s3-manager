@@ -70,10 +70,10 @@ export type S3AccountSummary = {
   user_links?: AccountUserLink[] | null;
   group_ids?: number[] | null;
   group_links?: AccountGroupLink[] | null;
-  storage_endpoint_id?: number | null;
-  storage_endpoint_name?: string | null;
-  storage_endpoint_url?: string | null;
-  storage_endpoint_capabilities?: Record<string, boolean> | null;
+  storage_endpoint_id: number;
+  storage_endpoint_name: string;
+  storage_endpoint_url: string;
+  storage_endpoint_capabilities: Record<string, boolean>;
   allow_manager_bucket_quota?: boolean;
 };
 
@@ -115,7 +115,7 @@ type CreateS3AccountPayload = {
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
-  storage_endpoint_id?: number | null;
+  storage_endpoint_id: number;
   tags?: TagDefinitionInput[] | null;
 };
 
@@ -134,7 +134,7 @@ type UpdateS3AccountPayload = {
   group_links?: AccountGroupLink[] | null;
   name?: string | null;
   email?: string | null;
-  storage_endpoint_id?: number | null;
+  storage_endpoint_id?: number;
   tags?: TagDefinitionInput[] | null;
   allow_manager_bucket_quota?: boolean | null;
 };
@@ -153,7 +153,7 @@ export type ImportS3AccountPayload = {
   rgw_account_id: string;
   name?: string | null;
   email?: string | null;
-  storage_endpoint_id?: number | null;
+  storage_endpoint_id: number;
 };
 
 export async function importS3Accounts(payload: ImportS3AccountPayload[]): Promise<S3Account[]> {

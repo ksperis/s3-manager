@@ -11,10 +11,12 @@ from app.routers import dependencies
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.routers.dependencies_internal.portal_access import _portal_membership_capabilities
 from app.services.portal_service import PortalService
+from tests.s3_account_factory import make_s3_account
 
 
 def _seed(db_session, *, delegated: bool = False):
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-settings-project",
         rgw_account_id="RGW-PORTAL-SETTINGS",
         portal_settings_delegated=delegated,

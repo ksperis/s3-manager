@@ -8,10 +8,11 @@ from app.db import AccountRole, S3Account, User, UserRole, UserS3Account
 from app.main import app
 from app.routers import dependencies
 from app.routers.dependencies import AccountAccess, AccountCapabilities
+from tests.s3_account_factory import make_s3_account
 
 
 def _seed_account(db_session, *, name="Research Account") -> S3Account:
-    account = S3Account(name=name, rgw_account_id="RGW00000000000000042")
+    account = make_s3_account(db_session, name=name, rgw_account_id="RGW00000000000000042")
     db_session.add(account)
     db_session.commit()
     db_session.refresh(account)

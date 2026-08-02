@@ -21,7 +21,6 @@ from app.models.s3_account import (
 from app.routers.dependencies import (
     get_audit_logger,
     get_current_super_admin,
-    get_optional_super_admin_rgw_client,
 )
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
 from app.services.audit_service import AuditService
@@ -55,16 +54,8 @@ def _account_rgw_key(account: S3Account) -> tuple[str, int]:
 
 def get_admin_accounts_service(
     db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
 ) -> S3AccountsService:
-    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
-
-
-def get_admin_accounts_listing_service(
-    db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
-) -> S3AccountsService:
-    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
+    return get_s3_accounts_service(db)
 
 
 @router.get("", response_model=PaginatedS3AccountsResponse)
@@ -76,7 +67,7 @@ def list_accounts(
     sort_dir: str = Query("asc"),
     include_quota: bool = Query(False, description="Include RGW quota information (slower)."),
     include_rgw_details: bool = Query(False, description="Include RGW user and topic details (slower)."),
-    service: S3AccountsService = Depends(get_admin_accounts_listing_service),
+    service: S3AccountsService = Depends(get_admin_accounts_service),
     _: dict = Depends(get_current_super_admin),
 ) -> PaginatedS3AccountsResponse:
     accounts = service.list_accounts(
@@ -123,7 +114,7 @@ def list_accounts(
 
 @router.get("/minimal", response_model=list[S3AccountSummary])
 def list_accounts_minimal(
-    service: S3AccountsService = Depends(get_admin_accounts_listing_service),
+    service: S3AccountsService = Depends(get_admin_accounts_service),
     _: dict = Depends(get_current_super_admin),
 ) -> list[S3AccountSummary]:
     return service.list_accounts_minimal()

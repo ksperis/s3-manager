@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.services.users_service import UsersService
 from app.db import S3Account, User, UserS3Account, UserRole
+from tests.s3_account_factory import make_s3_account
 
 
 class FakeRGWAdmin:
@@ -21,7 +22,7 @@ def test_assign_user_to_account_creates_link_and_root(db_session):
         .first()
     )
     if not account:
-        account = S3Account(name="acc", rgw_account_id="RGW00000000000000001")
+        account = make_s3_account(db_session, name="acc", rgw_account_id="RGW00000000000000001")
         db_session.add(account)
         db_session.flush()
     user = User(

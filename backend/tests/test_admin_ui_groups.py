@@ -24,6 +24,7 @@ from app.main import app
 from app.routers import dependencies, execution_contexts
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.users_service import UsersService
+from tests.s3_account_factory import make_s3_account
 
 
 PNG_1X1 = base64.b64decode(
@@ -45,7 +46,8 @@ def _user(db_session, *, email: str = "group-user@example.com", role: str = User
 
 
 def _account(db_session, *, name: str = "group-account") -> S3Account:
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name=name,
         rgw_account_id=f"RGW-{name}",
         rgw_access_key=f"AK-{name}",

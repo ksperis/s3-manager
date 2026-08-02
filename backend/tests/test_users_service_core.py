@@ -21,10 +21,12 @@ from app.db import (
 from app.models.admin_automation import UiUserSpec
 from app.models.user import PASSWORD_POLICY_ERROR, UserCreate, UserUpdate
 from app.services.users_service import UsersService
+from tests.s3_account_factory import make_s3_account
 
 
 def _seed_account(db_session, name: str, rgw_id: str) -> S3Account:
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name=name,
         rgw_account_id=rgw_id,
         rgw_access_key=f"AK-{name}",

@@ -2,14 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 import pytest
 from app.main import app
-from app.db import S3Account, UiGroup, User, UserRole
+from app.db import UiGroup, User, UserRole
 from app.routers import dependencies
 from fastapi.testclient import TestClient
+from tests.s3_account_factory import make_s3_account
 
 
 @pytest.fixture
 def seed_user_account(db_session):
-    acc = S3Account(name="api-acc", rgw_account_id="RGW00000000000000002")
+    acc = make_s3_account(db_session, name="api-acc", rgw_account_id="RGW00000000000000002")
     db_session.add(acc)
     db_session.flush()
     usr = User(
@@ -126,7 +127,11 @@ def test_admin_user_api_rejects_legacy_ui_roles(
 
 def test_update_user_replaces_account_links_atomically(client: TestClient, db_session, seed_user_account):
     usr, first_account = seed_user_account
-    second_account = S3Account(name="api-acc-2", rgw_account_id="RGW00000000000000003")
+    second_account = make_s3_account(
+        db_session,
+        name="api-acc-2",
+        rgw_account_id="RGW00000000000000003",
+    )
     db_session.add(second_account)
     db_session.commit()
 

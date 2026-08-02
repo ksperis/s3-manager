@@ -653,8 +653,12 @@ def test_delete_endpoint_blocks_when_references_exist(db_session):
 
 def test_delete_endpoint_purges_derived_database_rows(db_session):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-health-cascade")
-    detached_account = S3Account(name="endpoint-history-account", storage_endpoint_id=None)
-    db_session.add(detached_account)
+    account_endpoint = _create_ceph_endpoint(db_session, name="ceph-account-history")
+    history_account = S3Account(
+        name="endpoint-history-account",
+        storage_endpoint_id=account_endpoint.id,
+    )
+    db_session.add(history_account)
     db_session.flush()
     rate_card = BillingRateCard(
         name="endpoint-delete-rate",
@@ -669,38 +673,38 @@ def test_delete_endpoint_purges_derived_database_rows(db_session):
         [
             BillingAssignment(
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
                 rate_card_id=rate_card.id,
             ),
             BillingUsageDaily(
                 day=date(2026, 1, 1),
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
                 source="rgw_admin_usage",
             ),
             BillingStorageDaily(
                 day=date(2026, 1, 1),
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
                 source="rgw_admin_bucket_stats",
             ),
             QuotaUsageHourly(
                 hour_ts=datetime(2026, 1, 1, 8, 0, 0, tzinfo=UTC),
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
                 used_bytes=1,
                 used_objects=1,
             ),
             QuotaUsageDaily(
                 day=date(2026, 1, 1),
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
                 last_used_bytes=1,
                 last_used_objects=1,
             ),
             QuotaAlertState(
                 storage_endpoint_id=endpoint.id,
-                s3_account_id=detached_account.id,
+                s3_account_id=history_account.id,
             ),
             BucketUsageStatsSnapshot(
                 scope_kind="admin_managed",

@@ -163,7 +163,7 @@ def get_manager_context(
                     max_users,
                     max_roles,
                     max_groups,
-                ) = get_s3_accounts_service(db, allow_missing_admin=True).get_account_limits(s3_account)
+                ) = get_s3_accounts_service(db).get_account_limits(s3_account)
 
     return ManagerContext(
         access_mode=access_mode,

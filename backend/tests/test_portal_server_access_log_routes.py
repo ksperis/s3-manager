@@ -11,6 +11,7 @@ from app.models.portal import PortalServerAccessLogPage
 from app.routers import dependencies
 from app.routers import portal as portal_router
 from app.routers.dependencies import AccountAccess, AccountCapabilities
+from tests.s3_account_factory import make_s3_account
 
 
 def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
@@ -41,7 +42,7 @@ def test_portal_server_access_log_routes_require_manager(
     db_session,
     monkeypatch,
 ):
-    account = S3Account(name="portal-log-routes", rgw_account_id="rgw-log-routes")
+    account = make_s3_account(db_session, name="portal-log-routes", rgw_account_id="rgw-log-routes")
     user = User(
         email="portal-log-routes@example.com",
         hashed_password="x",

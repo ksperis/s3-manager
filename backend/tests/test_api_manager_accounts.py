@@ -2,10 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from app.db import (
     AccountRole,
-    S3Account,
     S3User,
     StorageEndpoint,
-    StorageProvider,
     User,
     UserRole,
     UserS3Account,
@@ -14,6 +12,7 @@ from app.db import (
 from app.main import app
 from app.routers import dependencies
 from fastapi.testclient import TestClient
+from tests.s3_account_factory import make_s3_account
 
 
 def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
@@ -24,8 +23,8 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         is_active=True,
         role=UserRole.UI_ADMIN.value,
     )
-    linked_account = S3Account(name="linked", rgw_account_id="RGW-LINKED")
-    other_account = S3Account(name="other", rgw_account_id="RGW-OTHER")
+    linked_account = make_s3_account(db_session, name="linked", rgw_account_id="RGW-LINKED")
+    other_account = make_s3_account(db_session, name="other", rgw_account_id="RGW-OTHER")
     db_session.add_all([super_admin, linked_account, other_account])
     db_session.flush()
     db_session.add(
@@ -37,12 +36,7 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         )
     )
 
-    endpoint = StorageEndpoint(
-        name="manager-accounts-ceph",
-        endpoint_url="https://manager-accounts-ceph.example.test",
-        provider=StorageProvider.CEPH.value,
-        is_default=True,
-    )
+    endpoint = db_session.query(StorageEndpoint).filter(StorageEndpoint.is_default.is_(True)).one()
     linked_s3_user = S3User(
         name="linked-s3",
         rgw_user_uid="uid-linked",

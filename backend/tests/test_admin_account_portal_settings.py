@@ -7,6 +7,7 @@ from app.main import app
 from app.models.app_settings import AppSettings
 from app.routers.admin import s3_accounts as admin_accounts_router
 from app.services.portal import settings as portal_settings_module
+from tests.s3_account_factory import make_s3_account
 
 
 class _CapturingAuditService:
@@ -18,7 +19,8 @@ class _CapturingAuditService:
 
 
 def _seed_account(db_session, *, overrides: dict | None = None) -> S3Account:
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name="portal-admin-account",
         rgw_account_id="RGW-PORTAL-ADMIN",
         rgw_access_key="AK",

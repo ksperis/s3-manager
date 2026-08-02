@@ -30,6 +30,10 @@ class AccountGroupLink(_CanonicalAccountLink):
     group_avatar: Optional[UiGroupAvatar] = None
 
 
+class _StrictS3AccountMutation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class S3Account(BaseModel):
     id: str
     db_id: Optional[int] = None
@@ -62,15 +66,13 @@ class S3Account(BaseModel):
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 
 
-class S3AccountCreate(BaseModel):
+class S3AccountCreate(_StrictS3AccountMutation):
     name: str
     email: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
-    storage_endpoint_id: Optional[int] = None
-    storage_endpoint_name: Optional[str] = None
-    storage_endpoint_url: Optional[str] = None
+    storage_endpoint_id: int
     tags: list[TagDefinitionInput] = Field(default_factory=list)
 
     @field_validator("tags", mode="before")
@@ -79,14 +81,14 @@ class S3AccountCreate(BaseModel):
         return validate_tag_definition_list(value, allow_none=False) or []
 
 
-class S3AccountImport(BaseModel):
+class S3AccountImport(_StrictS3AccountMutation):
     rgw_account_id: str
     name: Optional[str] = None
     email: Optional[str] = None
-    storage_endpoint_id: Optional[int] = None
+    storage_endpoint_id: int
 
 
-class S3AccountUpdate(BaseModel):
+class S3AccountUpdate(_StrictS3AccountMutation):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
@@ -105,6 +107,13 @@ class S3AccountUpdate(BaseModel):
     def normalize_optional_tags(cls, value: object) -> Optional[list[dict[str, str]]]:
         return validate_tag_definition_list(value, allow_none=True)
 
+    @field_validator("storage_endpoint_id", mode="before")
+    @classmethod
+    def reject_null_storage_endpoint_id(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("storage_endpoint_id cannot be null")
+        return value
+
 
 class S3AccountSummary(BaseModel):
     id: str
@@ -116,9 +125,10 @@ class S3AccountSummary(BaseModel):
     user_links: Optional[list[AccountUserLink]] = None
     group_ids: Optional[list[int]] = None
     group_links: Optional[list[AccountGroupLink]] = None
-    storage_endpoint_id: Optional[int] = None
-    storage_endpoint_name: Optional[str] = None
-    storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    storage_endpoint_id: int
+    storage_endpoint_name: str
+    storage_endpoint_url: str
+    storage_endpoint_capabilities: dict[str, bool]
     allow_manager_bucket_quota: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
 

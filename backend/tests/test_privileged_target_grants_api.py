@@ -1,8 +1,9 @@
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole
+from app.db import S3User, StorageEndpoint, StorageProvider, User, UserRole
 from app.main import app
 from app.routers import dependencies
+from tests.s3_account_factory import make_s3_account
 
 
 def _ui_admin() -> User:
@@ -29,7 +30,7 @@ def _s3_user_endpoint(db_session, *, name: str) -> StorageEndpoint:
 
 
 def test_ui_admin_can_grant_account_bucket_quota_target(client: TestClient, db_session):
-    account = S3Account(name="privileged-account", rgw_account_id="RGW00000000000000042")
+    account = make_s3_account(db_session, name="privileged-account", rgw_account_id="RGW00000000000000042")
     db_session.add(account)
     db_session.commit()
     db_session.refresh(account)
@@ -47,7 +48,7 @@ def test_ui_admin_can_grant_account_bucket_quota_target(client: TestClient, db_s
 
 
 def test_ui_admin_can_update_account_without_changing_privileged_target(client: TestClient, db_session):
-    account = S3Account(name="regular-account", rgw_account_id="RGW00000000000000043")
+    account = make_s3_account(db_session, name="regular-account", rgw_account_id="RGW00000000000000043")
     db_session.add(account)
     db_session.commit()
     db_session.refresh(account)

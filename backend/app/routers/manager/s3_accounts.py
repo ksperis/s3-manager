@@ -29,7 +29,7 @@ def list_manager_accounts(
     user: Union[User, ManagerSessionPrincipal] = Depends(get_current_account_admin),
     db: Session = Depends(get_db),
 ) -> list[S3AccountSchema]:
-    quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
+    quota_service = get_s3_accounts_service(db)
     s3_users_service = get_s3_users_service(db)
     if isinstance(user, ManagerSessionPrincipal):
         accounts: list[S3AccountSchema] = []

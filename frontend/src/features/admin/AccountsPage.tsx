@@ -676,7 +676,7 @@ export default function S3AccountsPage() {
   }, [editingEndpointId, endpointAccountsWrite, fetchEndpointAccountsWritePermission]);
 
   const loadAccountDetail = useCallback(
-    async (account: S3AccountSummary, options?: { includeUsage?: boolean }) => {
+    async (account: S3Account | S3AccountSummary, options?: { includeUsage?: boolean }) => {
       const targetId = accountDbId(account);
       if (targetId == null || Number.isNaN(targetId)) {
         setActionError("Unable to resolve the account identifier.");
@@ -818,7 +818,7 @@ export default function S3AccountsPage() {
         quota_max_size_gb: form.quota_max_size_gb ? Number(form.quota_max_size_gb) : undefined,
         quota_max_size_unit: form.quota_max_size_gb ? form.quota_max_size_unit : undefined,
         quota_max_objects: form.quota_max_objects ? Number(form.quota_max_objects) : undefined,
-        storage_endpoint_id: form.storage_endpoint_id ? Number(form.storage_endpoint_id) : undefined,
+        storage_endpoint_id: Number(form.storage_endpoint_id),
       });
       setActionMessage("S3Account created");
       const defaultCeph =
@@ -994,7 +994,7 @@ export default function S3AccountsPage() {
     onClose: closeEditS3AccountModal,
   });
 
-  const startEditS3Account = async (account: S3AccountSummary) => {
+  const startEditS3Account = async (account: S3Account | S3AccountSummary) => {
     setActionError(null);
     setActionMessage(null);
     setUserPortalRoleChoice({});
@@ -1169,7 +1169,7 @@ export default function S3AccountsPage() {
     }
   };
 
-  const openDeleteS3AccountModal = async (account: S3AccountSummary) => {
+  const openDeleteS3AccountModal = async (account: S3Account | S3AccountSummary) => {
     setActionError(null);
     setActionMessage(null);
     const detail = await loadAccountDetail(account, { includeUsage: true });
@@ -1524,6 +1524,11 @@ export default function S3AccountsPage() {
               disabled={importDisabled}
               onClick={async () => {
                 try {
+                  if (!importTenantEndpointId) {
+                    setImportError("Select a Ceph endpoint to import accounts.");
+                    setImportMessage(null);
+                    return;
+                  }
                   if (!importEndpointCanWrite) {
                     setImportError("Selected endpoint does not allow this operation (missing accounts=write).");
                     setImportMessage(null);
@@ -1548,7 +1553,7 @@ export default function S3AccountsPage() {
                   }
                   const payload: ImportS3AccountPayload[] = raw.map((id) => ({
                     rgw_account_id: id,
-                    storage_endpoint_id: importTenantEndpointId ? Number(importTenantEndpointId) : undefined,
+                    storage_endpoint_id: Number(importTenantEndpointId),
                   }));
                   await importS3Accounts(payload);
                   setImportMessage("S3Accounts imported.");

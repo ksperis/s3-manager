@@ -29,6 +29,7 @@ from app.services import app_settings_service
 from app.services.portal import settings as portal_settings_module
 from app.services.portal_service import PortalService
 from app.utils.time import utcnow
+from tests.s3_account_factory import make_s3_account
 
 
 def _create_user(db_session) -> User:
@@ -51,7 +52,8 @@ def _create_account(
     rgw_account_id: str,
     storage_endpoint: StorageEndpoint | None = None,
 ) -> S3Account:
-    account = S3Account(
+    account = make_s3_account(
+        db_session,
         name=name,
         rgw_account_id=rgw_account_id,
         rgw_access_key=f"AK-{name}",

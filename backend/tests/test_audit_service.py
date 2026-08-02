@@ -15,6 +15,7 @@ from app.services.audit_service import (
     AuditService,
     parse_audit_metadata,
 )
+from tests.s3_account_factory import make_s3_account
 
 
 def _create_user(db_session) -> User:
@@ -33,7 +34,7 @@ def _create_user(db_session) -> User:
 
 def test_record_action_keeps_persisted_account_fk(db_session) -> None:
     user = _create_user(db_session)
-    account = S3Account(name="persisted-account")
+    account = make_s3_account(db_session, name="persisted-account")
     db_session.add(account)
     db_session.commit()
     db_session.refresh(account)

@@ -174,9 +174,8 @@ def test_browser_usage_summary_uses_live_account_usage(client, db_session, monke
     account = _account()
 
     class FakeS3AccountsService:
-        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+        def __init__(self, db):  # noqa: ANN001
             assert db is db_session
-            assert allow_missing_admin is True
 
         def get_account_usage(self, received):  # noqa: ANN001
             assert received is account
@@ -207,9 +206,8 @@ def test_browser_usage_summary_hides_account_when_live_usage_is_unavailable(clie
     account = _account()
 
     class FakeS3AccountsService:
-        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+        def __init__(self, db):  # noqa: ANN001
             assert db is db_session
-            assert allow_missing_admin is True
 
         def get_account_usage(self, received):  # noqa: ANN001
             assert received is account
@@ -320,9 +318,8 @@ def test_browser_usage_summary_uses_live_account_usage_for_portal_context(client
     account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
 
     class FakeS3AccountsService:
-        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+        def __init__(self, db):  # noqa: ANN001
             assert db is db_session
-            assert allow_missing_admin is True
 
         def get_account_usage(self, received):  # noqa: ANN001
             assert received is account
@@ -358,9 +355,8 @@ def test_browser_usage_summary_does_not_fallback_to_portal_storage_space_rows(cl
     ]
 
     class FakeS3AccountsService:
-        def __init__(self, db, *, allow_missing_admin=False):  # noqa: ANN001
+        def __init__(self, db):  # noqa: ANN001
             assert db is db_session
-            assert allow_missing_admin is True
 
         def get_account_usage(self, received):  # noqa: ANN001
             assert received is account

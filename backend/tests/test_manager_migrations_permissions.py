@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import BucketMigration, BucketMigrationItem, S3Account, User, UserRole
+from app.db import BucketMigration, BucketMigrationItem, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.routers.dependencies import (
@@ -14,6 +14,7 @@ from app.routers.dependencies import (
     _build_bucket_migration_allowed_context_ids,
     _ensure_bucket_migration_allowed,
 )
+from tests.s3_account_factory import make_s3_account
 
 
 def _user(role: str, *, bucket_migration: bool = False) -> User:
@@ -222,8 +223,8 @@ def test_bucket_migration_scope_does_not_grant_superadmin_implicit_contexts(db_s
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
     )
-    account_a = S3Account(name="scope-account-a")
-    account_b = S3Account(name="scope-account-b")
+    account_a = make_s3_account(db_session, name="scope-account-a")
+    account_b = make_s3_account(db_session, name="scope-account-b")
     db_session.add_all([user, account_a, account_b])
     db_session.commit()
 

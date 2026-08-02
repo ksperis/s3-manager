@@ -5,10 +5,14 @@ from __future__ import annotations
 from app.db import AuditLog, S3Account
 from app.main import app
 from app.routers.manager import activity as manager_activity_router
+from tests.s3_account_factory import make_s3_account
 
 
-def _account(name: str) -> S3Account:
-    return S3Account(name=name, rgw_access_key="AK", rgw_secret_key="SK")
+def _account(name: str, db_session=None) -> S3Account:
+    values = {"name": name, "rgw_access_key": "AK", "rgw_secret_key": "SK"}
+    if db_session is None:
+        return S3Account(**values)
+    return make_s3_account(db_session, **values)
 
 
 def _audit_log(
@@ -37,8 +41,8 @@ def _audit_log(
 
 
 def test_manager_activity_filters_audit_logs_to_current_account(client, db_session):
-    account = _account("account-a")
-    other_account = _account("account-b")
+    account = _account("account-a", db_session)
+    other_account = _account("account-b", db_session)
     db_session.add_all([account, other_account])
     db_session.commit()
 
@@ -67,7 +71,7 @@ def test_manager_activity_filters_audit_logs_to_current_account(client, db_sessi
 
 
 def test_manager_activity_does_not_expose_sensitive_audit_fields(client, db_session):
-    account = _account("account-a")
+    account = _account("account-a", db_session)
     db_session.add(account)
     db_session.commit()
     log = _audit_log(account=account, action="put_bucket_policy")
@@ -86,7 +90,7 @@ def test_manager_activity_does_not_expose_sensitive_audit_fields(client, db_sess
 
 
 def test_manager_activity_rejects_limits_above_twenty(client, db_session):
-    account = _account("account-a")
+    account = _account("account-a", db_session)
     db_session.add(account)
     db_session.commit()
     app.dependency_overrides[manager_activity_router.get_account_context] = lambda: account

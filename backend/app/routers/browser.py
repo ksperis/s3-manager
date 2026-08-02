@@ -193,7 +193,7 @@ def _build_account_live_usage_summary(
     source: str,
     label: str,
 ) -> BrowserUsageSummary:
-    service = S3AccountsService(db, allow_missing_admin=True)
+    service = S3AccountsService(db)
     used_bytes, object_count, _bucket_count = service.get_account_usage(account)
     if used_bytes is None:
         return _unavailable_usage_summary(source=source, label=label)

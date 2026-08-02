@@ -2,12 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 from types import SimpleNamespace
 
-from app.db import S3Account, User, UserRole
+from app.db import User, UserRole
 from app.routers.manager import context as context_router
+from tests.s3_account_factory import make_s3_account
 
 
 def _prepare_context(db_session, monkeypatch):
-    account = S3Account(name="limits-account", rgw_account_id="RGW-LIMITS")
+    account = make_s3_account(db_session, name="limits-account", rgw_account_id="RGW-LIMITS")
     actor = User(
         email="limits@example.test",
         hashed_password="x",

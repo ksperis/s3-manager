@@ -41,7 +41,6 @@ from app.routers.dependencies_internal.ceph_admin_context import (
     _resolve_admin_rgw_context,
     _resolve_ceph_admin_browser_context,
     _resolve_default_endpoint,
-    get_optional_super_admin_rgw_client,
     get_super_admin_rgw_client,
 )
 from app.routers.dependencies_internal.feature_gates import (

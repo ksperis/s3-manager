@@ -66,7 +66,7 @@ class PortalRequestsService:
     ) -> None:
         self.db = db
         self.users_service = users_service or get_users_service(db)
-        self.accounts_service = accounts_service or get_s3_accounts_service(db, allow_missing_admin=True)
+        self.accounts_service = accounts_service or get_s3_accounts_service(db)
 
     def create_request(
         self,

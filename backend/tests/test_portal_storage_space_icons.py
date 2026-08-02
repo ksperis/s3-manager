@@ -8,6 +8,7 @@ from app.db import AccountRole, AuditLog, PortalStorageSpaceMetadata, S3Account,
 from app.main import app
 from app.routers import dependencies
 from app.routers.dependencies import AccountAccess, AccountCapabilities
+from tests.s3_account_factory import make_s3_account
 
 
 def _portal_access(account: S3Account, user: User, role: str) -> AccountAccess:
@@ -34,7 +35,7 @@ def _png(width: int = 1, height: int = 1) -> bytes:
 
 
 def _setup_space(db_session):
-    account = S3Account(name="portal-icons", rgw_account_id="rgw-portal-icons")
+    account = make_s3_account(db_session, name="portal-icons", rgw_account_id="rgw-portal-icons")
     manager = User(
         email="portal-icon-manager@example.com",
         hashed_password="x",

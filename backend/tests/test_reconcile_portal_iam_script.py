@@ -1,7 +1,8 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import AccountRole, S3Account, User, UserRole, UserS3Account
+from app.db import AccountRole, User, UserRole, UserS3Account
 from app.scripts import reconcile_portal_iam as script
+from tests.s3_account_factory import make_s3_account
 
 
 class _FakePortalService:
@@ -19,7 +20,7 @@ class _FakePortalService:
 
 
 def _seed_access(db_session):
-    account = S3Account(name="reconcile-account", rgw_account_id="RGW-RECONCILE")
+    account = make_s3_account(db_session, name="reconcile-account", rgw_account_id="RGW-RECONCILE")
     administrator = User(
         email="reconcile-admin@example.test",
         hashed_password="x",

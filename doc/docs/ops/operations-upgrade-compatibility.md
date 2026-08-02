@@ -371,6 +371,21 @@ After this boundary, S3 user creation and import APIs require
 backend and frontend together because the request and response contracts are
 both strict.
 
+## 2026-08 canonical S3 account endpoints
+
+Migration `0095_canonical_s3_account_endpoints` assigns every detached S3
+account to the current default Ceph endpoint, then makes
+`s3_accounts.storage_endpoint_id` non-nullable. Before upgrading, verify that a
+Ceph endpoint is marked as the default. The migration stops with an explicit
+error when detached accounts exist without such an endpoint; it does not retain
+a runtime fallback.
+
+After this boundary, S3 account creation and import APIs require
+`storage_endpoint_id`, and update requests reject an explicit `null` endpoint.
+Account-specific RGW operations always use the persisted endpoint. Deploy the
+backend and frontend together because the request and response contracts are
+both strict.
+
 ## 2026-03 compatibility cleanup
 
 Current behavior after cleanup:
