@@ -2,7 +2,29 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+from typing import Optional
+from urllib.parse import urlencode
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.models.browser import (
+    CompleteMultipartUploadRequest,
+    CopyObjectPayload,
+    DeleteObjectsPayload,
+    ListMultipartUploadsResponse,
+    ListPartsResponse,
+    MultipartPart,
+    MultipartUploadInitRequest,
+    MultipartUploadInitResponse,
+    MultipartUploadItem,
+    PresignPartRequest,
+    PresignPartResponse,
+    PresignRequest,
+    PresignedUrl,
+    SseCustomerContext,
+)
+from app.services.s3_client import _delete_objects
+from app.services.s3_execution_context import S3ExecutionTarget
 
 
 class BrowserObjectOperationsMixin:
