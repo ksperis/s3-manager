@@ -2,10 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from .bucket_migration._shared import *
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
+from app.services.buckets_service import BucketsService
 from .bucket_migration.execution import BucketMigrationExecutionMixin
 from .bucket_migration.persistence import BucketMigrationPersistenceMixin
 from .bucket_migration.planning import BucketMigrationPlanningMixin
+from .bucket_migration.precheck import BucketMigrationInspector, BucketMigrationPrecheckPlanner
 from .bucket_migration.progress import BucketMigrationProgressMixin
 from .bucket_migration.rollback import BucketMigrationRollbackMixin
 
@@ -44,7 +49,6 @@ class BucketMigrationService(
 
 
 from .bucket_migration.webhooks import (  # noqa: E402
-    _BucketMigrationWebhookDispatcher,
     get_bucket_migration_webhook_dispatcher,
     reset_bucket_migration_webhook_dispatcher_for_tests,
 )

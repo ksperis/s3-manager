@@ -29,14 +29,16 @@ from app.db import (
     UserS3User,
 )
 from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigrationCreateRequest
-from app.services.bucket_migration_service import (
-    BucketMigrationService,
-    BucketMigrationWorker,
+from app.services.bucket_migration._shared import (
     _BucketVersionEntry,
-    _BucketMigrationWebhookDispatcher,
     _DB_ERROR_MESSAGE_MAX_CHARS,
     _DB_EVENT_MESSAGE_MAX_CHARS,
     _VersionedObjectDetails,
+)
+from app.services.bucket_migration.webhooks import _BucketMigrationWebhookDispatcher
+from app.services.bucket_migration_service import (
+    BucketMigrationService,
+    BucketMigrationWorker,
 )
 
 
