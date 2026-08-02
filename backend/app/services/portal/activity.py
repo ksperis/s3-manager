@@ -2,18 +2,14 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.services.audit_service import parse_audit_metadata
+
 from ._shared import *
 
 
 class PortalActivityMixin:
     def _audit_metadata(self, log: AuditLog) -> dict[str, Any]:
-        if not log.metadata_json:
-            return {}
-        try:
-            value = json.loads(log.metadata_json)
-        except (TypeError, ValueError):
-            return {}
-        return value if isinstance(value, dict) else {}
+        return parse_audit_metadata(log.metadata_json) or {}
 
     def _visible_storage_space_lookup(
         self,

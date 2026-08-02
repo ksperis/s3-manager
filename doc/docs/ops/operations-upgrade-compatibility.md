@@ -1,5 +1,17 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical audit metadata
+
+Migration `0087_canonical_audit_metadata` rewrites every non-null audit metadata
+payload as a JSON object. Existing objects retain their fields, other valid JSON
+values move under `value`, and malformed historical text moves under `unparsed`
+so old audit evidence is not discarded. New oversized metadata uses a bounded,
+valid JSON envelope with a preview and the original serialized length.
+
+Deploy the migration and backend together. Audit and Portal readers now share a
+strict object contract instead of hiding malformed storage independently. The
+data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical billing operation breakdowns
 
 Migration `0086_canonical_billing_ops_breakdown` rewrites each available daily

@@ -16,6 +16,39 @@ from app.db import S3Account, AuditLog, User
 
 logger = logging.getLogger(__name__)
 
+MAX_AUDIT_METADATA_LENGTH = 16384
+
+
+def parse_audit_metadata(metadata_json: Optional[str]) -> Optional[dict[str, Any]]:
+    if metadata_json is None:
+        return None
+    value = json.loads(metadata_json)
+    if not isinstance(value, dict):
+        raise ValueError("Persisted audit metadata must be a JSON object")
+    return value
+
+
+def _truncate_audit_metadata(serialized: str) -> str:
+    lower = 0
+    upper = len(serialized)
+    best = ""
+    while lower <= upper:
+        preview_length = (lower + upper) // 2
+        candidate = json.dumps(
+            {
+                "truncated": True,
+                "original_length": len(serialized),
+                "preview": serialized[:preview_length],
+            },
+            separators=(",", ":"),
+        )
+        if len(candidate) <= MAX_AUDIT_METADATA_LENGTH:
+            best = candidate
+            lower = preview_length + 1
+        else:
+            upper = preview_length - 1
+    return best
+
 
 class AuditService:
     def __init__(self, db: Session) -> None:
@@ -170,7 +203,7 @@ class AuditService:
             "account_name": log.account_name,
             "status": log.status,
             "message": log.message,
-            "metadata": self._deserialize_metadata(log.metadata_json),
+            "metadata": parse_audit_metadata(log.metadata_json),
         }
 
     def _serialize_metadata(self, metadata: Optional[dict[str, Any]]) -> Optional[str]:
@@ -181,20 +214,9 @@ class AuditService:
             serialized = json.dumps(sanitized_metadata, default=self._fallback_encoder)
         except (TypeError, ValueError):
             serialized = json.dumps({"raw": sanitize_audit_metadata(str(metadata))})
-        # Guard against overly large payloads in SQLite/Text columns
-        if len(serialized) > 16384:
-            truncated = serialized[:16380] + "..."
-            return truncated
+        if len(serialized) > MAX_AUDIT_METADATA_LENGTH:
+            return _truncate_audit_metadata(serialized)
         return serialized
-
-    def _deserialize_metadata(self, metadata_json: Optional[str]) -> Optional[dict[str, Any]]:
-        if not metadata_json:
-            return None
-        try:
-            value = json.loads(metadata_json)
-            return value if isinstance(value, dict) else {"value": value}
-        except (TypeError, ValueError):
-            return None
 
     @staticmethod
     def _fallback_encoder(value: Any) -> str:

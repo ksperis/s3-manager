@@ -2,8 +2,14 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
+import pytest
+
 from app.db import AuditLog, S3Account, User, UserRole
-from app.services.audit_service import AuditService
+from app.services.audit_service import (
+    MAX_AUDIT_METADATA_LENGTH,
+    AuditService,
+    parse_audit_metadata,
+)
 
 
 def _create_user(db_session) -> User:
@@ -109,3 +115,32 @@ def test_record_action_sanitizes_sensitive_metadata_before_persisting(db_session
     assert "oauth-secret" not in log.metadata_json
     assert "session-token-value" not in log.metadata_json
     assert "plain-password" not in log.metadata_json
+
+
+def test_audit_metadata_truncation_remains_valid_json(db_session) -> None:
+    user = _create_user(db_session)
+    service = AuditService(db_session)
+    service.record_action(
+        user=user,
+        scope="admin",
+        action="large_metadata",
+        metadata={"details": 'value with "quotes" and \\slashes ' * 1000},
+    )
+
+    log = db_session.query(AuditLog).one()
+    assert log.metadata_json is not None
+    assert len(log.metadata_json) <= MAX_AUDIT_METADATA_LENGTH
+    metadata = parse_audit_metadata(log.metadata_json)
+    assert metadata is not None
+    assert metadata["truncated"] is True
+    assert metadata["original_length"] > MAX_AUDIT_METADATA_LENGTH
+    assert metadata["preview"].startswith('{"details":')
+
+
+def test_audit_metadata_parser_rejects_noncanonical_storage() -> None:
+    assert parse_audit_metadata(None) is None
+    assert parse_audit_metadata('{"key": "value"}') == {"key": "value"}
+
+    for raw in ("{", "[]", '"value"'):
+        with pytest.raises(ValueError):
+            parse_audit_metadata(raw)
