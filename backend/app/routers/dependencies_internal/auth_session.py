@@ -14,10 +14,10 @@ from app.core.security import constant_time_equal, decode_token
 from app.db import User, UserRole, is_admin_ui_role, is_superadmin_ui_role
 from app.models.session import ManagerSessionPrincipal
 from app.models.access_context import ManagerActor
+from app.services import effective_access_service
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 
-from . import service_loaders
 
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")
@@ -72,14 +72,14 @@ def get_current_ui_superadmin(user: User = Depends(get_current_user)) -> User:
 
 
 def get_current_ceph_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-    effective = service_loaders.get_effective_access_service(db).resolve_user(user)
+    effective = effective_access_service.EffectiveAccessService(db).resolve_user(user)
     if not is_admin_ui_role(user.role) or not effective.can_access_ceph_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
 
 def get_current_storage_ops_admin(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-    effective = service_loaders.get_effective_access_service(db).resolve_user(user)
+    effective = effective_access_service.EffectiveAccessService(db).resolve_user(user)
     if user.role not in {
         UserRole.UI_SUPERADMIN.value,
         UserRole.UI_ADMIN.value,

@@ -36,24 +36,24 @@ def _settings(*, enabled: bool):
 
 
 def test_bucket_migration_allowed_for_admin_with_user_tool_access(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies_internal.settings_loader.load_app_settings", lambda: _settings(enabled=True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(enabled=True))
     _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value, bucket_migration=True))
 
 
 def test_bucket_migration_allowed_for_ui_user_with_user_tool_access(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies_internal.settings_loader.load_app_settings", lambda: _settings(enabled=True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(enabled=True))
     _ensure_bucket_migration_allowed(_user(UserRole.UI_USER.value, bucket_migration=True))
 
 
 def test_bucket_migration_forbidden_without_user_tool_access(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies_internal.settings_loader.load_app_settings", lambda: _settings(enabled=True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(enabled=True))
     with pytest.raises(HTTPException) as exc:
         _ensure_bucket_migration_allowed(_user(UserRole.UI_USER.value))
     assert exc.value.status_code == 403
 
 
 def test_bucket_migration_forbidden_when_feature_disabled(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies_internal.settings_loader.load_app_settings", lambda: _settings(enabled=False))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(enabled=False))
     with pytest.raises(HTTPException) as exc:
         _ensure_bucket_migration_allowed(_user(UserRole.UI_ADMIN.value, bucket_migration=True))
     assert exc.value.status_code == 403
@@ -61,7 +61,7 @@ def test_bucket_migration_forbidden_when_feature_disabled(monkeypatch):
 
 
 def test_bucket_migration_forbidden_for_unassigned_user(monkeypatch):
-    monkeypatch.setattr("app.routers.dependencies_internal.settings_loader.load_app_settings", lambda: _settings(enabled=True))
+    monkeypatch.setattr("app.services.app_settings_service.load_app_settings", lambda: _settings(enabled=True))
     with pytest.raises(HTTPException) as exc:
         _ensure_bucket_migration_allowed(_user(UserRole.UI_NONE.value, bucket_migration=True))
     assert exc.value.status_code == 403

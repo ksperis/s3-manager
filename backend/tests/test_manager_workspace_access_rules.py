@@ -23,7 +23,7 @@ from app.db import (
 from app.models.app_settings import AppSettings, GeneralSettings
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
 from app.routers import dependencies
-from app.routers.dependencies_internal import settings_loader
+from app.services import app_settings_service
 from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
 from app.services.s3_execution_context import S3ExecutionContext
@@ -221,7 +221,7 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     )
     db_session.commit()
     monkeypatch.setattr(
-        settings_loader,
+        app_settings_service,
         "load_app_settings",
         lambda: AppSettings(
             general=GeneralSettings(
@@ -290,7 +290,7 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
     )
     db_session.commit()
     monkeypatch.setattr(
-        settings_loader,
+        app_settings_service,
         "load_app_settings",
         lambda: AppSettings(
             general=GeneralSettings(
@@ -907,7 +907,7 @@ def test_browser_workspace_rejects_forged_account_and_shared_connection(db_sessi
 def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_session, monkeypatch):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 
     endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-ok")
@@ -926,7 +926,7 @@ def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_s
 def test_manager_context_s3_user_disables_ceph_keys_without_target_grant(db_session, monkeypatch):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 
     endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-no-target-grant")
@@ -950,7 +950,7 @@ def test_manager_context_s3_user_disables_ceph_keys_without_target_grant(db_sess
 def test_manager_context_s3_user_disables_ceph_keys_without_user_tool_access(db_session, monkeypatch):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 
     endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-no-user-access")
@@ -984,7 +984,7 @@ def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible
 ):
     settings = AppSettings()
     settings.general.manager_ceph_s3_user_keys_enabled = feature_enabled
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
     monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
 
     user, account = _build_linked_s3_user_context(
@@ -1034,7 +1034,7 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
     settings = AppSettings()
     settings.general.ceph_admin_enabled = True
     settings.general.browser_ceph_admin_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     user = User(
         email="ceph-admin-browser-ok@example.com",
@@ -1077,7 +1077,7 @@ def test_browser_workspace_rejects_ceph_admin_selector_for_invalid_ceph_admin_id
     settings = AppSettings()
     settings.general.ceph_admin_enabled = True
     settings.general.browser_ceph_admin_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     user = User(
         email="ceph-admin-browser-invalid@example.com",
@@ -1121,7 +1121,7 @@ def test_browser_workspace_rejects_ceph_admin_selector_for_non_admin_user(db_ses
     settings = AppSettings()
     settings.general.ceph_admin_enabled = True
     settings.general.browser_ceph_admin_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     user = User(
         email="ceph-admin-browser-ko@example.com",

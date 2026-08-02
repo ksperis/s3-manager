@@ -542,17 +542,7 @@ def test_browser_workspace_never_reuses_manager_account_context(db_session, monk
     )
     db_session.commit()
 
-    monkeypatch.setattr(
-        execution_contexts,
-        "load_app_settings",
-        lambda: SimpleNamespace(
-            general=SimpleNamespace(
-                browser_enabled=True,
-                portal_enabled=True,
-                browser_portal_enabled=True,
-            )
-        ),
-    )
+    _configure_portal_browser_catalog(monkeypatch, enabled=True)
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
@@ -631,7 +621,7 @@ def test_workspace_access_defaults_to_browser_for_private_connection_only(db_ses
         access_browser=True,
     )
     monkeypatch.setattr(
-        execution_contexts,
+        app_settings_service,
         "load_app_settings",
         lambda: AppSettings(
             general=GeneralSettings(
@@ -670,7 +660,7 @@ def test_workspace_access_counts_enabled_portal_project_and_keeps_portal_default
     )
     db_session.commit()
     settings = _configure_portal_browser_catalog(monkeypatch, enabled=True)
-    monkeypatch.setattr(execution_contexts, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     access = execution_contexts.get_workspace_access(user=user, db=db_session)
 
@@ -698,7 +688,7 @@ def test_workspace_access_excludes_portal_role_on_incompatible_account(db_sessio
     db_session.commit()
     settings = _configure_portal_browser_catalog(monkeypatch, enabled=True)
     settings.general.manager_enabled = False
-    monkeypatch.setattr(execution_contexts, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     access = execution_contexts.get_workspace_access(user=user, db=db_session)
 

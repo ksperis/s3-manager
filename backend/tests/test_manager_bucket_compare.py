@@ -13,7 +13,7 @@ from app.models.app_settings import AppSettings
 from app.models.ceph_admin import CephAdminBucketConfigDiff, CephAdminBucketContentDiff
 from app.models.manager_bucket_compare import ManagerBucketCompareActionRequest, ManagerBucketCompareRequest
 from app.routers import dependencies as dependencies_router
-from app.routers.dependencies_internal import settings_loader
+from app.services import app_settings_service
 from app.routers.manager import buckets as buckets_router
 
 
@@ -299,7 +299,7 @@ def test_compare_request_rejects_empty_feature_list_when_config_scope_enabled():
 def test_require_bucket_compare_enabled_blocks_when_feature_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_compare_enabled = False
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_compare_enabled(_tool_user(), db=None)
@@ -311,7 +311,7 @@ def test_require_bucket_compare_enabled_blocks_when_feature_disabled(monkeypatch
 def test_require_bucket_compare_enabled_blocks_without_user_tool_access(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_compare_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_compare_enabled(_tool_user(bucket_compare=False), db=None)
@@ -645,7 +645,7 @@ def test_compare_bucket_action_request_validates_action_and_parallelism():
 def test_compare_bucket_action_feature_off_returns_403(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_compare_enabled = False
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     payload = ManagerBucketCompareActionRequest(
         target_context_id="2",

@@ -56,7 +56,7 @@ from app.models.portal import (
 from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
-from app.services import s3_client
+from app.services import app_settings_service, s3_client
 from app.services.portal_service import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
@@ -1895,7 +1895,7 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
     app_settings = AppSettings()
     app_settings.general.portal_enabled = True
     app_settings.general.browser_portal_enabled = True
-    monkeypatch.setattr(portal_access_deps.settings_loader, "load_app_settings", lambda: app_settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: app_settings)
     monkeypatch.setattr(portal_access_deps, "_validate_portal_account_surface", lambda _account: None)
     monkeypatch.setattr(PortalService, "get_portal_credentials", lambda *_args, **_kwargs: ("AK", "SK"))
     monkeypatch.setattr(

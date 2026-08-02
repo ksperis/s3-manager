@@ -12,6 +12,7 @@ from app.models.access_context import EffectiveAccountLink, ManagerActor
 from app.models.account_capabilities import AccountCapabilities
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
+from app.services import app_settings_service, effective_access_service
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
@@ -21,7 +22,6 @@ from app.utils.time import utcnow
 
 from .auth_session import get_current_actor, settings
 from .ceph_admin_context import _resolve_default_endpoint
-from . import service_loaders, settings_loader
 
 
 def _resolve_ceph_admin_browser_context(
@@ -118,7 +118,7 @@ def _resolve_s3_user_context(
 ) -> S3ExecutionContext:
     if surface != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 users are not available in Browser")
-    effective = service_loaders.get_effective_access_service(db).resolve_user(user)
+    effective = effective_access_service.EffectiveAccessService(db).resolve_user(user)
     if not effective.has_s3_user(s3_user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this S3 user")
 
@@ -148,7 +148,7 @@ def _resolve_connection_context(
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
-    service = service_loaders.get_effective_access_service(db)
+    service = effective_access_service.EffectiveAccessService(db)
     effective = service.resolve_user(user)
     if not service.connection_is_allowed(user, conn, workspace=surface, resolved=effective):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Connection is not authorized in this workspace")
@@ -187,7 +187,7 @@ def _resolve_workspace_surface(request: Optional[Request]) -> str:
 
 
 def _resolve_default_account_id(db: Session, user: User) -> int:
-    links = service_loaders.get_effective_access_service(db).resolve_user(user).account_links
+    links = effective_access_service.EffectiveAccessService(db).resolve_user(user).account_links
     if len(links) == 1:
         return links[0].account_id
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
@@ -211,7 +211,7 @@ def _resolve_user_account_link(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
         account_id = _resolve_default_account_id(db, user)
     account = _resolve_account_by_id(db, account_id)
-    link = service_loaders.get_effective_access_service(db).resolve_user(user).account_link_for(account.id)
+    link = effective_access_service.EffectiveAccessService(db).resolve_user(user).account_link_for(account.id)
     if not link:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
     return account, link
@@ -304,7 +304,7 @@ def _resolve_requested_session_endpoint(
         return pinned_endpoint
     if not requested_endpoint:
         return None
-    general = settings_loader.load_app_settings().general
+    general = app_settings_service.load_app_settings().general
     if general.allow_login_custom_endpoint:
         return requested_endpoint
     if general.allow_login_endpoint_list:

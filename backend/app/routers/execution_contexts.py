@@ -15,7 +15,7 @@ from app.models.execution_context import (
     WorkspaceAvailability,
 )
 from app.routers.dependencies import get_current_account_user
-from app.routers.dependencies_internal.settings_loader import load_app_settings
+from app.services import app_settings_service
 from app.services.effective_access_service import EffectiveAccessService
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
@@ -317,7 +317,7 @@ def get_workspace_access(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> WorkspaceAccess:
-    settings = load_app_settings().general
+    settings = app_settings_service.load_app_settings().general
     service = EffectiveAccessService(db)
     effective = service.resolve_user(user)
     manager_count = sum(

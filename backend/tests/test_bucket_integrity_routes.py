@@ -20,7 +20,7 @@ from app.models.app_settings import AppSettings
 from app.models.bucket_integrity import BucketIntegrityCheckProgress, BucketIntegrityCheckRequest, BucketIntegrityCheckResult
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers import dependencies as dependencies_router
-from app.routers.dependencies_internal import settings_loader
+from app.services import app_settings_service
 from app.routers.ceph_admin import integrity as ceph_integrity
 from app.routers.ceph_admin.dependencies import CephAdminContext
 from app.routers.manager import integrity as manager_integrity
@@ -68,7 +68,7 @@ def _manager_tool_user(*, bucket_integrity_check: bool = True) -> User:
 def test_require_bucket_integrity_enabled_blocks_when_feature_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_integrity_check_enabled = False
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(), db=None)
@@ -80,7 +80,7 @@ def test_require_bucket_integrity_enabled_blocks_when_feature_disabled(monkeypat
 def test_require_bucket_integrity_enabled_blocks_without_user_tool_access(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_integrity_check_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_integrity_check_enabled(_manager_tool_user(bucket_integrity_check=False), db=None)
@@ -141,7 +141,7 @@ def test_manager_integrity_route_streams_progress_and_result(monkeypatch):
 def test_manager_integrity_route_returns_403_when_flag_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_integrity_check_enabled = False
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     previous_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None

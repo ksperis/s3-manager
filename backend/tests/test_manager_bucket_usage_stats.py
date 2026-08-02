@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from app.db import User, UserRole
 from app.models.app_settings import AppSettings
 from app.routers import dependencies as dependencies_router
-from app.routers.dependencies_internal import settings_loader
+from app.services import app_settings_service
 
 
 def _manager_user(*, role: str = UserRole.UI_USER.value) -> User:
@@ -23,7 +23,7 @@ def _manager_user(*, role: str = UserRole.UI_USER.value) -> User:
 def test_require_bucket_usage_stats_enabled_blocks_when_feature_disabled(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_usage_stats_enabled = False
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_usage_stats_enabled(_manager_user())
@@ -35,7 +35,7 @@ def test_require_bucket_usage_stats_enabled_blocks_when_feature_disabled(monkeyp
 def test_require_bucket_usage_stats_enabled_blocks_non_manager_roles(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_usage_stats_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc:
         dependencies_router.require_bucket_usage_stats_enabled(_manager_user(role=UserRole.UI_NONE.value))
@@ -47,6 +47,6 @@ def test_require_bucket_usage_stats_enabled_blocks_non_manager_roles(monkeypatch
 def test_require_bucket_usage_stats_enabled_allows_manager_user_without_tool_access(monkeypatch):
     settings = AppSettings()
     settings.general.bucket_usage_stats_enabled = True
-    monkeypatch.setattr(settings_loader, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(app_settings_service, "load_app_settings", lambda: settings)
 
     assert dependencies_router.require_bucket_usage_stats_enabled(_manager_user()).email == "usage-stats-tool@example.com"
