@@ -40,7 +40,7 @@ def _create_row(db_session, **kwargs) -> S3Connection:
     custom_endpoint_config = kwargs.get("custom_endpoint_config")
     if custom_endpoint_config is None and kwargs.get("storage_endpoint_id") is None:
         custom_endpoint_config = (
-            '{"endpoint_url":"https://existing.example.test","region":"eu-west-1","force_path_style":false,"verify_tls":true}'
+            '{"endpoint_url":"https://existing.example.test","force_path_style":false,"provider":null,"region":"eu-west-1","verify_tls":true}'
         )
     row = S3Connection(
         created_by_user_id=kwargs["created_by_user_id"],
@@ -190,7 +190,7 @@ def test_create_connection_custom_endpoint_and_storage_endpoint_paths(db_session
     assert preset_conn.storage_endpoint_id == endpoint.id
     assert preset_conn.endpoint_url == endpoint.endpoint_url
     assert preset_conn.force_path_style is True
-    assert preset_conn.verify_tls is True
+    assert preset_conn.verify_tls is False
 
 
 def test_create_and_update_connection_normalize_tags(db_session, monkeypatch):
@@ -256,7 +256,7 @@ def test_update_connection_updates_private_connection(db_session, monkeypatch):
         db_session,
         created_by_user_id=owner.id,
         name="private-conn",
-        custom_endpoint_config='{"endpoint_url":"https://old.example.test","region":"eu-west-3","force_path_style":false,"verify_tls":true}',
+        custom_endpoint_config='{"endpoint_url":"https://old.example.test","force_path_style":false,"provider":null,"region":"eu-west-3","verify_tls":true}',
         access_manager=False,
         access_browser=True,
     )
@@ -344,7 +344,7 @@ def test_update_connection_rejects_existing_manual_endpoint_without_tls_verifica
         db_session,
         created_by_user_id=owner.id,
         name="existing-no-tls",
-        custom_endpoint_config='{"endpoint_url":"https://old.example.test","region":"eu-west-3","force_path_style":false,"verify_tls":false}',
+        custom_endpoint_config='{"endpoint_url":"https://old.example.test","force_path_style":false,"provider":null,"region":"eu-west-3","verify_tls":false}',
         access_manager=False,
         access_browser=True,
     )

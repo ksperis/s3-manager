@@ -83,6 +83,15 @@ def _connection(
         is_active=True,
         access_manager=access_manager,
         access_browser=True,
+        custom_endpoint_config=json.dumps(
+            {
+                "endpoint_url": f"https://{name}.example.test",
+                "force_path_style": False,
+                "provider": None,
+                "region": None,
+                "verify_tls": True,
+            }
+        ),
         capabilities_json=json.dumps({"can_manage_iam": True}),
         access_key_id=f"AK-{name}",
         secret_access_key=f"SK-{name}",

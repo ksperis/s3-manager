@@ -250,7 +250,7 @@ def test_admin_cannot_mutate_or_delete_a_connection_used_as_managed_access_sourc
         access_browser=False,
         access_key_id="SOURCE-AK",
         secret_access_key="SOURCE-SK",
-        custom_endpoint_config='{"endpoint_url":"https://source.example.test","verify_tls":true}',
+        custom_endpoint_config='{"endpoint_url":"https://source.example.test","force_path_style":false,"provider":null,"region":null,"verify_tls":true}',
     )
     db_session.add(source)
     db_session.flush()

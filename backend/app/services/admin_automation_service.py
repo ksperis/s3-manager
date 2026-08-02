@@ -49,7 +49,11 @@ from app.utils.normalize import normalize_storage_provider
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
 from app.utils.storage_endpoint_features import dump_features_config, normalize_features_config
-from app.utils.s3_connection_endpoint import build_custom_endpoint_config, parse_custom_endpoint_config, resolve_connection_details
+from app.utils.s3_connection_endpoint import (
+    build_custom_endpoint_config,
+    custom_endpoint_update_base,
+    resolve_connection_details,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1283,12 +1287,12 @@ class AdminAutomationService:
                 conn.storage_endpoint_id = None
                 should_probe_iam = True
         if conn.storage_endpoint_id is None:
-            current = parse_custom_endpoint_config(conn.custom_endpoint_config)
-            endpoint_url = current.get("endpoint_url")
-            region = current.get("region")
-            force_path_style = bool(current.get("force_path_style", False))
-            verify_tls = bool(current.get("verify_tls", True))
-            provider = current.get("provider") or current.get("provider_hint")
+            current = custom_endpoint_update_base(conn.custom_endpoint_config)
+            endpoint_url = current.endpoint_url
+            region = current.region
+            force_path_style = current.force_path_style
+            verify_tls = current.verify_tls
+            provider = current.provider
             if "endpoint_url" in payload_data and spec.endpoint_url is not None:
                 endpoint_url = spec.endpoint_url.rstrip("/")
                 should_probe_iam = True

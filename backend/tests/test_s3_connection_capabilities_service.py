@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from botocore.exceptions import ClientError
+import pytest
 
 from app.services import s3_connection_capabilities_service as svc
 
@@ -30,7 +31,7 @@ def _conn(**kwargs):
         "access_key_id": "AKIA-CONN",
         "secret_access_key": "SECRET-CONN",
         "capabilities_json": '{"can_manage_iam":false}',
-        "custom_endpoint_config": '{"endpoint_url":"https://s3.example.test","region":"eu-west-1","verify_tls":true}',
+        "custom_endpoint_config": '{"endpoint_url":"https://s3.example.test","force_path_style":false,"provider":null,"region":"eu-west-1","verify_tls":true}',
         "storage_endpoint": None,
     }
     base.update(kwargs)
@@ -40,7 +41,15 @@ def _conn(**kwargs):
 def test_probe_connection_can_manage_iam_false_when_missing_required_fields():
     assert svc.probe_connection_can_manage_iam(_conn(access_key_id="")) is False
     assert svc.probe_connection_can_manage_iam(_conn(secret_access_key="")) is False
-    assert svc.probe_connection_can_manage_iam(_conn(custom_endpoint_config='{"endpoint_url":null}')) is False
+    with pytest.raises(ValueError, match="endpoint URL"):
+        svc.probe_connection_can_manage_iam(
+            _conn(
+                custom_endpoint_config=(
+                    '{"endpoint_url":null,"force_path_style":false,'
+                    '"provider":null,"region":null,"verify_tls":true}'
+                )
+            )
+        )
 
 
 def test_probe_connection_can_manage_iam_success(monkeypatch):
@@ -64,7 +73,9 @@ def test_probe_connection_can_manage_iam_uses_aws_iam_endpoint(monkeypatch):
             provider="aws",
             endpoint_url="https://s3.amazonaws.com",
             region="us-east-1",
+            force_path_style=False,
             verify_tls=True,
+            name="AWS",
             features_config=None,
         )
     )
@@ -88,7 +99,9 @@ def test_probe_connection_can_manage_iam_signs_commercial_aws_iam_with_us_east_1
             provider="aws",
             endpoint_url="https://s3.eu-west-1.amazonaws.com",
             region="eu-west-1",
+            force_path_style=False,
             verify_tls=True,
+            name="AWS Europe",
             features_config=None,
         )
     )
@@ -110,7 +123,8 @@ def test_probe_connection_can_manage_iam_signs_custom_aws_connection_with_us_eas
     connection = _conn(
         custom_endpoint_config=(
             '{"endpoint_url":"https://s3.eu-west-1.amazonaws.com",'
-            '"region":"eu-west-1","verify_tls":true,"provider":"aws"}'
+            '"force_path_style":false,"provider":"aws",'
+            '"region":"eu-west-1","verify_tls":true}'
         )
     )
 
@@ -132,7 +146,9 @@ def test_probe_connection_can_manage_iam_respects_disabled_endpoint_iam(monkeypa
             provider="aws",
             endpoint_url="https://s3.amazonaws.com",
             region="us-east-1",
+            force_path_style=False,
             verify_tls=True,
+            name="AWS disabled IAM",
             features_config="features:\n  iam:\n    enabled: false\n",
         )
     )

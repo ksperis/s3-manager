@@ -88,6 +88,19 @@ def _create_connection(
         expires_at=expires_at,
         storage_endpoint=storage_endpoint,
         storage_endpoint_id=storage_endpoint.id if storage_endpoint else None,
+        custom_endpoint_config=(
+            None
+            if storage_endpoint
+            else json.dumps(
+                {
+                    "endpoint_url": f"https://{name}.example.test",
+                    "force_path_style": False,
+                    "provider": None,
+                    "region": None,
+                    "verify_tls": True,
+                }
+            )
+        ),
         capabilities_json=json.dumps({"can_manage_iam": bool(can_manage_iam)}),
         access_key_id=f"CONN-AK-{name}",
         secret_access_key=f"CONN-SK-{name}",

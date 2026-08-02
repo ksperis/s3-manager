@@ -18,7 +18,7 @@ from app.utils.s3_connection_capabilities import (
 )
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
-    parse_custom_endpoint_config,
+    custom_endpoint_update_base,
 )
 from app.utils.s3_connection_ordering import s3_connection_name_order_by
 from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
@@ -274,12 +274,12 @@ class S3ConnectionsService:
         }
         should_rebuild_custom_endpoint = not row.server_managed or bool(endpoint_fields.intersection(payload_data))
         if row.storage_endpoint_id is None and should_rebuild_custom_endpoint:
-            current = parse_custom_endpoint_config(row.custom_endpoint_config)
-            endpoint_url = current.get("endpoint_url")
-            region = current.get("region")
-            force_path_style = bool(current.get("force_path_style", False))
-            verify_tls = bool(current.get("verify_tls", True))
-            provider = current.get("provider") or current.get("provider_hint")
+            current = custom_endpoint_update_base(row.custom_endpoint_config)
+            endpoint_url = current.endpoint_url
+            region = current.region
+            force_path_style = current.force_path_style
+            verify_tls = current.verify_tls
+            provider = current.provider
             if payload.endpoint_url is not None:
                 endpoint_url = payload.endpoint_url.rstrip("/")
                 should_probe_iam = True

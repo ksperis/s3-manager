@@ -1,5 +1,19 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical custom S3 connection endpoints
+
+Migration `0089_canonical_s3_connection_endpoints` rewrites every manual S3
+connection endpoint with the exact current fields, maps the removed
+`provider_hint` key to `provider`, supplies current boolean defaults, and clears
+custom JSON from connections bound to a registered Storage Endpoint. The
+migration stops with the affected connection ID if a manual connection has no
+usable endpoint URL; repair or delete that invalid row before retrying.
+
+Deploy the migration and backend together. Runtime readers now reject malformed,
+partial, or unknown custom endpoint data instead of repairing it or consulting
+removed model attributes. Registered endpoints also propagate their configured
+TLS verification flag to connections. The cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical account Portal settings overrides
 
 Migration `0088_canonical_portal_settings_override` replaces the historical

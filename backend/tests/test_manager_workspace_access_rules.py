@@ -35,6 +35,18 @@ def _request(path: str, headers: dict | None = None, method: str = "GET"):
     )
 
 
+def _custom_endpoint(name: str) -> str:
+    return json.dumps(
+        {
+            "endpoint_url": f"https://{name}.example.test",
+            "force_path_style": False,
+            "provider": None,
+            "region": None,
+            "verify_tls": True,
+        }
+    )
+
+
 def _ceph_metrics_endpoint(*, name: str, provider: str = "ceph") -> StorageEndpoint:
     metrics_enabled = provider == "ceph"
     usage_enabled = provider == "ceph"
@@ -417,6 +429,7 @@ def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enable
         name="non-iam-connection",
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("non-iam-connection"),
         capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-CONN",
         secret_access_key="SK-CONN",
@@ -449,6 +462,7 @@ def test_manager_workspace_touch_connection_last_used_timestamp(db_session):
         name="touch-connection",
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("touch-connection"),
         capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-TOUCH",
         secret_access_key="SK-TOUCH",
@@ -481,6 +495,7 @@ def test_storage_ops_workspace_does_not_touch_connection_last_used_timestamp(db_
         name="no-touch-connection",
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("no-touch-connection"),
         capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-NO-TOUCH",
         secret_access_key="SK-NO-TOUCH",
@@ -513,6 +528,7 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
         name="manager-disabled-connection",
         access_manager=False,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("manager-disabled-connection"),
         capabilities_json=json.dumps({"can_manage_iam": True}),
         access_key_id="AK-CONN2",
         secret_access_key="SK-CONN2",
@@ -547,6 +563,7 @@ def test_manager_and_browser_workspace_reject_inactive_connection(db_session, pa
         name="inactive-connection",
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("inactive-connection"),
         capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-INACTIVE",
         secret_access_key="SK-INACTIVE",
@@ -603,6 +620,7 @@ def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
         name="manager-connection-browser-disabled",
         access_manager=True,
         access_browser=False,
+        custom_endpoint_config=_custom_endpoint("manager-connection-browser-disabled"),
         capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-CONN3",
         secret_access_key="SK-CONN3",
@@ -834,6 +852,7 @@ def test_browser_workspace_rejects_forged_account_and_shared_connection(db_sessi
         is_shared=True,
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=_custom_endpoint("browser-forged-shared-connection"),
         access_key_id="AK-FORGED-SHARED",
         secret_access_key="SK-FORGED-SHARED",
     )

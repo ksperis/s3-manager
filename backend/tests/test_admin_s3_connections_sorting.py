@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 
 from app.db import S3Connection, UiGroup, UiGroupS3Connection, User, UserRole, UserS3Connection
 from app.services.tags_service import TagsService
@@ -34,6 +35,15 @@ def _seed_connection(
         is_temporary=False,
         access_manager=True,
         access_browser=True,
+        custom_endpoint_config=json.dumps(
+            {
+                "endpoint_url": f"https://{name}.example.test",
+                "force_path_style": False,
+                "provider": None,
+                "region": None,
+                "verify_tls": True,
+            }
+        ),
         access_key_id=f"AK-{name}-{creator_id}",
         secret_access_key="SECRET",
         created_at=created_at,
