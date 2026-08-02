@@ -166,9 +166,9 @@ export function RequireStorageOpsFeature() {
   return renderWorkspaceFeature(loading, generalSettings.storage_ops_enabled, "Storage Ops");
 }
 
-export type BrowserSurface = "root" | "manager" | "ceph_admin";
+type BrowserSurface = "root" | "manager" | "ceph_admin";
 
-export function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surface: BrowserSurface) {
+function isBrowserSurfaceEnabled(generalSettings: GeneralSettings, surface: BrowserSurface) {
   if (!generalSettings.browser_enabled) return false;
   if (surface === "root") return generalSettings.browser_root_enabled;
   if (surface === "manager") return generalSettings.browser_manager_enabled;
@@ -204,34 +204,34 @@ export function RequireManagerIamFeature() {
   return <Outlet />;
 }
 
-export function canAccessManagerMigration(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
+function canAccessManagerMigration(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
   if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   return Boolean(getManagerToolAccess(user)?.bucket_migration);
 }
 
-export function canAccessManagerBucketCompare(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
+function canAccessManagerBucketCompare(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
   if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   if (!getManagerToolAccess(user)?.bucket_compare) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
-export function canAccessManagerBucketIntegrity(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
+function canAccessManagerBucketIntegrity(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
   if (!generalSettings.bucket_integrity_check_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   if (!getManagerToolAccess(user)?.bucket_integrity_check) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
-export function canAccessManagerBucketPurge(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
+function canAccessManagerBucketPurge(generalSettings: GeneralSettings, user: SessionUser | null): boolean {
   if (!generalSettings.bucket_purge_enabled || !user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   if (!getManagerToolAccess(user)?.bucket_purge) return false;
   return user.capabilities?.can_manage_buckets !== false;
 }
 
-export function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
+function canAccessManagerFeatureRules(user: SessionUser | null): boolean {
   if (!user?.role) return false;
   if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
   if (!getManagerToolAccess(user)?.feature_rules) return false;

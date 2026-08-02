@@ -14,7 +14,7 @@ export type GraphicalReplicationRule = {
   deleteMarkerStatus: ReplicationRuleStatus;
 };
 
-export type GraphicalReplicationState = {
+type GraphicalReplicationState = {
   role: string;
   rules: GraphicalReplicationRule[];
   hasAdvancedFields: boolean;

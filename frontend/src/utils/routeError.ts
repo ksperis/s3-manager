@@ -9,7 +9,7 @@ import { readStoredUser, resolvePostLoginPath } from "./workspaces";
 
 const BACKEND_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
 
-export type RouteErrorKind = "backend_unavailable" | "generic";
+type RouteErrorKind = "backend_unavailable" | "generic";
 
 function hasBackendUnavailableStatus(status: unknown): boolean {
   return typeof status === "number" && BACKEND_UNAVAILABLE_STATUSES.has(status);

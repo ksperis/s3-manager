@@ -146,7 +146,7 @@ export type EndpointHealthLatencyOverviewEndpoint = {
   scope?: string;
 };
 
-export type EndpointHealthLatencyOverviewResponse = {
+type EndpointHealthLatencyOverviewResponse = {
   generated_at: string;
   window: string;
   start: string;
@@ -167,7 +167,7 @@ export type EndpointHealthGlobalIncident = {
   scope?: string;
 };
 
-export type EndpointHealthGlobalIncidentsResponse = {
+type EndpointHealthGlobalIncidentsResponse = {
   window: string;
   start: string;
   end: string;

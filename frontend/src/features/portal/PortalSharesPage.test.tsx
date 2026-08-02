@@ -240,8 +240,8 @@ describe("PortalSharesPage", () => {
     );
   });
 
-  it("keeps legacy access deep links working", async () => {
-    window.history.pushState({}, "", "/portal/shares?tab=by");
+  it("opens the canonical access view from the URL", async () => {
+    window.history.pushState({}, "", "/portal/shares?view=access");
     renderPage();
 
     expect(
@@ -250,7 +250,7 @@ describe("PortalSharesPage", () => {
     expect(
       screen.queryByRole("heading", { name: "Access by space" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Granted by me" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Shared with me" })).toHaveAttribute(
       "aria-selected",
       "true",
     );

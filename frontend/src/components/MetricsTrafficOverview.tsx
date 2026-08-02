@@ -54,14 +54,14 @@ function expectedStepMs(window: TrafficWindow): number {
   return window === "week" || window === "month" ? DAY_MS : HOUR_MS;
 }
 
-export type MetricsSnapshotCardProps = {
+type MetricsSnapshotCardProps = {
   label: string;
   value: string;
   hint?: string;
   loading?: boolean;
 };
 
-export type MetricsSummaryCardProps = {
+type MetricsSummaryCardProps = {
   eyebrow?: string;
   title: string;
   description?: string;

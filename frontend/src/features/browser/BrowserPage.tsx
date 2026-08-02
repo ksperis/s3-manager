@@ -64,13 +64,6 @@ import {
   type S3AccountSelector,
 } from "../../api/accountParams";
 import {
-  getBucketLogging,
-  getBucketPolicy,
-  getBucketProperties,
-  getBucketStats,
-  getBucketWebsite,
-} from "../../api/buckets";
-import {
   BrowserBucket,
   type BrowserUsageSummary,
   type BrowserRequestOptions,
@@ -148,6 +141,16 @@ import {
   BrowserCopyValueModal,
 } from "./BrowserDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
+import {
+  extractBrowserErrorDetails as extractErrorDetails,
+  formatBrowserOperationError as formatOperationError,
+} from "./browserOperationErrors";
+import {
+  BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES,
+  buildBucketInspectorFeatures,
+  fetchBucketInspectorData,
+  type BucketInspectorData,
+} from "./browserBucketInspectorModel";
 import BrowserObjectDetailsModal from "./BrowserObjectDetailsModal";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 import BrowserOperationsModal from "./BrowserOperationsModal";
@@ -161,25 +164,15 @@ import {
 import {
   DEFAULT_FOLDERS_PANEL_WIDTH_PX,
   DEFAULT_INSPECTOR_PANEL_WIDTH_PX,
-  readBrowserRootObjectColumns,
-  readBrowserRootObjectColumnWidths,
   readBrowserRootContextSelection,
   readBrowserRootUiState,
   readStoredBrowserRootUiState,
   writeBrowserRootActiveLayout,
   writeBrowserRootDensity,
   writeBrowserRootContextSelection,
-  writeBrowserRootObjectColumns,
-  writeBrowserRootObjectColumnWidths,
   writeBrowserRootUiLayout,
   writeBrowserRootUiPanelWidths,
 } from "./browserRootUiState";
-import {
-  readBrowserEmbeddedObjectColumns,
-  readBrowserEmbeddedObjectColumnWidths,
-  writeBrowserEmbeddedObjectColumns,
-  writeBrowserEmbeddedObjectColumnWidths,
-} from "./browserEmbeddedColumnsState";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
@@ -294,9 +287,40 @@ import {
   PANEL_LAYOUT_GAP_PX,
   PANEL_RESIZER_HITBOX_WIDTH_PX,
   PANELS_DISABLE_MEDIA_QUERY,
-  clampBrowserPanelWidth,
   resolveBrowserPanelWidths,
 } from "./browserPanelLayout";
+import {
+  COLUMN_DEFINITIONS,
+  COLUMN_RESIZER_HITBOX_WIDTH_PX,
+  COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX,
+  COMPACT_ROW_ACTION_TARGET_SIZE_PX,
+  DEFAULT_VISIBLE_COLUMN_IDS,
+  DIRECT_DELETED_ITEM_ACTION_IDS,
+  DIRECT_ITEM_ACTION_IDS,
+  DIRECT_PORTAL_ITEM_ACTION_IDS,
+  MIN_ACTIONS_COLUMN_WIDTH_PX,
+  ROW_ACTION_CELL_HORIZONTAL_PADDING_PX,
+  ROW_ACTION_GAP_PX,
+  SELECTION_COLUMN_WIDTH_PX,
+  buildBrowserItems,
+  buildBrowserPathStats,
+  clampColumnWidth,
+  collectAvailableStorageClasses,
+  createLazyColumnCacheEntry,
+  loadColumnWidthsForSurface,
+  loadVisibleColumnsForSurface,
+  normalizeVisibleColumns,
+  persistColumnWidthsForSurface,
+  persistVisibleColumnsForSurface,
+  resolveColumnWidthPx,
+  type BrowserColumnId,
+  type BrowserObjectColumnWidths,
+  type BrowserResizableColumnId,
+  type BrowserSortKey,
+  type ColumnDefinition,
+  type LazyColumnCacheEntry,
+  type LazyFieldStatus,
+} from "./browserObjectTableModel";
 import {
   buildPathSuggestionEntries,
   mergePathSuggestions,
@@ -448,19 +472,6 @@ function ToolbarToggleMenuItem({
 }
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
-type BucketInspectorTone = "active" | "inactive" | "unknown";
-type BucketInspectorFeature = {
-  state: string;
-  tone: BucketInspectorTone;
-};
-type BucketInspectorData = {
-  creation_date?: string | null;
-  used_bytes?: number | null;
-  object_count?: number | null;
-  quota_max_size_bytes?: number | null;
-  quota_max_objects?: number | null;
-  features: Record<string, BucketInspectorFeature>;
-};
 type SearchScope = "prefix" | "bucket";
 type BrowserConfirmDialogState = {
   title: string;
@@ -474,53 +485,6 @@ type BrowserCopyDialogState = {
   label: string;
   value: string;
   successMessage?: string;
-};
-type BrowserColumnId =
-  | "type"
-  | "size"
-  | "modified"
-  | "storageClass"
-  | "etag"
-  | "contentType"
-  | "tagsCount"
-  | "metadataCount"
-  | "cacheControl"
-  | "expires"
-  | "restoreStatus";
-type BrowserSortKey = "name" | "size" | "modified" | "storageClass" | "etag";
-type ColumnLazySource = "metadata" | "tags";
-type BrowserResizableColumnId = "name" | BrowserColumnId;
-type ColumnDefinition = {
-  id: BrowserColumnId;
-  label: string;
-  defaultVisible: boolean;
-  sortable?: BrowserSortKey;
-  lazySource?: ColumnLazySource;
-  defaultWidthPx: number;
-  minWidthPx: number;
-  maxWidthPx: number;
-  align?: "left" | "right";
-};
-type ResizableColumnDefinition = {
-  id: BrowserResizableColumnId;
-  label: string;
-  defaultWidthPx: number;
-  minWidthPx: number;
-  maxWidthPx: number;
-};
-type BrowserObjectColumnWidths = Partial<
-  Record<BrowserResizableColumnId, number>
->;
-type LazyFieldStatus = "idle" | "loading" | "ready" | "error";
-type LazyColumnCacheEntry = {
-  contentType: string | null;
-  tagsCount: number | null;
-  metadataCount: number | null;
-  cacheControl: string | null;
-  expires: string | null;
-  restoreStatus: string | null;
-  metadataStatus: LazyFieldStatus;
-  tagsStatus: LazyFieldStatus;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
@@ -564,258 +528,6 @@ function extractBucketListError(error: unknown, isPortalContext: boolean): strin
   return message;
 }
 
-const NAME_COLUMN_DEFINITION: ResizableColumnDefinition = {
-  id: "name",
-  label: "Name",
-  defaultWidthPx: 320,
-  minWidthPx: 220,
-  maxWidthPx: 640,
-};
-const SELECTION_COLUMN_WIDTH_PX = 36;
-const MIN_ACTIONS_COLUMN_WIDTH_PX = 108;
-const COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX = 44;
-const COMPACT_ROW_ACTION_TARGET_SIZE_PX = 24;
-const ROW_ACTION_GAP_PX = 4;
-const ROW_ACTION_CELL_HORIZONTAL_PADDING_PX = 16;
-const DIRECT_ITEM_ACTION_IDS: readonly BrowserActionId[] = [
-  "download",
-  "delete",
-];
-const DIRECT_PORTAL_ITEM_ACTION_IDS: readonly BrowserActionId[] = [
-  "download",
-  "createPublicLink",
-  "delete",
-];
-const DIRECT_DELETED_ITEM_ACTION_IDS: readonly BrowserActionId[] = ["restore"];
-const COLUMN_RESIZER_HITBOX_WIDTH_PX = 12;
-const COLUMN_DEFINITIONS: ColumnDefinition[] = [
-  {
-    id: "type",
-    label: "Type",
-    defaultVisible: false,
-    defaultWidthPx: 112,
-    minWidthPx: 96,
-    maxWidthPx: 240,
-  },
-  {
-    id: "size",
-    label: "Size",
-    defaultVisible: true,
-    sortable: "size",
-    defaultWidthPx: 80,
-    minWidthPx: 72,
-    maxWidthPx: 180,
-    align: "right",
-  },
-  {
-    id: "modified",
-    label: "Modified",
-    defaultVisible: true,
-    sortable: "modified",
-    defaultWidthPx: 160,
-    minWidthPx: 132,
-    maxWidthPx: 260,
-  },
-  {
-    id: "storageClass",
-    label: "Storage class",
-    defaultVisible: false,
-    sortable: "storageClass",
-    defaultWidthPx: 160,
-    minWidthPx: 120,
-    maxWidthPx: 260,
-  },
-  {
-    id: "etag",
-    label: "ETag",
-    defaultVisible: false,
-    sortable: "etag",
-    defaultWidthPx: 192,
-    minWidthPx: 140,
-    maxWidthPx: 320,
-  },
-  {
-    id: "contentType",
-    label: "Content-Type",
-    defaultVisible: false,
-    lazySource: "metadata",
-    defaultWidthPx: 176,
-    minWidthPx: 140,
-    maxWidthPx: 320,
-  },
-  {
-    id: "tagsCount",
-    label: "Tags",
-    defaultVisible: false,
-    lazySource: "tags",
-    defaultWidthPx: 80,
-    minWidthPx: 72,
-    maxWidthPx: 140,
-    align: "right",
-  },
-  {
-    id: "metadataCount",
-    label: "Metadata",
-    defaultVisible: false,
-    lazySource: "metadata",
-    defaultWidthPx: 96,
-    minWidthPx: 84,
-    maxWidthPx: 160,
-    align: "right",
-  },
-  {
-    id: "cacheControl",
-    label: "Cache-Control",
-    defaultVisible: false,
-    lazySource: "metadata",
-    defaultWidthPx: 176,
-    minWidthPx: 140,
-    maxWidthPx: 320,
-  },
-  {
-    id: "expires",
-    label: "Expires",
-    defaultVisible: false,
-    lazySource: "metadata",
-    defaultWidthPx: 176,
-    minWidthPx: 140,
-    maxWidthPx: 320,
-  },
-  {
-    id: "restoreStatus",
-    label: "Restore status",
-    defaultVisible: false,
-    lazySource: "metadata",
-    defaultWidthPx: 176,
-    minWidthPx: 140,
-    maxWidthPx: 320,
-  },
-];
-const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map(
-  (definition) => definition.id,
-);
-const RESIZABLE_COLUMN_IDS_IN_ORDER: BrowserResizableColumnId[] = [
-  NAME_COLUMN_DEFINITION.id,
-  ...COLUMN_IDS_IN_ORDER,
-];
-const RESIZABLE_COLUMN_DEFINITIONS = [
-  NAME_COLUMN_DEFINITION,
-  ...COLUMN_DEFINITIONS,
-] as const;
-const RESIZABLE_COLUMN_DEFINITIONS_BY_ID = RESIZABLE_COLUMN_DEFINITIONS.reduce<
-  Record<BrowserResizableColumnId, ResizableColumnDefinition>
->((acc, definition) => {
-  acc[definition.id] = definition;
-  return acc;
-}, {} as Record<BrowserResizableColumnId, ResizableColumnDefinition>);
-const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter(
-  (definition) => definition.defaultVisible,
-).map((definition) => definition.id);
-
-const isResizableColumnId = (
-  value: string,
-): value is BrowserResizableColumnId =>
-  RESIZABLE_COLUMN_IDS_IN_ORDER.includes(value as BrowserResizableColumnId);
-
-const clampColumnWidth = (
-  columnId: BrowserResizableColumnId,
-  widthPx: number,
-) => {
-  const definition = RESIZABLE_COLUMN_DEFINITIONS_BY_ID[columnId];
-  return clampBrowserPanelWidth(
-    widthPx,
-    definition.minWidthPx,
-    definition.maxWidthPx,
-  );
-};
-
-const normalizeColumnWidths = (
-  widths: Record<string, number>,
-): BrowserObjectColumnWidths => {
-  return Object.entries(widths).reduce<BrowserObjectColumnWidths>(
-    (acc, [columnId, widthPx]) => {
-      if (
-        !isResizableColumnId(columnId) ||
-        typeof widthPx !== "number" ||
-        !Number.isFinite(widthPx)
-      ) {
-        return acc;
-      }
-      acc[columnId] = clampColumnWidth(columnId, widthPx);
-      return acc;
-    },
-    {},
-  );
-};
-
-const resolveColumnWidthPx = (
-  columnId: BrowserResizableColumnId,
-  widths: BrowserObjectColumnWidths,
-) => widths[columnId] ?? RESIZABLE_COLUMN_DEFINITIONS_BY_ID[columnId].defaultWidthPx;
-
-const loadVisibleColumnsForSurface = (
-  isMainBrowserPath: boolean,
-  layoutMode: BrowserLayoutMode,
-): BrowserColumnId[] => {
-  const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumns(layoutMode)
-    : readBrowserEmbeddedObjectColumns();
-  if (!stored.length) {
-    return DEFAULT_VISIBLE_COLUMN_IDS;
-  }
-  const selected = new Set(stored);
-  const normalized = COLUMN_IDS_IN_ORDER.filter((columnId) =>
-    selected.has(columnId),
-  );
-  return normalized.length > 0 ? normalized : DEFAULT_VISIBLE_COLUMN_IDS;
-};
-
-const persistVisibleColumnsForSurface = (
-  isMainBrowserPath: boolean,
-  columns: BrowserColumnId[],
-  layoutMode: BrowserLayoutMode,
-) => {
-  if (isMainBrowserPath) {
-    writeBrowserRootObjectColumns(columns, layoutMode);
-    return;
-  }
-  writeBrowserEmbeddedObjectColumns(columns);
-};
-
-const loadColumnWidthsForSurface = (
-  isMainBrowserPath: boolean,
-  layoutMode: BrowserLayoutMode,
-): BrowserObjectColumnWidths => {
-  const stored = isMainBrowserPath
-    ? readBrowserRootObjectColumnWidths(layoutMode)
-    : readBrowserEmbeddedObjectColumnWidths();
-  return normalizeColumnWidths(stored);
-};
-
-const persistColumnWidthsForSurface = (
-  isMainBrowserPath: boolean,
-  widths: BrowserObjectColumnWidths,
-  layoutMode: BrowserLayoutMode,
-) => {
-  const normalized = normalizeColumnWidths(widths);
-  if (isMainBrowserPath) {
-    writeBrowserRootObjectColumnWidths(normalized, layoutMode);
-    return;
-  }
-  writeBrowserEmbeddedObjectColumnWidths(normalized);
-};
-
-const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
-  contentType: null,
-  tagsCount: null,
-  metadataCount: null,
-  cacheControl: null,
-  expires: null,
-  restoreStatus: null,
-  metadataStatus: "idle",
-  tagsStatus: "idle",
-});
-
 const getDeletedObjectEntryId = (
   value: Pick<BrowserObject, "key" | "version_id">,
 ) => `${value.key}::${value.version_id ?? "null"}`;
@@ -852,38 +564,6 @@ const mergeDeletedObjectsWithLimit = (
     items: items.slice(0, limit),
     limitReached: items.length > limit || byId.size > limit,
   };
-};
-const BUCKET_INSPECTOR_FEATURE_ORDER = [
-  "versioning",
-  "object_lock",
-  "block_public_access",
-  "lifecycle_rules",
-  "static_website",
-  "quota",
-  "bucket_policy",
-  "cors",
-  "access_logging",
-] as const;
-const BUCKET_INSPECTOR_FEATURE_LABELS: Record<string, string> = {
-  versioning: "Versioning",
-  object_lock: "Object Lock",
-  block_public_access: "Block public access",
-  lifecycle_rules: "Lifecycle rules",
-  static_website: "Static website",
-  quota: "Quota",
-  bucket_policy: "Bucket policy",
-  cors: "CORS",
-  access_logging: "Access logging",
-};
-const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<
-  BucketInspectorTone,
-  string
-> = {
-  active:
-    "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
-  inactive:
-    "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
-  unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
 const browserSectionEyebrowClasses =
   cx("ui-caption font-semibold", uiMutedTextClass);
@@ -4508,77 +4188,23 @@ export default function BrowserPage({
     return "";
   }, [filter, normalizedPrefix, searchScope]);
 
-  const items = useMemo<BrowserItem[]>(() => {
-    const activePrefixSet = new Set(prefixes);
-    const combinedPrefixes = [...prefixes];
-    deletedPrefixes.forEach((prefixKey) => {
-      if (!activePrefixSet.has(prefixKey)) {
-        combinedPrefixes.push(prefixKey);
-      }
-    });
-    const folderItems = combinedPrefixes.map((prefixKey) => {
-      const rawName = shortName(prefixKey, displayPrefixForItems);
-      const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
-      const isDeletedFolder = !activePrefixSet.has(prefixKey);
-      return {
-        id: isDeletedFolder ? `${prefixKey}::deleted-prefix` : prefixKey,
-        key: prefixKey,
-        name: name || prefixKey,
-        type: "folder",
-        isDeleted: isDeletedFolder,
-        isHistorical: isDeletedFolder,
-        size: "-",
-        sizeBytes: null,
-        modified: "-",
-        modifiedAt: null,
-        owner: "-",
-      } satisfies BrowserItem;
-    });
-    const objectItems = objects.map((obj) => {
-      const modifiedAt = obj.last_modified
-        ? new Date(obj.last_modified).getTime()
-        : null;
-      return {
-        id: obj.key,
-        key: obj.key,
-        name: shortName(obj.key, displayPrefixForItems),
-        type: "file",
-        size: formatBytes(obj.size),
-        sizeBytes: obj.size,
-        modified: formatDateTime(obj.last_modified),
-        modifiedAt,
-        owner: "-",
-        storageClass: obj.storage_class ?? undefined,
-        etag: normalizeEtag(obj.etag ?? undefined) ?? null,
-      } satisfies BrowserItem;
-    });
-    const deletedItemRows = deletedObjects.map((obj) => {
-      const modifiedAt = obj.last_modified
-        ? new Date(obj.last_modified).getTime()
-        : null;
-      return {
-        id: `${obj.key}::deleted::${obj.version_id ?? "null"}`,
-        key: obj.key,
-        name: shortName(obj.key, displayPrefixForItems),
-        type: "file",
-        isDeleted: true,
-        deleteMarkerVersionId: obj.version_id ?? null,
-        size: "-",
-        sizeBytes: null,
-        modified: formatDateTime(obj.last_modified),
-        modifiedAt,
-        owner: "-",
-      } satisfies BrowserItem;
-    });
-    return [...folderItems, ...objectItems, ...deletedItemRows];
-  }, [
-    deletedObjects,
-    deletedPrefixes,
-    displayPrefixForItems,
-    objects,
-    prefixes,
-  ]);
-
+  const items = useMemo(
+    () =>
+      buildBrowserItems(
+        prefixes,
+        deletedPrefixes,
+        objects,
+        deletedObjects,
+        displayPrefixForItems,
+      ),
+    [
+      deletedObjects,
+      deletedPrefixes,
+      displayPrefixForItems,
+      objects,
+      prefixes,
+    ],
+  );
   const listItems = useMemo(
     () =>
       showFolderItems
@@ -5015,15 +4641,10 @@ export default function BrowserPage({
     return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
   }, [selectedItems]);
 
-  const availableStorageClasses = useMemo(() => {
-    const classes = new Set<string>();
-    items.forEach((item) => {
-      if (item.storageClass) {
-        classes.add(item.storageClass);
-      }
-    });
-    return Array.from(classes);
-  }, [items]);
+  const availableStorageClasses = useMemo(
+    () => collectAvailableStorageClasses(items),
+    [items],
+  );
   const searchableStorageClasses = useMemo(() => {
     const ordered = storageClassOptions.map((option) => option.value);
     const known = new Set(ordered);
@@ -5033,39 +4654,7 @@ export default function BrowserPage({
     return [...ordered, ...unknown];
   }, [availableStorageClasses]);
 
-  const pathStats = useMemo(() => {
-    let totalBytes = 0;
-    let files = 0;
-    let deletedFiles = 0;
-    let folders = 0;
-    let deletedFolders = 0;
-    const storageCounts: Record<string, number> = {};
-    items.forEach((item) => {
-      if (item.type === "folder") {
-        folders += 1;
-        if (item.isDeleted) {
-          deletedFolders += 1;
-        }
-        return;
-      }
-      if (item.isDeleted) {
-        deletedFiles += 1;
-        return;
-      }
-      files += 1;
-      totalBytes += item.sizeBytes ?? 0;
-      const storage = item.storageClass ?? "STANDARD";
-      storageCounts[storage] = (storageCounts[storage] ?? 0) + 1;
-    });
-    return {
-      totalBytes,
-      files,
-      deletedFiles,
-      folders,
-      deletedFolders,
-      storageCounts,
-    };
-  }, [items]);
+  const pathStats = useMemo(() => buildBrowserPathStats(items), [items]);
 
   const bucketInspectorData = useMemo(
     () => (bucketName ? (bucketInspectorByName[bucketName] ?? null) : null),
@@ -5074,39 +4663,10 @@ export default function BrowserPage({
   const cephQuotaScopeLabel = isLegacyS3UserContext
     ? "User quota"
     : "Account quota";
-  const bucketInspectorFeatures = useMemo(() => {
-    const featureMap = bucketInspectorData?.features ?? null;
-    if (!featureMap) return [];
-    const seen = new Set<string>();
-    const keys: string[] = [];
-    BUCKET_INSPECTOR_FEATURE_ORDER.forEach((featureKey) => {
-      if (featureMap[featureKey]) {
-        seen.add(featureKey);
-        keys.push(featureKey);
-      }
-    });
-    Object.keys(featureMap).forEach((featureKey) => {
-      if (seen.has(featureKey)) return;
-      keys.push(featureKey);
-    });
-    return keys.map((featureKey) => {
-      const feature = featureMap[featureKey];
-      const label =
-        BUCKET_INSPECTOR_FEATURE_LABELS[featureKey] ??
-        featureKey
-          .split("_")
-          .filter(Boolean)
-          .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-          .join(" ");
-      return {
-        key: featureKey,
-        label,
-        state: feature?.state ?? "Unknown",
-        tone: feature?.tone ?? "unknown",
-      };
-    });
-  }, [bucketInspectorData]);
-
+  const bucketInspectorFeatures = useMemo(
+    () => buildBucketInspectorFeatures(bucketInspectorData),
+    [bucketInspectorData],
+  );
   const inspectedItem = useMemo(() => {
     if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
       return activeItem;
@@ -5927,163 +5487,13 @@ export default function BrowserPage({
       setBucketInspectorLoading(true);
       setBucketInspectorError(null);
       try {
-        const results = await Promise.allSettled([
-          getBucketStats(accountIdForApi, bucketName, {
-            with_stats: bucketInspectorUsageEnabled,
-          }),
-          getBucketProperties(accountIdForApi, bucketName),
-          getBucketPolicy(accountIdForApi, bucketName),
-          getBucketLogging(accountIdForApi, bucketName),
-          bucketInspectorStaticWebsiteEnabled
-            ? getBucketWebsite(accountIdForApi, bucketName)
-            : Promise.resolve(null),
-        ]);
+        const payload = await fetchBucketInspectorData({
+          accountId: accountIdForApi,
+          bucketName,
+          includeUsage: bucketInspectorUsageEnabled,
+          includeStaticWebsite: bucketInspectorStaticWebsiteEnabled,
+        });
         if (bucketInspectorRequestIdRef.current !== requestId) return;
-        const bucketsResult = results[0];
-        const propertiesResult = results[1];
-        const policyResult = results[2];
-        const loggingResult = results[3];
-        const websiteResult = results[4];
-
-        const selectedBucket =
-          bucketsResult.status === "fulfilled" ? bucketsResult.value : null;
-
-        const unavailableFeature = (
-          state = "Unavailable",
-        ): BucketInspectorFeature => ({ state, tone: "unknown" });
-        const activeFeature = (state: string): BucketInspectorFeature => ({
-          state,
-          tone: "active",
-        });
-        const inactiveFeature = (state: string): BucketInspectorFeature => ({
-          state,
-          tone: "inactive",
-        });
-
-        const features: Record<string, BucketInspectorFeature> = {};
-
-        if (propertiesResult.status === "fulfilled") {
-          const properties = propertiesResult.value;
-          const versioningRaw = (
-            properties.versioning_status ?? "Disabled"
-          ).trim();
-          const versioningNormalized = versioningRaw.toLowerCase();
-          if (versioningNormalized === "enabled") {
-            features.versioning = activeFeature("Enabled");
-          } else if (versioningNormalized === "suspended") {
-            features.versioning = unavailableFeature(
-              versioningRaw || "Suspended",
-            );
-          } else {
-            features.versioning = inactiveFeature(versioningRaw || "Disabled");
-          }
-
-          const objectLockEnabled = Boolean(
-            properties.object_lock?.enabled ?? properties.object_lock_enabled,
-          );
-          features.object_lock = objectLockEnabled
-            ? activeFeature("Enabled")
-            : inactiveFeature("Disabled");
-
-          const publicBlock = properties.public_access_block;
-          if (!publicBlock) {
-            features.block_public_access = inactiveFeature("Disabled");
-          } else {
-            const flags = [
-              publicBlock.block_public_acls,
-              publicBlock.ignore_public_acls,
-              publicBlock.block_public_policy,
-              publicBlock.restrict_public_buckets,
-            ];
-            const fullyEnabled = flags.every((flag) => flag === true);
-            const partiallyEnabled =
-              !fullyEnabled && flags.some((flag) => flag === true);
-            features.block_public_access = fullyEnabled
-              ? activeFeature("Enabled")
-              : partiallyEnabled
-                ? activeFeature("Partial")
-                : inactiveFeature("Disabled");
-          }
-
-          const lifecycleRules = properties.lifecycle_rules ?? [];
-          features.lifecycle_rules =
-            lifecycleRules.length > 0
-              ? activeFeature("Enabled")
-              : inactiveFeature("Disabled");
-
-          const corsRules = properties.cors_rules ?? [];
-          features.cors =
-            corsRules.length > 0
-              ? activeFeature("Configured")
-              : inactiveFeature("Not set");
-        } else {
-          features.versioning = unavailableFeature();
-          features.object_lock = unavailableFeature();
-          features.block_public_access = unavailableFeature();
-          features.lifecycle_rules = unavailableFeature();
-          features.cors = unavailableFeature();
-        }
-
-        if (policyResult.status === "fulfilled") {
-          const policy = policyResult.value.policy;
-          const configured = Boolean(policy && Object.keys(policy).length > 0);
-          features.bucket_policy = configured
-            ? activeFeature("Configured")
-            : inactiveFeature("Not set");
-        } else {
-          features.bucket_policy = unavailableFeature();
-        }
-
-        if (loggingResult.status === "fulfilled") {
-          const logging = loggingResult.value;
-          const enabled = Boolean(
-            logging.enabled && (logging.target_bucket ?? "").trim().length > 0,
-          );
-          features.access_logging = enabled
-            ? activeFeature("Enabled")
-            : inactiveFeature("Disabled");
-        } else {
-          features.access_logging = unavailableFeature();
-        }
-
-        if (!bucketInspectorStaticWebsiteEnabled) {
-          features.static_website = unavailableFeature();
-        } else if (websiteResult.status === "fulfilled") {
-          const website = websiteResult.value;
-          const routingRules = Array.isArray(website?.routing_rules)
-            ? website.routing_rules
-            : [];
-          const configured = Boolean(
-            (website?.redirect_all_requests_to?.host_name ?? "").trim() ||
-            (website?.index_document ?? "").trim() ||
-            routingRules.length > 0,
-          );
-          features.static_website = configured
-            ? activeFeature("Enabled")
-            : inactiveFeature("Disabled");
-        } else {
-          features.static_website = unavailableFeature();
-        }
-
-        const quotaConfigured = Boolean(
-          (selectedBucket?.quota_max_size_bytes ?? 0) > 0 ||
-          (selectedBucket?.quota_max_objects ?? 0) > 0,
-        );
-        features.quota = selectedBucket
-          ? quotaConfigured
-            ? activeFeature("Configured")
-            : inactiveFeature("Not set")
-          : unavailableFeature();
-
-        const payload: BucketInspectorData = {
-          creation_date: selectedBucket?.creation_date ?? null,
-          used_bytes: selectedBucket?.used_bytes ?? null,
-          object_count: selectedBucket?.object_count ?? null,
-          quota_max_size_bytes: selectedBucket?.quota_max_size_bytes ?? null,
-          quota_max_objects: selectedBucket?.quota_max_objects ?? null,
-          features,
-        };
-
         setBucketInspectorByName((prev) => ({
           ...prev,
           [bucketName]: payload,
@@ -6108,7 +5518,6 @@ export default function BrowserPage({
       hasS3AccountContext,
     ],
   );
-
   const handleOpenBucketInspector = useCallback(() => {
     setInspectorTab("bucket");
     if (!bucketName || !hasS3AccountContext || bucketInspectorLoading) return;
@@ -6729,14 +6138,6 @@ export default function BrowserPage({
     }
   };
 
-  const normalizeVisibleColumns = useCallback(
-    (columnIds: BrowserColumnId[]) => {
-      const selected = new Set(columnIds);
-      return COLUMN_IDS_IN_ORDER.filter((columnId) => selected.has(columnId));
-    },
-    [],
-  );
-
   const resetAllColumnWidths = useCallback(() => {
     setColumnWidths({});
   }, []);
@@ -6753,7 +6154,7 @@ export default function BrowserPage({
         return normalizeVisibleColumns(Array.from(selected));
       });
     },
-    [normalizeVisibleColumns],
+    [],
   );
 
   const handleResetVisibleColumns = useCallback(() => {
@@ -7271,129 +6672,6 @@ export default function BrowserPage({
       ].slice(0, COMPLETED_OPERATIONS_LIMIT),
     );
   };
-
-  const extractErrorDetails = useCallback(
-    (payload: unknown): { code?: string; message?: string } | null => {
-      if (!payload) return null;
-      if (typeof payload === "string") {
-        const trimmed = payload.trim();
-        if (!trimmed) return null;
-        if (trimmed.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(trimmed) as {
-              code?: unknown;
-              errorCode?: unknown;
-              error_code?: unknown;
-              message?: unknown;
-              detail?: unknown;
-              error?: unknown;
-            };
-            const code =
-              typeof parsed.code === "string"
-                ? parsed.code
-                : typeof parsed.errorCode === "string"
-                  ? parsed.errorCode
-                  : typeof parsed.error_code === "string"
-                    ? parsed.error_code
-                    : undefined;
-            const message =
-              typeof parsed.message === "string"
-                ? parsed.message
-                : typeof parsed.detail === "string"
-                  ? parsed.detail
-                  : typeof parsed.error === "string"
-                    ? parsed.error
-                    : undefined;
-            if (code || message) {
-              return { code, message };
-            }
-          } catch {
-            // fall through to XML/inline parsing
-          }
-        }
-        const codeMatch = trimmed.match(/<Code>([^<]+)<\/Code>/);
-        const messageMatch = trimmed.match(/<Message>([^<]+)<\/Message>/);
-        const code = codeMatch?.[1];
-        const message = messageMatch?.[1];
-        if (code || message) {
-          return { code, message };
-        }
-        return { message: trimmed.slice(0, 300) };
-      }
-      if (typeof payload === "object") {
-        const candidate = payload as {
-          code?: unknown;
-          errorCode?: unknown;
-          error_code?: unknown;
-          message?: unknown;
-          detail?: unknown;
-          error?: unknown;
-        };
-        const code =
-          typeof candidate.code === "string"
-            ? candidate.code
-            : typeof candidate.errorCode === "string"
-              ? candidate.errorCode
-              : typeof candidate.error_code === "string"
-                ? candidate.error_code
-                : undefined;
-        const message =
-          typeof candidate.message === "string"
-            ? candidate.message
-            : typeof candidate.detail === "string"
-              ? candidate.detail
-              : typeof candidate.error === "string"
-                ? candidate.error
-                : undefined;
-        if (code || message) {
-          return { code, message };
-        }
-      }
-      return null;
-    },
-    [],
-  );
-
-  const formatOperationError = useCallback(
-    (err: unknown, fallback: string, context?: string) => {
-      let detail: string | undefined;
-      if (axios.isAxiosError(err)) {
-        const status = err.response?.status;
-        const statusText = err.response?.statusText;
-        const statusLabel = status
-          ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}`
-          : "";
-        const parsed = extractErrorDetails(err.response?.data);
-        const message =
-          parsed?.code && parsed?.message
-            ? `${parsed.code}: ${parsed.message}`
-            : parsed?.message || parsed?.code;
-        const parts = [statusLabel, message || err.message].filter(Boolean);
-        detail = parts.length > 0 ? parts.join(" - ") : undefined;
-      } else if (err instanceof Error && err.message) {
-        detail = err.message;
-      } else if (typeof err === "string" && err.trim()) {
-        detail = err;
-      } else if (err && typeof err === "object" && "message" in err) {
-        const message = (err as { message?: unknown }).message;
-        if (typeof message === "string" && message.trim()) {
-          detail = message;
-        }
-      }
-      const message = detail ?? fallback;
-      if (context) {
-        const normalize = (value: string) =>
-          value.trim().replace(/[.:]\s*$/, "");
-        const normalizedContext = normalize(context);
-        if (!detail && normalizedContext === normalize(fallback)) {
-          return fallback;
-        }
-        return `${normalizedContext}: ${message}`;
-      }
-      return message;
-    },
-    [extractErrorDetails],
-  );
 
   const resetBulkAttributesDraft = () => {
     setBulkApplyMetadata(false);
@@ -8450,7 +7728,7 @@ export default function BrowserPage({
       const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
       return `${fallback}${suffix}`;
     },
-    [extractErrorDetails],
+    [],
   );
 
   const resolveClipboardTransferMode = useCallback(
@@ -10917,7 +10195,6 @@ export default function BrowserPage({
     deleteObjectForTransfer,
     downloadObjectBlobForTransfer,
     downloadObjectStreamForTransfer,
-    formatOperationError,
     getSseCustomerKeyForScope,
     hasS3AccountContext,
     listAllObjectsForPrefix,

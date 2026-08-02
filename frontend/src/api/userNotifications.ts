@@ -21,17 +21,17 @@ export type UserNotification = {
   read_at?: string | null;
 };
 
-export type UserNotificationsResponse = {
+type UserNotificationsResponse = {
   items: UserNotification[];
   unread_count: number;
 };
 
-export type MarkUserNotificationsReadPayload = {
+type MarkUserNotificationsReadPayload = {
   notification_ids?: number[];
   all?: boolean;
 };
 
-export type MarkUserNotificationsReadResponse = {
+type MarkUserNotificationsReadResponse = {
   updated_count: number;
   unread_count: number;
 };

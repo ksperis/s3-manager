@@ -19,7 +19,7 @@ function shouldSortArray(entries: unknown[]): boolean {
   );
 }
 
-export function normalizeForStableSignature(value: unknown): unknown {
+function normalizeForStableSignature(value: unknown): unknown {
   if (Array.isArray(value)) {
     const normalized = value.map((entry) => normalizeForStableSignature(entry));
     if (shouldSortArray(normalized)) {

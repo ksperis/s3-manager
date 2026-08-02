@@ -20,7 +20,7 @@ export type BucketDetailTabId =
   | "advanced"
   | "metrics";
 
-export type BucketDetailSurface = {
+type BucketDetailSurface = {
   mode: BucketDetailMode;
   rootPath: string;
   rootLabel: string;

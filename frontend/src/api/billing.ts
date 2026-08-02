@@ -55,7 +55,7 @@ export type BillingSubjectSummary = {
   cost?: BillingCost | null;
 };
 
-export type BillingSubjectsResponse = {
+type BillingSubjectsResponse = {
   items: BillingSubjectSummary[];
   total: number;
   page: number;

@@ -138,7 +138,7 @@ export type AppSettings = {
   branding: BrandingSettings;
 };
 
-export type QuotaNotificationTestEmailResult = {
+type QuotaNotificationTestEmailResult = {
   status: string;
   recipient: string;
   sent_at: string;

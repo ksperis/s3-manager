@@ -144,7 +144,7 @@ export type PortalStorageSpaceSummary = {
   icon?: StorageSpaceIconDescriptor | null;
 };
 
-export type PortalStorageSpace = PortalStorageSpaceSummary;
+type PortalStorageSpace = PortalStorageSpaceSummary;
 
 export type PortalStorageSpaceInitialShare = {
   user_id: number;
@@ -163,7 +163,7 @@ export type PortalStorageSpaceCreate = {
   dataset_label?: string | null;
 };
 
-export type PortalStorageSpaceImport = {
+type PortalStorageSpaceImport = {
   bucket_name: string;
   description?: string | null;
   visibility?: PortalStorageSpaceVisibility;
@@ -174,7 +174,7 @@ export type PortalStorageSpaceImport = {
   dataset_label?: string | null;
 };
 
-export type PortalStorageSpaceUpdate = Partial<PortalStorageSpaceCreate> & {
+type PortalStorageSpaceUpdate = Partial<PortalStorageSpaceCreate> & {
   archived?: boolean;
 };
 
@@ -191,7 +191,7 @@ export type PortalStorageObjectDetail = {
   preview_unavailable_reason?: string | null;
 };
 
-export type PortalStorageObjectDownload = {
+type PortalStorageObjectDownload = {
   blob: Blob;
   filename: string;
 };
@@ -206,7 +206,7 @@ export type PortalStorageSpaceSettings = {
   can_update: boolean;
 };
 
-export type PortalStorageSpaceSettingsUpdate = Pick<
+type PortalStorageSpaceSettingsUpdate = Pick<
   PortalStorageSpaceSettings,
   "versioning_enabled" | "lifecycle_enabled" | "version_history_retention_days"
 >;
@@ -230,7 +230,7 @@ export type PortalStorageObjectVersionsResponse = {
   next_version_id_marker?: string | null;
 };
 
-export type PortalTrashItem = {
+type PortalTrashItem = {
   key: string;
   name: string;
   deleted_at?: string | null;
@@ -240,7 +240,7 @@ export type PortalTrashItem = {
   size?: number | null;
 };
 
-export type PortalTrashResponse = {
+type PortalTrashResponse = {
   versioning_status: PortalStorageSpaceVersioningStatus;
   can_restore: boolean;
   items: PortalTrashItem[];
@@ -249,7 +249,7 @@ export type PortalTrashResponse = {
   next_version_id_marker?: string | null;
 };
 
-export type PortalStorageObjectRestoreResponse = {
+type PortalStorageObjectRestoreResponse = {
   key: string;
   restored_from_version_id: string;
   message: string;
@@ -292,7 +292,7 @@ export type PortalDeletedPrefixRestoreResult = {
   finished_at: string;
 };
 
-export type PortalDeletedPrefixRestoreStreamOptions = {
+type PortalDeletedPrefixRestoreStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: PortalDeletedPrefixRestoreProgress) => void;
 };
@@ -325,12 +325,12 @@ export type PortalStorageSpaceVersionCleanupResult = {
   finished_at: string;
 };
 
-export type PortalStorageSpaceVersionCleanupStreamOptions = {
+type PortalStorageSpaceVersionCleanupStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: PortalStorageSpaceVersionCleanupProgress) => void;
 };
 
-export type PortalServerAccessRawLogsDownload = {
+type PortalServerAccessRawLogsDownload = {
   blob: Blob;
   filename: string;
 };
@@ -389,7 +389,7 @@ export type PortalCollaborator = {
   avatar?: UserAvatarDescriptor | null;
 };
 
-export type PortalCollaboratorTrend = {
+type PortalCollaboratorTrend = {
   window: "month" | "week" | "day";
   label: string;
   period_start: string;
@@ -449,7 +449,7 @@ export type PortalTransfer = {
   error_message?: string | null;
 };
 
-export type PortalServerAccessLogMode = "transfers" | "operations";
+type PortalServerAccessLogMode = "transfers" | "operations";
 
 export type PortalServerAccessRequesterIdentity = {
   label: string;
@@ -488,7 +488,7 @@ export type PortalServerAccessLogEntry = {
   log_object_key: string;
 };
 
-export type PortalServerAccessLogPage = {
+type PortalServerAccessLogPage = {
   entries: PortalServerAccessLogEntry[];
   total: number;
   limit: number;

@@ -118,11 +118,6 @@ export type CopyDetailItem = {
   errorMessage?: string;
 };
 
-export type SelectionStats = {
-  objectCount: number;
-  totalBytes: number;
-};
-
 export type BulkMetadataDraft = {
   contentType: string;
   cacheControl: string;

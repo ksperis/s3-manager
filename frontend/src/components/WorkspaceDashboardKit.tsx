@@ -65,7 +65,7 @@ export type WorkspaceDashboardMetric = {
   unavailableReason?: string | null;
 };
 
-export type WorkspaceDashboardStorageEvolutionPoint = {
+type WorkspaceDashboardStorageEvolutionPoint = {
   timestampMs: number;
   usedBytes: number;
 };
@@ -102,21 +102,21 @@ export function buildWorkspaceStorageEvolutionPoints(
   }));
 }
 
-export function workspaceStatusLabel(status: HealthCheckStatus): string {
+function workspaceStatusLabel(status: HealthCheckStatus): string {
   if (status === "up") return "Up";
   if (status === "degraded") return "Degraded";
   if (status === "down") return "Down";
   return "Unknown";
 }
 
-export function workspaceStatusDotClass(status: HealthCheckStatus): string {
+function workspaceStatusDotClass(status: HealthCheckStatus): string {
   if (status === "up") return "bg-emerald-500";
   if (status === "degraded") return "bg-amber-500";
   if (status === "down") return "bg-rose-500";
   return "bg-slate-400";
 }
 
-export function workspaceStatusPillClass(status: HealthCheckStatus): string {
+function workspaceStatusPillClass(status: HealthCheckStatus): string {
   if (status === "up") {
     return "border-emerald-200/80 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300";
   }
@@ -325,7 +325,7 @@ export function WorkspaceDashboardMetricTrendLine({ trend }: { trend: WorkspaceD
   );
 }
 
-export function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDashboardMetric }) {
+function WorkspaceDashboardMetricCard({ metric }: { metric: WorkspaceDashboardMetric }) {
   const content = (
     <div
       className={cx(uiCardClass, "flex h-full min-h-[164px] items-center gap-3 overflow-hidden px-4 py-3.5 sm:gap-4 sm:px-5")}
@@ -565,7 +565,7 @@ export function WorkspaceDashboardUnavailableFrame({
   return <div className={className}>{children}</div>;
 }
 
-export function WorkspaceDashboardSparkline({
+function WorkspaceDashboardSparkline({
   values,
   tone,
 }: {

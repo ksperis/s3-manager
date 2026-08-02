@@ -7,7 +7,9 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db import StorageProvider
+from app.models.s3_connection import CredentialOwnerType
 from app.models.user import ManagerToolAccess
+from app.utils.account_roles import CanonicalAccountRole
 
 
 ApplyState = Literal["present", "absent"]
@@ -170,7 +172,7 @@ class S3ConnectionSpec(BaseModel):
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
     remediation_action: Optional[Literal["activate_manager"]] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
@@ -207,20 +209,18 @@ class AccountLinkAccountRef(BaseModel):
 
 
 class AccountLinkApply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     state: ApplyState = "present"
     user: AccountLinkUserRef
     account: AccountLinkAccountRef
-    role: Optional[str] = None
-    account_admin: Optional[bool] = Field(default=None, deprecated=True)
-    account_role: Optional[str] = Field(default=None, deprecated=True)
+    role: Optional[CanonicalAccountRole] = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def adapt_legacy_role(cls, value):
-        from app.utils.account_roles import adapt_legacy_role_payload
-
-        require_explicit = not isinstance(value, dict) or value.get("state", "present") != "absent"
-        return adapt_legacy_role_payload(value, require_explicit=require_explicit)
+    @model_validator(mode="after")
+    def _require_role_for_present_link(self) -> "AccountLinkApply":
+        if self.state == "present" and self.role is None:
+            raise ValueError("account_links.role is required when state is present")
+        return self
 
 
 class AdminAutomationApplyRequest(BaseModel):

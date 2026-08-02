@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
-export const E2E_FRONTEND_BASE_URL = process.env.E2E_FRONTEND_BASE_URL ?? "http://127.0.0.1:4173";
-export const E2E_BACKEND_ORIGIN = process.env.E2E_BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
+const E2E_FRONTEND_BASE_URL = process.env.E2E_FRONTEND_BASE_URL ?? "http://127.0.0.1:4173";
+const E2E_BACKEND_ORIGIN = process.env.E2E_BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
 export const E2E_BACKEND_API_URL = process.env.E2E_BACKEND_API_URL ?? `${E2E_BACKEND_ORIGIN}/api`;
 export const E2E_S3_ENDPOINT = process.env.E2E_S3_ENDPOINT ?? "http://localhost:5000";
 export const E2E_S3_ACCESS_KEY = process.env.E2E_S3_ACCESS_KEY ?? "minio";

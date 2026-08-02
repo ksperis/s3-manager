@@ -5,7 +5,7 @@ import {
   hasAdvancedFilters,
   sanitizeAdvancedFilter,
   type AdvancedFilterState,
-} from "./BucketOpsWorkbench";
+} from "./bucketOpsAdvancedFilterModel";
 
 const baseAdvancedFilter = (): AdvancedFilterState => sanitizeAdvancedFilter({});
 

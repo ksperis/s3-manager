@@ -3,10 +3,10 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-export type BucketFeatureRecord = Record<string, unknown>;
+type BucketFeatureRecord = Record<string, unknown>;
 type RecordValue = BucketFeatureRecord;
 
-export type BucketFeatureTagSummary = {
+type BucketFeatureTagSummary = {
   key?: string | null;
   value?: string | null;
 };

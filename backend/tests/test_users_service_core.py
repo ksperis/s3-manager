@@ -228,8 +228,7 @@ def test_update_user_replaces_direct_account_links_and_preserves_root_links(db_s
             account_links=[
                 {
                     "account_id": added_account.id,
-                    "account_admin": True,
-                    "account_role": "portal_none",
+                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 }
             ]
         ),

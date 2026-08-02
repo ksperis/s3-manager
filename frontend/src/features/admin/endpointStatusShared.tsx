@@ -78,7 +78,7 @@ export function statusStatCardClasses(status: "up" | "degraded" | "down" | "unkn
   return "border-slate-200/80 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100";
 }
 
-export function statusSegmentClass(status: HealthCheckStatus) {
+function statusSegmentClass(status: HealthCheckStatus) {
   if (status === "up") return "bg-emerald-500";
   if (status === "degraded") return "bg-amber-500";
   if (status === "down") return "bg-rose-500";
@@ -92,21 +92,7 @@ export function statusTextClass(status: HealthCheckStatus) {
   return "text-slate-700 dark:text-slate-300";
 }
 
-export function statusChartColor(status: HealthCheckStatus) {
-  if (status === "up") return "#10B981";
-  if (status === "degraded") return "#F59E0B";
-  if (status === "down") return "#EF4444";
-  return "#94A3B8";
-}
-
-export function timelineLevelFromStatus(status: HealthCheckStatus) {
-  if (status === "down") return 100;
-  if (status === "degraded") return 60;
-  if (status === "up") return 12;
-  return 4;
-}
-
-export type TimelinePoint = {
+type TimelinePoint = {
   timestamp: string;
   end_timestamp?: string | null;
   status: HealthCheckStatus;
@@ -122,7 +108,7 @@ type TimelineSegment = {
   reason?: string | null;
 };
 
-export type TimelineSegmentDetail = TimelineSegment & {
+type TimelineSegmentDetail = TimelineSegment & {
   key: string;
   durationMs: number;
   cause?: string | null;
@@ -130,7 +116,7 @@ export type TimelineSegmentDetail = TimelineSegment & {
   endTimestamp: string;
 };
 
-export function parseTimestampMs(value?: string | null) {
+function parseTimestampMs(value?: string | null) {
   if (!value) return null;
   const parsed = new Date(value).getTime();
   if (Number.isNaN(parsed)) return null;

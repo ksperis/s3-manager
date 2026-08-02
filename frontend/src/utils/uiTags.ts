@@ -8,7 +8,7 @@ export type UiTagDefinition = TagDefinitionInput & {
   id?: number | null;
 };
 
-export type UiTagLike =
+type UiTagLike =
   | string
   | UiTagDefinition
   | TagDefinitionSummary
@@ -51,11 +51,6 @@ export function normalizeUiTags(values?: Array<UiTagLike> | null): UiTagDefiniti
     });
   });
   return normalized;
-}
-
-export function isSelectorVisibleUiTag(value: UiTagLike): boolean {
-  const normalized = normalizeUiTags(value ? [value] : []);
-  return normalized[0]?.scope !== "administrative";
 }
 
 export function filterSelectorVisibleUiTags(values?: Array<UiTagLike> | null): UiTagDefinition[] {

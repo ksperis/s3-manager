@@ -101,12 +101,7 @@ def _serialize_filter(query: CephAdminAccountFilterQuery | None) -> str | None:
 
 
 def _clone_account(account: CephAdminRgwAccountSummary) -> CephAdminRgwAccountSummary:
-    if hasattr(account, "model_copy"):
-        return account.model_copy(deep=True)
-    if hasattr(account, "copy"):
-        return account.copy(deep=True)
-    payload = account.model_dump() if hasattr(account, "model_dump") else account.dict()
-    return CephAdminRgwAccountSummary(**payload)
+    return account.model_copy(deep=True)
 
 
 def _clone_account_list(items: list[CephAdminRgwAccountSummary]) -> list[CephAdminRgwAccountSummary]:

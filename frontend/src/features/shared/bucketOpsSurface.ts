@@ -4,7 +4,7 @@
  */
 export type BucketOpsMode = "ceph-admin" | "storage-ops";
 
-export type BucketOpsSurfaceContract = {
+type BucketOpsSurfaceContract = {
   mode: BucketOpsMode;
   breadcrumb: { label: string; to: string };
   storageKeys: {

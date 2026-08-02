@@ -16,7 +16,6 @@ export const CLIENT_STORAGE_KEYS = {
   generalSettingsCache: "settings:general:v1",
   selectorTagsPreference: "showSelectorTags",
   portalTransfers: "portal:v3:transfers",
-  browserRootUiState: "browser:root-ui-state:v1",
   browserRootUiStateV2: "browser:root-ui-state:v2",
   browserRootContextSelections: "browser:root-context-selections:v2",
   browserPathHistory: "browser:path-history:v1",
@@ -24,8 +23,8 @@ export const CLIENT_STORAGE_KEYS = {
   browserEmbeddedObjectColumnWidths: "browser:embedded-object-column-widths:v1",
 } as const;
 
-export type ClientStorageKey = (typeof CLIENT_STORAGE_KEYS)[keyof typeof CLIENT_STORAGE_KEYS];
-export type ClientStorageRawKey = string;
+type ClientStorageKey = (typeof CLIENT_STORAGE_KEYS)[keyof typeof CLIENT_STORAGE_KEYS];
+type ClientStorageRawKey = string;
 
 function resolveLocalStorage(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
@@ -111,7 +110,7 @@ export function removeClientStorageKey(key: ClientStorageKey | ClientStorageRawK
   }
 }
 
-export function readSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
+function readSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey): string | null {
   try {
     return resolveSessionStorage()?.getItem(key) ?? null;
   } catch {
@@ -119,7 +118,7 @@ export function readSessionStorageKey(key: ClientStorageKey | ClientStorageRawKe
   }
 }
 
-export function writeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
+function writeSessionStorageKey(key: ClientStorageKey | ClientStorageRawKey, value: string): void {
   try {
     resolveSessionStorage()?.setItem(key, value);
   } catch {

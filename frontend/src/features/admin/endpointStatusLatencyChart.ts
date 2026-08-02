@@ -5,7 +5,7 @@
 import type { EndpointHealthSeries, HealthCheckStatus, HealthWindow } from "../../api/healthchecks";
 import { toTimestampMs } from "./endpointStatusShared";
 
-export type LatencyDisplayMode = "rollup" | "daily";
+type LatencyDisplayMode = "rollup" | "daily";
 
 export type LatencyChartPoint = {
   timestampMs: number;
@@ -14,7 +14,7 @@ export type LatencyChartPoint = {
   status: HealthCheckStatus;
 };
 
-export type LatencyStatusBand = {
+type LatencyStatusBand = {
   startMs: number;
   endMs: number;
   status: "degraded" | "down";

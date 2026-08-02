@@ -9,7 +9,7 @@ export type BucketIndexCheckTarget = {
   tenant?: string | null;
 };
 
-export type BucketIndexCheckPayload = {
+type BucketIndexCheckPayload = {
   targets: BucketIndexCheckTarget[];
   parallelism?: number;
 };
@@ -47,7 +47,7 @@ export type BucketIndexCheckResult = {
   buckets: BucketIndexCheckBucketResult[];
 };
 
-export type BucketIndexCheckStreamOptions = {
+type BucketIndexCheckStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: BucketIndexCheckProgress) => void;
 };

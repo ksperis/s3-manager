@@ -16,6 +16,10 @@ from .base import Base
 class S3Connection(Base):
     __tablename__ = "s3_connections"
     __table_args__ = (
+        CheckConstraint(
+            "credential_owner_type IS NULL OR credential_owner_type IN ('iam_user', 'account_user', 's3_user')",
+            name="ck_s3_connections_credential_owner_type",
+        ),
         Index(
             "uq_s3_connections_private_creator_name",
             "created_by_user_id",

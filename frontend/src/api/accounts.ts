@@ -77,9 +77,9 @@ export type S3AccountSummary = {
   allow_manager_bucket_quota?: boolean;
 };
 
-export type PaginatedS3AccountsResponse = PaginatedResponse<S3Account>;
+type PaginatedS3AccountsResponse = PaginatedResponse<S3Account>;
 
-export type ListS3AccountsParams = {
+type ListS3AccountsParams = {
   page?: number;
   page_size?: number;
   search?: string;
@@ -99,7 +99,7 @@ export async function listMinimalS3Accounts(): Promise<S3AccountSummary[]> {
   return data;
 }
 
-export type GetS3AccountOptions = {
+type GetS3AccountOptions = {
   includeUsage?: boolean;
 };
 
@@ -109,7 +109,7 @@ export async function getS3Account(accountId: number, options?: GetS3AccountOpti
   return data;
 }
 
-export type CreateS3AccountPayload = {
+type CreateS3AccountPayload = {
   name: string;
   email?: string | null;
   quota_max_size_gb?: number | null;
@@ -124,7 +124,7 @@ export async function createS3Account(payload: CreateS3AccountPayload): Promise<
   return data;
 }
 
-export type UpdateS3AccountPayload = {
+type UpdateS3AccountPayload = {
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
@@ -161,11 +161,6 @@ export async function importS3Accounts(payload: ImportS3AccountPayload[]): Promi
     timeout: timeoutForRequestProfile("long_running"),
   });
   return data;
-}
-
-export async function importS3AccountsByIds(ids: string[]): Promise<S3Account[]> {
-  const payload = ids.map((id) => ({ rgw_account_id: id }));
-  return importS3Accounts(payload);
 }
 
 export async function fetchAccountPortalSettings(accountId: number): Promise<PortalAccountSettings> {

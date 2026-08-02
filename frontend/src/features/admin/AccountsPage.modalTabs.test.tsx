@@ -575,7 +575,8 @@ describe("AccountsPage modal tabs", () => {
     await screen.findByText("acc-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
 
-    expect(screen.queryByRole("button", { name: "Portal overrides" })).not.toBeInTheDocument();
+    await screen.findByRole("tabpanel", { name: "General" });
+    expect(screen.queryByRole("tab", { name: "Portal overrides" })).not.toBeInTheDocument();
     expect(fetchAccountPortalSettingsMock).not.toHaveBeenCalled();
   });
 

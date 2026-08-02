@@ -799,7 +799,7 @@ export default function PortalStorageSpacesPage() {
               action={
                 firstManagedTeamSpace ? (
                   <Link
-                    to={`/portal/shares?space_id=${encodeURIComponent(firstManagedTeamSpace.id)}&tab=by`}
+                    to={`/portal/storage-spaces/${encodeURIComponent(firstManagedTeamSpace.id)}?tab=collaborators`}
                     className={cx(
                       uiButtonBaseClass,
                       uiButtonVariants.secondary,

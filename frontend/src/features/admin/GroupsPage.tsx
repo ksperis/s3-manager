@@ -24,6 +24,10 @@ import {
   updateGroup,
 } from "../../api/groups";
 import { AccountMembership, UserSummary, listMinimalUsers } from "../../api/users";
+import {
+  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  normalizeAccountAccessRole,
+} from "../../api/accountRoles";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
 import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
@@ -64,10 +68,8 @@ import {
 } from "./AdminAssociationPicker";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
-  PORTAL_ROLE_OPTIONS,
   buildManagerToolDefinitions,
   normalizeManagerToolAccess,
-  normalizePortalRole,
   type ManagerToolKey,
 } from "./adminAccessConfig";
 import PageTabs from "../../components/PageTabs";
@@ -344,7 +346,7 @@ export default function GroupsPage() {
       account_links:
         group.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          role: normalizePortalRole(link.role),
+          role: normalizeAccountAccessRole(link.role),
         })) ?? [],
       s3_user_ids: group.s3_users ?? [],
       s3_connection_ids: group.s3_connections ?? [],
@@ -403,7 +405,7 @@ export default function GroupsPage() {
       account_links:
         form.account_links?.map((link) => ({
           account_id: Number(link.account_id),
-          role: normalizePortalRole(link.role),
+          role: normalizeAccountAccessRole(link.role),
         })) ?? [],
       s3_user_ids: form.s3_user_ids ?? [],
       s3_connection_ids: form.s3_connection_ids ?? [],
@@ -591,12 +593,12 @@ export default function GroupsPage() {
                         aria-label={`Access role for ${accountOptionsById.get(accountId)?.name ?? `Account #${accountId}`}`}
                         size="compact"
                         fieldClassName="w-52"
-                        value={normalizePortalRole(link.role)}
+                        value={normalizeAccountAccessRole(link.role)}
                         onChange={(event) =>
-                          updateAccountSelection(accountId, { role: normalizePortalRole(event.target.value) })
+                          updateAccountSelection(accountId, { role: normalizeAccountAccessRole(event.target.value) })
                         }
                       >
-                        {PORTAL_ROLE_OPTIONS.map((option) => (
+                        {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </UiSelect>
@@ -648,7 +650,7 @@ export default function GroupsPage() {
                           ...accountSelections.map((accountId) => ({
                             account_id: accountId,
                             role: accountPortalRoleChoice[accountId]
-                              ? normalizePortalRole(accountPortalRoleChoice[accountId])
+                              ? normalizeAccountAccessRole(accountPortalRoleChoice[accountId])
                               : showPortalRole
                                 ? "portal_user" as const
                                 : "account_administrator" as const,
@@ -683,11 +685,11 @@ export default function GroupsPage() {
                               onChange={(event) =>
                                 setAccountPortalRoleChoice((current) => ({
                                   ...current,
-                                  [accountId]: normalizePortalRole(event.target.value),
+                                  [accountId]: normalizeAccountAccessRole(event.target.value),
                                 }))
                               }
                             >
-                              {PORTAL_ROLE_OPTIONS.map((option) => (
+                              {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
                               ))}
                             </UiSelect>

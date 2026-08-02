@@ -12,19 +12,19 @@ export type ManagedInlinePolicy = {
   document: Record<string, unknown>;
 };
 
-export type ManagedPrivateAccessBasePayload = {
+type ManagedPrivateAccessBasePayload = {
   connection_name: string;
   access_browser: boolean;
   access_manager: boolean;
 };
 
-export type ManagedIAMPrivateAccessPayload = ManagedPrivateAccessBasePayload & {
+type ManagedIAMPrivateAccessPayload = ManagedPrivateAccessBasePayload & {
   groups: string[];
   managed_policies: string[];
   inline_policies: ManagedInlinePolicy[];
 };
 
-export type ManagedPrivateAccessResult = {
+type ManagedPrivateAccessResult = {
   provisioning_id: number;
   status: "active" | "cleanup_pending";
   connection: S3Connection;

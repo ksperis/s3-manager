@@ -38,7 +38,7 @@ export type BrowserActionId =
   | "delete";
 
 export type BrowserActionSection = "layout" | "path" | "selection";
-export type BrowserActionScope = "path" | "item" | "selection";
+type BrowserActionScope = "path" | "item" | "selection";
 
 export type BrowserActionState = {
   id: BrowserActionId;
@@ -50,8 +50,8 @@ export type BrowserActionState = {
 };
 
 export type BrowserActionMap = Record<BrowserActionId, BrowserActionState>;
-export type BrowserActionHandler = () => void | Promise<void>;
-export type BrowserActionDispatcherResult =
+type BrowserActionHandler = () => void | Promise<void>;
+type BrowserActionDispatcherResult =
   | { executed: true }
   | { executed: false; reason: string };
 export type BrowserFunctionalProfile = "standard" | "advanced" | "portal";
@@ -72,13 +72,13 @@ export const FULL_BROWSER_CAPABILITY_FACTS: BrowserCapabilityFacts = {
   canCreatePublicLinks: false,
 };
 
-export type BrowserItemPrimaryAction =
+type BrowserItemPrimaryAction =
   | { kind: "open-folder" }
   | { kind: "open-file"; initialTab: "preview" | "properties" }
   | { kind: "open-versions" }
   | { kind: "none" };
 
-export type ResolveBrowserActionsInput = {
+type ResolveBrowserActionsInput = {
   scope: BrowserActionScope;
   items?: BrowserItem[];
   bucketName: string;
@@ -324,7 +324,7 @@ const WRITE_ACTION_IDS = new Set<BrowserActionId>([
   "bulkAttributes",
 ]);
 
-export function applyBrowserFunctionalPolicy(
+function applyBrowserFunctionalPolicy(
   actions: BrowserActionMap,
   profile: BrowserFunctionalProfile,
   capabilityFacts: BrowserCapabilityFacts,

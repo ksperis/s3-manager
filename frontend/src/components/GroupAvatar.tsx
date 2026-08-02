@@ -7,7 +7,7 @@ import { fetchAuthenticatedAvatarImage } from "../api/avatarImages";
 import { cx } from "./ui/styles";
 import { useAuthenticatedAvatarUrl } from "./useAuthenticatedAvatarUrl";
 
-export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
+type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 const sizeClasses: Record<AvatarSize, string> = {
   xs: "h-6 w-6 text-[9px]",

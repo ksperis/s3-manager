@@ -8,7 +8,7 @@ import {
   buildWorkspacePageBreadcrumbs,
 } from "../../navigation/workspacePages";
 
-export type StorageOpsPageId = keyof typeof STORAGE_OPS_PAGE_CONTRACTS;
+type StorageOpsPageId = keyof typeof STORAGE_OPS_PAGE_CONTRACTS;
 
 export function storageOpsPageBreadcrumbs(
   pageId: StorageOpsPageId,

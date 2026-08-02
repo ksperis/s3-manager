@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   loginWithLdap: vi.fn(),
   fetchGeneralSettings: vi.fn(),
   fetchLoginSettings: vi.fn(),
+  getWorkspaceAccess: vi.fn(),
 }));
 
 vi.mock("../../api/auth", () => ({
@@ -26,6 +27,10 @@ vi.mock("../../api/auth", () => ({
 vi.mock("../../api/appSettings", () => ({
   fetchGeneralSettings: (...args: unknown[]) => mocks.fetchGeneralSettings(...args),
   fetchLoginSettings: (...args: unknown[]) => mocks.fetchLoginSettings(...args),
+}));
+
+vi.mock("../../api/executionContexts", () => ({
+  getWorkspaceAccess: (...args: unknown[]) => mocks.getWorkspaceAccess(...args),
 }));
 
 vi.mock("../../utils/routePrefetch", () => ({
@@ -82,6 +87,15 @@ describe("LoginPage LDAP", () => {
       login_logo_url: null,
     });
     mocks.fetchGeneralSettings.mockResolvedValue(generalSettings);
+    mocks.getWorkspaceAccess.mockResolvedValue({
+      admin: { available: false, context_count: 0 },
+      ceph_admin: { available: false, context_count: 0 },
+      storage_ops: { available: false, context_count: 0 },
+      manager: { available: false, context_count: 0 },
+      browser: { available: false, context_count: 0 },
+      portal: { available: false, context_count: 0 },
+      default_workspace: null,
+    });
     mocks.loginWithLdap.mockResolvedValue({
       access_token: "ldap-access-token",
       token_type: "bearer",
@@ -122,6 +136,7 @@ describe("LoginPage LDAP", () => {
 
     await waitFor(() => {
       expect(mocks.loginWithLdap).toHaveBeenCalledWith("corp", "jane", "secret-password");
+      expect(mocks.getWorkspaceAccess).toHaveBeenCalledOnce();
     });
     expect(window.localStorage.getItem("token")).toBe("ldap-access-token");
     expect(JSON.parse(window.localStorage.getItem("user") || "{}")).toMatchObject({

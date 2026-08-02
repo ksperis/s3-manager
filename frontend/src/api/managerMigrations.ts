@@ -77,12 +77,12 @@ export type BucketMigrationItemStatus =
   | "failed"
   | "canceled";
 
-export type BucketMigrationBucketMapping = {
+type BucketMigrationBucketMapping = {
   source_bucket: string;
   target_bucket?: string | null;
 };
 
-export type BucketMigrationCreateRequest = {
+type BucketMigrationCreateRequest = {
   source_context_id: string;
   target_context_id: string;
   buckets: BucketMigrationBucketMapping[];
@@ -172,17 +172,17 @@ export type BucketMigrationDetail = BucketMigrationView & {
   recent_events: BucketMigrationEventView[];
 };
 
-export type BucketMigrationListResponse = {
+type BucketMigrationListResponse = {
   items: BucketMigrationView[];
 };
 
-export type BucketMigrationActionResponse = {
+type BucketMigrationActionResponse = {
   id: number;
   status: BucketMigrationStatus;
   message: string;
 };
 
-export type ManagerMigrationStreamDone = {
+type ManagerMigrationStreamDone = {
   migration_id: number;
   status: BucketMigrationStatus;
   reason: string;

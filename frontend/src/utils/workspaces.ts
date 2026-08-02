@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import type { GeneralSettings } from "../api/appSettings";
+import type { AccountAccessRole } from "../api/accountRoles";
 import type { WorkspaceAccess } from "../api/executionContexts";
 import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
@@ -16,7 +17,7 @@ const USER_ROLE = "ui_user";
 
 export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "portal" | "browser";
 
-export type WorkspaceOption = {
+type WorkspaceOption = {
   id: WorkspaceId;
   label: string;
   path: string;
@@ -48,7 +49,7 @@ export type SessionUser = {
   accountName?: string | null;
   account_links?: {
     account_id: number;
-    role: "portal_user" | "portal_manager" | "account_administrator";
+    role: AccountAccessRole;
   }[] | null;
   s3_users?: number[] | null;
   s3_user_details?: { id: number; name?: string | null }[] | null;
@@ -81,10 +82,6 @@ export function isSuperAdminRole(role?: string | null): boolean {
 export function isAdminLikeRole(role?: string | null): boolean {
   const normalized = (role ?? "").trim().toLowerCase();
   return normalized === ADMIN_ROLE || isSuperAdminRole(normalized);
-}
-
-export function isManagerToolRole(role?: string | null): boolean {
-  return isAdminLikeRole(role) || role === USER_ROLE;
 }
 
 export function getManagerToolAccess(user: SessionUser | null): ManagerToolAccess | null {
@@ -226,7 +223,7 @@ export function resolveWorkspaceFromPath(pathname: string, options: WorkspaceOpt
   return active ?? null;
 }
 
-export function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralSettings): string {
+function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralSettings): string {
   if (!user || !user.role) return "/login";
   if (isAdminLikeRole(user.role)) return "/admin";
   if (user.role !== USER_ROLE) return "/unauthorized";

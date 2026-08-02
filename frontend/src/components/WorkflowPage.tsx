@@ -5,7 +5,6 @@
 import type { ReactNode } from "react";
 import { useInRouterContext } from "react-router-dom";
 
-import Modal from "./Modal";
 import PageHeader, { type PageBreadcrumb } from "./PageHeader";
 import { cx, uiDividerClass, uiMutedTextClass, uiPanelClass, uiTitleTextClass } from "./ui/styles";
 
@@ -112,38 +111,6 @@ export default function WorkflowPage({
 
 export function workflowPageHostClass(active: boolean, baseClass = "space-y-4"): string {
   return cx(baseClass, active && "workflow-page-host--active [&>.workflow-page]:!mt-0");
-}
-
-type WorkflowSurfaceProps = Omit<WorkflowPageProps, "onBack" | "backTo"> & {
-  presentation: "modal" | "page";
-  onClose: () => void;
-  modalMaxWidthClass?: string;
-  modalMaxBodyHeightClass?: string;
-};
-
-/** Use only when the same bounded form can intentionally be short in one mode
- * and page-sized in another (for example endpoint tags versus full endpoint
- * configuration). */
-export function WorkflowSurface({
-  presentation,
-  onClose,
-  modalMaxWidthClass,
-  modalMaxBodyHeightClass,
-  ...props
-}: WorkflowSurfaceProps) {
-  if (presentation === "modal") {
-    return (
-      <Modal
-        title={props.title}
-        onClose={onClose}
-        maxWidthClass={modalMaxWidthClass}
-        maxBodyHeightClass={modalMaxBodyHeightClass}
-      >
-        {props.children}
-      </Modal>
-    );
-  }
-  return <WorkflowPage {...props} onBack={onClose} />;
 }
 
 type WorkflowSectionProps = {

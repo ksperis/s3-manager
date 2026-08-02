@@ -5,6 +5,8 @@
 import client from "./client";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
+export type CredentialOwnerType = "iam_user" | "account_user" | "s3_user";
+
 export type S3Connection = {
   id: number;
   name: string;
@@ -17,7 +19,7 @@ export type S3Connection = {
   access_browser?: boolean | null;
   server_managed?: boolean | null;
   managed_access_state?: string | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   endpoint_url: string;
   region?: string | null;
@@ -31,14 +33,14 @@ export type S3Connection = {
   last_used_at?: string | null;
 };
 
-export type CreateConnectionPayload = {
+type CreateConnectionPayload = {
   name: string;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -49,14 +51,14 @@ export type CreateConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-export type UpdateConnectionPayload = {
+type UpdateConnectionPayload = {
   name?: string | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
   access_manager?: boolean | null;
   access_browser?: boolean | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -67,7 +69,7 @@ export type UpdateConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-export type ValidateConnectionCredentialsPayload = {
+type ValidateConnectionCredentialsPayload = {
   storage_endpoint_id?: number | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -77,7 +79,7 @@ export type ValidateConnectionCredentialsPayload = {
   verify_tls?: boolean;
 };
 
-export type ConnectionCredentialsValidationResult = {
+type ConnectionCredentialsValidationResult = {
   ok: boolean;
   severity: "success" | "warning" | "error";
   code?: string | null;

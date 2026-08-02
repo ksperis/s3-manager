@@ -88,7 +88,7 @@ workspace-specific visual themes when a shared product pattern fits.
 | Cards, panels, and page sections | `uiCardClass`, `uiPanelClass`, `uiCardMutedClass`, `uiPanelMutedClass` | Standard cards use 8px radius and soft/no shadows. Avoid decorative nesting. |
 | Forms and settings | `ui-control`, `uiLabelClass`, `UiCheckboxField`, `UiDetails`, settings panels | Compute dirty state from saveable fields only. |
 | Long operations and large forms | `WorkflowPage`, `WorkflowTabs`, `WorkflowSection`, `WorkflowActions`, `workflowPageHostClass` | Replace the current list content with a focused in-page workflow. Keep the page header full-width so its actions stay aligned with listing pages; apply `width` only to the left-aligned content wrapper and never center the form body. |
-| Dialogs, drawers, and overlays | `Modal`, `WorkflowSurface`, shared menu classes, `AnchoredPortalMenu`, `useUnsavedChangesGuard` | Reserve overlays for short, contextual tasks. Editable overlays must protect unapplied changes on every close path. |
+| Dialogs, drawers, and overlays | `Modal`, shared menu classes, `AnchoredPortalMenu`, `useUnsavedChangesGuard` | Reserve overlays for short, contextual tasks. Editable overlays must protect unapplied changes on every close path. |
 | Inline status, warnings, and capability gaps | `UiBadge`, `UiInlineMessage`, `PageBanner`, `PageEmptyState`, `MetricsUnavailableCard` | Distinguish missing data, disabled features, denied permissions, and unsupported backend capability. |
 | Destructive or high-risk operations | Explicit confirmation plus backend safeguards and audit logs | Never rely on color or UI gating alone for safety. |
 | Dashboards and metrics | Shared KPI, usage, traffic, and workspace dashboard components | Reuse chart language across Admin, Manager, Portal, and Ceph Admin while keeping labels surface-appropriate. |
@@ -112,11 +112,13 @@ more valuable than extra space. This includes confirmations, one-time secret
 handoffs, compact create forms, small metadata edits, and Browser actions tied
 to the current bucket, prefix, or object selection.
 
-`WorkflowSurface` is the compatibility seam for a form that legitimately needs
-both presentations. Callers must choose the presentation explicitly; do not
-infer it from viewport size. When a workflow page is rendered inside an
-inventory component, apply `workflowPageHostClass` to the host so the inventory
-is visually replaced while confirmation modals can still appear above it.
+Do not keep a generic compatibility component that switches a workflow between
+modal and page presentations. When the same form legitimately needs both,
+factor the fields and business hook, then compose explicit `Modal` and
+`WorkflowPage` wrappers at their call sites. Do not infer the presentation from
+viewport size. When a workflow page is rendered inside an inventory component,
+apply `workflowPageHostClass` to the host so the inventory is visually replaced
+while confirmation modals can still appear above it.
 
 ## Vocabulary Rules
 

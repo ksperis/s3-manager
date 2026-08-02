@@ -109,8 +109,7 @@ def test_ui_group_crud_defaults_and_rejects_private_connections(client: TestClie
             "account_links": [
                 {
                     "account_id": account.id,
-                    "account_admin": True,
-                    "account_role": AccountRole.PORTAL_MANAGER.value,
+                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 }
             ],
             "s3_user_ids": [s3_user.id],
@@ -281,8 +280,7 @@ def test_ui_group_effective_access_is_inherited_without_overwriting_direct_user_
             "account_links": [
                 {
                     "account_id": account.id,
-                    "account_admin": True,
-                    "account_role": AccountRole.PORTAL_MANAGER.value,
+                    "role": AccountRole.ACCOUNT_ADMINISTRATOR.value,
                 }
             ],
             "s3_user_ids": [s3_user.id],

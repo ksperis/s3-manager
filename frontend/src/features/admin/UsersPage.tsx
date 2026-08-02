@@ -14,6 +14,11 @@ import {
   listUsers,
   updateUser,
 } from "../../api/users";
+import {
+  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  normalizeAccountAccessRole,
+  type AccountAccessRole,
+} from "../../api/accountRoles";
 import { UiGroupSummary, listMinimalGroups } from "../../api/groups";
 import { S3AccountSummary, listMinimalS3Accounts } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
@@ -41,12 +46,9 @@ import {
 } from "./AdminAccessSections";
 import {
   DEFAULT_MANAGER_TOOL_ACCESS,
-  PORTAL_ROLE_OPTIONS,
   buildManagerToolDefinitions,
   normalizeManagerToolAccess,
-  normalizePortalRole,
   type ManagerToolKey,
-  type PortalAccountRole,
 } from "./adminAccessConfig";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
@@ -93,7 +95,7 @@ type AuxiliaryLoadState = "idle" | "loading" | "loaded" | "error";
 
 type AccountSelection = {
   id: number;
-  role: PortalAccountRole;
+  role: AccountAccessRole;
 };
 
 type Option = {
@@ -188,8 +190,8 @@ type AssociationsTabsProps = {
     setSelections: Dispatch<SetStateAction<number[]>>;
     adminChoice: Record<number, boolean>;
     setAdminChoice: Dispatch<SetStateAction<Record<number, boolean>>>;
-    portalRoleChoice: Record<number, PortalAccountRole>;
-    setPortalRoleChoice: Dispatch<SetStateAction<Record<number, PortalAccountRole>>>;
+    portalRoleChoice: Record<number, AccountAccessRole>;
+    setPortalRoleChoice: Dispatch<SetStateAction<Record<number, AccountAccessRole>>>;
     toggleSelection: (id: number) => void;
   };
   s3Users: {
@@ -289,16 +291,16 @@ const AssociationsTabs = ({
                                   aria-label={`Access role for ${label}`}
                                   size="compact"
                                   fieldClassName="w-52"
-                                  value={normalizePortalRole(entry.role)}
+                                  value={normalizeAccountAccessRole(entry.role)}
                                   onChange={(e) =>
                                     accounts.setSelected((prev) =>
                                       prev.map((item) =>
-                                        item.id === entry.id ? { ...item, role: normalizePortalRole(e.target.value) } : item
+                                        item.id === entry.id ? { ...item, role: normalizeAccountAccessRole(e.target.value) } : item
                                       )
                                     )
                                   }
                                 >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>
@@ -381,11 +383,11 @@ const AssociationsTabs = ({
                                 onChange={(event) =>
                                   accounts.setPortalRoleChoice((prev) => ({
                                     ...prev,
-                                    [accountId]: normalizePortalRole(event.target.value),
+                                    [accountId]: normalizeAccountAccessRole(event.target.value),
                                   }))
                                 }
                               >
-                                {PORTAL_ROLE_OPTIONS.map((option) => (
+                                {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                   <option key={option.value} value={option.value}>{option.label}</option>
                                 ))}
                               </UiSelect>
@@ -677,7 +679,7 @@ export default function UsersPage() {
   const [createSelectedGroups, setCreateSelectedGroups] = useState<number[]>([]);
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createAccountPortalRoleChoice, setCreateAccountPortalRoleChoice] = useState<
-    Record<number, PortalAccountRole>
+    Record<number, AccountAccessRole>
   >({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
@@ -716,7 +718,7 @@ export default function UsersPage() {
   const [editSelectedGroups, setEditSelectedGroups] = useState<number[]>([]);
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editAccountPortalRoleChoice, setEditAccountPortalRoleChoice] = useState<
-    Record<number, PortalAccountRole>
+    Record<number, AccountAccessRole>
   >({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
@@ -894,7 +896,7 @@ export default function UsersPage() {
     const accountItems = displayedAccountLinks.map((link) => {
       const id = Number(link.account_id);
       const label = accountOptionsById.get(id)?.name ?? `Account #${id}`;
-      const role = normalizePortalRole(link.role);
+      const role = normalizeAccountAccessRole(link.role);
       const effectiveRoleLabel = accountAssociationRoleLabels({ id, label, role }, showPortalRole)[0];
       const provenance = effectiveAccountLinks.length > 0
         ? (link as EffectiveAccountMembership).provenance
@@ -1489,7 +1491,7 @@ export default function UsersPage() {
             assignUserToS3Account(
               created.id,
               Number(entry.id),
-              normalizePortalRole(entry.role)
+              normalizeAccountAccessRole(entry.role)
             )
           )
         );
@@ -1537,8 +1539,8 @@ export default function UsersPage() {
     };
     setEditingUser(user);
     setEditForm(nextEditForm);
-    const accountRoles = new Map<number, PortalAccountRole>(
-      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizePortalRole(link.role)])
+    const accountRoles = new Map<number, AccountAccessRole>(
+      (user.account_links ?? []).map((link) => [Number(link.account_id), normalizeAccountAccessRole(link.role)])
     );
     const selectedAccounts =
       user.accounts?.map((id) => ({
@@ -1647,7 +1649,7 @@ export default function UsersPage() {
       );
       payload.account_links = editSelectedS3Accounts.map((entry) => ({
         account_id: Number(entry.id),
-        role: normalizePortalRole(entry.role),
+        role: normalizeAccountAccessRole(entry.role),
       }));
       payload.group_ids = editSelectedGroups;
       payload.s3_user_ids = editSelectedS3Users;

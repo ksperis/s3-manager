@@ -62,7 +62,7 @@ function resolveY(
   return clamp(below, VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, viewportHeight - height - VIEWPORT_MARGIN));
 }
 
-export function useAnchoredMenuPosition({
+function useAnchoredMenuPosition({
   open,
   anchorRef,
   menuRef,

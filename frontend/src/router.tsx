@@ -392,8 +392,6 @@ export function createAppRoutes() {
               <Route path="shares" element={<PortalSharesPage />} />
               <Route path="requests" element={<PortalRequestsPage />} />
               <Route path="history" element={<PortalHistoryPage />} />
-              <Route path="activity" element={<Navigate to="/portal/history" replace />} />
-              <Route path="transfers" element={<Navigate to="/portal/history?view=transfers" replace />} />
               <Route path="usage" element={<PortalUsagePage />} />
               <Route path="settings" element={<PortalSettingsPage />} />
             </Route>

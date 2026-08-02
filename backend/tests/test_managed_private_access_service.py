@@ -516,6 +516,8 @@ def test_rgw_user_provisioning_uses_distinct_key_and_endpoint(db_session, monkey
     assert created.storage_endpoint_id == endpoint.id
     assert created.access_key_id == "PERSONAL-AK"
     assert created.access_key_id != s3_user.rgw_access_key
+    assert created.credential_owner_type == "s3_user"
+    assert created.credential_owner_identifier == s3_user.rgw_user_uid
     assert "PERSONAL-SK" not in result.model_dump_json()
 
 

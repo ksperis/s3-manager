@@ -11,7 +11,7 @@ export type KeyRotationType =
   | "s3_user"
   | "ceph_admin";
 
-export type KeyRotationRequestPayload = {
+type KeyRotationRequestPayload = {
   endpoint_ids: number[];
   key_types: KeyRotationType[];
   deactivate_only?: boolean;

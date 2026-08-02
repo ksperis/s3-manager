@@ -147,9 +147,9 @@ export default function PortalObjectDetailPage() {
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const requestedObjectTab: ObjectTab =
-    requestedTab === "history" || requestedTab === "versions"
+    requestedTab === "history"
       ? "history"
-      : requestedTab === "properties" || requestedTab === "details"
+      : requestedTab === "properties"
         ? "details"
         : "preview";
   const [activeTab, setActiveTab] = useState<ObjectTab>(requestedObjectTab);

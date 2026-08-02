@@ -2,30 +2,19 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAvatar
-from app.utils.account_roles import adapt_legacy_role_payload, legacy_fields_for_role
+from app.utils.account_roles import CanonicalAccountRole
 
 
 class _CanonicalAccountLink(BaseModel):
-    role: str
-    account_admin: Optional[bool] = Field(default=None, deprecated=True)
-    account_role: Optional[str] = Field(default=None, deprecated=True)
+    model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="before")
-    @classmethod
-    def adapt_legacy_role(cls, value):
-        return adapt_legacy_role_payload(value, require_explicit=True)
-
-    @model_validator(mode="after")
-    def derive_legacy_fields(self):
-        if self.role:
-            self.account_admin, self.account_role = legacy_fields_for_role(self.role)
-        return self
+    role: CanonicalAccountRole
 
 
 class AccountUserLink(_CanonicalAccountLink):

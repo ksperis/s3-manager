@@ -56,9 +56,8 @@ import {
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 
 export type { CephAdminBucket };
-export type { BucketProperties };
 
-export const STORAGE_OPS_BUCKET_REF_SEPARATOR = "::";
+const STORAGE_OPS_BUCKET_REF_SEPARATOR = "::";
 export const STORAGE_OPS_SCOPE_ID = 1;
 
 export type StorageOpsBucket = CephAdminBucket & {
@@ -82,11 +81,11 @@ export type StorageOpsSummary = {
   total_endpoints: number;
 };
 
-export type PaginatedStorageOpsBucketsResponse = Omit<PaginatedCephAdminBucketsResponse, "items"> & {
+type PaginatedStorageOpsBucketsResponse = Omit<PaginatedCephAdminBucketsResponse, "items"> & {
   items: StorageOpsBucket[];
 };
 
-export type StorageOpsBucketRef = {
+type StorageOpsBucketRef = {
   contextId: string;
   bucketName: string;
 };
@@ -99,10 +98,6 @@ type CephAdminBucketsStreamOptions = {
 type ListStorageOpsBucketsOptions = {
   signal?: AbortSignal;
 };
-
-export function encodeStorageOpsBucketRef(contextId: string, bucketName: string): string {
-  return `${contextId}${STORAGE_OPS_BUCKET_REF_SEPARATOR}${bucketName}`;
-}
 
 export function decodeStorageOpsBucketRef(value: string): StorageOpsBucketRef | null {
   const text = String(value ?? "");

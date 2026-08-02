@@ -342,15 +342,6 @@ export const CompactIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
-export const GridIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
-    <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="11" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="3.5" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="11" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
 export const ChevronDownIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <path d="m5 7 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

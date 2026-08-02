@@ -10,13 +10,13 @@ import type { BucketOpsMode } from "./bucketOpsSurface";
 const BUCKET_LIST_RETURN_STORAGE_PREFIX = "bucket-list.return.v1";
 const BUCKET_LIST_ORIGIN_STATE_KEY = "bucketListOrigin";
 
-export type BucketListOrigin = {
+type BucketListOrigin = {
   surface: BucketOpsMode;
   scopeKey: string;
   listUrl: string;
 };
 
-export type BucketListReturnContext = BucketListOrigin & {
+type BucketListReturnContext = BucketListOrigin & {
   rowKey: string;
   scrollY: number;
   savedAt: number;
@@ -87,7 +87,7 @@ export function buildBucketDetailLocationState(origin: BucketListOrigin): Bucket
   return { [BUCKET_LIST_ORIGIN_STATE_KEY]: origin };
 }
 
-export function readBucketListOrigin(state: unknown, surface: BucketOpsMode): BucketListOrigin | null {
+function readBucketListOrigin(state: unknown, surface: BucketOpsMode): BucketListOrigin | null {
   if (!state || typeof state !== "object") return null;
   const origin = sanitizeOrigin((state as BucketDetailLocationState)[BUCKET_LIST_ORIGIN_STATE_KEY]);
   return origin?.surface === surface ? origin : null;

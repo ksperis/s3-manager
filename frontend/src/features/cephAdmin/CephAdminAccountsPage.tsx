@@ -506,7 +506,7 @@ export default function CephAdminAccountsPage() {
     advancedFilterParam,
     sort.field,
     sort.direction,
-    includeParams.join(","),
+    includeParams,
     reloadNonce,
   ]);
 
@@ -587,7 +587,7 @@ export default function CephAdminAccountsPage() {
   const accountNameFieldState = fieldHighlight(Boolean(accountNameAppliedValue), accountNamePending);
   const emailFieldState = fieldHighlight(Boolean(emailAppliedValue), emailPending);
 
-  const numericFields: Array<{ key: AdvancedNumericField; label: string }> = [
+  const numericFields = useMemo<Array<{ key: AdvancedNumericField; label: string }>>(() => [
     { key: "minMaxUsers", label: "Max users >=" },
     { key: "maxMaxUsers", label: "Max users <=" },
     { key: "minMaxBuckets", label: "Max buckets >=" },
@@ -600,13 +600,13 @@ export default function CephAdminAccountsPage() {
     { key: "maxBucketCount", label: "Bucket count <=" },
     { key: "minUserCount", label: "User count >=" },
     { key: "maxUserCount", label: "User count <=" },
-  ];
-  const usageNumericFields: Array<{ key: AdvancedNumericField; label: string; format: "percent" }> = [
+  ], []);
+  const usageNumericFields = useMemo<Array<{ key: AdvancedNumericField; label: string; format: "percent" }>>(() => [
     { key: "minQuotaUsageSizePercent", label: "Quota usage size % >=", format: "percent" },
     { key: "maxQuotaUsageSizePercent", label: "Quota usage size % <=", format: "percent" },
     { key: "minQuotaUsageObjectPercent", label: "Quota usage objects % >=", format: "percent" },
     { key: "maxQuotaUsageObjectPercent", label: "Quota usage objects % <=", format: "percent" },
-  ];
+  ], []);
 
   const numericFieldStates = useMemo(() => {
     const states = {} as Record<AdvancedNumericField, { labelClass: string; fieldClass: string }>;

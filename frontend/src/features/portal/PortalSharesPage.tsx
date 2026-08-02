@@ -493,19 +493,10 @@ export default function PortalSharesPage() {
     if (initialUrlContextApplied.current || workspace.spaces.length === 0)
       return;
     const params = new URLSearchParams(window.location.search);
-    const requestedTab = params.get("tab");
     const requestedSpaceId = params.get("space_id");
-    if (requestedTab === "with" || requestedTab === "by") {
-      setActiveTab(requestedTab);
-      setActiveViewTab("access");
-    } else if (requestedTab === "links") {
-      setActiveViewTab("links");
-    }
     const requestedView = params.get("view");
     if (requestedView === "members" || requestedView === "access" || requestedView === "links") {
       setActiveViewTab(requestedView);
-    } else if (requestedView === "invite") {
-      setActiveViewTab("access");
     }
     if (
       requestedSpaceId &&

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BillingPage from "./BillingPage";
 
 const mocks = vi.hoisted(() => ({
@@ -103,6 +103,7 @@ function detail(id: number, name: string) {
 
 describe("BillingPage", () => {
   beforeEach(() => {
+    vi.setSystemTime(new Date("2026-07-15T12:00:00Z"));
     vi.restoreAllMocks();
     vi.clearAllMocks();
     Object.defineProperty(window.URL, "createObjectURL", {
@@ -136,6 +137,10 @@ describe("BillingPage", () => {
       errors: [{ subject: "account", subject_id: 42, error: "RGW usage denied" }],
     });
     mocks.downloadBillingCsv.mockResolvedValue(new Blob(["subject_type\n"], { type: "text/csv" }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders billing data, paginates subjects, selects a subject, and exports CSV", async () => {

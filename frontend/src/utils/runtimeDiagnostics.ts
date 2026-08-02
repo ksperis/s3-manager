@@ -45,10 +45,6 @@ export function reportRuntimeError(context: string, error: unknown): void {
   console.error(context, ...sanitizeConsoleArgs([error]));
 }
 
-export function reportRuntimeWarning(context: string, error: unknown): void {
-  console.warn(context, ...sanitizeConsoleArgs([error]));
-}
-
 export function installConsoleRedaction(): void {
   if (installed || typeof console === "undefined") return;
   installed = true;

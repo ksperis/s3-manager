@@ -42,6 +42,7 @@ import {
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
+import type { CredentialOwnerType } from "../../api/connections";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -472,12 +473,6 @@ export default function S3ConnectionsPage() {
   }, [editGroupSearch, editLinkedGroupIds, uiGroups]);
   const visibleAvailableEditUsers = useMemo(() => availableEditUsers.slice(0, maxLinkOptions), [availableEditUsers, maxLinkOptions]);
   const visibleAvailableEditGroups = useMemo(() => availableEditGroups.slice(0, maxLinkOptions), [availableEditGroups, maxLinkOptions]);
-  const editCredentialOwnerTypeOptions = useMemo(() => {
-    const currentValue = editForm.credential_owner_type.trim();
-    if (!currentValue) return credentialOwnerTypeOptions;
-    if (credentialOwnerTypeOptions.some((opt) => opt.value === currentValue)) return credentialOwnerTypeOptions;
-    return [...credentialOwnerTypeOptions, { value: currentValue, label: `${currentValue} (legacy)` }];
-  }, [editForm.credential_owner_type]);
   const createCurrentSignature = useMemo(
     () =>
       stableSignature({
@@ -810,7 +805,8 @@ export default function S3ConnectionsPage() {
         name: editForm.name || undefined,
         group_ids: targetGroupIds,
         tags: normalizeUiTags(editForm.tags),
-        credential_owner_type: editForm.credential_owner_type || null,
+        credential_owner_type:
+          (editForm.credential_owner_type as CredentialOwnerType) || null,
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
       });
@@ -1439,7 +1435,7 @@ export default function S3ConnectionsPage() {
                       value={editForm.credential_owner_type}
                       onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
                     >
-                      {editCredentialOwnerTypeOptions.map((option) => (
+                    {credentialOwnerTypeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>

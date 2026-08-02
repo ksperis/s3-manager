@@ -11,7 +11,6 @@ import {
 } from "../../utils/clientStorage";
 import type { BrowserDensity, BrowserLayoutMode } from "./browserActions";
 
-export const BROWSER_ROOT_UI_STATE_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootUiState;
 export const BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootUiStateV2;
 export const BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY = CLIENT_STORAGE_KEYS.browserRootContextSelections;
 export const DEFAULT_FOLDERS_PANEL_WIDTH_PX = 280;
@@ -21,14 +20,14 @@ export const MAX_FOLDERS_PANEL_WIDTH_PX = 420;
 export const MIN_INSPECTOR_PANEL_WIDTH_PX = 280;
 export const MAX_INSPECTOR_PANEL_WIDTH_PX = 520;
 
-export type BrowserRootUiLayoutState = {
+type BrowserRootUiLayoutState = {
   showFolders: boolean;
   showInspector: boolean;
   foldersPanelWidthPx?: number;
   inspectorPanelWidthPx?: number;
 };
 
-export type BrowserRootUiModeState = {
+type BrowserRootUiModeState = {
   showFolders: boolean;
   showInspector: boolean;
   foldersPanelWidthPx: number;
@@ -37,12 +36,12 @@ export type BrowserRootUiModeState = {
   objectColumnWidths: Record<string, number>;
 };
 
-export type BrowserRootUiContextSelection = {
+type BrowserRootUiContextSelection = {
   bucketName: string;
   prefix: string;
 };
 
-export type BrowserRootUiState = {
+type BrowserRootUiState = {
   activeLayout: BrowserLayoutMode;
   density: BrowserDensity;
   layouts: Record<BrowserLayoutMode, BrowserRootUiModeState>;
@@ -142,36 +141,6 @@ const normalizeV2State = (value: unknown): BrowserRootUiState | null => {
   };
 };
 
-const migrateV1State = (value: unknown): BrowserRootUiState | null => {
-  if (!isRecord(value)) return null;
-  const layout = isRecord(value.layout) ? value.layout : {};
-  const activeLayout: BrowserLayoutMode =
-    layout.showFolders === true || layout.showInspector === true || layout.showActionBar === true
-      ? "workbench"
-      : "standard";
-  const sharedColumns = normalizeObjectColumns(value.objectColumns);
-  const sharedWidths = normalizeObjectColumnWidths(value.objectColumnWidths);
-  return {
-    activeLayout,
-    density: "compact",
-    layouts: {
-      standard: {
-        ...createModeState(null, { showFolders: false, showInspector: false }),
-        objectColumns: sharedColumns,
-        objectColumnWidths: sharedWidths,
-      },
-      workbench: {
-        ...createModeState(layout, { showFolders: true, showInspector: true }),
-        objectColumns: sharedColumns,
-        objectColumnWidths: sharedWidths,
-      },
-    },
-    contextSelections: normalizeContextSelections(
-      readSessionJsonFromKey<unknown>(BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY),
-    ),
-  };
-};
-
 const serializeV2State = (state: BrowserRootUiState) => ({
   activeLayout: state.activeLayout,
   density: state.density,
@@ -185,12 +154,9 @@ const writeBrowserRootUiState = (state: BrowserRootUiState) => {
 
 export const readStoredBrowserRootUiState = (): BrowserRootUiState | null => {
   if (typeof window === "undefined") return null;
-  const current = normalizeV2State(readClientJson<unknown>(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY));
-  if (current) return current;
-  const migrated = migrateV1State(readClientJson<unknown>(BROWSER_ROOT_UI_STATE_STORAGE_KEY));
-  if (!migrated) return null;
-  writeBrowserRootUiState(migrated);
-  return migrated;
+  return normalizeV2State(
+    readClientJson<unknown>(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY),
+  );
 };
 
 export const readBrowserRootUiState = (): BrowserRootUiState =>

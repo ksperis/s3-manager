@@ -49,7 +49,7 @@ export const advancedFilterBodyClass = "flex-1 overflow-y-auto px-4 py-4";
 
 export const advancedFilterFooterClass = "border-t border-[color:var(--ui-border-soft)] bg-white px-4 py-3 dark:bg-neutral-950";
 
-export const advancedFilterSummaryClass =
+const advancedFilterSummaryClass =
   "rounded-lg border border-[color:var(--ui-border)] bg-neutral-50 p-3 text-[var(--ui-text)] shadow-[var(--ui-shadow-soft)] dark:bg-neutral-900/80";
 
 export const advancedFilterSectionClass =
@@ -94,7 +94,7 @@ export const advancedFilterToolbarButtonClass = (active: boolean = false) => {
 export const advancedFilterSummaryChipClass =
   "rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100";
 
-export type AdvancedFilterSummaryItem = {
+type AdvancedFilterSummaryItem = {
   id: string;
   label: ReactNode;
 };
@@ -118,7 +118,7 @@ export const renderAdvancedFilterDraftSummary = (items: AdvancedFilterSummaryIte
   </section>
 );
 
-export const advancedFilterHeaderBadgeClass =
+const advancedFilterHeaderBadgeClass =
   "rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
 
 export const advancedFilterSyncBadgeClass = (pending: boolean) => {
@@ -213,7 +213,7 @@ export function isCancelledError(err: unknown): boolean {
   return name === "CanceledError" || code === "ERR_CANCELED";
 }
 
-export const formatAdvancedSearchStage = (stage: string) => {
+const formatAdvancedSearchStage = (stage: string) => {
   if (!stage.trim()) return "";
   return stage
     .split("_")
@@ -266,7 +266,7 @@ export const renderAdvancedSearchProgress = (progress: AdvancedSearchProgress) =
   );
 };
 
-export type ParsedExactListInput = {
+type ParsedExactListInput = {
   values: string[];
   listProvided: boolean;
 };

@@ -45,7 +45,7 @@ type UseBucketOpsListingParams = {
   ) => Promise<PaginatedCephAdminBucketsResponse>;
 };
 
-export type AdvancedSearchProgress = {
+type AdvancedSearchProgress = {
   active: boolean;
   determinate: boolean;
   percent: number;

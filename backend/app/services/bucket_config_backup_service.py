@@ -6,6 +6,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.db import S3Account
 from app.models.bucket_config_backup import (
     BucketConfigBackupBucket,
@@ -21,10 +23,8 @@ QuotaSnapshotLoader = Callable[[str], dict[str, int | None]]
 def _jsonable(value: Any) -> Any:
     if value is None:
         return None
-    if hasattr(value, "model_dump"):
+    if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
-    if hasattr(value, "dict"):
-        return value.dict()
     return value
 
 

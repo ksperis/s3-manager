@@ -7,7 +7,7 @@ import { CLIENT_STORAGE_KEYS, clearAuthStorage, readClientJson, readClientStorag
 import { coordinateAuthRefresh } from "./authRefreshCoordinator";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
-export type ApiRequestProfile = "interactive" | "long_running";
+type ApiRequestProfile = "interactive" | "long_running";
 
 export const API_REQUEST_TIMEOUT_MS = 0;
 export const INTERACTIVE_REQUEST_TIMEOUT_MS = 15_000;

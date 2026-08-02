@@ -71,7 +71,7 @@ export type BucketIntegrityResult = {
   buckets: BucketIntegrityBucketResult[];
 };
 
-export type BucketIntegrityStreamOptions = {
+type BucketIntegrityStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: BucketIntegrityProgress) => void;
 };

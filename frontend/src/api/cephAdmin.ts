@@ -55,8 +55,6 @@ export type CephAdminAdminOpsResult = {
   result?: unknown;
 };
 
-export type CephAdminBucketAdminOpsAction = "delete" | "unlink" | "link" | "index-check";
-
 const tenantParams = (tenant?: string | null) => (tenant ? { tenant } : undefined);
 
 export async function deleteCephAdminAccount(
@@ -138,19 +136,6 @@ export async function checkCephAdminBucketIndex(
   );
   return data;
 }
-
-export type CephAdminPlacementTarget = {
-  name: string;
-  storage_classes: string[];
-};
-
-export type CephAdminEndpointInfo = {
-  default_placement?: string | null;
-  zonegroup?: string | null;
-  realm?: string | null;
-  placement_targets: CephAdminPlacementTarget[];
-  storage_classes: string[];
-};
 
 export type CephAdminRgwAccount = {
   account_id: string;
@@ -258,13 +243,13 @@ export type CreateCephAdminAccountPayload = {
   extra_params?: Record<string, unknown>;
 };
 
-export type CreateCephAdminAccountResponse = {
+type CreateCephAdminAccountResponse = {
   account: CephAdminRgwAccountDetail;
 };
 
-export type PaginatedCephAdminAccountsResponse = PaginatedResponse<CephAdminRgwAccount>;
+type PaginatedCephAdminAccountsResponse = PaginatedResponse<CephAdminRgwAccount>;
 
-export type ListCephAdminAccountsParams = {
+type ListCephAdminAccountsParams = {
   page?: number;
   page_size?: number;
   search?: string;
@@ -504,14 +489,14 @@ export type CreateCephAdminUserPayload = {
   extra_params?: Record<string, unknown>;
 };
 
-export type CreateCephAdminUserResponse = {
+type CreateCephAdminUserResponse = {
   detail: CephAdminRgwUserDetail;
   generated_key?: CephAdminRgwGeneratedAccessKey | null;
 };
 
-export type PaginatedCephAdminUsersResponse = PaginatedResponse<CephAdminRgwUser>;
+type PaginatedCephAdminUsersResponse = PaginatedResponse<CephAdminRgwUser>;
 
-export type ListCephAdminUsersParams = {
+type ListCephAdminUsersParams = {
   page?: number;
   page_size?: number;
   search?: string;
@@ -719,18 +704,18 @@ export type CephAdminBucketConfigBackupFeature =
   | "access_logging"
   | "tags";
 
-export type CephAdminBucketConfigBackupRequest = {
+type CephAdminBucketConfigBackupRequest = {
   buckets: string[];
   features: CephAdminBucketConfigBackupFeature[];
 };
 
-export type CephAdminBucketConfigBackupBucket = {
+type CephAdminBucketConfigBackupBucket = {
   name: string;
   configuration: Record<string, unknown>;
   errors: Record<string, string>;
 };
 
-export type CephAdminBucketConfigBackupResponse = {
+type CephAdminBucketConfigBackupResponse = {
   kind: string;
   version: number;
   generated_at: string;
@@ -803,7 +788,7 @@ export async function streamCephAdminBuckets(
   });
 }
 
-export type CephAdminBucketCompareRequest = {
+type CephAdminBucketCompareRequest = {
   target_endpoint_id: number;
   source_bucket: string;
   target_bucket: string;
@@ -831,7 +816,7 @@ export type CephAdminBucketObjectDetail = {
   storage_class?: string | null;
 };
 
-export type CephAdminBucketObjectDiffEntry = {
+type CephAdminBucketObjectDiffEntry = {
   key: string;
   source_size?: number | null;
   target_size?: number | null;
@@ -863,7 +848,7 @@ export type CephAdminBucketContentDiff = {
   different_sample: CephAdminBucketObjectDiffEntry[];
 };
 
-export type CephAdminBucketConfigDiffSection = {
+type CephAdminBucketConfigDiffSection = {
   key: string;
   label: string;
   source?: unknown;
@@ -899,12 +884,12 @@ export async function compareCephAdminBucketPair(
   return data;
 }
 
-export type BucketLifecycleConfig = { rules: Record<string, unknown>[] };
-export type BucketCors = { rules: Record<string, unknown>[] };
-export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
-export type BucketPolicy = { policy: Record<string, unknown> | null };
+type BucketLifecycleConfig = { rules: Record<string, unknown>[] };
+type BucketCors = { rules: Record<string, unknown>[] };
+type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
+type BucketPolicy = { policy: Record<string, unknown> | null };
 export type { BucketTag };
-export type BucketReplicationConfiguration = { configuration: Record<string, unknown> };
+type BucketReplicationConfiguration = { configuration: Record<string, unknown> };
 
 export type BucketObjectLockConfiguration = {
   enabled?: boolean | null;
@@ -920,7 +905,7 @@ export type BucketPublicAccessBlock = {
   restrict_public_buckets?: boolean | null;
 };
 
-export type BucketVersioningStatus = {
+type BucketVersioningStatus = {
   status?: string | null;
   enabled: boolean;
 };
@@ -1170,19 +1155,19 @@ export async function deleteCephAdminBucketTags(endpointId: number, bucketName: 
   await client.delete(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/tags`);
 }
 
-export type BucketAclGrantee = {
+type BucketAclGrantee = {
   type: string;
   id?: string | null;
   display_name?: string | null;
   uri?: string | null;
 };
 
-export type BucketAclGrant = {
+type BucketAclGrant = {
   grantee: BucketAclGrantee;
   permission: string;
 };
 
-export type BucketAcl = {
+type BucketAcl = {
   owner?: string | null;
   grants: BucketAclGrant[];
 };

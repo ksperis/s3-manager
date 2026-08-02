@@ -7,19 +7,19 @@ import { cx, type UiTone } from "../../components/ui/styles";
 import { extractApiError } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 
-export type ParsedRawMappingResult = {
+type ParsedRawMappingResult = {
   mapping: Map<string, string>;
   invalidLines: string[];
 };
 
-export type CompareDiffTone = "added" | "removed";
+type CompareDiffTone = "added" | "removed";
 
-export type CompareDiffLine = {
+type CompareDiffLine = {
   text: string;
   tone?: CompareDiffTone;
 };
 
-export type CompareObjectDetailLike = {
+type CompareObjectDetailLike = {
   key: string;
   size?: number | null;
   etag?: string | null;
@@ -114,14 +114,14 @@ export const formatUnknown = (value: unknown) => {
   }
 };
 
-export const formatCompareDateTime = (value?: string | null): string => {
+const formatCompareDateTime = (value?: string | null): string => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
 };
 
-export const formatCompareEtag = (value?: string | null): string => {
+const formatCompareEtag = (value?: string | null): string => {
   const normalized = (value ?? "").trim().replace(/^"|"$/g, "");
   if (!normalized) return "-";
   return normalized.length > 18 ? `${normalized.slice(0, 18)}...` : normalized;

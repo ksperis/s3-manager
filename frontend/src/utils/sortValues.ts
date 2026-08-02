@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-export type SortDirection = "asc" | "desc";
+type SortDirection = "asc" | "desc";
 export type SortableValue = string | number | boolean | null | undefined;
 export type SortableField<T> = Extract<
   {

@@ -13,12 +13,12 @@ export type ApiTokenInfo = {
   revoked_at?: string | null;
 };
 
-export type CreateApiTokenPayload = {
+type CreateApiTokenPayload = {
   name: string;
   expires_in_days?: number;
 };
 
-export type CreateApiTokenResponse = {
+type CreateApiTokenResponse = {
   access_token: string;
   token_type: string;
   api_token: ApiTokenInfo;

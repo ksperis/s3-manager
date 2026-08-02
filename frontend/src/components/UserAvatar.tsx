@@ -27,7 +27,7 @@ function fallbackInitials(name?: string | null, email?: string | null): string {
   return localPart.slice(0, 2).toUpperCase() || "U";
 }
 
-export type UserAvatarProps = {
+type UserAvatarProps = {
   avatar?: UserAvatarDescriptor | null;
   name?: string | null;
   email?: string | null;
@@ -85,7 +85,7 @@ export default function UserAvatar({
   );
 }
 
-export type UserAvatarStackPerson = {
+type UserAvatarStackPerson = {
   user_id: number;
   email: string;
   display_name?: string | null;

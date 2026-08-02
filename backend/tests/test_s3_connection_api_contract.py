@@ -109,6 +109,28 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
     assert "access_browser" not in payload
 
 
+@pytest.mark.parametrize("path", ["/api/connections", "/api/admin/s3-connections"])
+def test_connections_api_rejects_noncanonical_credential_owner_types(
+    contract_client,
+    path,
+):
+    client, _, _ = contract_client
+
+    response = client.post(
+        path,
+        json={
+            "name": "invalid-owner-type",
+            "endpoint_url": "https://invalid-owner-type.example.test",
+            "access_key_id": "AKIAINVALIDOWNERTYPE",
+            "secret_access_key": "SECRETINVALIDOWNERTYPE",
+            "credential_owner_type": "rgw_user",
+            "credential_owner_identifier": "rgw-user",
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_client):
     client, _, _ = contract_client
     monkeypatch.setattr(

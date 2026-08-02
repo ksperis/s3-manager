@@ -13,7 +13,7 @@ export function portalRequestTypeLabel(type: PortalAdminRequestType): string {
   return type;
 }
 
-export function portalRequestStatusLabel(status: PortalAdminRequestStatus): string {
+function portalRequestStatusLabel(status: PortalAdminRequestStatus): string {
   if (status === "pending") return "Pending";
   if (status === "processing") return "Processing";
   if (status === "approved") return "Approved";
@@ -22,7 +22,7 @@ export function portalRequestStatusLabel(status: PortalAdminRequestStatus): stri
   return status;
 }
 
-export function portalRequestStatusTone(status: PortalAdminRequestStatus): UiTone {
+function portalRequestStatusTone(status: PortalAdminRequestStatus): UiTone {
   if (status === "approved") return "success";
   if (status === "rejected" || status === "failed") return "danger";
   if (status === "processing") return "warning";

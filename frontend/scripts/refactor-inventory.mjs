@@ -2,7 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".css", ".scss", ".mjs"]);
-const EXCLUDED_DIRS = new Set(["node_modules", "dist", "coverage"]);
+const EXCLUDED_DIRS = new Set([
+  ".playwright-cli",
+  "coverage",
+  "dist",
+  "node_modules",
+  "output",
+  "playwright-report",
+  "test-results",
+]);
 const SIGNALS = [
   ["localStorage", "localStorage"],
   ["sessionStorage", "sessionStorage"],

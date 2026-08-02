@@ -2,10 +2,10 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import type { UiGroupAvatarDescriptor } from "../../api/groups";
 import type { UserAvatarDescriptor } from "../../api/users";
+import { normalizeAccountAccessRole } from "../../api/accountRoles";
 import GroupAvatar from "../../components/GroupAvatar";
 import UserAvatar from "../../components/UserAvatar";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import { normalizePortalRole } from "./adminAccessConfig";
 import { buildAdminPrincipalEditHref } from "./adminPrincipalEditLink";
 
 export type AssociationChipItem = {
@@ -47,7 +47,7 @@ const associationCategoryClasses: Record<CompactAssociationCategory["id"], strin
   connections: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100",
 };
 
-export type AssociationRoleTooltipEntry = {
+type AssociationRoleTooltipEntry = {
   key: string;
   identity: string;
   kindLabel?: string;
@@ -205,7 +205,7 @@ export function accountAssociationRoleLabels(
   _showPortalRole = true,
 ): string[] {
   const roles: string[] = [];
-  const portalRole = normalizePortalRole(account.role);
+  const portalRole = normalizeAccountAccessRole(account.role);
   roles.push(
     portalRole === "account_administrator"
       ? "Account administrator"
@@ -278,7 +278,7 @@ function principalTooltipEntry(item: AssociationPrincipalItem, _showPortalRole: 
   const identity = item.email && item.email !== item.label ? `${item.label} · ${item.email}` : item.label;
   const roles: string[] = [...(item.role_labels ?? [])];
   if (item.role) {
-    const portalRole = normalizePortalRole(item.role);
+    const portalRole = normalizeAccountAccessRole(item.role);
     roles.push(
       portalRole === "account_administrator"
         ? "Account administrator"

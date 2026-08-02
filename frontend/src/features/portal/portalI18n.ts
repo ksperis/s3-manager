@@ -13,7 +13,7 @@ import type {
 
 type TFunction = (message: I18nMessage) => string;
 
-export function portalIntlLocale(locale: UiLanguage): string {
+function portalIntlLocale(locale: UiLanguage): string {
   if (locale === "fr") return "fr-FR";
   if (locale === "de") return "de-DE";
   return "en-US";
@@ -30,12 +30,6 @@ export function portalStatusLabel(status: PortalWorkspaceStatus | "Archived", t:
   if (status === "Archived") return t({ en: "Archived", fr: "Archivé", de: "Archiviert" });
   if (status === "Attention") return t({ en: "Attention", fr: "Attention", de: "Achtung" });
   return t({ en: "Active", fr: "Actif", de: "Aktiv" });
-}
-
-export function portalVisibilityLabel(visibility: PortalStorageSpaceVisibility, t: TFunction): string {
-  return visibility === "shared"
-    ? t({ en: "Shared", fr: "Partagé", de: "Geteilt" })
-    : t({ en: "Private", fr: "Privé", de: "Privat" });
 }
 
 export function portalShareScopeLabel(

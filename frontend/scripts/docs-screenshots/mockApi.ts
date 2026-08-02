@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { MockRule } from "./types";
 
-export type RegisteredApiMocks = {
+type RegisteredApiMocks = {
   assertNoUnmatched: () => void;
 };
 

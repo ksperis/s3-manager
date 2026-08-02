@@ -41,7 +41,7 @@ export type S3UserSummary = {
   allow_manager_ceph_s3_user_keys?: boolean;
 };
 
-export type CreateS3UserPayload = {
+type CreateS3UserPayload = {
   name: string;
   uid?: string | null;
   email?: string | null;
@@ -54,7 +54,7 @@ export type CreateS3UserPayload = {
   allow_manager_ceph_s3_user_keys?: boolean | null;
 };
 
-export type ImportS3UserPayload = {
+type ImportS3UserPayload = {
   uid: string;
   name?: string | null;
   email?: string | null;
@@ -89,9 +89,9 @@ export type CreatedS3UserAccessKey = {
   created_at?: string | null;
 };
 
-export type PaginatedS3UsersResponse = PaginatedResponse<S3User>;
+type PaginatedS3UsersResponse = PaginatedResponse<S3User>;
 
-export type ListS3UsersParams = {
+type ListS3UsersParams = {
   page?: number;
   page_size?: number;
   search?: string;

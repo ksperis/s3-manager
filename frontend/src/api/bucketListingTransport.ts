@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-export type BucketListingTransportParams = {
+type BucketListingTransportParams = {
   page?: number;
   page_size?: number;
   filter?: string;

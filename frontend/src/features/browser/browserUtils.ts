@@ -153,7 +153,7 @@ export const pairsToRecord = (items: { key: string; value: string }[]) =>
 
 export const normalizeUploadPath = (value: string) => value.replace(/\\/g, "/").replace(/^\/+/, "");
 
-export const extractRelativePath = (file: File) => {
+const extractRelativePath = (file: File) => {
   const relative = (file as { webkitRelativePath?: string }).webkitRelativePath;
   return relative && relative.length > 0 ? relative : file.name;
 };
@@ -180,19 +180,19 @@ export const buildUploadGrouping = (relativePath: string, batchId: string) => {
   };
 };
 
-export const getWebkitEntry = (item: DataTransferItem): WebkitEntry | null => {
+const getWebkitEntry = (item: DataTransferItem): WebkitEntry | null => {
   const cast = item as DataTransferItem & { webkitGetAsEntry?: () => WebkitEntry | null };
   return cast.webkitGetAsEntry ? cast.webkitGetAsEntry() : null;
 };
 
-export const readDirectoryEntries = (reader: {
+const readDirectoryEntries = (reader: {
   readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: unknown) => void) => void;
 }) =>
   new Promise<WebkitEntry[]>((resolve, reject) => {
     reader.readEntries(resolve, reject);
   });
 
-export const walkEntry = async (entry: WebkitEntry, parentPath: string): Promise<UploadCandidate[]> => {
+const walkEntry = async (entry: WebkitEntry, parentPath: string): Promise<UploadCandidate[]> => {
   if (entry.isFile && entry.file) {
     const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
     return [{ file, relativePath: `${parentPath}${file.name}` }];
@@ -224,7 +224,7 @@ export const collectDroppedFiles = async (dataTransfer: DataTransfer): Promise<U
   return buildUploadCandidates(Array.from(dataTransfer.files || []));
 };
 
-export const getExtension = (name: string) => {
+const getExtension = (name: string) => {
   const idx = name.lastIndexOf(".");
   if (idx === -1) return "";
   return name.slice(idx + 1).toLowerCase();

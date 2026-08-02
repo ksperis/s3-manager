@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 export const OBJECT_PREVIEW_MAX_BYTES = 50 * 1024 * 1024;
 export const OBJECT_PREVIEW_TEXT_MAX_BYTES = 64 * 1024;
 
-export type ObjectPreviewKind =
+type ObjectPreviewKind =
   | "image"
   | "video"
   | "audio"
@@ -20,7 +20,7 @@ export type ObjectPreviewLoadResult = {
   contentType?: string | null;
 };
 
-export type ObjectPreviewLabels = {
+type ObjectPreviewLabels = {
   loading: string;
   unavailable: string;
   tooLarge: string;
@@ -30,7 +30,7 @@ export type ObjectPreviewLabels = {
   frameTitle: string;
 };
 
-export type ObjectPreviewProps = {
+type ObjectPreviewProps = {
   name: string;
   sizeBytes?: number | null;
   contentType?: string | null;

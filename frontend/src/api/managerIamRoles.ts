@@ -25,14 +25,14 @@ export type IAMRole = {
   assume_role_policy_document?: Record<string, unknown> | string;
 };
 
-export type CreateRolePayload = {
+type CreateRolePayload = {
   name: string;
   path?: string;
   assume_role_policy_document?: Record<string, unknown> | string;
   inline_policies?: InlinePolicy[];
 };
 
-export type UpdateRolePayload = {
+type UpdateRolePayload = {
   path?: string;
   assume_role_policy_document?: Record<string, unknown> | string;
 };

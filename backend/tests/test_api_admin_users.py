@@ -36,7 +36,7 @@ def test_assign_user_to_account_api(client: TestClient, seed_user_account):
     assert acc.id in data.get("accounts", [])
 
 
-def test_assign_user_to_account_requires_a_canonical_or_convertible_legacy_role(
+def test_assign_user_to_account_requires_a_canonical_role(
     client: TestClient,
     seed_user_account,
 ):
@@ -48,7 +48,7 @@ def test_assign_user_to_account_requires_a_canonical_or_convertible_legacy_role(
     )
     assert missing.status_code == 422
 
-    legacy = client.post(
+    removed_legacy = client.post(
         f"/api/admin/users/{usr.id}/assign-account",
         json={
             "account_id": acc.id,
@@ -56,18 +56,10 @@ def test_assign_user_to_account_requires_a_canonical_or_convertible_legacy_role(
             "account_role": "portal_manager",
         },
     )
-    assert legacy.status_code == 200, legacy.text
-    assert legacy.json()["account_links"] == [
-        {
-            "account_id": acc.id,
-            "role": "portal_manager",
-            "account_admin": False,
-            "account_role": "portal_manager",
-        }
-    ]
+    assert removed_legacy.status_code == 422
 
 
-def test_assign_user_to_account_rejects_contradictory_legacy_fields(
+def test_assign_user_to_account_rejects_removed_legacy_fields(
     client: TestClient,
     seed_user_account,
 ):
@@ -129,8 +121,6 @@ def test_update_user_replaces_account_links_atomically(client: TestClient, db_se
         {
             "account_id": second_account.id,
             "role": "account_administrator",
-            "account_admin": True,
-            "account_role": "portal_manager",
         }
     ]
     assert first_account.id not in payload["accounts"]

@@ -70,12 +70,7 @@ _RGW_BUCKET_PAYLOAD_ENDPOINT_LOCKS_LOCK = Lock()
 
 
 def _clone_bucket(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
-    if hasattr(bucket, "model_copy"):
-        return bucket.model_copy(deep=True)
-    if hasattr(bucket, "copy"):
-        return bucket.copy(deep=True)
-    payload = bucket.model_dump() if hasattr(bucket, "model_dump") else bucket.dict()
-    return CephAdminBucketSummary(**payload)
+    return bucket.model_copy(deep=True)
 
 
 def _clone_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:

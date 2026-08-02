@@ -120,7 +120,7 @@ function extractError(err: unknown): string {
   return extractApiError(err, "Unexpected error");
 }
 
-function renderTopicSubscriptions(topic: Topic) {
+function renderTopicSubscriptionCounts(topic: Topic) {
   return (
     <>
       <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
@@ -528,7 +528,7 @@ export default function TopicsPage() {
       id: "subscriptions",
       label: "Subscriptions",
       cellClassName: "ui-caption",
-      render: renderTopicSubscriptions,
+      render: renderTopicSubscriptionCounts,
     },
     {
       id: "actions",

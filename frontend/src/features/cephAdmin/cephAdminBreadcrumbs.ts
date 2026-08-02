@@ -8,7 +8,7 @@ import {
   buildWorkspacePageBreadcrumbs,
 } from "../../navigation/workspacePages";
 
-export type CephAdminPageId = keyof typeof CEPH_ADMIN_PAGE_CONTRACTS;
+type CephAdminPageId = keyof typeof CEPH_ADMIN_PAGE_CONTRACTS;
 
 export function cephAdminPageBreadcrumbs(
   pageId: CephAdminPageId,

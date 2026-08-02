@@ -11,11 +11,11 @@ from threading import Lock
 from time import monotonic
 import threading
 import uuid
-from typing import Any, Callable, Type, TypeVar
+from typing import Any, Callable, TypeVar
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.services.bucket_listing_shared import (
     _format_sse_event,
@@ -27,6 +27,7 @@ from app.routers.sse_worker import wait_for_cancellable_worker
 _K = TypeVar("_K")
 _T = TypeVar("_T")
 _R = TypeVar("_R")
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 PROGRESS_EMIT_EVERY_ITEMS = 100
 PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
@@ -131,7 +132,10 @@ def normalize_http_error_detail(detail: object) -> object:
 def stream_listing_response(
     request: Request,
     *,
-    compute: Callable[[Callable[[ListingProgressSnapshot], None], Callable[[], None]], Any],
+    compute: Callable[
+        [Callable[[ListingProgressSnapshot], None], Callable[[], None]],
+        BaseModel,
+    ],
     logger: logging.Logger,
     failure_message: str,
 ) -> StreamingResponse:
@@ -164,7 +168,7 @@ def stream_listing_response(
         def worker() -> None:
             try:
                 result = compute(progress_callback, cancel_check)
-                payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result.dict()
+                payload = result.model_dump(mode="json")
                 push_message(_format_sse_event("result", payload))
                 push_message(_format_sse_event("done", {"request_id": request_id}))
             except ListingCancelled:
@@ -277,22 +281,22 @@ def parse_bool(value: Any) -> bool | None:
     return None
 
 
-def fields_set(model: Any) -> set[str]:
-    if hasattr(model, "model_fields_set"):
-        return set(getattr(model, "model_fields_set"))
-    if hasattr(model, "__fields_set__"):
-        return set(getattr(model, "__fields_set__"))
-    return set()
+def fields_set(model: BaseModel) -> set[str]:
+    return set(model.model_fields_set)
 
 
-def serialize_filter(query: Any | None) -> str | None:
+def serialize_filter(query: BaseModel | None) -> str | None:
     if not query:
         return None
-    payload = query.model_dump(mode="json") if hasattr(query, "model_dump") else query.dict()
+    payload = query.model_dump(mode="json")
     return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
 
-def parse_filter_query(raw: str | None, *, query_cls: Type[Any]) -> Any | None:
+def parse_filter_query(
+    raw: str | None,
+    *,
+    query_cls: type[_ModelT],
+) -> _ModelT | None:
     if raw is None:
         return None
     text = raw.strip()
@@ -305,9 +309,7 @@ def parse_filter_query(raw: str | None, *, query_cls: Type[Any]) -> Any | None:
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="advanced_filter must be a JSON object")
     try:
-        if hasattr(query_cls, "model_validate"):
-            return query_cls.model_validate(parsed)
-        return query_cls(**parsed)
+        return query_cls.model_validate(parsed)
     except ValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=sanitize_error_detail(str(exc))) from exc
 

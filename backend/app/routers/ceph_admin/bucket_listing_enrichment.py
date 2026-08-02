@@ -2124,7 +2124,7 @@ def _enrich_buckets(
         if column_details:
             update["column_details"] = column_details
         if update:
-            base = bucket.model_dump() if hasattr(bucket, "model_dump") else bucket.dict()
+            base = bucket.model_dump()
             return CephAdminBucketSummary(**{**base, **update})
         return bucket
 

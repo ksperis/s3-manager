@@ -39,11 +39,9 @@ from app.db import (
 from app.models.bucket_migration import BucketMigrationCreateRequest
 from app.services.app_settings_service import load_app_settings as _load_app_settings
 from app.services.buckets_service import BucketsService
-from app.services.bucket_migration_runtime import (
-    BucketMigrationExecutor,
+from app.services.bucket_migration.precheck import (
     BucketMigrationInspector,
     BucketMigrationPrecheckPlanner,
-    BucketMigrationVerifier,
 )
 from app.services.object_diff_common import compare_object_entries
 from app.services.effective_access_service import EffectiveAccessService

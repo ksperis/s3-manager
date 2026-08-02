@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.db import S3Connection, User, UserRole
 from app.models.admin_automation import (
+    AccountLinkApply,
     AdminAutomationApplyRequest,
     S3ConnectionApply,
     S3ConnectionMatch,
@@ -94,6 +95,29 @@ def test_automation_connection_spec_rejects_visibility_and_access_flags(legacy_f
                 "access_key_id": "AK-INVALID",
                 "secret_access_key": "SK-INVALID",
                 legacy_field: True,
+            }
+        )
+
+
+@pytest.mark.parametrize("removed_field", ["account_admin", "account_role"])
+def test_automation_account_link_rejects_removed_role_fields(removed_field):
+    with pytest.raises(ValidationError):
+        AccountLinkApply.model_validate(
+            {
+                "user": {"id": 1},
+                "account": {"id": 2},
+                "role": "portal_user",
+                removed_field: False,
+            }
+        )
+
+
+def test_automation_present_account_link_requires_canonical_role():
+    with pytest.raises(ValidationError):
+        AccountLinkApply.model_validate(
+            {
+                "user": {"id": 1},
+                "account": {"id": 2},
             }
         )
 

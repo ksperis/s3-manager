@@ -9,11 +9,11 @@ import {
   MIN_INSPECTOR_PANEL_WIDTH_PX,
 } from "./browserRootUiState";
 
-export const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
+const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
 export const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
 export const PANEL_LAYOUT_GAP_PX = 12;
 export const PANEL_RESIZER_HITBOX_WIDTH_PX = 12;
-export const MIN_BROWSER_CENTER_WIDTH_PX = 320;
+const MIN_BROWSER_CENTER_WIDTH_PX = 320;
 
 export const clampBrowserPanelWidth = (
   value: number,
@@ -21,7 +21,7 @@ export const clampBrowserPanelWidth = (
   max: number,
 ) => Math.min(max, Math.max(min, Math.round(value)));
 
-export type BrowserPanelWidthInput = {
+type BrowserPanelWidthInput = {
   containerWidth: number;
   foldersPanelWidthPx: number;
   inspectorPanelWidthPx: number;
@@ -29,7 +29,7 @@ export type BrowserPanelWidthInput = {
   isInspectorPanelVisible: boolean;
 };
 
-export type BrowserPanelWidths = {
+type BrowserPanelWidths = {
   resolvedFoldersWidth: number;
   resolvedInspectorWidth: number;
 };

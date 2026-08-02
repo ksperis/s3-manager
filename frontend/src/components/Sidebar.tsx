@@ -6,8 +6,6 @@ import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from "
 import { NavLink, useLocation } from "react-router-dom";
 import { SIDEBAR_COMPACT_WIDTH, SIDEBAR_DEFAULT_WIDTH } from "./sidebarSizing";
 
-export const SIDEBAR_CHROME_SLOT_ID = "app-sidebar-chrome-slot";
-export const SIDEBAR_CHROME_SLOT_EVENT = "s3-manager-sidebar-chrome-slot-change";
 const WORKSPACE_ROOTS = ["admin", "ceph-admin", "storage-ops", "manager", "browser", "portal"] as const;
 
 export function resolveWorkspaceProfilePath(pathname: string): string {

@@ -36,9 +36,9 @@ export type ReviewItemSummary = {
 };
 
 export type MigrationOperatorAction = "start" | "pause" | "resume" | "continue" | "rollback";
-export type NextActionType = MigrationOperatorAction | "retry_failed_items";
+type NextActionType = MigrationOperatorAction | "retry_failed_items";
 
-export type NextAction = {
+type NextAction = {
   title: string;
   description: string;
   action: NextActionType | null;
@@ -281,16 +281,6 @@ export function computeItemCopyProgressPercent(item: { source_count?: number | n
   const baseline = Number(item.source_count ?? 0);
   if (!Number.isFinite(baseline) || baseline <= 0) return null;
   return Math.max(0, Math.min(100, Math.round((Math.max(0, item.objects_copied) / baseline) * 100)));
-}
-
-export function isActiveMigrationStatus(status: BucketMigrationStatus): boolean {
-  return ["draft", "queued", "running", "pause_requested", "cancel_requested", "paused", "awaiting_cutover"].includes(
-    status
-  );
-}
-
-export function isNeedsAttentionMigrationStatus(status: BucketMigrationStatus): boolean {
-  return ["failed", "completed_with_errors", "canceled"].includes(status);
 }
 
 export function isFinalMigrationStatus(status: BucketMigrationStatus): boolean {

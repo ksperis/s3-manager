@@ -494,25 +494,6 @@ class BucketMigrationInspector:
         }
 
 
-class BucketMigrationVerifier:
-    def __init__(self, service: Any) -> None:
-        self._service = service
-
-    def compare_buckets_streamed(self, *args: Any, **kwargs: Any) -> Any:
-        return self._service._compare_buckets_streamed_impl(*args, **kwargs)
-
-    def strong_verify_size_only_candidates_streamed(self, *args: Any, **kwargs: Any) -> Any:
-        return self._service._strong_verify_size_only_candidates_streamed_impl(*args, **kwargs)
-
-
-class BucketMigrationExecutor:
-    def __init__(self, service: Any) -> None:
-        self._service = service
-
-    def run_item(self, *args: Any, **kwargs: Any) -> Any:
-        return self._service._run_item_impl(*args, **kwargs)
-
-
 class BucketMigrationPrecheckPlanner:
     def __init__(self, service: Any, inspector: BucketMigrationInspector) -> None:
         self._service = service

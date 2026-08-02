@@ -7,12 +7,12 @@ import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 
 export type StorageProvider = "ceph" | "aws" | "other";
 
-export type StorageEndpointFeature = {
+type StorageEndpointFeature = {
   enabled: boolean;
   endpoint?: string | null;
 };
 
-export type StorageEndpointHealthcheckFeature = {
+type StorageEndpointHealthcheckFeature = {
   enabled: boolean;
   mode: "http" | "s3";
   url?: string | null;
@@ -67,11 +67,11 @@ export type StorageEndpoint = {
   updated_at: string;
 };
 
-export type StorageEndpointTagsPayload = {
+type StorageEndpointTagsPayload = {
   tags: TagDefinitionInput[];
 };
 
-export type StorageEndpointMeta = {
+type StorageEndpointMeta = {
   managed_by_env: boolean;
 };
 
@@ -94,7 +94,7 @@ export type StorageEndpointPayload = {
   features_config?: string | null;
 };
 
-export type StorageEndpointFeatureDetectionPayload = {
+type StorageEndpointFeatureDetectionPayload = {
   endpoint_id?: number | null;
   endpoint_url: string;
   admin_endpoint?: string | null;
@@ -106,7 +106,7 @@ export type StorageEndpointFeatureDetectionPayload = {
   supervision_secret_key?: string | null;
 };
 
-export type StorageEndpointFeatureDetectionResult = {
+type StorageEndpointFeatureDetectionResult = {
   admin: boolean;
   account: boolean;
   usage: boolean;
@@ -118,11 +118,11 @@ export type StorageEndpointFeatureDetectionResult = {
   warnings: string[];
 };
 
-export type ListStorageEndpointsParams = {
+type ListStorageEndpointsParams = {
   include_admin_ops_permissions?: boolean;
 };
 
-export type GetStorageEndpointParams = {
+type GetStorageEndpointParams = {
   include_admin_ops_permissions?: boolean;
 };
 

@@ -155,7 +155,12 @@ export default function PortalStorageSpaceDetailPage() {
   const location = useLocation();
   const { generalSettings } = useGeneralSettings();
   const [message, setMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<SpaceDetailTab>("files");
+  const [activeTab, setActiveTab] = useState<SpaceDetailTab>(() => {
+    const requestedTab = new URLSearchParams(location.search).get("tab");
+    return requestedTab === "collaborators" || requestedTab === "settings"
+      ? requestedTab
+      : "files";
+  });
   const [trashRestoreTarget, setTrashRestoreTarget] =
     useState<BrowserDeletedObjectTarget | null>(null);
   const [restoringTrashKey, setRestoringTrashKey] = useState<string | null>(null);
@@ -261,7 +266,7 @@ export default function PortalStorageSpaceDetailPage() {
   );
   const showDeletedFiles = useMemo(() => {
     const params = new URLSearchParams(location.search);
-    return params.get("show_deleted") === "1" || params.get("tab") === "trash";
+    return params.get("show_deleted") === "1";
   }, [location.search]);
 
   const selectSpaceDetailTab = useCallback(
@@ -338,20 +343,6 @@ export default function PortalStorageSpaceDetailPage() {
   }, [accountIdForApi, activeTab, space, t]);
 
   useEffect(() => {
-    if (requestedTab === "trash") {
-      setActiveTab("files");
-      const params = new URLSearchParams(location.search);
-      params.delete("tab");
-      params.set("show_deleted", "1");
-      navigate(
-        {
-          pathname: location.pathname,
-          search: `?${params.toString()}`,
-        },
-        { replace: true },
-      );
-      return;
-    }
     if (
       requestedTab === "files" ||
       requestedTab === "collaborators" ||
@@ -359,12 +350,7 @@ export default function PortalStorageSpaceDetailPage() {
     ) {
       setActiveTab(requestedTab);
     }
-  }, [
-    location.pathname,
-    location.search,
-    navigate,
-    requestedTab,
-  ]);
+  }, [requestedTab]);
 
   useEffect(() => {
     if (!startGuideStorageKey) {
@@ -378,8 +364,22 @@ export default function PortalStorageSpaceDetailPage() {
     }
   }, [startGuideStorageKey]);
 
+  const shouldLoadAccessSummary = Boolean(
+    space &&
+      accountIdForApi &&
+      (activeTab === "collaborators" ||
+        (activeTab === "files" &&
+          (space.shareCount == null ||
+            (generalSettings.browser_enabled &&
+              generalSettings.browser_portal_enabled &&
+              space.status !== "Archived" &&
+              space.canBrowse &&
+              space.role === "Manager" &&
+              space.visibility === "shared"))))
+  );
+
   const loadAccessSummary = useCallback(async () => {
-    if (!space || !accountIdForApi) {
+    if (!space || !accountIdForApi || !shouldLoadAccessSummary) {
       setAccessSummary(null);
       return;
     }
@@ -398,7 +398,7 @@ export default function PortalStorageSpaceDetailPage() {
     } finally {
       setAccessSummaryLoading(false);
     }
-  }, [accountIdForApi, space, t]);
+  }, [accountIdForApi, shouldLoadAccessSummary, space, t]);
 
   useEffect(() => {
     void loadAccessSummary();
@@ -406,7 +406,7 @@ export default function PortalStorageSpaceDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!space || !accountIdForApi || !accessSummary?.can_manage_access || savedAccessMode !== "restricted" || accessChanged) {
+    if (!accessPeopleDialogOpen || !space || !accountIdForApi || !accessSummary?.can_manage_access || savedAccessMode !== "restricted" || accessChanged) {
       setAccessCandidates([]);
       setAccessCandidatesLoading(false);
       setAccessRolesByUserId({});
@@ -429,7 +429,7 @@ export default function PortalStorageSpaceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, accessChanged, accessSummary?.can_manage_access, savedAccessMode, space]);
+  }, [accessPeopleDialogOpen, accountIdForApi, accessChanged, accessSummary?.can_manage_access, savedAccessMode, space]);
 
   const handleSaveMetadata = async () => {
     if (!space || !accountIdForApi) return;

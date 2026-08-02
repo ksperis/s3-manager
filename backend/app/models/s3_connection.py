@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.pagination import PaginatedResponse
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
 
+CredentialOwnerType = Literal["iam_user", "account_user", "s3_user"]
+
 
 class S3Connection(BaseModel):
     id: int
@@ -22,7 +24,7 @@ class S3Connection(BaseModel):
     access_browser: bool = True
     server_managed: bool = False
     managed_access_state: Optional[str] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: str
     region: Optional[str] = None
@@ -44,7 +46,7 @@ class S3ConnectionCreate(BaseModel):
     storage_endpoint_id: Optional[int] = None
     access_manager: bool = False
     access_browser: bool = True
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -69,7 +71,7 @@ class S3ConnectionUpdate(BaseModel):
     is_active: Optional[bool] = None
     access_manager: Optional[bool] = None
     access_browser: Optional[bool] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None

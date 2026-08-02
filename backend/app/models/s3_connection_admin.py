@@ -11,6 +11,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.tagging import TagDefinitionInput, TagDefinitionSummary, validate_tag_definition_list
+from app.models.s3_connection import CredentialOwnerType
 from app.models.ui_group import UiGroupAvatar
 from app.models.user import UserAssociationDetail, UserAvatar
 
@@ -29,7 +30,7 @@ class S3ConnectionAdminItem(BaseModel):
     is_active: bool = True
     execution_status: Literal["ready", "remediation_required"] = "ready"
     remediation_reason: Optional[str] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     provider_hint: Optional[str] = None
     region: Optional[str] = None
@@ -65,7 +66,7 @@ class S3ConnectionAdminCreate(BaseModel):
     name: str
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -89,7 +90,7 @@ class S3ConnectionAdminUpdate(BaseModel):
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_active: Optional[bool] = None
-    credential_owner_type: Optional[str] = None
+    credential_owner_type: Optional[CredentialOwnerType] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None

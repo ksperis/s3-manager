@@ -5,7 +5,7 @@
 import { Link } from "react-router-dom";
 import { cx, uiCardClass } from "./ui/styles";
 
-export type WorkspaceNavCardItem = {
+type WorkspaceNavCardItem = {
   title: string;
   description: string;
   to: string;

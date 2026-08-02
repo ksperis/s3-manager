@@ -81,7 +81,7 @@ export type BucketPurgeResult = {
   buckets: BucketPurgeBucketResult[];
 };
 
-export type BucketPurgeStreamOptions = {
+type BucketPurgeStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: BucketPurgeProgress) => void;
 };

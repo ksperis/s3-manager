@@ -10,6 +10,7 @@ import re
 import sqlite3
 
 from botocore.exceptions import BotoCoreError, ClientError
+from pydantic import BaseModel
 
 from app.db import S3Account
 from app.services.object_diff_common import compare_object_entries
@@ -749,10 +750,7 @@ class BucketsService:
             if feature_map:
                 features = feature_map
 
-            if hasattr(bucket, "model_dump"):
-                base = bucket.model_dump(exclude={"tags", "features"})
-            else:
-                base = bucket.dict(exclude={"tags", "features"})
+            base = bucket.model_dump(exclude={"tags", "features"})
             result.append(
                 Bucket(
                     **base,
@@ -1322,10 +1320,8 @@ class BucketsService:
         def to_jsonable(value: Any) -> Any:
             if value is None:
                 return None
-            if hasattr(value, "model_dump"):
+            if isinstance(value, BaseModel):
                 return value.model_dump(mode="json")
-            if hasattr(value, "dict"):
-                return value.dict()
             return value
 
         allowed_section_keys = {

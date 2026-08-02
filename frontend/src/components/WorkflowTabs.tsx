@@ -6,7 +6,7 @@ import { type ReactNode, useId } from "react";
 
 import PageTabs, { PageTabPanel } from "./PageTabs";
 
-export type WorkflowTab<T extends string> = {
+type WorkflowTab<T extends string> = {
   id: T;
   label: string;
   visible?: boolean;

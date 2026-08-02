@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-export const S3_BUCKET_NAME_MIN_LENGTH = 3;
+const S3_BUCKET_NAME_MIN_LENGTH = 3;
 export const S3_BUCKET_NAME_MAX_LENGTH = 63;
 
 const BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;

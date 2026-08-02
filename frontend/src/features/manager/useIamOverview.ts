@@ -48,11 +48,11 @@ export function useIamOverview(
     } finally {
       setLoading(false);
     }
-  }, [accountId, enabled, hasContext, refreshKey]);
+  }, [accountId, enabled, hasContext]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return { overview, loading, error, reload: load };
 }

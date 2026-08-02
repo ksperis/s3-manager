@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createConnection } from "../api/connections";
+import { createConnection, type CredentialOwnerType } from "../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../api/storageEndpoints";
 import { notifyExecutionContextsRefresh } from "../utils/executionContextRefresh";
 import { extractApiError } from "../utils/apiError";
@@ -31,7 +31,7 @@ type Props = {
   defaultProviderHint?: string | null;
   defaultAccessManager?: boolean;
   defaultAccessBrowser?: boolean;
-  defaultOwnerType?: string | null;
+  defaultOwnerType?: CredentialOwnerType | null;
   defaultOwnerIdentifier?: string | null;
   onClose: () => void;
   onCreated?: () => void;

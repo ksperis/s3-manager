@@ -7,6 +7,7 @@ import { PaginatedResponse } from "./types";
 import type { TagDefinitionInput, TagDefinitionSummary } from "./tags";
 import type { UiGroupAvatarDescriptor } from "./groups";
 import type { UserAvatarDescriptor, UserSummary } from "./users";
+import type { CredentialOwnerType } from "./connections";
 
 export type S3ConnectionAdminItem = {
   id: number;
@@ -18,7 +19,7 @@ export type S3ConnectionAdminItem = {
   execution_status: "ready" | "remediation_required";
   remediation_reason?: string | null;
   capabilities?: Record<string, unknown> | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   provider_hint?: string | null;
   region?: string | null;
@@ -38,7 +39,7 @@ export type S3ConnectionAdminItem = {
   updated_at?: string | null;
 };
 
-export type PaginatedS3ConnectionsResponse = PaginatedResponse<S3ConnectionAdminItem>;
+type PaginatedS3ConnectionsResponse = PaginatedResponse<S3ConnectionAdminItem>;
 
 export type S3ConnectionSummary = {
   id: number;
@@ -48,7 +49,7 @@ export type S3ConnectionSummary = {
   execution_status: "ready" | "remediation_required";
 };
 
-export type ListS3ConnectionsParams = {
+type ListS3ConnectionsParams = {
   page?: number;
   page_size?: number;
   search?: string;
@@ -56,11 +57,11 @@ export type ListS3ConnectionsParams = {
   sort_dir?: "asc" | "desc";
 };
 
-export type CreateS3ConnectionPayload = {
+type CreateS3ConnectionPayload = {
   name: string;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -71,13 +72,13 @@ export type CreateS3ConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-export type UpdateS3ConnectionPayload = {
+type UpdateS3ConnectionPayload = {
   name?: string | null;
   group_ids?: number[] | null;
   provider_hint?: string | null;
   storage_endpoint_id?: number | null;
   is_active?: boolean | null;
-  credential_owner_type?: string | null;
+  credential_owner_type?: CredentialOwnerType | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -86,12 +87,12 @@ export type UpdateS3ConnectionPayload = {
   tags?: TagDefinitionInput[] | null;
 };
 
-export type RotateS3ConnectionCredentialsPayload = {
+type RotateS3ConnectionCredentialsPayload = {
   access_key_id: string;
   secret_access_key: string;
 };
 
-export type ValidateS3ConnectionCredentialsPayload = {
+type ValidateS3ConnectionCredentialsPayload = {
   storage_endpoint_id?: number | null;
   endpoint_url?: string | null;
   region?: string | null;
@@ -101,14 +102,14 @@ export type ValidateS3ConnectionCredentialsPayload = {
   verify_tls?: boolean;
 };
 
-export type S3ConnectionCredentialsValidationResult = {
+type S3ConnectionCredentialsValidationResult = {
   ok: boolean;
   severity: "success" | "warning" | "error";
   code?: string | null;
   message: string;
 };
 
-export type S3ConnectionUserLink = {
+type S3ConnectionUserLink = {
   user_id: number;
   email?: string | null;
   full_name?: string | null;
@@ -116,7 +117,7 @@ export type S3ConnectionUserLink = {
   updated_at?: string | null;
 };
 
-export type UpsertS3ConnectionUserLinkPayload = {
+type UpsertS3ConnectionUserLinkPayload = {
   user_id: number;
 };
 

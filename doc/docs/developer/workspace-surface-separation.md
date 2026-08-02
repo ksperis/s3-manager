@@ -153,9 +153,9 @@ Portal canonical routes are:
 - `/portal/requests`
 - `/portal/settings`
 
-`/portal/activity` and `/portal/transfers` remain compatibility redirects to
-the corresponding `/portal/history` tab. They are not canonical navigation
-destinations.
+`/portal/history` is the only Portal history destination. Its optional
+`view=transfers` and `view=access` parameters select the corresponding tabs;
+the default activity view has no query parameter.
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 and `/portal/policies` are intentionally not routed in the production Portal

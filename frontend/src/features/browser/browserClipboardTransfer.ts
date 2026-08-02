@@ -33,7 +33,7 @@ type ClipboardTransferUploadStreamRef = ClipboardTransferObjectRef & {
   signal?: AbortSignal;
 };
 
-export type TransferClipboardObjectParams = {
+type TransferClipboardObjectParams = {
   source: ClipboardTransferObjectRef;
   destination: ClipboardTransferObjectRef;
   sizeBytes: number;

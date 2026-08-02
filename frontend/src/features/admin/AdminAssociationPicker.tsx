@@ -13,12 +13,11 @@ import {
   uiTableContainerClass,
   uiTitleTextClass,
 } from "../../components/ui/styles";
-import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 
-export const adminAssociationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
-export const adminAssociationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
-export const adminAssociationCompactSelectClass = cx(toolbarCompactSelectClasses, "w-44");
+const adminAssociationAddPanelClass = cx(uiCardMutedClass, "space-y-2 px-3 py-2");
+const adminAssociationCompactInputClass = cx(toolbarCompactInputClasses, "w-44");
 export const adminAssociationCheckboxClass = "h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary";
 export const adminAssociationTableContainerClass = uiTableContainerClass;
 export const adminAssociationTableClass = cx(uiDataTableClass, "compact-table min-w-full");
@@ -35,9 +34,6 @@ export const adminAssociationTableActionCellClass = "px-3 py-2 text-right";
 export const adminAssociationOptionLabelClass = "flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
 export const adminAssociationAccountOptionLabelClass =
   "flex min-w-48 items-center gap-2 ui-body text-slate-700 dark:text-slate-200";
-export const adminAssociationAdminLabelClass =
-  "flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300";
-
 export const adminAssociationOptionRowClass = (selected: boolean) =>
   `flex items-center justify-between rounded-md px-2 py-1 ${
     selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
@@ -47,32 +43,6 @@ export const adminAssociationAccountOptionRowClass = (selected: boolean) =>
   `flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
     selected ? "bg-[var(--ui-selected-bg)]" : "hover:bg-[var(--ui-hover)]"
   }`;
-
-type AdminAssociationAdminCheckboxProps = {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  label?: ReactNode;
-  className?: string;
-};
-
-export function AdminAssociationAdminCheckbox({
-  checked,
-  onCheckedChange,
-  label = "Admin",
-  className = adminAssociationAdminLabelClass,
-}: AdminAssociationAdminCheckboxProps) {
-  return (
-    <label className={className}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onCheckedChange(event.target.checked)}
-        className={adminAssociationCheckboxClass}
-      />
-      {label}
-    </label>
-  );
-}
 
 type AdminAssociationSectionHeaderProps = {
   title: ReactNode;

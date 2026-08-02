@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import UiRemoveIcon from "./ui/UiRemoveIcon";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiMutedTextClass } from "./ui/styles";
 
-export type ActiveFilterBarItem = {
+type ActiveFilterBarItem = {
   id: string;
   label: ReactNode;
   onRemove?: () => void;

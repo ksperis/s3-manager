@@ -4,7 +4,7 @@
  */
 export type UiTone = "neutral" | "info" | "success" | "warning" | "danger" | "primary";
 export type UiFeatureStateTone = "neutral" | "configured" | "unsaved";
-export type UiFeatureCardState = UiFeatureStateTone | "disabled";
+type UiFeatureCardState = UiFeatureStateTone | "disabled";
 
 export function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");

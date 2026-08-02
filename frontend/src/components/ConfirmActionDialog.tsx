@@ -13,7 +13,7 @@ import {
   uiToneBannerClasses,
 } from "./ui/styles";
 
-export type ConfirmActionDialogDetail = {
+type ConfirmActionDialogDetail = {
   label: string;
   value: ReactNode;
   mono?: boolean;

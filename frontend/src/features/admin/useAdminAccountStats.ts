@@ -50,11 +50,11 @@ export function useAdminAccountStats(
     } finally {
       setLoading(false);
     }
-  }, [accountId, enabled, refreshKey]);
+  }, [accountId, enabled]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return { stats, loading, error, reload: load };
 }

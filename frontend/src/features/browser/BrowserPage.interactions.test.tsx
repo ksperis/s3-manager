@@ -21,7 +21,6 @@ import BrowserPage from "./BrowserPage";
 import type { ExecutionContext } from "../../api/executionContexts";
 import {
   BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
-  BROWSER_ROOT_UI_STATE_STORAGE_KEY,
   BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
 } from "./browserRootUiState";
 import {
@@ -424,12 +423,31 @@ async function waitForOpenedMoreMenu(previousMenus: Set<HTMLElement>) {
 
 function seedBrowserRootUiState(value: unknown) {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const layout = record.layout && typeof record.layout === "object"
+    ? record.layout as Record<string, unknown>
+    : {};
+  const activeLayout =
+    layout.showFolders === true ||
+    layout.showInspector === true ||
+    layout.showActionBar === true
+      ? "workbench"
+      : "standard";
   window.localStorage.setItem(
-    BROWSER_ROOT_UI_STATE_STORAGE_KEY,
+    BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
     JSON.stringify({
-      layout: record.layout,
-      objectColumns: record.objectColumns,
-      objectColumnWidths: record.objectColumnWidths,
+      activeLayout,
+      density: "compact",
+      layouts: {
+        standard: {
+          objectColumns: record.objectColumns,
+          objectColumnWidths: record.objectColumnWidths,
+        },
+        workbench: {
+          ...layout,
+          objectColumns: record.objectColumns,
+          objectColumnWidths: record.objectColumnWidths,
+        },
+      },
     }),
   );
   if (record.contextSelections) {

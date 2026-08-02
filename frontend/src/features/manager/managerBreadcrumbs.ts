@@ -8,7 +8,7 @@ import {
   buildWorkspacePageBreadcrumbs,
 } from "../../navigation/workspacePages";
 
-export type ManagerPageId = keyof typeof MANAGER_PAGE_CONTRACTS;
+type ManagerPageId = keyof typeof MANAGER_PAGE_CONTRACTS;
 
 export function managerPageBreadcrumbs(
   pageId: ManagerPageId,

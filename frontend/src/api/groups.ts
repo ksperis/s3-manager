@@ -74,9 +74,9 @@ export type UiGroupPayload = {
   s3_connection_ids?: number[];
 };
 
-export type PaginatedUiGroupsResponse = PaginatedResponse<UiGroup>;
+type PaginatedUiGroupsResponse = PaginatedResponse<UiGroup>;
 
-export type ListUiGroupsParams = {
+type ListUiGroupsParams = {
   page?: number;
   page_size?: number;
   search?: string;

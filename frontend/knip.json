@@ -11,5 +11,6 @@
       "playwright.e2e.config.ts",
       "playwright.docs.config.ts"
     ]
-  }
+  },
+  "ignoreDependencies": ["react-router-dom-real"]
 }

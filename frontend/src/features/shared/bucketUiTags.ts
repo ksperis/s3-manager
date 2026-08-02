@@ -20,7 +20,7 @@ export type BucketUiTagTarget = {
   tenant: string | null;
 };
 
-export type BucketUiTagEntry = {
+type BucketUiTagEntry = {
   target: BucketUiTagTarget;
   tags: string[];
 };
@@ -36,7 +36,7 @@ type EndpointUiTagStore = Record<string, PersistedBucketUiTagEntry>;
 export const buildBucketUiTagsStorageKey = (mode: BucketOpsMode, endpointId: number) =>
   `${UI_TAGS_V2_PREFIX}.${mode}.${endpointId}`;
 
-export const buildBucketUiTagStateKey = (mode: BucketOpsMode, endpointId: number, identity: string) =>
+const buildBucketUiTagStateKey = (mode: BucketOpsMode, endpointId: number, identity: string) =>
   `${mode}${STATE_KEY_SEPARATOR}${endpointId}${STATE_KEY_SEPARATOR}${identity}`;
 
 export const createBucketUiTagTarget = (

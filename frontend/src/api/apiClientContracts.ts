@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-export type ApiClientContractRow = {
+type ApiClientContractRow = {
   area: "auth" | "admin" | "manager" | "browser" | "portal" | "ceph-admin" | "storage-ops" | "shared";
   clientFile: string;
   transport: "axios" | "fetch-sse" | "aws-sdk";

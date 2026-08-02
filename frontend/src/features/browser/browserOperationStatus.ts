@@ -12,12 +12,12 @@ type OperationStatusPillOptions = {
   completionStatus?: OperationItem["completionStatus"];
 };
 
-export type OperationStatusPill = {
+type OperationStatusPill = {
   label: string;
   classes: string;
 };
 
-export const queuedOperationStatusClasses = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+const queuedOperationStatusClasses = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
 
 export function operationInProgressStatusClasses(status: OperationItem["status"]) {
   if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
@@ -32,7 +32,7 @@ export function operationCompletionLabel(status?: OperationItem["completionStatu
   return "Completed";
 }
 
-export function operationCompletionStatusClasses(status?: OperationItem["completionStatus"]) {
+function operationCompletionStatusClasses(status?: OperationItem["completionStatus"]) {
   if (status === "failed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
   if (status === "cancelled") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
   return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";

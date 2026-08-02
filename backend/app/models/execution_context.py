@@ -18,7 +18,6 @@ class ExecutionContext(BaseModel):
     display_name: str
     hidden: bool = False
     role: Optional[str] = None
-    account_role: Optional[str] = Field(default=None, deprecated=True)
     manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None
     max_buckets: Optional[int] = None

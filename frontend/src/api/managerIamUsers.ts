@@ -37,7 +37,7 @@ export type IAMUser = {
   managed_connection_id?: number | null;
 };
 
-export type IAMUserWithKey = IAMUser & { access_key?: AccessKey };
+type IAMUserWithKey = IAMUser & { access_key?: AccessKey };
 
 export async function listIamUsers(accountId?: S3AccountSelector): Promise<IAMUser[]> {
   return listIamEntities<IAMUser>("users", accountId);

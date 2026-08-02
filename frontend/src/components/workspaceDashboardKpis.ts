@@ -69,14 +69,14 @@ type WorkspaceKpiTransferConfig = WorkspaceKpiEndpoint & {
   icon: ReactNode;
 };
 
-export type BuildWorkspaceDashboardKpisConfig = {
+type BuildWorkspaceDashboardKpisConfig = {
   storage: WorkspaceKpiStorageConfig;
   spaces: WorkspaceKpiCountConfig;
   objects: WorkspaceKpiCountConfig;
   transfer: WorkspaceKpiTransferConfig;
 };
 
-export function workspaceDashboardPercent(used?: number | null, quota?: number | null): number | null {
+function workspaceDashboardPercent(used?: number | null, quota?: number | null): number | null {
   if (used == null || quota == null || quota <= 0) return null;
   return Math.max(0, Math.min(100, (used / quota) * 100));
 }
@@ -89,19 +89,15 @@ export function formatWorkspaceDashboardNumber(value?: number | null): string {
     .replace(/B$/, " B");
 }
 
-export function formatWorkspaceOptionalBytes(value?: number | null): string {
+function formatWorkspaceOptionalBytes(value?: number | null): string {
   return value == null ? "" : formatBytes(value);
 }
 
-export function formatWorkspaceOptionalDashboardNumber(value?: number | null): string {
-  return value == null ? "" : formatWorkspaceDashboardNumber(value);
-}
-
-export function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number | null, ofLabel = "of"): string {
+function formatWorkspaceQuotaDetail(quota: string, usagePercent?: number | null, ofLabel = "of"): string {
   return usagePercent == null ? `${ofLabel} ${quota}` : `${ofLabel} ${quota} (${formatPercentage(usagePercent)})`;
 }
 
-export function formatWorkspaceCountQuotaDetail(
+function formatWorkspaceCountQuotaDetail(
   value: number | null | undefined,
   quota: number,
   unitLabel: string,
@@ -168,7 +164,7 @@ export function formatWorkspaceSignedTrend(
   return { label: `${valueLabel}${qualifierLabel}`, valueLabel, qualifierLabel, tone };
 }
 
-export function formatWorkspaceStorageTrend(
+function formatWorkspaceStorageTrend(
   currentValue: number | null | undefined,
   baseline?: ManagerUsageTrendBaseline | null,
   comparisonLabel = "vs"
@@ -189,7 +185,7 @@ export function formatWorkspaceSignedBytesDelta(value: number | null): string {
   return `${value > 0 ? "+" : "-"}${formatBytes(Math.abs(value))}`;
 }
 
-export type WorkspaceProjectedFullLabels = {
+type WorkspaceProjectedFullLabels = {
   unavailable?: string;
   full?: string;
   stable?: string;
@@ -228,7 +224,7 @@ export function formatWorkspaceProjectedFull(
   return labels.years?.(years) ?? `~${years} years`;
 }
 
-export function formatWorkspaceCountTrend(
+function formatWorkspaceCountTrend(
   currentValue: number | null | undefined,
   baselineValue: number | null | undefined,
   baseline?: ManagerUsageTrendBaseline | null,

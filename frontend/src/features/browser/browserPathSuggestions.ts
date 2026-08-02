@@ -13,7 +13,7 @@ export type PathSuggestion = {
   source: PathSuggestionSource;
 };
 
-export type PathDraftContext = {
+type PathDraftContext = {
   parentPrefix: string;
   fragment: string;
 };
@@ -72,7 +72,7 @@ export const buildPathSuggestionEntries = (
   return entries;
 };
 
-export const scorePathSuggestion = (
+const scorePathSuggestion = (
   entry: PathSuggestion,
   fragment: string,
 ): number => {

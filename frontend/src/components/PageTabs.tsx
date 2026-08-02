@@ -22,11 +22,11 @@ type PageTabsProps = {
   idPrefix?: string;
 };
 
-export function pageTabId(idPrefix: string, tabId: string): string {
+function pageTabId(idPrefix: string, tabId: string): string {
   return `${idPrefix}-tab-${tabId}`;
 }
 
-export function pageTabPanelId(idPrefix: string, tabId: string): string {
+function pageTabPanelId(idPrefix: string, tabId: string): string {
   return `${idPrefix}-panel-${tabId}`;
 }
 

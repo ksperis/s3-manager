@@ -14,7 +14,7 @@ import {
 } from "./ui/styles";
 import UiBadge from "./ui/UiBadge";
 
-export type PageControlStripItem = {
+type PageControlStripItem = {
   label: string;
   value: ReactNode;
   tone?: "neutral" | "primary" | "success" | "warning" | "danger";
@@ -22,7 +22,7 @@ export type PageControlStripItem = {
   title?: string;
 };
 
-export type PageControlStripAlert = {
+type PageControlStripAlert = {
   tone?: "neutral" | "primary" | "success" | "warning" | "danger";
   message: ReactNode;
 };

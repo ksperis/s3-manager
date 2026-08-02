@@ -146,7 +146,7 @@ export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   };
 }
 
-export function workspaceIconById(id: WorkspaceId): React.ReactNode {
+function workspaceIconById(id: WorkspaceId): React.ReactNode {
   if (id === "admin") return <AdminIcon className="h-4 w-4" />;
   if (id === "ceph-admin") return <CephIcon className="h-4 w-4" />;
   if (id === "storage-ops") return <OpsIcon className="h-4 w-4" />;

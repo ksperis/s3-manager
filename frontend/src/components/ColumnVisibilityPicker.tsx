@@ -47,7 +47,7 @@ export type ColumnPickerDetailGroup<Id extends string> = {
   defaultExpanded?: boolean;
 };
 
-export type ColumnVisibilityPickerProps<Id extends string> = {
+type ColumnVisibilityPickerProps<Id extends string> = {
   title?: string;
   selectedCount: number;
   onReset: () => void;

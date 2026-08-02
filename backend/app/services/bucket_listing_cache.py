@@ -39,12 +39,7 @@ _BUCKET_LISTING_INFLIGHT: dict[BucketListingCacheKey, Future[list[Bucket]]] = {}
 
 
 def _clone_bucket(item: Bucket) -> Bucket:
-    if hasattr(item, "model_copy"):
-        return item.model_copy(deep=True)
-    if hasattr(item, "copy"):
-        return item.copy(deep=True)
-    payload = item.model_dump() if hasattr(item, "model_dump") else item.dict()
-    return Bucket(**payload)
+    return item.model_copy(deep=True)
 
 
 def _clone_bucket_list(items: list[Bucket]) -> list[Bucket]:

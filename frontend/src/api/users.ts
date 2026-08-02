@@ -135,7 +135,7 @@ export type UpdateUserPayload = {
   group_ids?: number[] | null;
 };
 
-export type UpdateCurrentUserPayload = {
+type UpdateCurrentUserPayload = {
   full_name?: string | null;
   avatar_preference?: UserAvatarPreference;
   ui_language?: "en" | "fr" | "de" | null;
@@ -146,9 +146,9 @@ export type UpdateCurrentUserPayload = {
   new_password?: string;
 };
 
-export type PaginatedUsersResponse = PaginatedResponse<User>;
+type PaginatedUsersResponse = PaginatedResponse<User>;
 
-export type ListUsersParams = {
+type ListUsersParams = {
   page?: number;
   page_size?: number;
   search?: string;

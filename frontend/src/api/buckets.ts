@@ -155,7 +155,7 @@ export type BucketPublicAccessBlock = {
   restrict_public_buckets?: boolean | null;
 };
 
-export type BucketVersioningStatus = {
+type BucketVersioningStatus = {
   status?: string | null;
   enabled: boolean;
 };
@@ -172,7 +172,7 @@ export type BucketWebsiteConfiguration = {
   routing_rules?: Record<string, unknown>[];
 };
 
-export type BucketAclGrantee = {
+type BucketAclGrantee = {
   type: string;
   id?: string | null;
   display_name?: string | null;
@@ -208,7 +208,7 @@ export type ManagerBucketCompareConfigFeature =
   | "access_logging"
   | "tags";
 
-export type ManagerBucketCompareRequest = {
+type ManagerBucketCompareRequest = {
   target_context_id: string;
   source_bucket: string;
   target_bucket: string;
@@ -226,7 +226,7 @@ export type ManagerBucketObjectDetail = {
   storage_class?: string | null;
 };
 
-export type ManagerBucketObjectDiffEntry = {
+type ManagerBucketObjectDiffEntry = {
   key: string;
   source_size?: number | null;
   target_size?: number | null;
@@ -258,7 +258,7 @@ export type ManagerBucketContentDiff = {
   different_sample: ManagerBucketObjectDiffEntry[];
 };
 
-export type ManagerBucketConfigDiffSection = {
+type ManagerBucketConfigDiffSection = {
   key: string;
   label: string;
   source?: unknown;
@@ -283,7 +283,7 @@ export type ManagerBucketCompareResult = {
 
 export type ManagerBucketCompareAction = "sync_source_only" | "sync_different" | "delete_target_only";
 
-export type ManagerBucketCompareActionRequest = {
+type ManagerBucketCompareActionRequest = {
   target_context_id: string;
   source_bucket: string;
   target_bucket: string;

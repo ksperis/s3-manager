@@ -20,12 +20,12 @@ export type AuditLogEntry = {
   metadata?: Record<string, unknown> | null;
 };
 
-export type AuditLogResponse = {
+type AuditLogResponse = {
   logs: AuditLogEntry[];
   next_cursor?: number | null;
 };
 
-export type AuditLogQuery = {
+type AuditLogQuery = {
   limit?: number;
   cursor?: number | null;
   role?: string;

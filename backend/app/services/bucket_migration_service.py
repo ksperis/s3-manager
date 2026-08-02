@@ -28,8 +28,6 @@ class BucketMigrationService(
         self._buckets = BucketsService()
         self._inspector = BucketMigrationInspector(self)
         self._precheck_planner = BucketMigrationPrecheckPlanner(self, self._inspector)
-        self._verifier = BucketMigrationVerifier(self)
-        self._executor = BucketMigrationExecutor(self)
         self._authorized_context_ids: Optional[set[str]]
         self._admin_account_context_ids: Optional[set[str]]
         if authorized_context_ids is None:

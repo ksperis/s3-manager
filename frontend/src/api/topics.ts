@@ -12,30 +12,19 @@ export type Topic = {
   is_ceph?: boolean;
   subscriptions_confirmed?: number | null;
   subscriptions_pending?: number | null;
-  subscriptions?: TopicSubscription[] | null;
   configuration?: Record<string, unknown> | null;
 };
 
-export type TopicSubscription = {
-  name: string;
-  bucket?: string | null;
-  endpoint_address?: string | null;
-  endpoint_topic?: string | null;
-  endpoint_args?: Record<string, unknown> | null;
-  persistent?: boolean | null;
-  metadata?: Record<string, unknown> | null;
-};
-
-export type CreateTopicPayload = {
+type CreateTopicPayload = {
   name: string;
   configuration?: Record<string, unknown> | null;
 };
 
-export type TopicPolicy = {
+type TopicPolicy = {
   policy: Record<string, unknown>;
 };
 
-export type TopicConfiguration = {
+type TopicConfiguration = {
   configuration: Record<string, unknown>;
 };
 

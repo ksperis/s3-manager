@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   BROWSER_ROOT_CONTEXT_SELECTIONS_STORAGE_KEY,
-  BROWSER_ROOT_UI_STATE_STORAGE_KEY,
   BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY,
   readBrowserRootContextSelection,
   readBrowserRootObjectColumns,
@@ -20,22 +19,16 @@ describe("browserRootUiState v2", () => {
     window.sessionStorage.clear();
   });
 
-  it("migrates v1 to Workbench, copies columns to both layouts, and leaves v1 intact", () => {
-    const v1 = {
+  it("ignores the obsolete v1 snapshot", () => {
+    window.localStorage.setItem("browser:root-ui-state:v1", JSON.stringify({
       layout: { showFolders: true, showInspector: false, showActionBar: true },
       objectColumns: ["size", "modified"],
       objectColumnWidths: { size: 140 },
-    };
-    window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify(v1));
+    }));
 
-    const migrated = readStoredBrowserRootUiState();
-
-    expect(migrated?.activeLayout).toBe("workbench");
-    expect(migrated?.density).toBe("compact");
-    expect(migrated?.layouts.standard.objectColumns).toEqual(["size", "modified"]);
-    expect(migrated?.layouts.workbench.objectColumns).toEqual(["size", "modified"]);
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBe(JSON.stringify(v1));
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).not.toBeNull();
+    expect(readStoredBrowserRootUiState()).toBeNull();
+    expect(readBrowserRootUiState().activeLayout).toBe("standard");
+    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_V2_STORAGE_KEY)).toBeNull();
   });
 
   it("isolates Standard and Workbench panels and columns", () => {
@@ -58,7 +51,7 @@ describe("browserRootUiState v2", () => {
     const state = readBrowserRootUiState();
     expect(state.activeLayout).toBe("workbench");
     expect(state.density).toBe("compact");
-    expect(window.localStorage.getItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem("browser:root-ui-state:v1")).toBeNull();
   });
 
   it("keeps bucket and prefix selections in the current tab only", () => {
@@ -70,11 +63,11 @@ describe("browserRootUiState v2", () => {
   });
 
   it("ignores context selections embedded in the old local snapshot", () => {
-    window.localStorage.setItem(BROWSER_ROOT_UI_STATE_STORAGE_KEY, JSON.stringify({
+    window.localStorage.setItem("browser:root-ui-state:v1", JSON.stringify({
       contextSelections: { "conn-1": { bucketName: "other-tab", prefix: "stale/" } },
     }));
 
     expect(readBrowserRootContextSelection("conn-1")).toBeNull();
-    expect(readStoredBrowserRootUiState()?.contextSelections).toEqual({});
+    expect(readStoredBrowserRootUiState()).toBeNull();
   });
 });

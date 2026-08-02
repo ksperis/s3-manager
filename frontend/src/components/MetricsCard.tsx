@@ -40,7 +40,7 @@ type MetricsChartPanelProps = {
   className?: string;
 };
 
-export type MetricsLegendListItem = {
+type MetricsLegendListItem = {
   key: string;
   label: string;
   value?: ReactNode;

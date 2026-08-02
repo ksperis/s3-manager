@@ -164,35 +164,6 @@ describe("TopicsPage", () => {
         is_ceph: true,
         subscriptions_confirmed: 2,
         subscriptions_pending: 0,
-        subscriptions: [
-          {
-            name: "projet-test-s3ls-unistra-preprod",
-            bucket: null,
-            endpoint_address: "https://notify.example.test/hooks/a",
-            endpoint_topic: "endpoint-topic-a",
-            endpoint_args: { "verify-ssl": false, time_to_live: 60 },
-            persistent: true,
-            metadata: { OpaqueData: "trace-a" },
-          },
-          {
-            name: "archive-daily-created",
-            bucket: null,
-            endpoint_address: "https://notify.example.test/hooks/b",
-            endpoint_topic: "endpoint-topic-b",
-            endpoint_args: { "verify-ssl": true },
-            persistent: false,
-            metadata: { OpaqueData: "trace-b" },
-          },
-          {
-            name: "notif.legacy-name",
-            bucket: null,
-            endpoint_address: "https://notify.example.test/hooks/hidden",
-            endpoint_topic: "endpoint-topic-hidden",
-            endpoint_args: { Version: "2012-10-17" },
-            persistent: true,
-            metadata: { OpaqueData: "hidden-trace" },
-          },
-        ],
       },
       {
         name: "secondary-topic",
@@ -200,7 +171,6 @@ describe("TopicsPage", () => {
         is_ceph: true,
         subscriptions_confirmed: 0,
         subscriptions_pending: 0,
-        subscriptions: [],
       },
     ]);
 

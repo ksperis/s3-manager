@@ -12,7 +12,7 @@ export type S3Object = {
   storage_class?: string | null;
 };
 
-export type ListObjectsResponse = {
+type ListObjectsResponse = {
   prefix: string;
   objects: S3Object[];
   prefixes: string[];

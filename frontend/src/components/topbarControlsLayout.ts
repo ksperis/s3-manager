@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 
 export type TopbarControlId = "workspace" | "account" | "endpoint";
-export type TopbarControlVisibility = "hidden" | "icon" | "icon_label" | "overflow";
+type TopbarControlVisibility = "hidden" | "icon" | "icon_label" | "overflow";
 export type TopbarControlRenderMode = "icon" | "icon_label";
 
 export type TopbarControlDescriptor = {
@@ -18,12 +18,12 @@ export type TopbarControlDescriptor = {
   renderControl: (mode: TopbarControlRenderMode) => ReactNode;
 };
 
-export type TopbarInlineControl = {
+type TopbarInlineControl = {
   id: TopbarControlId;
   mode: TopbarControlRenderMode;
 };
 
-export type TopbarControlsLayoutResult = {
+type TopbarControlsLayoutResult = {
   inlineControls: TopbarInlineControl[];
   overflowControls: TopbarControlId[];
   mobileUsesHub: boolean;

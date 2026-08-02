@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { timeoutForRequestProfile } from "./client";
+import type { AccountAccessRole } from "./accountRoles";
 import type { TagDefinitionSummary } from "./tags";
 
 export type ExecutionContextKind = "account" | "connection" | "legacy_user" | "portal_account";
@@ -20,7 +21,7 @@ export type ExecutionContext = {
   tags: TagDefinitionSummary[];
   endpoint_tags: TagDefinitionSummary[];
   hidden?: boolean;
-  role?: "portal_user" | "portal_manager" | "account_administrator" | null;
+  role?: AccountAccessRole | null;
   manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
   max_buckets?: number | null;
@@ -38,7 +39,7 @@ export type ExecutionContext = {
   capabilities: ExecutionContextCapabilities;
 };
 
-export type ExecutionWorkspace = "manager" | "browser";
+type ExecutionWorkspace = "manager" | "browser";
 
 export async function listExecutionContexts(
   workspace?: ExecutionWorkspace,

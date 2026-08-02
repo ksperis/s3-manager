@@ -4,7 +4,7 @@
  */
 import type { TagColorKey } from "../api/tags";
 
-export type TagColorOption = {
+type TagColorOption = {
   key: TagColorKey;
   label: string;
   badgeClassName: string;

@@ -11,21 +11,21 @@ export type PortalAdminRequestStatus = "pending" | "processing" | "approved" | "
 export type PortalQuotaDirection = "increase" | "decrease";
 export type PortalQuotaUnit = "MiB" | "GiB" | "TiB";
 
-export type PortalUserAccessRequestCreate = {
+type PortalUserAccessRequestCreate = {
   request_type: "portal_user_access";
   target_name: string;
   target_email: string;
   reason?: string | null;
 };
 
-export type PortalUserRemovalRequestCreate = {
+type PortalUserRemovalRequestCreate = {
   request_type: "portal_user_removal";
   target_email: string;
   target_name?: string | null;
   reason?: string | null;
 };
 
-export type PortalAccountQuotaChangeRequestCreate = {
+type PortalAccountQuotaChangeRequestCreate = {
   request_type: "account_quota_change";
   direction: PortalQuotaDirection;
   target_quota_value: number;
@@ -33,7 +33,7 @@ export type PortalAccountQuotaChangeRequestCreate = {
   reason?: string | null;
 };
 
-export type PortalAdminRequestCreate =
+type PortalAdminRequestCreate =
   | PortalUserAccessRequestCreate
   | PortalUserRemovalRequestCreate
   | PortalAccountQuotaChangeRequestCreate;
@@ -66,7 +66,7 @@ export type PortalAdminRequest = {
   messages: PortalAdminRequestMessage[];
 };
 
-export type AdminPortalRequestListParams = {
+type AdminPortalRequestListParams = {
   status?: PortalAdminRequestStatus | "all";
   request_type?: PortalAdminRequestType | "all";
   account_id?: number | "all";
@@ -94,16 +94,6 @@ export async function createPortalRequest(
   return data;
 }
 
-export async function getPortalRequest(
-  accountId: S3AccountSelector,
-  requestId: number
-): Promise<PortalAdminRequest> {
-  const { data } = await client.get<PortalAdminRequest>(`/portal/requests/${requestId}`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function listAdminPortalRequests(
   params?: AdminPortalRequestListParams
 ): Promise<PortalAdminRequest[]> {
@@ -115,11 +105,6 @@ export async function listAdminPortalRequests(
     limit: params?.limit,
   };
   const { data } = await client.get<PortalAdminRequest[]>("/admin/portal-requests", { params: query });
-  return data;
-}
-
-export async function getAdminPortalRequest(requestId: number): Promise<PortalAdminRequest> {
-  const { data } = await client.get<PortalAdminRequest>(`/admin/portal-requests/${requestId}`);
   return data;
 }
 

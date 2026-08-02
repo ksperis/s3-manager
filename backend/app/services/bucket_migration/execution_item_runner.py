@@ -6,23 +6,6 @@ from ._shared import *
 
 
 class BucketMigrationItemRunnerMixin:
-    def _run_item(
-        self,
-        migration: BucketMigration,
-        item: BucketMigrationItem,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        *,
-        control_check: Callable[[], str],
-    ) -> None:
-        self._executor.run_item(
-            migration,
-            item,
-            source_ctx,
-            target_ctx,
-            control_check=control_check,
-        )
-
     def _load_item_execution_plan(self, item: BucketMigrationItem) -> dict[str, Any]:
         parsed = _json_loads(getattr(item, "execution_plan_json", None))
         return parsed if isinstance(parsed, dict) else {}
@@ -64,7 +47,7 @@ class BucketMigrationItemRunnerMixin:
                 )
             raise RuntimeError("Migration item is blocked by precheck findings and cannot run.")
 
-    def _run_item_impl(
+    def _run_item(
         self,
         migration: BucketMigration,
         item: BucketMigrationItem,

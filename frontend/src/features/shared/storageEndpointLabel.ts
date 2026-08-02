@@ -44,7 +44,7 @@ function isDefaultStorageEndpoint(
   return (fallbackName ?? "").startsWith("Default");
 }
 
-export function getStorageSuffix(
+function getStorageSuffix(
   context: AccountLike,
   defaultEndpointId: number | null,
   defaultEndpointName: string | null

@@ -225,7 +225,6 @@ def test_list_topics_deduplicates_ceph_entries_and_uses_sns_subscription_counts(
     assert topic.is_ceph is True
     assert topic.subscriptions_confirmed == 2
     assert topic.subscriptions_pending == 1
-    assert topic.subscriptions == []
     assert attributes_calls == [arn]
 
 
@@ -264,7 +263,6 @@ def test_list_topics_ignores_ceph_notification_entries_as_topic_names_without_pr
     assert len(topics) == 1
     assert topics[0].is_ceph is True
     assert topics[0].name == "topic-from-arn"
-    assert topics[0].subscriptions == []
     assert topics[0].subscriptions_confirmed == 4
     assert topics[0].subscriptions_pending == 0
 
@@ -290,6 +288,5 @@ def test_list_topics_keeps_standard_sns_behavior(monkeypatch):
     assert len(topics) == 1
     assert topics[0].name == "standard-topic"
     assert topics[0].is_ceph is False
-    assert topics[0].subscriptions == []
     assert topics[0].subscriptions_confirmed == 1
     assert topics[0].subscriptions_pending == 0

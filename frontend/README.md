@@ -28,7 +28,6 @@ npm run check
 This executes:
 
 - `npm run lint`
-- `npm run lint:browser`
 - `npm run typecheck`
 - `npm run deadcode:check`
 - `npm run test`
@@ -36,7 +35,8 @@ This executes:
 - `npm run chunks:check`
 - `npm run budget:check`
 
-Current gate scope is intentionally incremental on the UI audit perimeter (Topbar, Modal, account selectors, auth entrypoints, route lazy loading helpers, and shared test setup). This avoids blocking on unrelated legacy debt while still preventing regressions in the audited surfaces.
+The lint gate covers the complete `src` tree, including production code and
+tests.
 
 ### Bundle baseline
 
@@ -53,12 +53,12 @@ Post-refactor measurements (2026-02-28):
 - Largest chunk: `337.9 KB` (`assets/vendor-B9RtXmmQ.js`)
 - Total JavaScript: `2.57 MB` across `114` chunks
 
-Current budget calibration (2026-07-15):
+Current budget calibration (2026-08-02):
 
 - Entry chunk budget: `600 KiB`
 - Largest chunk budget: `1,500 KiB`
-- Total JavaScript budget: `3,650 KiB`
-- Current validated build: entry `116.4 KB`, largest chunk `380.7 KB`, total JavaScript `3.54 MB` across `199` chunks
+- Total JavaScript budget: `3,750 KiB`
+- Current validated build: entry `123.5 KB`, largest chunk `380.7 KB`, total JavaScript `3.62 MB` across `211` chunks
 
 ### UI review checklist
 

@@ -602,10 +602,11 @@ export default function CephAdminBucketCompareModal({
   }, [onClose, stopComparison]);
 
   useEffect(() => {
+    const requestControllers = requestControllersRef.current;
     return () => {
       cancelRequestedRef.current = true;
-      requestControllersRef.current.forEach((controller) => controller.abort());
-      requestControllersRef.current.clear();
+      requestControllers.forEach((controller) => controller.abort());
+      requestControllers.clear();
     };
   }, []);
 

@@ -16,7 +16,7 @@ import {
 
 export type S3ConnectionEndpointMode = "preset" | "custom";
 
-export const S3_CONNECTION_PROVIDER_HINT_OPTIONS = [
+const S3_CONNECTION_PROVIDER_HINT_OPTIONS = [
   { value: "", label: "(auto)" },
   { value: "aws", label: "AWS" },
   { value: "ceph", label: "Ceph RGW" },
@@ -25,7 +25,7 @@ export const S3_CONNECTION_PROVIDER_HINT_OPTIONS = [
   { value: "other", label: "Other" },
 ];
 
-export type S3ConnectionEndpointDraft = {
+type S3ConnectionEndpointDraft = {
   provider_hint: string;
   endpoint_url: string;
   region: string;

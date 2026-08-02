@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ from app.models.managed_private_access import (
     ManagedPrivateAccessResult,
     ManagedRGWUserPrivateAccessRequest,
 )
+from app.models.s3_connection import CredentialOwnerType
 from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.effective_access_service import EffectiveAccessService
@@ -35,6 +37,17 @@ from app.utils.time import utcnow
 
 
 ACTIVE_STATES = ("provisioning", "active", "deleting", "cleanup_pending")
+RemotePrincipalType = Literal["iam_user", "rgw_user"]
+
+
+def _credential_owner_type_for_principal(
+    principal_type: str,
+) -> CredentialOwnerType:
+    if principal_type == "iam_user":
+        return "iam_user"
+    if principal_type == "rgw_user":
+        return "s3_user"
+    raise ManagedPrivateAccessError(f"Unsupported remote principal type: {principal_type}")
 
 
 class ManagedPrivateAccessError(RuntimeError):
@@ -59,7 +72,7 @@ class ManagedPrivateAccessCleanupPending(ManagedPrivateAccessError):
 class _Source:
     kind: str
     identifier: int
-    remote_principal_type: str
+    remote_principal_type: RemotePrincipalType
     remote_principal_identifier: str
     iam_username: str | None
 
@@ -584,7 +597,9 @@ class ManagedPrivateAccessService:
             access_manager=access_manager,
             access_browser=access_browser,
             server_managed=True,
-            credential_owner_type=provisioning.remote_principal_type,
+            credential_owner_type=_credential_owner_type_for_principal(
+                provisioning.remote_principal_type
+            ),
             credential_owner_identifier=provisioning.remote_principal_identifier,
             storage_endpoint_id=destination.storage_endpoint_id,
             custom_endpoint_config=destination.custom_endpoint_config,

@@ -8,7 +8,7 @@ import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../util
 const STORAGE_KEY = CLIENT_STORAGE_KEYS.portalTransfers;
 const UPDATE_EVENT = "portal-transfers-updated";
 
-export type PortalLocalTransfer = PortalWorkspaceTransfer & {
+type PortalLocalTransfer = PortalWorkspaceTransfer & {
   accountId: string;
   spaceId: string;
   updatedAt: string;

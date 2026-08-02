@@ -159,12 +159,7 @@ def _serialize_filter(query: CephAdminUserFilterQuery | None) -> str | None:
 
 
 def _clone_user(user: CephAdminRgwUserSummary) -> CephAdminRgwUserSummary:
-    if hasattr(user, "model_copy"):
-        return user.model_copy(deep=True)
-    if hasattr(user, "copy"):
-        return user.copy(deep=True)
-    payload = user.model_dump() if hasattr(user, "model_dump") else user.dict()
-    return CephAdminRgwUserSummary(**payload)
+    return user.model_copy(deep=True)
 
 
 def _clone_user_list(items: list[CephAdminRgwUserSummary]) -> list[CephAdminRgwUserSummary]:

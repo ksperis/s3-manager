@@ -21,7 +21,7 @@ import {
 } from "./browserIcons";
 import type { BucketAccessEntry, BucketAccessStatus } from "./browserBucketsPanelHelpers";
 
-export type BrowserWorkspaceSidebarBucketRow = {
+type BrowserWorkspaceSidebarBucketRow = {
   bucket: BrowserBucket;
   access: BucketAccessEntry;
 };

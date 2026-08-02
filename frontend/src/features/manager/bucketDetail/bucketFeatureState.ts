@@ -4,10 +4,8 @@
  */
 import type {
   BucketLoggingConfiguration,
-  BucketObjectLockConfiguration,
   BucketPublicAccessBlock,
   BucketTag,
-  BucketWebsiteConfiguration,
 } from "../../../api/buckets";
 import type { GraphicalReplicationRule } from "../bucketReplication";
 
@@ -31,7 +29,7 @@ function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function normalizeBucketJsonValue(value: unknown): unknown {
+function normalizeBucketJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeBucketJsonValue(entry));
   }
@@ -94,30 +92,6 @@ export function normalizeAccessLoggingDraft(config: BucketLoggingConfiguration |
   };
 }
 
-export function normalizeWebsiteDraft(config: BucketWebsiteConfiguration | null | undefined): Record<string, unknown> {
-  const redirect = config?.redirect_all_requests_to;
-  return {
-    index_document: normalizeString(config?.index_document),
-    error_document: normalizeString(config?.error_document),
-    redirect_all_requests_to: redirect
-      ? {
-          host_name: normalizeString(redirect.host_name),
-          protocol: normalizeString(redirect.protocol),
-        }
-      : null,
-    routing_rules: Array.isArray(config?.routing_rules) ? config?.routing_rules : [],
-  };
-}
-
-export function normalizeObjectLockDraft(config: BucketObjectLockConfiguration | null | undefined): Record<string, unknown> {
-  return {
-    enabled: config?.enabled ?? null,
-    mode: normalizeString(config?.mode),
-    days: config?.days ?? null,
-    years: config?.years ?? null,
-  };
-}
-
 export function normalizeQuotaDraft(maxSize: string, unit: "MiB" | "GiB" | "TiB", maxObjects: string): Record<string, unknown> {
   return {
     max_size: normalizeString(maxSize),
@@ -175,7 +149,7 @@ export function normalizeNotificationConfiguration(configuration: unknown): Reco
   return normalized;
 }
 
-export function normalizeLifecycleSimpleDraft(draft: {
+function normalizeLifecycleSimpleDraft(draft: {
   id: string;
   prefix: string;
   expirationDays: string;

@@ -539,7 +539,13 @@ def test_browser_workspace_never_reuses_manager_account_context(db_session, monk
 
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
 
-    assert contexts == []
+    assert len(contexts) == 1
+    context = contexts[0]
+    assert context.kind == "portal_account"
+    assert context.id == str(account.id)
+    assert context.role == AccountRole.PORTAL_MANAGER.value
+    assert context.manager_account_is_admin is True
+    assert all(candidate.kind != "account" for candidate in contexts)
 
 
 def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):

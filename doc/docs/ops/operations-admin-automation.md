@@ -32,10 +32,9 @@ not accept `is_shared`, `access_manager`, or `access_browser`; new connections
 are shared, Browser-disabled, and Manager-enabled. A migrated connection in
 remediation is enabled only through the explicit `activate_manager` action.
 
-Account-link creation requires canonical `role`, except for a convertible
-legacy payload during the compatibility release. Conflicting canonical and
-legacy roles are rejected. Removing a link deletes the association instead of
-retaining an empty-role row.
+Account-link creation requires canonical `role`; removed association fields are
+rejected. Removing a link deletes the association instead of retaining an
+empty-role row.
 
 ## Authentication
 

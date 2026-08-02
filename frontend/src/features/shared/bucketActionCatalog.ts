@@ -3,11 +3,11 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-export type BucketActionSurface = "ceph-admin" | "storage-ops";
-export type BucketActionScope = "row" | "selection";
-export type BucketActionGroup = "navigation" | "selection" | "s3" | "rgw" | "destructive-s3" | "destructive-rgw";
+type BucketActionSurface = "ceph-admin" | "storage-ops";
+type BucketActionScope = "row" | "selection";
+type BucketActionGroup = "navigation" | "selection" | "s3" | "rgw" | "destructive-s3" | "destructive-rgw";
 
-export type BucketActionId =
+type BucketActionId =
   | "open-browser"
   | "open-manager"
   | "configure-one"
@@ -25,7 +25,7 @@ export type BucketActionId =
   | "unlink-bucket"
   | "delete-bucket";
 
-export type BucketActionDescriptor = {
+type BucketActionDescriptor = {
   id: BucketActionId;
   label: string;
   group: BucketActionGroup;
@@ -45,7 +45,7 @@ export const BUCKET_ACTION_GROUP_LABELS: Record<BucketActionGroup, string> = {
   "destructive-rgw": "Destructive RGW Admin Ops",
 };
 
-export const BUCKET_ACTIONS: Record<BucketActionId, BucketActionDescriptor> = {
+const BUCKET_ACTIONS: Record<BucketActionId, BucketActionDescriptor> = {
   "open-browser": { id: "open-browser", label: "Open in Browser", group: "navigation", scopes: ["row"], surfaces: ["ceph-admin"] },
   "open-manager": { id: "open-manager", label: "Open in Manager", group: "navigation", scopes: ["row"], surfaces: ["storage-ops"] },
   "configure-one": { id: "configure-one", label: "Configure bucket…", group: "s3", scopes: ["row"], surfaces: ["ceph-admin", "storage-ops"] },

@@ -5,3 +5,10 @@ export const ACCOUNT_ACCESS_ROLE_OPTIONS: { value: AccountAccessRole; label: str
   { value: "portal_manager", label: "Portal manager" },
   { value: "account_administrator", label: "Account administrator" },
 ];
+
+export function normalizeAccountAccessRole(value?: string | null): AccountAccessRole {
+  if (value === "portal_user" || value === "portal_manager" || value === "account_administrator") {
+    return value;
+  }
+  return "portal_user";
+}

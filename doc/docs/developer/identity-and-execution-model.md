@@ -41,11 +41,9 @@ effective-access response includes the direct source, every contributing group,
 and the source or sources that determine the maximum. `UserS3Account.is_root`
 is internal and protected; it always projects `account_administrator`.
 
-The legacy `account_admin` and `account_role` request fields are accepted only
-at the API boundary for this compatibility release. They are converted to
-`role`, contradictory canonical/legacy payloads are rejected with `422`, and
-services never read the legacy fields. Deprecated response fields are derived
-from the canonical role. The legacy database columns no longer exist.
+Account-association API payloads expose and accept only `role`. Unknown or
+removed association fields are rejected with `422`, and the legacy database
+columns no longer exist.
 
 An association without a useful legacy right is deleted by migration `0069`.
 It is not represented as `role = NULL` and cannot be recovered by downgrade;
@@ -116,6 +114,12 @@ new secret to the frontend:
   access key last, then stores it in an owned private S3 Connection;
 - an assigned RGW User with Ceph key-management permission creates a distinct
   RGW key and immediately stores it in an owned private S3 Connection.
+
+S3 Connection identity metadata uses only `iam_user`, `account_user`, or
+`s3_user` as `credential_owner_type`. The durable provisioning saga may retain
+the storage-side principal kind `rgw_user`, but the resulting connection always
+uses the canonical `s3_user` API and database value. Migration `0073` converts
+existing rows and removes the frontend fallback for unknown owner types.
 
 The identity is independent of `AccountIAMUser` and every Portal identity. A
 shared connection is only an administration context; its credentials,

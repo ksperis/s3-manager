@@ -9,7 +9,6 @@ import {
   uiButtonBaseClass,
   uiButtonVariants,
   uiCardClass,
-  uiCardMutedClass,
   uiCheckboxClass,
   uiDividerClass,
   uiInputClass,
@@ -99,10 +98,6 @@ export function SettingsFormCard({ children, className, ...props }: SettingsForm
       {children}
     </form>
   );
-}
-
-export function SettingsMutedCard({ children, className }: SettingsCardProps) {
-  return <div className={cx(uiCardMutedClass, "p-4", className)}>{children}</div>;
 }
 
 export const SettingsSection = ({

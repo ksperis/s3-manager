@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 import { E2E_BUCKET_NAME } from "./config";
 
-export async function gotoBrowser(page: Page): Promise<void> {
+async function gotoBrowser(page: Page): Promise<void> {
   await page.goto("/browser");
   await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeVisible();
 }
@@ -19,7 +19,7 @@ export async function openFolder(page: Page, folderName: string): Promise<void> 
   await folderButton.dblclick();
 }
 
-export async function ensureActionBarEnabled(page: Page): Promise<void> {
+async function ensureActionBarEnabled(page: Page): Promise<void> {
   const actionBar = page.getByRole("toolbar", { name: "Browser actions bar" });
   if (await actionBar.isVisible().catch(() => false)) {
     return;

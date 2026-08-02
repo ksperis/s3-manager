@@ -28,7 +28,7 @@ import {
 import { portalRoleTone } from "./portalUi";
 
 export type PortalAccessMode = "private" | "account" | "restricted";
-export type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceGrantRole };
+type PortalSelectedShare = { user_id: number; role: PortalStorageSpaceGrantRole };
 
 export function portalAccessModeFromParts(
   visibility?: PortalStorageSpaceVisibility | null,

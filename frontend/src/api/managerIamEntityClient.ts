@@ -6,7 +6,7 @@ import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { IamPolicy, InlinePolicy } from "./managerIamPolicies";
 
-export type IamEntitySegment = "users" | "groups" | "roles";
+type IamEntitySegment = "users" | "groups" | "roles";
 
 function segmentBasePath(segment: IamEntitySegment): string {
   return `/manager/iam/${segment}`;

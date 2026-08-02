@@ -29,7 +29,7 @@ export type BrowserBucket = {
   icon?: StorageSpaceIconDescriptor | null;
 };
 
-export type PaginatedBrowserBucketsResponse = {
+type PaginatedBrowserBucketsResponse = {
   items: BrowserBucket[];
   total: number;
   page: number;
@@ -47,7 +47,7 @@ export type BrowserUsageSummary = {
   quota_max_objects?: number | null;
 };
 
-export type BucketVersioningStatus = {
+type BucketVersioningStatus = {
   status?: string | null;
   enabled: boolean;
 };
@@ -80,7 +80,7 @@ export type BrowserSettings = {
   streaming_zip_threshold_mb: number;
 };
 
-export type BrowserObjectsQuery = {
+type BrowserObjectsQuery = {
   query?: string;
   exactMatch?: boolean;
   caseSensitive?: boolean;
@@ -102,7 +102,7 @@ export type BrowserObjectVersion = {
   storage_class?: string | null;
 };
 
-export type ListObjectVersionsResponse = {
+type ListObjectVersionsResponse = {
   prefix?: string | null;
   common_prefixes?: string[];
   versions: BrowserObjectVersion[];
@@ -133,7 +133,7 @@ export type ObjectMetadata = {
 
 export type ObjectTag = { key: string; value: string };
 
-export type BrowserLazyColumnField =
+type BrowserLazyColumnField =
   | "content_type"
   | "tags_count"
   | "metadata_count"
@@ -141,7 +141,7 @@ export type BrowserLazyColumnField =
   | "expires"
   | "restore_status";
 
-export type BrowserObjectColumnValues = {
+type BrowserObjectColumnValues = {
   key: string;
   content_type?: string | null;
   tags_count?: number | null;
@@ -153,7 +153,7 @@ export type BrowserObjectColumnValues = {
   tags_status: "ready" | "error";
 };
 
-export type BrowserObjectColumnsResponse = {
+type BrowserObjectColumnsResponse = {
   items: BrowserObjectColumnValues[];
 };
 
@@ -176,7 +176,7 @@ export type ObjectMetadataUpdate = {
   storage_class?: string | null;
 };
 
-export type ObjectAcl = {
+type ObjectAcl = {
   key: string;
   acl: string;
   version_id?: string | null;
@@ -225,7 +225,7 @@ export type PresignedUrl = {
 
 export const SSE_CUSTOMER_ALGORITHM = "AES256";
 
-export type SseCustomerKeyValidationResult =
+type SseCustomerKeyValidationResult =
   | { valid: true; normalizedKey: string }
   | { valid: false; error: string };
 
@@ -313,7 +313,7 @@ function mergeBrowserHeaders(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-export type MultipartUploadInitRequest = {
+type MultipartUploadInitRequest = {
   key: string;
   content_type?: string | null;
   metadata?: Record<string, string>;
@@ -321,7 +321,7 @@ export type MultipartUploadInitRequest = {
   acl?: string | null;
 };
 
-export type MultipartUploadInitResponse = {
+type MultipartUploadInitResponse = {
   key: string;
   upload_id: string;
 };
@@ -334,24 +334,11 @@ export type MultipartUploadItem = {
   owner?: string | null;
 };
 
-export type ListMultipartUploadsResponse = {
+type ListMultipartUploadsResponse = {
   uploads: MultipartUploadItem[];
   is_truncated: boolean;
   next_key?: string | null;
   next_upload_id?: string | null;
-};
-
-export type MultipartPart = {
-  part_number: number;
-  etag: string;
-  size: number;
-  last_modified?: string | null;
-};
-
-export type ListPartsResponse = {
-  parts: MultipartPart[];
-  is_truncated: boolean;
-  next_part_number?: number | null;
 };
 
 export type PresignPartRequest = {
@@ -367,13 +354,13 @@ export type PresignPartResponse = {
   headers?: Record<string, string>;
 };
 
-export type CompletedPart = { part_number: number; etag: string };
+type CompletedPart = { part_number: number; etag: string };
 
-export type CompleteMultipartUploadRequest = {
+type CompleteMultipartUploadRequest = {
   parts: CompletedPart[];
 };
 
-export type CopyObjectPayload = {
+type CopyObjectPayload = {
   source_bucket?: string;
   source_key: string;
   destination_key: string;
@@ -386,19 +373,19 @@ export type CopyObjectPayload = {
   move?: boolean;
 };
 
-export type DeleteObjectEntry = {
+type DeleteObjectEntry = {
   key: string;
   version_id?: string | null;
 };
 
-export type CleanupObjectVersionsPayload = {
+type CleanupObjectVersionsPayload = {
   prefix?: string;
   keep_last_n?: number;
   older_than_days?: number;
   delete_orphan_markers?: boolean;
 };
 
-export type CleanupObjectVersionsResponse = {
+type CleanupObjectVersionsResponse = {
   prefix?: string | null;
   deleted_versions: number;
   deleted_delete_markers: number;

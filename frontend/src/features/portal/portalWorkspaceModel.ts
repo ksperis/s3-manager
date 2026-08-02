@@ -24,18 +24,6 @@ export type PortalWorkspaceStatus = "Active" | "Attention";
 export type PortalWorkspaceAccess = "Private" | "Shared" | "Public" | "Public Read" | "Unavailable";
 export type PortalWorkspaceAlertTone = "info" | "warning" | "danger";
 
-export type PortalWorkspaceFile = {
-  id: string;
-  name: string;
-  kind: "folder" | "file";
-  path: string;
-  sizeBytes?: number | null;
-  updatedLabel: string;
-  ownerLabel: string;
-  mimeType?: string;
-  typeLabel?: string;
-};
-
 export type PortalWorkspaceSpace = {
   id: string;
   name: string;

@@ -17,9 +17,5 @@ export default defineConfig({
       "react-router-dom": reactRouterDomTestShim,
       "react-router-dom-real": reactRouterDomReal,
     },
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "html"],
-    },
   },
 });

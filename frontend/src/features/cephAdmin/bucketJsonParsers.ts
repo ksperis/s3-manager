@@ -1,4 +1,4 @@
-export type JsonRecord = Record<string, unknown>;
+type JsonRecord = Record<string, unknown>;
 
 const isJsonObject = (value: unknown): value is JsonRecord =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -13,10 +13,10 @@ export const stableStringify = (value: unknown): string => {
   return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
 };
 
-export type ParseLifecycleRulesResult = { rules: JsonRecord[] } | { error: string };
-export type ParseNotificationConfigurationResult = { configuration: JsonRecord } | { error: string };
-export type ParseCorsRulesResult = { rules: JsonRecord[] } | { error: string };
-export type ParsePolicyStatementsResult = { policy: JsonRecord; statements: JsonRecord[] } | { error: string };
+type ParseLifecycleRulesResult = { rules: JsonRecord[] } | { error: string };
+type ParseNotificationConfigurationResult = { configuration: JsonRecord } | { error: string };
+type ParseCorsRulesResult = { rules: JsonRecord[] } | { error: string };
+type ParsePolicyStatementsResult = { policy: JsonRecord; statements: JsonRecord[] } | { error: string };
 
 export const parseLifecycleRules = (raw: string): ParseLifecycleRulesResult => {
   const trimmed = raw.trim();
@@ -59,7 +59,7 @@ const NOTIFICATION_ARRAY_TYPES = Object.keys(
   NOTIFICATION_CONFIGURATION_ARRAY_KEYS
 ) as Array<Exclude<NotificationConfigurationTypeKey, "eventbridge">>;
 
-export type NotificationConfigurationChange = {
+type NotificationConfigurationChange = {
   type: NotificationConfigurationTypeKey;
   action: "replace" | "add" | "remove";
   index?: number;
@@ -67,7 +67,7 @@ export type NotificationConfigurationChange = {
   after?: JsonRecord;
 };
 
-export const getNotificationConfigurationId = (configuration: JsonRecord) => {
+const getNotificationConfigurationId = (configuration: JsonRecord) => {
   const rawId = configuration.Id ?? configuration.ID ?? configuration.id;
   if (typeof rawId === "string") {
     const trimmed = rawId.trim();

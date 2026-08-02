@@ -931,25 +931,6 @@ class BucketMigrationObjectSyncMixin:
         strategy: str = "current_only",
         control_check: Callable[[], str],
     ) -> Optional[_SyncDiff]:
-        return self._verifier.compare_buckets_streamed(
-            source_ctx,
-            target_ctx,
-            source_bucket=source_bucket,
-            target_bucket=target_bucket,
-            strategy=strategy,
-            control_check=control_check,
-        )
-
-    def _compare_buckets_streamed_impl(
-        self,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        strategy: str = "current_only",
-        control_check: Callable[[], str],
-    ) -> Optional[_SyncDiff]:
         if strategy == "version_aware":
             return self._compare_buckets_version_aware(
                 source_ctx,
@@ -1016,27 +997,6 @@ class BucketMigrationObjectSyncMixin:
         return diff
 
     def _strong_verify_size_only_candidates_streamed(
-        self,
-        source_ctx: _ResolvedContext,
-        target_ctx: _ResolvedContext,
-        *,
-        source_bucket: str,
-        target_bucket: str,
-        strategy: str = "current_only",
-        parallelism_max: int,
-        control_check: Callable[[], str],
-    ) -> tuple[int, int, list[str], dict[str, int]]:
-        return self._verifier.strong_verify_size_only_candidates_streamed(
-            source_ctx,
-            target_ctx,
-            source_bucket=source_bucket,
-            target_bucket=target_bucket,
-            strategy=strategy,
-            parallelism_max=parallelism_max,
-            control_check=control_check,
-        )
-
-    def _strong_verify_size_only_candidates_streamed_impl(
         self,
         source_ctx: _ResolvedContext,
         target_ctx: _ResolvedContext,

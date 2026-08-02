@@ -107,6 +107,35 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+const accessSummaryFixture = {
+  mode: "restricted" as const,
+  default_account_member_role: null,
+  owner: {
+    user_id: 7,
+    email: "manager@example.com",
+    display_name: "Manager User",
+    role: "Owner" as const,
+    account_role: "portal_manager" as const,
+    access_source: "owner" as const,
+  },
+  effective_member_count: 4,
+  explicit_shares: [
+    {
+      id: "research-data:12",
+      storage_space_id: "research-data",
+      storage_space_name: "Research Data",
+      user_id: 12,
+      email: "viewer@example.com",
+      role: "Viewer" as const,
+      direction: "by_me" as const,
+      activity_label: "Active",
+    },
+  ],
+  public_link_count: 2,
+  can_manage_access: true,
+  can_create_public_links: true,
+};
+
 vi.mock("./usePortalWorkspaceData", () => ({
   usePortalWorkspaceData: (...args: unknown[]) => {
     mocks.usePortalWorkspaceDataMock(...args);
@@ -200,8 +229,8 @@ vi.mock("../browser/BrowserEmbed", () => ({
   ),
 }));
 
-function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["initialEntries"] = ["/portal/storage-spaces/research-data"]) {
-  return render(
+async function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["initialEntries"] = ["/portal/storage-spaces/research-data"]) {
+  const rendered = render(
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/portal/storage-spaces" element={<div>Spaces</div>} />
@@ -209,6 +238,27 @@ function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["initial
       </Routes>
     </MemoryRouter>
   );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  if (mocks.fetchAccessSummaryMock.mock.calls.length > 0) {
+    await waitFor(() => {
+      if (screen.queryByTestId("portal-browser-embed")) {
+        const browserProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as
+          | ComponentProps<typeof BrowserEmbed>
+          | undefined;
+        expect(browserProps?.capabilityFacts?.canCreatePublicLinks).toBe(true);
+      } else {
+        expect(screen.getByText("Manager User")).toBeInTheDocument();
+      }
+    });
+  }
+  return rendered;
+}
+
+async function openSettingsTab() {
+  fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+  await screen.findByRole("checkbox", { name: "Versioning" });
 }
 
 describe("PortalStorageSpaceDetailPage", () => {
@@ -217,34 +267,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.deleteStorageSpaceMock.mockReset();
     window.localStorage.clear();
     mocks.usePortalWorkspaceDataMock.mockClear();
-    mocks.fetchAccessSummaryMock.mockResolvedValue({
-      mode: "restricted",
-      default_account_member_role: null,
-      owner: {
-        user_id: 7,
-        email: "manager@example.com",
-        display_name: "Manager User",
-        role: "Owner",
-        account_role: "portal_manager",
-        access_source: "owner",
-      },
-      effective_member_count: 4,
-      explicit_shares: [
-        {
-          id: "research-data:12",
-          storage_space_id: "research-data",
-          storage_space_name: "Research Data",
-          user_id: 12,
-          email: "viewer@example.com",
-          role: "Viewer",
-          direction: "by_me",
-          activity_label: "Active",
-        },
-      ],
-      public_link_count: 2,
-      can_manage_access: true,
-      can_create_public_links: true,
-    });
+    mocks.fetchAccessSummaryMock.mockResolvedValue(accessSummaryFixture);
     mocks.fetchStorageSpaceSettingsMock.mockResolvedValue({
       versioning_enabled: true,
       versioning_status: "Enabled",
@@ -348,8 +371,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.refreshWorkspaceData.mockClear();
   });
 
-  it("embeds the main Browser with an explicit locked Portal profile", () => {
-    renderPage();
+  it("embeds the main Browser with an explicit locked Portal profile", async () => {
+    await renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
     expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
@@ -367,7 +390,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Version history settings" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
@@ -401,7 +424,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("lets a Portal Manager configure Versioning, Lifecycle and version history retention", async () => {
-    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
 
     const versioning = await screen.findByRole("checkbox", { name: "Versioning" });
     const lifecycle = screen.getByRole("checkbox", { name: "Lifecycle" });
@@ -430,7 +453,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       can_update: false,
     });
 
-    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
 
     expect(await screen.findByRole("checkbox", { name: "Versioning" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "Lifecycle" })).toBeDisabled();
@@ -450,15 +473,15 @@ describe("PortalStorageSpaceDetailPage", () => {
       can_update: false,
     });
 
-    renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=settings"]);
 
     expect(await screen.findByText("Archived spaces keep their settings but cannot be changed.")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Versioning" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
   });
 
-  it("maps the legacy trash URL to the mixed Browser view and restores a deleted file", async () => {
-    renderPage(["/portal/storage-spaces/research-data?tab=trash"]);
+  it("opens the deleted-files view and restores a deleted file", async () => {
+    await renderPage(["/portal/storage-spaces/research-data?show_deleted=1"]);
 
     await waitFor(() => {
       const embedProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed>;
@@ -525,7 +548,7 @@ describe("PortalStorageSpaceDetailPage", () => {
         };
       },
     );
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Mock restore folder" }));
     expect(
@@ -545,11 +568,16 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getByText("returned to their folders")).toBeInTheDocument();
   });
 
-  it("guides users to add files and invite people after creating a space", () => {
+  it("guides users to add files and invite people after creating a space", async () => {
     mocks.hookResult.workspace.spaces[0].objectCount = 0;
     mocks.hookResult.workspace.spaces[0].shareCount = 0;
+    mocks.fetchAccessSummaryMock.mockResolvedValueOnce({
+      ...accessSummaryFixture,
+      effective_member_count: 1,
+      explicit_shares: [],
+    });
 
-    renderPage([
+    await renderPage([
       {
         pathname: "/portal/storage-spaces/research-data",
         state: { portalSpaceCreated: true },
@@ -567,11 +595,16 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.getAllByRole("button", { name: "Invite people" }).length).toBeGreaterThan(0);
   });
 
-  it("lets users dismiss the start guide for an empty active space", () => {
+  it("lets users dismiss the start guide for an empty active space", async () => {
     mocks.hookResult.workspace.spaces[0].objectCount = 0;
     mocks.hookResult.workspace.spaces[0].shareCount = 0;
+    mocks.fetchAccessSummaryMock.mockResolvedValueOnce({
+      ...accessSummaryFixture,
+      effective_member_count: 1,
+      explicit_shares: [],
+    });
 
-    renderPage();
+    await renderPage();
 
     expect(screen.queryByText("Space created.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Start this space" })).toBeInTheDocument();
@@ -586,11 +619,11 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(window.localStorage.getItem("portal.storage-space-detail.start-guide.dismissed.101.research-data")).toBe("true");
   });
 
-  it("does not repeat the start guide after files or collaborators exist", () => {
+  it("does not repeat the start guide after files or collaborators exist", async () => {
     mocks.hookResult.workspace.spaces[0].objectCount = 0;
     mocks.hookResult.workspace.spaces[0].shareCount = 1;
 
-    renderPage();
+    await renderPage();
 
     expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
   });
@@ -599,7 +632,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].objectCount = 0;
     mocks.hookResult.workspace.spaces[0].shareCount = null;
 
-    renderPage();
+    await renderPage();
 
     await waitFor(() => {
       expect(mocks.fetchAccessSummaryMock).toHaveBeenCalledWith("101", "research-data");
@@ -607,11 +640,11 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("heading", { name: "Start this space" })).not.toBeInTheDocument();
   });
 
-  it("passes resolved read-only capabilities for Viewer spaces", () => {
+  it("passes resolved read-only capabilities for Viewer spaces", async () => {
     mocks.hookResult.workspace.spaces[0].role = "Viewer";
     mocks.hookResult.workspace.spaces[0].contentRole = "Viewer";
 
-    renderPage();
+    await renderPage();
 
     const embedProps = vi.mocked(BrowserEmbed).mock.calls[0][0] as ComponentProps<typeof BrowserEmbed>;
     expect(embedProps.capabilityFacts).toEqual({
@@ -630,7 +663,7 @@ describe("PortalStorageSpaceDetailPage", () => {
       configurable: true,
     });
 
-    renderPage();
+    await renderPage();
 
     await waitFor(() => {
       const latestProps = vi.mocked(BrowserEmbed).mock.calls.at(-1)?.[0] as ComponentProps<typeof BrowserEmbed> | undefined;
@@ -667,10 +700,10 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(await screen.findByText("Link copied.")).toBeInTheDocument();
   });
 
-  it("shows a disabled state when the Portal Browser kill switch is off", () => {
+  it("shows a disabled state when the Portal Browser kill switch is off", async () => {
     mocks.generalSettings.browser_portal_enabled = false;
 
-    renderPage();
+    await renderPage();
 
     expect(screen.getByText(/Files are unavailable/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
@@ -680,9 +713,9 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].nameEditable = false;
     mocks.hookResult.workspace.spaces[0].origin = "imported";
 
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
     expect(screen.getByLabelText("Space name")).toHaveClass("ui-control");
     expect(screen.getByLabelText("Space name")).toBeDisabled();
@@ -701,7 +734,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("shows the collaborator panel with public link context", async () => {
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
     expect(await screen.findByRole("tabpanel", { name: "Collaborators" })).toBeInTheDocument();
@@ -740,7 +773,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("opens the contextual collaborator workflow from a direct link and header action", async () => {
-    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
 
     expect(
       await screen.findByRole("tab", { name: "Collaborators" }),
@@ -757,7 +790,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("confirms role changes before applying them to the current space", async () => {
-    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
 
     const roleSelect = await screen.findByRole("combobox", {
       name: "Access for viewer@example.com",
@@ -787,7 +820,7 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("requests a missing project member without leaving the space workflow", async () => {
-    renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
+    await renderPage(["/portal/storage-spaces/research-data?tab=collaborators"]);
 
     fireEvent.click(await screen.findByRole("button", { name: "Add people" }));
     const workflow = document.querySelector(".workflow-page");
@@ -832,9 +865,9 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("shows external-tool mapping without replacing the space name", async () => {
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     expect(await screen.findByRole("heading", { name: "Connect external tools" })).toBeInTheDocument();
     expect(screen.getByText("research-data-internal")).toBeInTheDocument();
     expect(screen.getByText("Manual storage name")).toBeInTheDocument();
@@ -847,9 +880,9 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("runs history cleanup after a button-only confirmation and shows progress", async () => {
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     fireEvent.click(await screen.findByRole("button", { name: "Clean up history" }));
 
     const confirmation = screen.getByRole("dialog", { name: "Clean up history" });
@@ -875,15 +908,15 @@ describe("PortalStorageSpaceDetailPage", () => {
   it("shows history cleanup disabled when the account override turns it off", async () => {
     mocks.hookResult.state.storage_space_version_cleanup_enabled = false;
 
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     expect(await screen.findByText("History cleanup is disabled for this project.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clean up history" })).toBeDisabled();
   });
 
   it("confirms access mode changes from the Access panel", async () => {
-    renderPage();
+    await renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
     const accessSelect = await screen.findByLabelText("Who can access this space?");
@@ -907,9 +940,9 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].status = "Archived";
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
 
     await waitFor(() => {
@@ -918,10 +951,10 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(mocks.hookResult.refreshWorkspaceData).toHaveBeenCalledTimes(1);
   });
 
-  it("explains how to empty a non-empty space without calling deletion", () => {
-    renderPage();
+  it("explains how to empty a non-empty space without calling deletion", async () => {
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
 
     expect(screen.getByRole("dialog", { name: "Delete space" })).toBeInTheDocument();
@@ -936,8 +969,8 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.hookResult.workspace.spaces[0].usedBytes = 0;
     mocks.deleteStorageSpaceMock.mockResolvedValue(undefined);
 
-    renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await renderPage();
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
     const dialog = screen.getByRole("dialog", { name: "Delete space" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
@@ -950,12 +983,13 @@ describe("PortalStorageSpaceDetailPage", () => {
   });
 
   it("keeps the confirmation open and reports deletion errors", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.hookResult.workspace.spaces[0].objectCount = 0;
     mocks.hookResult.workspace.spaces[0].usedBytes = 0;
     mocks.deleteStorageSpaceMock.mockRejectedValue(new Error("Deletion service unavailable"));
 
-    renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await renderPage();
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
     const dialog = screen.getByRole("dialog", { name: "Delete space" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete space" }));
@@ -963,60 +997,62 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(await within(dialog).findByText("Deletion service unavailable")).toBeInTheDocument();
     expect(mocks.hookResult.refreshWorkspaceData).not.toHaveBeenCalled();
     expect(dialog).toBeInTheDocument();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.any(Error));
+    consoleErrorSpy.mockRestore();
   });
 
-  it("hides permanent deletion from administrative Owners without content ownership", () => {
+  it("hides permanent deletion from administrative Owners without content ownership", async () => {
     mocks.hookResult.workspace.spaces[0].contentRole = null;
     mocks.hookResult.workspace.spaces[0].canBrowse = false;
     mocks.hookResult.workspace.spaces[0].canDelete = false;
 
-    renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await renderPage();
+    await openSettingsTab();
 
     expect(screen.queryByRole("button", { name: "Delete space" })).not.toBeInTheDocument();
   });
 
-  it("asks to restore an archived non-empty space before cleanup", () => {
+  it("asks to restore an archived non-empty space before cleanup", async () => {
     mocks.hookResult.workspace.spaces[0].status = "Archived";
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
-    renderPage();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await renderPage();
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
 
     expect(screen.getByText(/Restore the space before removing files and cleaning its history/i)).toBeInTheDocument();
   });
 
-  it("hides the embedded Browser when the space is archived", () => {
+  it("hides the embedded Browser when the space is archived", async () => {
     mocks.hookResult.workspace.spaces[0].status = "Archived";
     mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
 
-    renderPage();
+    await renderPage();
 
     expect(screen.getByText(/This space is archived/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
   });
 
-  it("keeps metadata management but hides files when content browsing is denied", () => {
+  it("keeps metadata management but hides files when content browsing is denied", async () => {
     mocks.hookResult.workspace.spaces[0].visibility = "private";
     mocks.hookResult.workspace.spaces[0].access = "Private";
     mocks.hookResult.workspace.spaces[0].contentRole = null;
     mocks.hookResult.workspace.spaces[0].canBrowse = false;
 
-    renderPage();
+    await renderPage();
 
     expect(screen.getByText(/Files are not available for this private space/i)).toBeInTheDocument();
     expect(screen.queryByTestId("portal-browser-embed")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     expect(screen.getByRole("heading", { name: "Space settings" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("confirms archive with explicit target and impacts", async () => {
-    renderPage();
+    await renderPage();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    await openSettingsTab();
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
 
     expect(screen.getByRole("heading", { name: "Archive space" })).toBeInTheDocument();

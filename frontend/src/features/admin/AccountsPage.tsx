@@ -22,6 +22,11 @@ import {
   updateAccountPortalSettings,
   updateS3Account,
 } from "../../api/accounts";
+import {
+  ACCOUNT_ACCESS_ROLE_OPTIONS,
+  normalizeAccountAccessRole,
+  type AccountAccessRole,
+} from "../../api/accountRoles";
 import type { PortalSettingsAdminUpdate, PortalSettingsOverride } from "../../api/appSettings";
 import type { PortalAccountSettings } from "../../api/portal";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -85,7 +90,6 @@ import { buildUiTagItems, extractUiTagLabels, normalizeUiTags, type UiTagDefinit
 type SortField = "name" | "rgw_account_id";
 type EditTab = "general" | "users" | "groups" | "privileged" | "portal";
 type TriState = "inherit" | "enabled" | "disabled";
-type PortalAccountRole = "portal_user" | "portal_manager" | "account_administrator";
 type PortalOverrideFormSnapshot = {
   delegatedToPortalManagers: boolean;
   browserAccess: TriState;
@@ -121,17 +125,6 @@ const toOverrideValue = (value: TriState): boolean | undefined => {
 
 const buildPortalOverrideFormSignature = (snapshot: PortalOverrideFormSnapshot) =>
   stableSignature({ portalOverrides: snapshot });
-
-const PORTAL_ROLE_OPTIONS: { value: PortalAccountRole; label: string }[] = [
-  { value: "portal_user", label: "Portal user" },
-  { value: "portal_manager", label: "Portal manager" },
-  { value: "account_administrator", label: "Account administrator" },
-];
-
-function normalizePortalRole(value?: string | null): PortalAccountRole {
-  if (value === "portal_user" || value === "portal_manager" || value === "account_administrator") return value;
-  return "portal_user";
-}
 
 export default function S3AccountsPage() {
   const { generalSettings } = useGeneralSettings();
@@ -222,8 +215,8 @@ export default function S3AccountsPage() {
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [userSelections, setUserSelections] = useState<number[]>([]);
   const [groupSelections, setGroupSelections] = useState<number[]>([]);
-  const [userPortalRoleChoice, setUserPortalRoleChoice] = useState<Record<number, PortalAccountRole>>({});
-  const [groupPortalRoleChoice, setGroupPortalRoleChoice] = useState<Record<number, PortalAccountRole>>({});
+  const [userPortalRoleChoice, setUserPortalRoleChoice] = useState<Record<number, AccountAccessRole>>({});
+  const [groupPortalRoleChoice, setGroupPortalRoleChoice] = useState<Record<number, AccountAccessRole>>({});
   const MAX_LINK_OPTIONS = 10;
   const currentUser = useMemo(() => {
     return readStoredUser() as { role?: string | null } | null;
@@ -421,14 +414,14 @@ export default function S3AccountsPage() {
     return editForm.user_links.map((link) => ({
       id: link.user_id,
       label: link.user_email ?? userLabelById.get(link.user_id) ?? `User #${link.user_id}`,
-      role: normalizePortalRole(link.role),
+      role: normalizeAccountAccessRole(link.role),
     }));
   }, [editForm.user_links, userLabelById]);
   const assignedGroups = useMemo(() => {
     return editForm.group_links.map((link) => ({
       id: link.group_id,
       label: link.group_name ?? groupLabelById.get(link.group_id) ?? `Group #${link.group_id}`,
-      role: normalizePortalRole(link.role),
+      role: normalizeAccountAccessRole(link.role),
     }));
   }, [editForm.group_links, groupLabelById]);
   const availableUsers = useMemo(() => {
@@ -1037,14 +1030,14 @@ export default function S3AccountsPage() {
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
-          role: normalizePortalRole(link.role),
+          role: normalizeAccountAccessRole(link.role),
           user_email: link.user_email ?? undefined,
         })) ?? [],
       group_links:
         detail.group_links?.map((link) => ({
           group_id: link.group_id,
           group_name: link.group_name ?? undefined,
-          role: normalizePortalRole(link.role),
+          role: normalizeAccountAccessRole(link.role),
         })) ?? [],
     };
     setEditingS3Account(detail);
@@ -1742,12 +1735,12 @@ export default function S3AccountsPage() {
                                     setEditForm((prev) => ({
                                       ...prev,
                                       user_links: prev.user_links.map((link) =>
-                                        link.user_id === u.id ? { ...link, role: normalizePortalRole(e.target.value) } : link
+                                        link.user_id === u.id ? { ...link, role: normalizeAccountAccessRole(e.target.value) } : link
                                       ),
                                     }))
                                   }
                                 >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>
@@ -1832,11 +1825,11 @@ export default function S3AccountsPage() {
                                   onChange={(event) =>
                                     setUserPortalRoleChoice((prev) => ({
                                       ...prev,
-                                      [u.id]: normalizePortalRole(event.target.value),
+                                      [u.id]: normalizeAccountAccessRole(event.target.value),
                                     }))
                                   }
                                 >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>
@@ -1895,12 +1888,12 @@ export default function S3AccountsPage() {
                                     setEditForm((prev) => ({
                                       ...prev,
                                       group_links: prev.group_links.map((link) =>
-                                        link.group_id === group.id ? { ...link, role: normalizePortalRole(e.target.value) } : link
+                                        link.group_id === group.id ? { ...link, role: normalizeAccountAccessRole(e.target.value) } : link
                                       ),
                                     }))
                                   }
                                 >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>
@@ -1985,11 +1978,11 @@ export default function S3AccountsPage() {
                                   onChange={(event) =>
                                     setGroupPortalRoleChoice((prev) => ({
                                       ...prev,
-                                      [group.id]: normalizePortalRole(event.target.value),
+                                      [group.id]: normalizeAccountAccessRole(event.target.value),
                                     }))
                                   }
                                 >
-                                  {PORTAL_ROLE_OPTIONS.map((option) => (
+                                  {ACCOUNT_ACCESS_ROLE_OPTIONS.map((option) => (
                                     <option key={option.value} value={option.value}>{option.label}</option>
                                   ))}
                                 </UiSelect>

@@ -4,7 +4,7 @@
  */
 import { generateSseCustomerKeyBase64, validateSseCustomerKeyBase64 } from "../../api/browser";
 
-export type CopySseCustomerKeyOutcome = "copied" | "manual_copy_required";
+type CopySseCustomerKeyOutcome = "copied" | "manual_copy_required";
 
 export const resolveSseCustomerKeyInputType = (visible: boolean): "password" | "text" =>
   visible ? "text" : "password";

@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import PageHeader, { type PageHeaderProps } from "./PageHeader";
 import { cx } from "./ui/styles";
 
-export type PageShellProps = PageHeaderProps & {
+type PageShellProps = PageHeaderProps & {
   children?: ReactNode;
   className?: string;
 };

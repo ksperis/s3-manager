@@ -10,13 +10,13 @@ import {
   normalizeManagerToolAccess,
 } from "./adminAccessConfig";
 
-export const adminModalSettingsGroupClass =
+const adminModalSettingsGroupClass =
   "rounded-lg border border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] p-4";
 
-export const adminSettingsItemSurfaceClass = (disabled: boolean) =>
+const adminSettingsItemSurfaceClass = (disabled: boolean) =>
   disabled ? "bg-[var(--ui-surface-muted)] opacity-75" : "bg-[var(--ui-surface)]";
 
-export type WorkspaceAccessToggle = {
+type WorkspaceAccessToggle = {
   checked: boolean;
   disabled?: boolean;
   title: string;

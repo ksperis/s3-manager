@@ -18,10 +18,10 @@ import {
 
 import type { BucketUsageStatsDistributionEntry } from "../../api/bucketUsageStats";
 import { MetricsChartPanel, MetricsEmptyState } from "../../components/MetricsCard";
-import { cx, uiMutedTextClass } from "../../components/ui/styles";
+import { cx } from "../../components/ui/styles";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 
-export const USAGE_STATS_CHART_COLORS = [
+const USAGE_STATS_CHART_COLORS = [
   "#2563EB",
   "#059669",
   "#D97706",

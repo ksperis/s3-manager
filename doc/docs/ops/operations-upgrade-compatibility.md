@@ -26,6 +26,9 @@ migration. It replaces the two account-association dimensions with one ordered
 `role`, removes the legacy columns in the same release, and makes shared S3
 connections Manager-only.
 
+The backend API accepts and returns only the canonical `role`; backend and
+frontend must therefore be deployed together across this migration boundary.
+
 ### Required deployment sequence
 
 Rolling upgrade is prohibited because old backend instances and workers still
@@ -84,6 +87,18 @@ It does not contact RGW or delete storage-side resources.
 
 There is no runtime conversion or compatibility path for old Owner grants,
 shared-space owners, or editable Portal IAM policies.
+
+## 2026-08 S3 connection credential owner types
+
+Migration `0073_canonical_connection_owner_types` makes connection identity
+metadata strict. It converts `rgw_user` to the canonical `s3_user`, trims and
+normalizes the supported values, clears unsupported owner types, and installs a
+database constraint. The only stored values are now `iam_user`, `account_user`,
+`s3_user`, or `NULL`.
+
+The downgrade removes the constraint but does not recreate noncanonical values.
+Back up the application database before the migration if those values must be
+inspected or exported.
 
 ## 2026-03 compatibility cleanup
 

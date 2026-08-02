@@ -195,9 +195,8 @@ flows unless the pathway is explicit, authorized, and audited.
   workflow revalidation. Catalogue and execution must not implement separate
   policies.
 - Account links store one required canonical `role`: `portal_user`,
-  `portal_manager`, or `account_administrator`. Legacy association fields may
-  exist only in the release-boundary API adapter; business services must not
-  read them.
+  `portal_manager`, or `account_administrator`. API payloads and business
+  services must use only this canonical field.
 - Delete associations that grant no right. Do not preserve them as nullable
   roles, sentinels, or hidden compatibility rows.
 - Standard Browser accepts active, unexpired owned private connections with

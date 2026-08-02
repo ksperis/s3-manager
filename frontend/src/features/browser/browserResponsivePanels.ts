@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-export type BrowserPanelVisibilityInput = {
+type BrowserPanelVisibilityInput = {
   allowFoldersPanel: boolean;
   allowInspectorPanel: boolean;
   isNarrowViewport: boolean;
@@ -10,7 +10,7 @@ export type BrowserPanelVisibilityInput = {
   showInspector: boolean;
 };
 
-export type BrowserPanelVisibility = {
+type BrowserPanelVisibility = {
   canUseFoldersPanel: boolean;
   canUseInspectorPanel: boolean;
   isFoldersPanelVisible: boolean;

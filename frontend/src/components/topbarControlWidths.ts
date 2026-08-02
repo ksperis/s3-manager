@@ -4,6 +4,5 @@
  */
 export const TOPBAR_CONTEXT_SELECTOR_WIDTH_CLASS = "w-[22rem] max-w-[50vw] min-w-[19rem]";
 export const TOPBAR_CONTEXT_SELECTOR_ICON_WIDTH_CLASS = "w-9";
-export const TOPBAR_CONTEXT_SELECTOR_COMPACT_WIDTH_CLASS = "w-[96px] max-w-[26vw] min-w-[4.75rem]";
 export const TOPBAR_CONTEXT_SELECTOR_VALUE_WIDTH_CLASS = "max-w-[22rem]";
 export const TOPBAR_CONTEXT_SELECTOR_ESTIMATED_LABEL_WIDTH = 352;

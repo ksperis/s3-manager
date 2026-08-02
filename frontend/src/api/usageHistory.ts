@@ -47,7 +47,7 @@ export type UsageHistoryResponse = {
   summary: UsageHistorySummary;
 };
 
-export type UsageHistoryQuery = {
+type UsageHistoryQuery = {
   granularity: UsageHistoryGranularity;
   endpointId?: number | null;
   subjectType?: UsageHistorySubjectType;
@@ -59,7 +59,7 @@ export type UsageHistoryQuery = {
   sortDir?: UsageHistorySortDir;
 };
 
-export type UsageHistoryCollectionResult = {
+type UsageHistoryCollectionResult = {
   started_at?: string;
   finished_at?: string;
   subjects_total?: number;
@@ -103,7 +103,7 @@ export type UsageHistoryTrendResponse = {
   summary: UsageHistoryTrendSummary;
 };
 
-export type AdminUsageHistoryTrendsQuery = {
+type AdminUsageHistoryTrendsQuery = {
   window: UsageHistoryTrendWindow;
   endpointId?: number | null;
   subjectType?: UsageHistorySubjectType;

@@ -4,9 +4,9 @@
  */
 import axios from "axios";
 
-export type ApiFailureKind = "timeout" | "unavailable" | "denied" | "invalid_response" | "unknown";
+type ApiFailureKind = "timeout" | "unavailable" | "denied" | "invalid_response" | "unknown";
 
-export type ApiFailure = {
+type ApiFailure = {
   kind: ApiFailureKind;
   message: string;
   retryable: boolean;

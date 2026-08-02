@@ -18,7 +18,7 @@ export type BucketUsageStatsPayload = {
   parallelism?: number;
 };
 
-export type BucketUsageStatsScopePayload = {
+type BucketUsageStatsScopePayload = {
   parallelism?: number;
 };
 
@@ -54,7 +54,7 @@ export type BucketUsageStatsSnapshot = {
   calculated_at: string;
 };
 
-export type BucketUsageStatsLatestResponse = {
+type BucketUsageStatsLatestResponse = {
   snapshot?: BucketUsageStatsSnapshot | null;
 };
 
@@ -127,7 +127,7 @@ export type BucketUsageStatsResult = {
   buckets: BucketUsageStatsBucketResult[];
 };
 
-export type BucketUsageStatsStreamOptions = {
+type BucketUsageStatsStreamOptions = {
   signal?: AbortSignal;
   onProgress?: (event: BucketUsageStatsProgress) => void;
 };

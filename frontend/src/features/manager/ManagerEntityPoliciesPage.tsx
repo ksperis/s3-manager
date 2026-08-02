@@ -16,7 +16,7 @@ import InlinePolicyEditor from "./InlinePolicyEditor";
 import { useS3AccountContext } from "./S3AccountContext";
 import { managerPageBreadcrumbs } from "./managerBreadcrumbs";
 
-export type ManagerPolicyEntityType = "user" | "group" | "role";
+type ManagerPolicyEntityType = "user" | "group" | "role";
 
 type PageAction = {
   label: string;

@@ -5,16 +5,11 @@
 import type { PageBreadcrumb } from "../../components/PageHeader";
 import {
   ADMIN_PAGE_CONTRACTS as ADMIN_NAVIGATION_CONTRACTS,
-  buildWorkspaceBreadcrumbs,
   buildWorkspacePageBreadcrumbs,
   type WorkspacePageContract,
 } from "../../navigation/workspacePages";
 
-export function adminBreadcrumbs(...breadcrumbs: PageBreadcrumb[]): PageBreadcrumb[] {
-  return buildWorkspaceBreadcrumbs("admin", ...breadcrumbs);
-}
-
-export type AdminPageId = keyof typeof ADMIN_NAVIGATION_CONTRACTS;
+type AdminPageId = keyof typeof ADMIN_NAVIGATION_CONTRACTS;
 type GovernedAdminPageId =
   | "accounts"
   | "groups"
@@ -23,7 +18,7 @@ type GovernedAdminPageId =
   | "storage-endpoints"
   | "users";
 
-export type AdminPageContract = {
+type AdminPageContract = {
   title: string;
   navigation: WorkspacePageContract;
   governanceArea: "accounts" | "connections" | "endpoints" | "identity";

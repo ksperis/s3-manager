@@ -50,11 +50,11 @@ export function useAdminS3UserStats(
     } finally {
       setLoading(false);
     }
-  }, [userId, enabled, refreshKey]);
+  }, [userId, enabled]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return { stats, loading, error, reload: load };
 }

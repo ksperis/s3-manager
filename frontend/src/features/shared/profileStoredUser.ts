@@ -6,7 +6,7 @@ import { CLIENT_STORAGE_KEYS, readClientJson, writeClientJson } from "../../util
 import { SESSION_USER_UPDATED_EVENT } from "../../utils/workspaces";
 import type { UserAvatarDescriptor } from "../../api/users";
 
-export type StoredUserProfilePatch = {
+type StoredUserProfilePatch = {
   fullName?: string | null;
   displayName?: string | null;
   uiLanguage?: "en" | "fr" | "de" | null;

@@ -3,9 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.models.pagination import PaginatedResponse
-from app.utils.account_roles import adapt_legacy_role_payload, legacy_fields_for_role
+from app.utils.account_roles import CanonicalAccountRole
 
 UiLanguage = Literal["en", "fr", "de"]
 UiThemePreference = Literal["light", "dark"]
@@ -37,21 +37,10 @@ class LinkedUiGroup(BaseModel):
 
 
 class AccountMembership(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     account_id: int
-    role: str
-    account_admin: Optional[bool] = Field(default=None, deprecated=True)
-    account_role: Optional[str] = Field(default=None, deprecated=True)
-
-    @model_validator(mode="before")
-    @classmethod
-    def adapt_legacy_role(cls, value):
-        return adapt_legacy_role_payload(value, require_explicit=True)
-
-    @model_validator(mode="after")
-    def derive_legacy_fields(self) -> "AccountMembership":
-        if self.role:
-            self.account_admin, self.account_role = legacy_fields_for_role(self.role)
-        return self
+    role: CanonicalAccountRole
 
 
 class EffectiveAccountGroupSource(BaseModel):
@@ -183,17 +172,10 @@ class UserSelfUpdate(BaseModel):
 
 
 class UserAssignS3Account(BaseModel):
-    account_id: int
-    role: str
-    account_admin: Optional[bool] = Field(default=None, deprecated=True)
-    account_role: Optional[str] = Field(default=None, deprecated=True)
+    model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="before")
-    @classmethod
-    def adapt_legacy_role(cls, value):
-        if isinstance(value, dict) and "account_root" in value:
-            raise ValueError("account_root is internal and cannot be changed through this API")
-        return adapt_legacy_role_payload(value, require_explicit=True)
+    account_id: int
+    role: CanonicalAccountRole
 
 
 class EffectiveUserAccess(BaseModel):

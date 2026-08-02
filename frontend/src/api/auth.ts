@@ -6,7 +6,7 @@ import client from "./client";
 import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "./users";
 import type { AccountAccessRole } from "./accountRoles";
 
-export type LoginResponse = {
+type LoginResponse = {
   access_token: string;
   token_type: string;
   user: {
@@ -44,7 +44,7 @@ export type LoginResponse = {
   };
 };
 
-export type SessionCapabilities = {
+type SessionCapabilities = {
   can_manage_iam: boolean;
   can_manage_buckets: boolean;
   can_view_traffic: boolean;
@@ -52,7 +52,7 @@ export type SessionCapabilities = {
   endpoint_url?: string | null;
 };
 
-export type KeyLoginResponse = {
+type KeyLoginResponse = {
   access_token: string;
   token_type: string;
   session: {
@@ -131,13 +131,13 @@ export type OidcProviderInfo = {
   icon_url?: string | null;
 };
 
-export type OidcStartResponse = {
+type OidcStartResponse = {
   provider: string;
   authorization_url: string;
   state: string;
 };
 
-export type OidcCallbackResponse = LoginResponse & {
+type OidcCallbackResponse = LoginResponse & {
   redirect_path?: string | null;
 };
 

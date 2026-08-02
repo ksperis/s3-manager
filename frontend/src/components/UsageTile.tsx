@@ -6,7 +6,7 @@ import { formatPercentage } from "../utils/format";
 import UiMeterBar from "./ui/UiMeterBar";
 import { cx, uiCardMutedClass, uiMutedTextClass, uiTitleTextClass } from "./ui/styles";
 
-export type UsageTileProps = {
+type UsageTileProps = {
   label: string;
   used?: number | null;
   quota?: number | null;
