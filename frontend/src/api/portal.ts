@@ -6,7 +6,7 @@ import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS, timeoutForRequestProfile } fro
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
-import type { BucketUsageStatsAggregateResponse } from "./bucketUsageStats";
+import type { BucketUsageStatsAggregateResponse, BucketUsageStatsSnapshot } from "./bucketUsageStats";
 import { resolveApiBaseUrl, streamBucketsWithSse } from "./sseBucketsStream";
 import type { ManagerUsageTrendsResponse } from "./stats";
 import type { UsageHistoryTrendResponse, UsageHistoryTrendWindow } from "./usageHistory";
@@ -145,6 +145,15 @@ export type PortalStorageSpaceSummary = {
 };
 
 type PortalStorageSpace = PortalStorageSpaceSummary;
+
+export type PortalStorageSpaceUsageStatsSnapshot = Omit<
+  BucketUsageStatsSnapshot,
+  "scope_kind" | "scope_id" | "scope_name" | "bucket_name" | "warnings"
+>;
+
+type PortalStorageSpaceUsageStatsResponse = {
+  snapshot?: PortalStorageSpaceUsageStatsSnapshot | null;
+};
 
 export type PortalStorageSpaceInitialShare = {
   user_id: number;
@@ -601,6 +610,17 @@ export async function getPortalUsageStatsAggregate(
 ): Promise<BucketUsageStatsAggregateResponse> {
   const { data } = await client.get<BucketUsageStatsAggregateResponse>(
     "/portal/usage-stats/latest",
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function fetchPortalStorageSpaceUsageStats(
+  accountId: S3AccountSelector,
+  spaceId: string
+): Promise<PortalStorageSpaceUsageStatsResponse> {
+  const { data } = await client.get<PortalStorageSpaceUsageStatsResponse>(
+    `/portal/storage-spaces/${encodeURIComponent(spaceId)}/usage-stats`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;

@@ -79,6 +79,7 @@ import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { storageSpaceObjectPath, storageSpacePath } from "./portalWorkspaceModel";
 import { completePortalTransfer, failPortalTransfer, startPortalTransfer } from "./portalTransferTracker";
+import PortalStorageSpaceStatistics from "./PortalStorageSpaceStatistics";
 import {
   PortalPageState,
   portalStorageSpaceStatusTone,
@@ -117,7 +118,7 @@ type PublicLinkTarget = {
   name: string;
 };
 
-type SpaceDetailTab = "files" | "collaborators" | "settings";
+type SpaceDetailTab = "files" | "collaborators" | "statistics" | "settings";
 
 function ObjectMetricCard({
   label,
@@ -157,7 +158,7 @@ export default function PortalStorageSpaceDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SpaceDetailTab>(() => {
     const requestedTab = new URLSearchParams(location.search).get("tab");
-    return requestedTab === "collaborators" || requestedTab === "settings"
+    return requestedTab === "collaborators" || requestedTab === "statistics" || requestedTab === "settings"
       ? requestedTab
       : "files";
   });
@@ -233,7 +234,10 @@ export default function PortalStorageSpaceDetailPage() {
     accountIdForApi,
     selectedAccount,
     refreshWorkspaceData = () => undefined,
-  } = usePortalWorkspaceData({ includeArchived: true });
+  } = usePortalWorkspaceData({
+    includeArchived: true,
+    includeUsage: activeTab === "statistics",
+  });
   const decodedSpaceId = decodeRouteValue(spaceId);
   const space = workspace.spaces.find((item) => item.id === decodedSpaceId) ?? null;
   const startGuideStorageKey = space
@@ -346,6 +350,7 @@ export default function PortalStorageSpaceDetailPage() {
     if (
       requestedTab === "files" ||
       requestedTab === "collaborators" ||
+      requestedTab === "statistics" ||
       requestedTab === "settings"
     ) {
       setActiveTab(requestedTab);
@@ -853,15 +858,6 @@ export default function PortalStorageSpaceDetailPage() {
   const canRename = hasFullAccess && space.nameEditable;
   const canModifyObjects = canBrowse && (hasFullAccess || space.role === "Editor");
   const lockedBucketName = space.internalName ?? space.id;
-  const quotaPercent =
-    space.quotaBytes && space.usedBytes
-      ? Math.min(100, (space.usedBytes / space.quotaBytes) * 100)
-      : null;
-  const averageFileSize =
-    space.usedBytes != null && space.objectCount != null && space.objectCount > 0
-      ? space.usedBytes / space.objectCount
-      : null;
-  const lastActivity = workspace.activity.find((item) => item.spaceId === space.id)?.actor ?? "-";
   const accessKeysPath = `/portal/access-keys?space_id=${encodeURIComponent(lockedBucketName)}&create=external`;
   const canInvitePeople = !isArchived && space.role === "Manager" && space.visibility === "shared";
   const knownCollaboratorCount = Math.max(
@@ -1486,20 +1482,6 @@ export default function PortalStorageSpaceDetailPage() {
     </section>
   ) : null;
 
-  const spaceMetricsSection = (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label={t({ en: "Space summary", fr: "Résumé de l'espace", de: "Bereichszusammenfassung" })}>
-      <ObjectMetricCard
-        label={t({ en: "Storage used", fr: "Stockage utilisé", de: "Genutzter Speicher" })}
-        value={formatBytes(space.usedBytes)}
-        detail={quotaPercent == null ? t({ en: "Quota unavailable", fr: "Quota indisponible", de: "Quote nicht verfügbar" }) : t({ en: `of ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)}%)`, fr: `sur ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)`, de: `von ${formatBytes(space.quotaBytes)} (${Math.round(quotaPercent)} %)` })}
-        progress={quotaPercent ?? undefined}
-      />
-      <ObjectMetricCard label={t({ en: "Files", fr: "Fichiers", de: "Dateien" })} value={formatCompactNumber(space.objectCount)} detail={space.objectCount == null ? t({ en: "Unavailable", fr: "Indisponible", de: "Nicht verfügbar" }) : t({ en: "Tracked", fr: "Suivis", de: "Erfasst" })} />
-      <ObjectMetricCard label={t({ en: "Average size", fr: "Taille moyenne", de: "Durchschnittsgröße" })} value={formatBytes(averageFileSize)} detail={t({ en: "per file", fr: "par fichier", de: "pro Datei" })} />
-      <ObjectMetricCard label={t({ en: "Last activity", fr: "Dernière activité", de: "Letzte Aktivität" })} value={lastActivity === "-" ? "-" : t({ en: "Recent", fr: "Récente", de: "Kürzlich" })} detail={lastActivity === "-" ? t({ en: "No activity available", fr: "Aucune activité disponible", de: "Keine Aktivität verfügbar" }) : t({ en: `By ${lastActivity}`, fr: `Par ${lastActivity}`, de: `Von ${lastActivity}` })} />
-    </section>
-  );
-
   const externalToolsCard = (
     <UiCard title={t({ en: "Connect external tools", fr: "Connecter des outils externes", de: "Externe Werkzeuge verbinden" })}>
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
@@ -1648,6 +1630,7 @@ export default function PortalStorageSpaceDetailPage() {
         tabs={[
           { id: "files", label: t({ en: "Files", fr: "Fichiers", de: "Dateien" }) },
           { id: "collaborators", label: t({ en: "Collaborators", fr: "Collaborateurs", de: "Mitwirkende" }) },
+          { id: "statistics", label: t({ en: "Statistics", fr: "Statistiques", de: "Statistiken" }) },
           { id: "settings", label: t({ en: "Settings", fr: "Réglages", de: "Einstellungen" }) },
         ]}
         activeTab={activeTab}
@@ -1664,7 +1647,17 @@ export default function PortalStorageSpaceDetailPage() {
         <PortalTabPanel idPrefix="portal-space-detail" tabId="files">
           {startSpacePanel}
           {filesSection}
-          {spaceMetricsSection}
+        </PortalTabPanel>
+      ) : null}
+
+      {activeTab === "statistics" ? (
+        <PortalTabPanel idPrefix="portal-space-detail" tabId="statistics">
+          <PortalStorageSpaceStatistics
+            accountIdForApi={accountIdForApi}
+            accountName={workspace.accountName}
+            rgwAccountId={selectedAccount?.rgw_account_id}
+            space={space}
+          />
         </PortalTabPanel>
       ) : null}
 

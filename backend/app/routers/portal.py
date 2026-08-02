@@ -56,6 +56,8 @@ from app.models.portal import (
     PortalStorageSpaceSharePayload,
     PortalStorageSpaceShareUpdate,
     PortalStorageSpaceSummary,
+    PortalStorageSpaceUsageStatsResponse,
+    PortalStorageSpaceUsageStatsSnapshot,
     PortalStorageSpaceUpdate,
     PortalUsage,
     PortalTrashResponse,
@@ -2044,6 +2046,65 @@ def portal_storage_space_detail(
     if storage_space is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
     return storage_space
+
+
+@router.get(
+    "/storage-spaces/{space_id}/usage-stats",
+    response_model=PortalStorageSpaceUsageStatsResponse,
+)
+def portal_storage_space_usage_stats(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    portal_service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+    db: Session = Depends(get_db),
+) -> PortalStorageSpaceUsageStatsResponse:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    _ensure_portal_bucket_usage_stats_enabled()
+    try:
+        spaces = portal_service.list_storage_spaces(actor, access, include_archived=True)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    storage_space = next((space for space in spaces if space.id == space_id), None)
+    if storage_space is None or not storage_space.internal_bucket_name:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage space not found")
+    if not storage_space.can_browse or storage_space.archived_at is not None or storage_space.status == "Archived":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Storage Space content access is required to view detailed statistics",
+        )
+    snapshot = BucketUsageStatsService().get_latest(
+        db,
+        scope_kind="manager",
+        scope_id=_portal_usage_stats_source_scope_id(access.account),
+        bucket_name=storage_space.internal_bucket_name,
+    )
+    if snapshot is None:
+        return PortalStorageSpaceUsageStatsResponse()
+    return PortalStorageSpaceUsageStatsResponse(
+        snapshot=PortalStorageSpaceUsageStatsSnapshot.model_validate(
+            snapshot.model_dump(
+                include={
+                    "scan_mode",
+                    "version_listing_available",
+                    "object_version_count",
+                    "current_version_count",
+                    "noncurrent_version_count",
+                    "delete_marker_count",
+                    "total_bytes",
+                    "current_bytes",
+                    "noncurrent_bytes",
+                    "data_type_distribution",
+                    "storage_class_distribution",
+                    "size_distribution",
+                    "age_distribution",
+                    "current_vs_noncurrent",
+                    "calculated_at",
+                }
+            )
+        )
+    )
 
 
 @router.get("/traffic")

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { BucketUsageStatsSnapshot } from "../../api/bucketUsageStats";
-import { UsageStatsDistributionTooltip } from "./BucketUsageStatsCharts";
+import { UsageStatsDataTypeDonut, UsageStatsDistributionTooltip } from "./BucketUsageStatsCharts";
 import BucketUsageStatsPanel from "./BucketUsageStatsPanel";
 
 vi.mock("recharts", () => {
@@ -15,7 +15,9 @@ vi.mock("recharts", () => {
     BarChart: Passthrough,
     CartesianGrid: Passthrough,
     Cell: () => null,
-    Pie: Passthrough,
+    Pie: ({ children, paddingAngle }: { children?: ReactNode; paddingAngle?: number }) => (
+      <div data-testid="usage-stats-pie" data-padding-angle={paddingAngle}>{children}</div>
+    ),
     PieChart: Passthrough,
     ResponsiveContainer: Passthrough,
     Tooltip: () => null,
@@ -115,5 +117,11 @@ describe("BucketUsageStatsPanel", () => {
 
     expect(screen.getByText(/Version listing was unavailable/i)).toBeInTheDocument();
     expect(screen.getByText("Unavailable for fallback current-only scans.")).toBeInTheDocument();
+  });
+
+  it("renders a complete donut when the distribution has one category", () => {
+    render(<UsageStatsDataTypeDonut entries={[snapshot.data_type_distribution[0]]} />);
+
+    expect(screen.getByTestId("usage-stats-pie")).toHaveAttribute("data-padding-angle", "0");
   });
 });

@@ -137,7 +137,14 @@ export function UsageStatsDataTypeDonut({
     <div className={cx("grid gap-4", legendWidth > 0 && "lg:grid-cols-[minmax(0,1fr)_220px]")}>
       <ResponsiveContainer width="100%" height={height}>
         <PieChart>
-          <Pie data={entries} dataKey="bytes" nameKey="label" innerRadius={innerRadius} outerRadius={outerRadius} paddingAngle={2}>
+          <Pie
+            data={entries}
+            dataKey="bytes"
+            nameKey="label"
+            innerRadius={innerRadius}
+            outerRadius={outerRadius}
+            paddingAngle={entries.length > 1 ? 2 : 0}
+          >
             {entries.map((entry, index) => (
               <Cell key={entry.key} fill={usageStatsChartColor(index)} />
             ))}

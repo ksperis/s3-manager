@@ -16,12 +16,13 @@ when needed.
 
 | Task | Where | Notes |
 |---|---|---|
-| Open an assigned space | **Portal > Spaces** | Select a space to browse files and view usage. |
+| Open an assigned space | **Portal > Spaces** | Select a space to browse files, manage collaborators, and view its statistics. |
 | Create a new space | **Spaces > Create space** | Any Portal user can create a private space when private creation is enabled. Portal managers can also create Team or Selected people spaces. The new space opens with the next steps to add files and invite people. |
 | Add existing storage | **Spaces > Add existing space** | Portal managers can expose existing buckets as spaces and choose the initial access mode. Selected people imports can include collaborators immediately. The added space opens with the same file and collaborator next steps. |
 | Choose a space icon | **Spaces > Icon** | Portal managers can choose a pictogram or upload a PNG/JPEG image up to 1 MiB. The icon is shared by the Portal and Browser space lists. |
 | Archive a space | Space actions | Archived spaces keep their bucket and metadata but suspend browsing, sharing, and public links. This is reversible. |
 | Configure version history | Space details > **Settings** | Owners can review Versioning, Lifecycle, and version history retention. A project Portal Manager can modify these values on an active space. |
+| Review space statistics | Space details > **Statistics** | See current storage, remaining room, files, average size, file composition, and upload/download activity for this space only. |
 | Delete a space | Space settings > **Delete space** | Private owners and Portal managers can permanently delete active, archived, and imported spaces only after current files and file history have been removed. |
 | Understand collaborators | **Portal > Spaces** or Space details > Collaborators | The Spaces list shows up to five collaborator avatars; hover an avatar to see the full name, and use the `+N` indicator for the remaining count. The detail panel shows the current mode, the private owner or project managers, covered member count, direct collaborators, and public-link count. |
 | Connect an external S3 tool | Space details > Connect external tools | Copy the space-to-bucket mapping, then open External tools with the space preselected. |
@@ -36,6 +37,22 @@ and shows a start guide. Use it to keep the setup order simple:
 
 The same guide remains visible when an active space has no files yet, so you can
 come back later and still see the next step.
+
+## Storage Space statistics
+
+Open the **Statistics** tab on a space to review its latest known summary. A
+zero value is shown as zero; a dash means the value is not currently known.
+
+When you can read the space content, the page also shows the latest stored file
+composition snapshot (types, sizes, ages, storage classes, and current versus
+older versions) and its upload/download activity for the last 24 hours, 7 days,
+or 30 days. These sections are loaded only when you open the tab. Portal does
+not recalculate the composition from this page.
+
+An archived space, or a space whose content you cannot read, keeps its known
+summary but does not expose detailed statistics. Per-space storage growth is
+not shown because no reliable historical series is currently collected at this
+scope; use **Storage health > Trends** for the project-wide history.
 
 ## Access modes
 

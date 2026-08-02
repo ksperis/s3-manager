@@ -27,6 +27,11 @@ import BucketUsageStatsAggregateCard from "../shared/BucketUsageStatsAggregateCa
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { formatPortalCurrency } from "./portalI18n";
+import {
+  portalActivitySourceTitle,
+  portalTrafficLabels,
+  portalUsageCompositionLabels,
+} from "./portalStatisticsLabels";
 import { PortalPageState } from "./portalUi";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
@@ -482,6 +487,7 @@ export default function PortalUsagePage() {
           coverageItemLabel={t({ en: "spaces", fr: "espaces", de: "Bereiche" })}
           emptyTitle={t({ en: "No file-type breakdown yet.", fr: "Aucune répartition par type pour le moment.", de: "Noch keine Dateityp-Aufteilung." })}
           emptyDescription={t({ en: "The platform prepares this view automatically when file composition collection is available.", fr: "La plateforme prépare cette vue automatiquement lorsque la collecte de composition est disponible.", de: "Die Plattform erstellt diese Ansicht automatisch, wenn die Dateizusammensetzung erfasst wird." })}
+          compositionLabels={portalUsageCompositionLabels(t)}
         />
       ) : null}
 
@@ -527,28 +533,10 @@ export default function PortalUsagePage() {
           showEmpty={trafficMissing}
           description={t({ en: "How files moved in and out of this workspace.", fr: "Comment les fichiers sont entrés et sortis de ce workspace.", de: "Wie Dateien in diesen Workspace hinein- und hinausbewegt wurden." })}
           bucketRankingTitle={t({ en: "Most active Storage Spaces", fr: "Espaces de stockage les plus actifs", de: "Aktivste Speicherbereiche" })}
-          userRankingTitle={t({ en: "Most active users", fr: "Utilisateurs les plus actifs", de: "Aktivste Benutzer" })}
+          userRankingTitle={portalActivitySourceTitle(t)}
           bucketRankingLabels={bucketRankingLabels}
           userRankingLabels={userRankingLabels}
-          labels={{
-            egress: t({ en: "Downloaded", fr: "Téléchargé", de: "Heruntergeladen" }),
-            egressHint: t({ en: "Sent out", fr: "Sorti", de: "Ausgehend" }),
-            ingress: t({ en: "Uploaded", fr: "Envoyé", de: "Hochgeladen" }),
-            ingressHint: t({ en: "Sent in", fr: "Entré", de: "Eingehend" }),
-            successRate: t({ en: "Completed activity", fr: "Activité réussie", de: "Abgeschlossene Aktivität" }),
-            summaryActivityUnit: t({ en: "actions", fr: "actions", de: "Aktionen" }),
-            trafficChartTitle: t({ en: "Movement over time", fr: "Mouvements dans le temps", de: "Bewegung im Zeitverlauf" }),
-            trafficChartSubtitle: t({ en: "Uploads compared with downloads", fr: "Envois comparés aux téléchargements", de: "Uploads im Vergleich zu Downloads" }),
-            callVolumeTitle: t({ en: "File activity", fr: "Activité fichier", de: "Dateiaktivität" }),
-            callVolumeSubtitle: t({ en: "Actions per period", fr: "Actions par période", de: "Aktionen pro Zeitraum" }),
-            requestBreakdownTitle: t({ en: "Action types", fr: "Types d'actions", de: "Aktionstypen" }),
-            emptyMessage: t({ en: "No upload or download activity for this window.", fr: "Aucun envoi ou téléchargement sur cette période.", de: "Keine Upload- oder Download-Aktivität in diesem Fenster." }),
-            rankingActivityUnit: t({ en: "actions", fr: "actions", de: "Aktionen" }),
-            successText: t({ en: "completed", fr: "réussies", de: "abgeschlossen" }),
-            inboundLabel: t({ en: "Uploaded", fr: "Envoyé", de: "Hochgeladen" }),
-            outboundLabel: t({ en: "Downloaded", fr: "Téléchargé", de: "Heruntergeladen" }),
-            callVolumeBarName: t({ en: "Actions", fr: "Actions", de: "Aktionen" }),
-          }}
+          labels={portalTrafficLabels(t)}
         />
       ) : null}
 

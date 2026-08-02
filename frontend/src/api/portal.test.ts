@@ -41,6 +41,7 @@ import {
   fetchPortalStorageSpaceObjectDetail,
   fetchPortalStorageSpaceObjectVersions,
   fetchPortalStorageSpaceAccessSummary,
+  fetchPortalStorageSpaceUsageStats,
   fetchPortalStorageSpaceTrash,
   fetchPortalStorageSpace,
   fetchPortalUsageHistoryTrends,
@@ -466,9 +467,13 @@ describe("portal storage spaces api", () => {
 
   it("fetches portal usage composition and history through portal endpoints", async () => {
     await getPortalUsageStatsAggregate("101");
+    await fetchPortalStorageSpaceUsageStats("101", "space / one");
     await fetchPortalUsageHistoryTrends("101", "month");
 
     expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-stats/latest", {
+      params: { account_id: "101" },
+    });
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/storage-spaces/space%20%2F%20one/usage-stats", {
       params: { account_id: "101" },
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/usage-history-trends", {

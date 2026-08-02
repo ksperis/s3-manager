@@ -724,6 +724,49 @@ def test_portal_traffic_aggregates_visible_buckets_for_portal_user(monkeypatch, 
     assert captured["bucket_filters"] == {"bucket-a", "bucket-b"}
 
 
+def test_portal_traffic_filters_to_requested_visible_bucket(monkeypatch, db_session):
+    account = S3Account(name="portal-traffic-bucket", rgw_account_id="tenant-traffic-bucket")
+    user = User(email="portal-traffic-bucket@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    service = PortalService(db_session)
+    captured: dict = {}
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda *_args, **_kwargs: ["bucket-a"],
+    )
+
+    class FakeTrafficService:
+        def __init__(self, _account):
+            pass
+
+        def get_traffic(self, *, window, bucket=None, bucket_filters=None):
+            captured["bucket"] = bucket
+            captured["bucket_filters"] = bucket_filters
+            return {"window": window.value}
+
+    monkeypatch.setattr(portal_router, "TrafficService", FakeTrafficService)
+
+    portal_router.portal_traffic(
+        window=TrafficWindow.WEEK,
+        bucket="bucket-a",
+        access=_portal_access(account, user),
+        portal_service=service,
+    )
+
+    assert captured == {"bucket": "bucket-a", "bucket_filters": None}
+
+    with pytest.raises(HTTPException) as excinfo:
+        portal_router.portal_traffic(
+            window=TrafficWindow.WEEK,
+            bucket="bucket-b",
+            access=_portal_access(account, user),
+            portal_service=service,
+        )
+    assert excinfo.value.status_code == 403
+
+
 def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_session):
     account = S3Account(name="portal-account-no-keys", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-nokeys@example.com", hashed_password="x", role="ui_user")
@@ -5453,6 +5496,158 @@ def test_portal_usage_stats_latest_respects_feature_flag(monkeypatch, db_session
 
     with pytest.raises(HTTPException) as excinfo:
         portal_router.portal_usage_stats_latest(
+            access=_portal_access(account, user),
+            portal_service=PortalService(db_session),
+            db=db_session,
+        )
+
+    assert excinfo.value.status_code == 403
+    assert excinfo.value.detail == "Bucket usage stats feature is disabled"
+
+
+def test_portal_storage_space_usage_stats_returns_sanitized_snapshot(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    account = S3Account(name="portal-space-stats", rgw_account_id="portal-space-stats")
+    user = User(email="space-stats@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    db_session.refresh(account)
+    BucketUsageStatsService().upsert_snapshot(
+        db_session,
+        _bucket_usage_snapshot("space-bucket", scope_id=str(account.id), bytes_value=123),
+    )
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="space-id",
+                name="Space",
+                role="Viewer",
+                internal_bucket_name="space-bucket",
+            )
+        ],
+    )
+
+    payload = portal_router.portal_storage_space_usage_stats(
+        "space-id",
+        access=_portal_access(account, user),
+        portal_service=service,
+        db=db_session,
+    )
+
+    assert payload.snapshot is not None
+    assert payload.snapshot.total_bytes == 123
+    assert payload.snapshot.data_type_distribution[0].key == "documents"
+    assert set(payload.snapshot.model_dump()) == {
+        "scan_mode",
+        "version_listing_available",
+        "object_version_count",
+        "current_version_count",
+        "noncurrent_version_count",
+        "delete_marker_count",
+        "total_bytes",
+        "current_bytes",
+        "noncurrent_bytes",
+        "data_type_distribution",
+        "storage_class_distribution",
+        "size_distribution",
+        "age_distribution",
+        "current_vs_noncurrent",
+        "calculated_at",
+    }
+
+
+def test_portal_storage_space_usage_stats_returns_empty_without_snapshot(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    account = S3Account(name="portal-space-stats-empty", rgw_account_id="portal-space-stats-empty")
+    user = User(email="space-stats-empty@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="space-id",
+                name="Space",
+                role="Viewer",
+                internal_bucket_name="space-bucket",
+            )
+        ],
+    )
+
+    payload = portal_router.portal_storage_space_usage_stats(
+        "space-id",
+        access=_portal_access(account, user),
+        portal_service=service,
+        db=db_session,
+    )
+
+    assert payload.snapshot is None
+
+
+@pytest.mark.parametrize(
+    ("requested_space_id", "can_browse", "archived", "expected_status"),
+    [
+        ("forged-id", True, False, 404),
+        ("space-id", False, False, 403),
+        ("space-id", True, True, 403),
+    ],
+)
+def test_portal_storage_space_usage_stats_rejects_inaccessible_space(
+    monkeypatch,
+    db_session,
+    requested_space_id,
+    can_browse,
+    archived,
+    expected_status,
+):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(True))
+    account = S3Account(name="portal-space-stats-denied", rgw_account_id="portal-space-stats-denied")
+    user = User(email="space-stats-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+    service = PortalService(db_session)
+    monkeypatch.setattr(
+        service,
+        "list_storage_spaces",
+        lambda *_args, **_kwargs: [
+            PortalStorageSpaceSummary(
+                id="space-id",
+                name="Space",
+                role="Viewer",
+                can_browse=can_browse,
+                status="Archived" if archived else "Active",
+                archived_at=datetime(2026, 6, 1, tzinfo=timezone.utc) if archived else None,
+                internal_bucket_name="space-bucket",
+            )
+        ],
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        portal_router.portal_storage_space_usage_stats(
+            requested_space_id,
+            access=_portal_access(account, user),
+            portal_service=service,
+            db=db_session,
+        )
+
+    assert excinfo.value.status_code == expected_status
+
+
+def test_portal_storage_space_usage_stats_respects_feature_flag(monkeypatch, db_session):
+    monkeypatch.setattr(portal_router, "load_app_settings", lambda: _bucket_usage_settings(False))
+    account = S3Account(name="portal-space-stats-disabled", rgw_account_id="portal-space-stats-disabled")
+    user = User(email="space-stats-disabled@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as excinfo:
+        portal_router.portal_storage_space_usage_stats(
+            "space-id",
             access=_portal_access(account, user),
             portal_service=PortalService(db_session),
             db=db_session,

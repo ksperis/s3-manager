@@ -21,7 +21,18 @@ import {
   usageStatsChartColor,
 } from "./BucketUsageStatsCharts";
 
-type BucketUsageStatsVisualSource = BucketUsageStatsSnapshot | BucketUsageStatsAggregate;
+type BucketUsageStatsVisualSource = Pick<
+  BucketUsageStatsSnapshot,
+  | "object_version_count"
+  | "total_bytes"
+  | "current_bytes"
+  | "noncurrent_bytes"
+  | "data_type_distribution"
+  | "storage_class_distribution"
+  | "size_distribution"
+  | "age_distribution"
+  | "current_vs_noncurrent"
+>;
 
 type SummaryMetric = {
   label: string;
@@ -29,11 +40,31 @@ type SummaryMetric = {
   hint?: string;
 };
 
+export type BucketUsageStatsCompositionLabels = {
+  logicalBytes?: string;
+  currentBytes?: string;
+  noncurrentBytes?: string;
+  versionsUnit?: string;
+  unavailable?: string;
+  versionListingWarning?: string;
+  dataTypesTitle?: string;
+  dataTypesSubtitle?: string;
+  currentVsNoncurrentTitle?: string;
+  currentVsNoncurrentSubtitle?: string;
+  storageClassesTitle?: string;
+  storageClassesSubtitle?: string;
+  objectSizesTitle?: string;
+  objectSizesSubtitle?: string;
+  objectAgeTitle?: string;
+  objectAgeSubtitle?: string;
+};
+
 type BucketUsageStatsCompositionVisualsProps = {
   stats: BucketUsageStatsVisualSource;
   finalMetric: SummaryMetric;
   currentVsNoncurrentEmptyMessage?: string;
   showVersionListingWarning?: boolean;
+  labels?: BucketUsageStatsCompositionLabels;
 };
 
 type BucketUsageStatsDataTypesCardProps = {
@@ -48,8 +79,8 @@ function SummaryMetricCard({ label, value, hint }: SummaryMetric) {
   return <MetricsTile label={label} value={value} hint={hint} />;
 }
 
-function usageStatsRatio(bytes: number, totalBytes: number): string {
-  return totalBytes > 0 ? formatPercentage((bytes / totalBytes) * 100) : "Unavailable";
+function usageStatsRatio(bytes: number, totalBytes: number, unavailable: string): string {
+  return totalBytes > 0 ? formatPercentage((bytes / totalBytes) * 100) : unavailable;
 }
 
 function topEntries(entries: BucketUsageStatsDistributionEntry[], limit = 5): BucketUsageStatsDistributionEntry[] {
@@ -61,6 +92,7 @@ export function BucketUsageStatsCompositionVisuals({
   finalMetric,
   currentVsNoncurrentEmptyMessage = "Unavailable for fallback current-only scans.",
   showVersionListingWarning,
+  labels,
 }: BucketUsageStatsCompositionVisualsProps) {
   const dataTypes = nonEmptyUsageStatsEntries(stats.data_type_distribution);
   const storageClasses = nonEmptyUsageStatsEntries(stats.storage_class_distribution);
@@ -73,47 +105,47 @@ export function BucketUsageStatsCompositionVisuals({
     <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-4">
         <SummaryMetricCard
-          label="Logical bytes"
+          label={labels?.logicalBytes ?? "Logical bytes"}
           value={formatBytes(stats.total_bytes)}
-          hint={`${formatCompactNumber(stats.object_version_count)} version(s)`}
+          hint={`${formatCompactNumber(stats.object_version_count)} ${labels?.versionsUnit ?? "version(s)"}`}
         />
         <SummaryMetricCard
-          label="Current bytes"
+          label={labels?.currentBytes ?? "Current bytes"}
           value={formatBytes(stats.current_bytes)}
-          hint={usageStatsRatio(stats.current_bytes, versionBytes)}
+          hint={usageStatsRatio(stats.current_bytes, versionBytes, labels?.unavailable ?? "Unavailable")}
         />
         <SummaryMetricCard
-          label="Non-current bytes"
+          label={labels?.noncurrentBytes ?? "Non-current bytes"}
           value={formatBytes(stats.noncurrent_bytes)}
-          hint={usageStatsRatio(stats.noncurrent_bytes, versionBytes)}
+          hint={usageStatsRatio(stats.noncurrent_bytes, versionBytes, labels?.unavailable ?? "Unavailable")}
         />
         <SummaryMetricCard {...finalMetric} />
       </div>
 
       {showVersionListingWarning && (
         <PageBanner tone="warning">
-          Version listing was unavailable. Current/non-current space distribution cannot be calculated from the fallback listing.
+          {labels?.versionListingWarning ?? "Version listing was unavailable. Current/non-current space distribution cannot be calculated from the fallback listing."}
         </PageBanner>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <UsageStatsChartShell title="Data types" subtitle="Logical bytes by inferred object type">
+        <UsageStatsChartShell title={labels?.dataTypesTitle ?? "Data types"} subtitle={labels?.dataTypesSubtitle ?? "Logical bytes by inferred object type"}>
           <UsageStatsDataTypeDonut entries={dataTypes} />
         </UsageStatsChartShell>
-        <UsageStatsChartShell title="Current vs non-current" subtitle="Stored object-version bytes">
+        <UsageStatsChartShell title={labels?.currentVsNoncurrentTitle ?? "Current vs non-current"} subtitle={labels?.currentVsNoncurrentSubtitle ?? "Stored object-version bytes"}>
           {currentVsNoncurrent.length > 0 ? (
             <UsageStatsDataTypeDonut entries={currentVsNoncurrent} />
           ) : (
             <UsageStatsEmptyChart message={currentVsNoncurrentEmptyMessage} />
           )}
         </UsageStatsChartShell>
-        <UsageStatsChartShell title="Storage classes" subtitle="Logical bytes by storage class">
+        <UsageStatsChartShell title={labels?.storageClassesTitle ?? "Storage classes"} subtitle={labels?.storageClassesSubtitle ?? "Logical bytes by storage class"}>
           <UsageStatsDistributionBars entries={storageClasses} />
         </UsageStatsChartShell>
-        <UsageStatsChartShell title="Object sizes" subtitle="Version count by object size">
+        <UsageStatsChartShell title={labels?.objectSizesTitle ?? "Object sizes"} subtitle={labels?.objectSizesSubtitle ?? "Version count by object size"}>
           <UsageStatsDistributionBars entries={sizeDistribution} bytesAxis={false} />
         </UsageStatsChartShell>
-        <UsageStatsChartShell title="Object age" subtitle="Version count by last modified date">
+        <UsageStatsChartShell title={labels?.objectAgeTitle ?? "Object age"} subtitle={labels?.objectAgeSubtitle ?? "Version count by last modified date"}>
           <UsageStatsDistributionBars entries={ageDistribution} bytesAxis={false} />
         </UsageStatsChartShell>
       </div>

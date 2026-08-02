@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ComponentProps } from "react";
 import PortalStorageSpaceDetailPage from "./PortalStorageSpaceDetailPage";
 import BrowserEmbed from "../browser/BrowserEmbed";
@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   createPortalRequestMock: vi.fn(),
   deleteStorageSpaceMock: vi.fn(),
   fetchAccessSummaryMock: vi.fn(),
+  fetchUsageStatsMock: vi.fn(),
+  fetchTrafficMock: vi.fn(),
   fetchStorageSpaceSettingsMock: vi.fn(),
   grantShareMock: vi.fn(),
   listShareCandidatesMock: vi.fn(),
@@ -31,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   generalSettings: {
     browser_enabled: true,
     browser_portal_enabled: true,
+    bucket_usage_stats_enabled: true,
   },
   hookResult: {
     accountIdForApi: "101",
@@ -43,6 +46,7 @@ const mocks = vi.hoisted(() => ({
     selectedAccount: {
       id: "101",
       name: "Account 1",
+      rgw_account_id: "portal-project",
       tags: [],
       quota_max_size_gb: 10,
       quota_max_objects: 1000,
@@ -153,7 +157,9 @@ vi.mock("../../api/portal", () => ({
   createPortalStorageSpacePublicLink: (...args: unknown[]) => mocks.createPublicLinkMock(...args),
   deletePortalStorageSpace: (...args: unknown[]) => mocks.deleteStorageSpaceMock(...args),
   fetchPortalStorageSpaceAccessSummary: (...args: unknown[]) => mocks.fetchAccessSummaryMock(...args),
+  fetchPortalStorageSpaceUsageStats: (...args: unknown[]) => mocks.fetchUsageStatsMock(...args),
   fetchPortalStorageSpaceSettings: (...args: unknown[]) => mocks.fetchStorageSpaceSettingsMock(...args),
+  fetchPortalTraffic: (...args: unknown[]) => mocks.fetchTrafficMock(...args),
   grantPortalStorageSpaceShare: (...args: unknown[]) => mocks.grantShareMock(...args),
   listPortalStorageSpaceShareCandidates: (...args: unknown[]) => mocks.listShareCandidatesMock(...args),
   portalStorageSpaceVersionCleanupConfirmationPhrase: (spaceName: string) => `CLEAN HISTORY ${spaceName.toUpperCase()}`,
@@ -229,6 +235,11 @@ vi.mock("../browser/BrowserEmbed", () => ({
   ),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location-probe">{`${location.pathname}${location.search}`}</output>;
+}
+
 async function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["initialEntries"] = ["/portal/storage-spaces/research-data"]) {
   const rendered = render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -236,6 +247,7 @@ async function renderPage(initialEntries: ComponentProps<typeof MemoryRouter>["i
         <Route path="/portal/storage-spaces" element={<div>Spaces</div>} />
         <Route path="/portal/storage-spaces/:spaceId" element={<PortalStorageSpaceDetailPage />} />
       </Routes>
+      <LocationProbe />
     </MemoryRouter>
   );
   await act(async () => {
@@ -274,6 +286,42 @@ describe("PortalStorageSpaceDetailPage", () => {
       lifecycle_enabled: true,
       version_history_retention_days: 90,
       can_update: true,
+    });
+    mocks.fetchUsageStatsMock.mockResolvedValue({
+      snapshot: {
+        scan_mode: "versions",
+        version_listing_available: true,
+        object_version_count: 12,
+        current_version_count: 10,
+        noncurrent_version_count: 2,
+        delete_marker_count: 1,
+        total_bytes: 512,
+        current_bytes: 400,
+        noncurrent_bytes: 112,
+        data_type_distribution: [
+          { key: "documents", label: "Documents", count: 12, bytes: 512, ratio_count: 1, ratio_bytes: 1 },
+        ],
+        storage_class_distribution: [],
+        size_distribution: [],
+        age_distribution: [],
+        current_vs_noncurrent: [],
+        calculated_at: "2026-07-30T10:00:00Z",
+      },
+    });
+    mocks.fetchTrafficMock.mockResolvedValue({
+      window: "week",
+      start: "2026-07-24T00:00:00Z",
+      end: "2026-07-30T00:00:00Z",
+      resolution: "daily",
+      data_points: 1,
+      series: [
+        { timestamp: "2026-07-30T00:00:00Z", bytes_in: 128, bytes_out: 64, ops: 2, success_ops: 2 },
+      ],
+      totals: { bytes_in: 128, bytes_out: 64, ops: 2, success_ops: 2, success_rate: 1 },
+      bucket_rankings: [{ bucket: "research-data-internal", bytes_in: 128, bytes_out: 64, bytes_total: 192, ops: 2, success_ratio: 1 }],
+      user_rankings: [{ user: "portal-project", bytes_in: 128, bytes_out: 64, bytes_total: 192, ops: 2, success_ratio: 1 }],
+      request_breakdown: [],
+      category_breakdown: [],
     });
     mocks.updateStorageSpaceSettingsMock.mockResolvedValue({
       versioning_enabled: false,
@@ -349,6 +397,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     mocks.createPortalRequestMock.mockResolvedValue({ id: 42, status: "pending" });
     mocks.generalSettings.browser_enabled = true;
     mocks.generalSettings.browser_portal_enabled = true;
+    mocks.generalSettings.bucket_usage_stats_enabled = true;
     mocks.hookResult.workspace.spaces[0].name = "Research Data";
     mocks.hookResult.workspace.spaces[0].role = "Manager";
     mocks.hookResult.workspace.spaces[0].canBrowse = true;
@@ -375,13 +424,17 @@ describe("PortalStorageSpaceDetailPage", () => {
     await renderPage();
 
     expect(screen.getByRole("heading", { name: "Research Data" })).toBeInTheDocument();
-    expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({ includeArchived: true });
+    expect(mocks.usePortalWorkspaceDataMock).toHaveBeenCalledWith({
+      includeArchived: true,
+      includeUsage: false,
+    });
     expect(screen.getByTestId("portal-browser-embed")).toBeInTheDocument();
-    expect(screen.getByText("Storage used")).toBeInTheDocument();
+    expect(screen.queryByText("Storage used")).not.toBeInTheDocument();
     expect(screen.queryByText("Utilisation")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Trash" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Collaborators" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Statistics" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Files" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
@@ -422,6 +475,107 @@ describe("PortalStorageSpaceDetailPage", () => {
       complete: expect.any(Function),
       fail: expect.any(Function),
     });
+  });
+
+  it("loads Storage Space statistics lazily and keeps the tab in the URL", async () => {
+    await renderPage();
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Files",
+      "Collaborators",
+      "Statistics",
+      "Settings",
+    ]);
+    expect(mocks.fetchUsageStatsMock).not.toHaveBeenCalled();
+    expect(mocks.fetchTrafficMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Statistics" }));
+
+    expect(await screen.findByRole("tabpanel", { name: "Statistics" })).toBeInTheDocument();
+    expect(mocks.usePortalWorkspaceDataMock).toHaveBeenLastCalledWith({
+      includeArchived: true,
+      includeUsage: true,
+    });
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("?tab=statistics");
+    await waitFor(() => {
+      expect(mocks.fetchUsageStatsMock).toHaveBeenCalledWith("101", "research-data");
+      expect(mocks.fetchTrafficMock).toHaveBeenCalledWith("101", "week", "research-data-internal");
+    });
+    expect(screen.getByText("Storage used")).toBeInTheDocument();
+    expect(screen.getByText("File composition")).toBeInTheDocument();
+    expect(screen.getByText("Uploaded")).toBeInTheDocument();
+    expect(screen.getByText("Activity source")).toBeInTheDocument();
+    expect(screen.queryByText("Most active Storage Spaces")).not.toBeInTheDocument();
+  });
+
+  it("reloads only scoped traffic when the statistics period changes", async () => {
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+    await waitFor(() => expect(mocks.fetchTrafficMock).toHaveBeenCalledWith("101", "week", "research-data-internal"));
+
+    fireEvent.click(screen.getByRole("button", { name: "30d" }));
+
+    await waitFor(() => expect(mocks.fetchTrafficMock).toHaveBeenLastCalledWith("101", "month", "research-data-internal"));
+    expect(mocks.fetchUsageStatsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps zero values and marks unknown summary values as unavailable", async () => {
+    mocks.hookResult.workspace.spaces[0].usedBytes = 0;
+    mocks.hookResult.workspace.spaces[0].objectCount = 0;
+    mocks.hookResult.workspace.spaces[0].quotaBytes = 1024;
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+
+    const summary = screen.getByRole("heading", { name: "Space summary" }).closest("section") as HTMLElement;
+    expect(within(summary).getByText("0 B")).toBeInTheDocument();
+    expect(within(summary).getByText("1.0 KB")).toBeInTheDocument();
+    expect(within(summary).getByText("0")).toBeInTheDocument();
+    expect(within(summary).getByText("–")).toBeInTheDocument();
+
+    mocks.hookResult.workspace.spaces[0].usedBytes = null;
+    mocks.hookResult.workspace.spaces[0].objectCount = null;
+    mocks.hookResult.workspace.spaces[0].quotaBytes = null;
+  });
+
+  it("keeps detailed statistics unavailable for archived spaces without issuing requests", async () => {
+    mocks.hookResult.workspace.spaces[0].status = "Archived";
+    mocks.hookResult.workspace.spaces[0].archivedAt = "2026-06-01T10:00:00Z";
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+
+    expect(screen.getByText(/Detailed statistics are unavailable while this Storage Space is archived/i)).toBeInTheDocument();
+    expect(screen.getByText("Storage used")).toBeInTheDocument();
+    expect(mocks.fetchUsageStatsMock).not.toHaveBeenCalled();
+    expect(mocks.fetchTrafficMock).not.toHaveBeenCalled();
+  });
+
+  it("shows independent composition and traffic errors", async () => {
+    mocks.fetchUsageStatsMock.mockRejectedValueOnce(new Error("composition unavailable"));
+    mocks.fetchTrafficMock.mockRejectedValueOnce(new Error("traffic unavailable"));
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+
+    expect(await screen.findByText("composition unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("traffic unavailable")).toBeInTheDocument();
+  });
+
+  it("shows an empty composition state without hiding scoped traffic", async () => {
+    mocks.fetchUsageStatsMock.mockResolvedValueOnce({ snapshot: null });
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+
+    expect(await screen.findByText(/No file-composition snapshot is available yet/i)).toBeInTheDocument();
+    expect(await screen.findByText("Activity source")).toBeInTheDocument();
+  });
+
+  it("keeps traffic available when file-composition collection is disabled", async () => {
+    mocks.generalSettings.bucket_usage_stats_enabled = false;
+
+    await renderPage(["/portal/storage-spaces/research-data?tab=statistics"]);
+
+    await waitFor(() => expect(mocks.fetchTrafficMock).toHaveBeenCalled());
+    expect(mocks.fetchUsageStatsMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("File composition")).not.toBeInTheDocument();
+    expect(screen.getByText("Transfer activity")).toBeInTheDocument();
   });
 
   it("lets a Portal Manager configure Versioning, Lifecycle and version history retention", async () => {

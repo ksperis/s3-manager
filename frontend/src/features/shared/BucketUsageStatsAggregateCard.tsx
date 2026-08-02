@@ -13,7 +13,10 @@ import {
   uiTitleTextClass,
 } from "../../components/ui/styles";
 import { formatUsageStatsDate } from "./BucketUsageStatsCharts";
-import { BucketUsageStatsCompositionVisuals } from "./BucketUsageStatsVisuals";
+import {
+  BucketUsageStatsCompositionVisuals,
+  type BucketUsageStatsCompositionLabels,
+} from "./BucketUsageStatsVisuals";
 
 type BucketUsageStatsAggregateCardProps = {
   title: string;
@@ -28,6 +31,7 @@ type BucketUsageStatsAggregateCardProps = {
   coverageItemLabel?: string;
   emptyDescription?: string;
   emptyTitle?: string;
+  compositionLabels?: BucketUsageStatsCompositionLabels;
 };
 
 export default function BucketUsageStatsAggregateCard({
@@ -43,6 +47,7 @@ export default function BucketUsageStatsAggregateCard({
   coverageItemLabel = "buckets",
   emptyDescription,
   emptyTitle = "No usage stats calculated yet.",
+  compositionLabels,
 }: BucketUsageStatsAggregateCardProps) {
   const hasSnapshot = Boolean(aggregate && aggregate.buckets_with_snapshot > 0);
   const coverageLabel = aggregate
@@ -102,6 +107,7 @@ export default function BucketUsageStatsAggregateCard({
             stats={aggregate}
             finalMetric={{ label: "Coverage", value: coverageLabel, hint: coverageHint }}
             currentVsNoncurrentEmptyMessage="Current/non-current unavailable."
+            labels={compositionLabels}
           />
         </>
       )}

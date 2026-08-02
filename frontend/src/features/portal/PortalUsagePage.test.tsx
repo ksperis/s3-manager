@@ -340,7 +340,7 @@ describe("PortalUsagePage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "File types" }));
 
-    expect(await screen.findByText("Logical bytes")).toBeInTheDocument();
+    expect(await screen.findByText("Stored data")).toBeInTheDocument();
     expect(screen.getByText("1 / 1 spaces covered")).toBeInTheDocument();
     expect(mocks.usageStatsMock).toHaveBeenCalledWith("101");
 
@@ -366,7 +366,7 @@ describe("PortalUsagePage", () => {
       "title",
       "portal-7be826c3-9f1e-4d4d-a385-7495dd17ee91",
     );
-    const userRanking = screen.getByText("Most active users").parentElement!;
+    const userRanking = screen.getByText("Activity source").parentElement!;
     expect(within(userRanking).getByText("Research Project")).toHaveAttribute(
       "title",
       "RGW40703637082424546",

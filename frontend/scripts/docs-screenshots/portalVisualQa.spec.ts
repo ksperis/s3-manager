@@ -48,6 +48,14 @@ const portalRoutes = [
     },
   },
   {
+    path: "/portal/storage-spaces/genomics-2026?tab=statistics",
+    expected: {
+      en: "File composition",
+      fr: "Composition des fichiers",
+      de: "Dateizusammensetzung",
+    },
+  },
+  {
     path: "/portal/storage-spaces/genomics-2026/objects/raw-data/2024/03/sample_001.fastq.gz",
     expected: {
       en: "Quick preview",
@@ -188,7 +196,8 @@ test.describe("Portal visual QA", () => {
             if (
               route.path.startsWith("/portal/storage-spaces/") &&
               !route.path.includes("/objects/") &&
-              !route.path.includes("tab=settings")
+              !route.path.includes("tab=settings") &&
+              !route.path.includes("tab=statistics")
             ) {
               await expect(
                 main.getByRole("button", { name: "Selected storage space" }),

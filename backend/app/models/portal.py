@@ -6,6 +6,7 @@ from typing import Literal, Optional, Union
 from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
+from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsScanMode
 from app.models.user import UserAvatar
 
 
@@ -113,6 +114,28 @@ class PortalUsage(BaseModel):
     max_buckets: Optional[int] = None
     storage_spaces: list[PortalUsageStorageSpace] = Field(default_factory=list)
     other_storage_space: Optional[PortalUsageStorageSpace] = None
+
+
+class PortalStorageSpaceUsageStatsSnapshot(BaseModel):
+    scan_mode: BucketUsageStatsScanMode
+    version_listing_available: bool = True
+    object_version_count: int = 0
+    current_version_count: int = 0
+    noncurrent_version_count: int = 0
+    delete_marker_count: int = 0
+    total_bytes: int = 0
+    current_bytes: int = 0
+    noncurrent_bytes: int = 0
+    data_type_distribution: list[BucketUsageStatsDistributionEntry] = Field(default_factory=list)
+    storage_class_distribution: list[BucketUsageStatsDistributionEntry] = Field(default_factory=list)
+    size_distribution: list[BucketUsageStatsDistributionEntry] = Field(default_factory=list)
+    age_distribution: list[BucketUsageStatsDistributionEntry] = Field(default_factory=list)
+    current_vs_noncurrent: list[BucketUsageStatsDistributionEntry] = Field(default_factory=list)
+    calculated_at: datetime
+
+
+class PortalStorageSpaceUsageStatsResponse(BaseModel):
+    snapshot: Optional[PortalStorageSpaceUsageStatsSnapshot] = None
 
 
 PortalStorageSpaceRole = Literal["Viewer", "Editor", "Owner", "Manager"]

@@ -89,6 +89,7 @@ type MetricsTrafficOverviewProps = {
   loading?: boolean;
   error?: string | null;
   showEmpty?: boolean;
+  showBucketRanking?: boolean;
   description?: string;
   bucketRankingTitle?: string;
   userRankingTitle?: string;
@@ -123,6 +124,7 @@ export default function MetricsTrafficOverview({
   loading,
   error,
   showEmpty,
+  showBucketRanking = true,
   description,
   bucketRankingTitle = "Most active buckets",
   userRankingTitle = "Most active accounts",
@@ -226,7 +228,7 @@ export default function MetricsTrafficOverview({
 
       {error && <PageBanner tone="warning">{error}</PageBanner>}
 
-      {!hideMetrics && (
+      {!hideMetrics && !showEmpty && (
         <div className="grid gap-4 md:grid-cols-3">
           <MetricsSnapshotCard label={labels?.egress ?? "Egress"} value={formatBytes(totals?.bytes_out ?? 0)} hint={labels?.egressHint ?? "Outgoing bytes"} loading={loading} />
           <MetricsSnapshotCard label={labels?.ingress ?? "Ingress"} value={formatBytes(totals?.bytes_in ?? 0)} hint={labels?.ingressHint ?? "Incoming bytes"} loading={loading} />
@@ -258,6 +260,8 @@ export default function MetricsTrafficOverview({
                 start={traffic?.start}
                 end={traffic?.end}
                 chartKey={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}`}
+                ingressLabel={labels?.ingress}
+                egressLabel={labels?.egress}
               />
             </ChartCard>
           </div>
@@ -286,14 +290,16 @@ export default function MetricsTrafficOverview({
       )}
 
       {!showEmpty && !hideMetrics && (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <RankingCard
-            title={bucketRankingTitle}
-            items={(traffic?.bucket_rankings ?? []).slice(0, 5)}
-            loading={loading}
-            rankingLabels={bucketRankingLabels}
-            labels={labels}
-          />
+        <div className={cx("grid gap-4", showBucketRanking ? "lg:grid-cols-3" : "lg:grid-cols-2")}>
+          {showBucketRanking ? (
+            <RankingCard
+              title={bucketRankingTitle}
+              items={(traffic?.bucket_rankings ?? []).slice(0, 5)}
+              loading={loading}
+              rankingLabels={bucketRankingLabels}
+              labels={labels}
+            />
+          ) : null}
           <RankingCard
             title={userRankingTitle}
             items={(traffic?.user_rankings ?? []).slice(0, 5)}

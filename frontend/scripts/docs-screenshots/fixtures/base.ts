@@ -808,7 +808,7 @@ const PORTAL_TRAFFIC = {
     { bucket: "photos", bytes_total: Math.round(2.1 * TB), bytes_in: Math.round(1.4 * TB), bytes_out: Math.round(700 * GB), ops: 3_400_000, success_ops: 3_360_000, success_ratio: 0.988 },
   ],
   user_rankings: [
-    { user: "storage.user@example.com", bytes_total: Math.round(6.3 * TB), bytes_in: Math.round(4.2 * TB), bytes_out: Math.round(2.1 * TB), ops: 12_600_000, success_ops: 12_500_000, success_ratio: 0.992 },
+    { user: "RGW-HELIOS", bytes_total: Math.round(6.3 * TB), bytes_in: Math.round(4.2 * TB), bytes_out: Math.round(2.1 * TB), ops: 12_600_000, success_ops: 12_500_000, success_ratio: 0.992 },
   ],
   request_breakdown: [{ group: "GetObject", bytes_in: 0, bytes_out: Math.round(2.1 * TB), ops: 8_400_000 }],
   category_breakdown: [{ category: "read", bytes_in: 0, bytes_out: Math.round(2.1 * TB), ops: 8_400_000 }],
@@ -898,6 +898,29 @@ const PORTAL_USAGE_STATS_AGGREGATE = {
   noncurrent_version_count: 120_000,
   delete_marker_count: 8,
   newest_snapshot_at: NOW,
+};
+
+const PORTAL_STORAGE_SPACE_USAGE_STATS = {
+  snapshot: {
+    scan_mode: "versions",
+    version_listing_available: true,
+    object_version_count: 12_920_000,
+    current_version_count: 12_800_000,
+    noncurrent_version_count: 120_000,
+    delete_marker_count: 8,
+    total_bytes: Math.round(3.42 * TB),
+    current_bytes: Math.round(2.96 * TB),
+    noncurrent_bytes: Math.round(0.46 * TB),
+    data_type_distribution: MANAGER_USAGE_STATS_AGGREGATE.data_type_distribution,
+    storage_class_distribution: MANAGER_USAGE_STATS_AGGREGATE.storage_class_distribution,
+    size_distribution: MANAGER_USAGE_STATS_AGGREGATE.size_distribution,
+    age_distribution: MANAGER_USAGE_STATS_AGGREGATE.age_distribution,
+    current_vs_noncurrent: [
+      { key: "current", label: "Current versions", count: 12_800_000, bytes: Math.round(2.96 * TB), ratio_count: 0.991, ratio_bytes: 0.865 },
+      { key: "noncurrent", label: "Older versions", count: 120_000, bytes: Math.round(0.46 * TB), ratio_count: 0.009, ratio_bytes: 0.135 },
+    ],
+    calculated_at: NOW,
+  },
 };
 
 const PORTAL_ACTIVITY = [
@@ -2000,6 +2023,11 @@ export function buildBaseRules(): MockRule[] {
       },
     },
     {
+      id: "portal-storage-space-usage-stats",
+      path: /^\/portal\/storage-spaces\/[^/]+\/usage-stats$/,
+      body: PORTAL_STORAGE_SPACE_USAGE_STATS,
+    },
+    {
       id: "portal-access-keys",
       path: /^\/portal\/access-keys$/,
       body: PORTAL_ACCESS_KEYS_STATE,
@@ -2022,7 +2050,34 @@ export function buildBaseRules(): MockRule[] {
     {
       id: "portal-traffic",
       path: /^\/portal\/traffic$/,
-      body: PORTAL_TRAFFIC,
+      body: ({ url }) => {
+        const window = url.searchParams.get("window") ?? PORTAL_TRAFFIC.window;
+        const bucket = url.searchParams.get("bucket");
+        if (!bucket) return { ...PORTAL_TRAFFIC, window };
+        const ranking = PORTAL_TRAFFIC.bucket_rankings[0];
+        return {
+          ...PORTAL_TRAFFIC,
+          window,
+          bucket_filter: bucket,
+          series: [
+            {
+              timestamp: PORTAL_TRAFFIC.end,
+              bytes_in: ranking.bytes_in,
+              bytes_out: ranking.bytes_out,
+              ops: ranking.ops,
+              success_ops: ranking.success_ops,
+            },
+          ],
+          totals: {
+            bytes_in: ranking.bytes_in,
+            bytes_out: ranking.bytes_out,
+            ops: ranking.ops,
+            success_ops: ranking.success_ops,
+            success_rate: ranking.success_ratio,
+          },
+          bucket_rankings: [{ ...ranking, bucket }],
+        };
+      },
     },
     {
       id: "portal-storage-spaces",

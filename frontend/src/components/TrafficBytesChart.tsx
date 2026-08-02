@@ -16,6 +16,8 @@ type TrafficBytesChartProps = {
   end?: string | null;
   height?: number;
   chartKey?: string;
+  ingressLabel?: string;
+  egressLabel?: string;
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -172,7 +174,16 @@ function TrafficTooltip({ payload, label, window }: any) {
   );
 }
 
-export default function TrafficBytesChart({ window, series, start, end, height = 280, chartKey }: TrafficBytesChartProps) {
+export default function TrafficBytesChart({
+  window,
+  series,
+  start,
+  end,
+  height = 280,
+  chartKey,
+  ingressLabel = "Ingress",
+  egressLabel = "Egress",
+}: TrafficBytesChartProps) {
   const chartData = useMemo(() => buildChartData(window, series, start, end), [end, series, start, window]);
   const domain = useMemo(() => {
     if (!chartData.length) {
@@ -205,8 +216,8 @@ export default function TrafficBytesChart({ window, series, start, end, height =
         <YAxis tickFormatter={(value) => formatBytesAxis(Number(value) || 0)} stroke="#94A3B8" />
         <Tooltip content={<TrafficTooltip window={window} />} />
         <Legend />
-        <Bar dataKey="bytes_in" name="Ingress" stackId="traffic" fill="#0EA5E9" />
-        <Bar dataKey="bytes_out" name="Egress" stackId="traffic" fill="#4F46E5" />
+        <Bar dataKey="bytes_in" name={ingressLabel} stackId="traffic" fill="#0EA5E9" />
+        <Bar dataKey="bytes_out" name={egressLabel} stackId="traffic" fill="#4F46E5" />
       </BarChart>
     </ResponsiveContainer>
   );
