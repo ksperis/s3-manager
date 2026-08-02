@@ -673,21 +673,14 @@ def test_workspace_access_excludes_portal_role_on_incompatible_account(db_sessio
         )
     )
     db_session.commit()
-    monkeypatch.setattr(
-        execution_contexts,
-        "load_app_settings",
-        lambda: AppSettings(
-            general=GeneralSettings(
-                manager_enabled=False,
-                browser_enabled=True,
-                browser_root_enabled=True,
-                portal_enabled=True,
-            )
-        ),
-    )
+    settings = _configure_portal_browser_catalog(monkeypatch, enabled=True)
+    settings.general.manager_enabled = False
+    monkeypatch.setattr(execution_contexts, "load_app_settings", lambda: settings)
 
     access = execution_contexts.get_workspace_access(user=user, db=db_session)
 
     assert access.portal.available is False
     assert access.portal.context_count == 0
+    assert access.browser.available is False
+    assert access.browser.context_count == 0
     assert access.default_workspace is None
