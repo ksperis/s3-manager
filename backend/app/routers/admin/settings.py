@@ -8,7 +8,7 @@ from app.db import User
 from app.models.app_settings import AppSettings, GeneralFeatureLocks, QuotaNotificationSettings
 from app.models.ldap import LDAPProviderAdminItem, LDAPProviderAdminPayload
 from app.models.oidc import OIDCProviderAdminItem, OIDCProviderAdminPayload
-from app.routers.dependencies import get_audit_logger, get_current_ui_superadmin
+from app.routers.dependencies import get_audit_service, get_current_ui_superadmin
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.app_settings_service import (
@@ -61,7 +61,7 @@ def update_settings(
     payload: AppSettings,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> AppSettings:
     try:
         server_access_logging_summary = get_portal_service(db).reconcile_all_portal_server_access_logging(payload.portal)
@@ -95,7 +95,7 @@ def create_oidc_provider_settings(
     payload: OIDCProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> OIDCProviderAdminItem:
     try:
         item = create_oidc_provider(db, payload)
@@ -123,7 +123,7 @@ def update_oidc_provider_settings(
     payload: OIDCProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> OIDCProviderAdminItem:
     try:
         item = update_oidc_provider(db, provider_id, payload)
@@ -150,7 +150,7 @@ def delete_oidc_provider_settings(
     provider_id: str,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     try:
         delete_oidc_provider(db, provider_id)
@@ -185,7 +185,7 @@ def create_ldap_provider_settings(
     payload: LDAPProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> LDAPProviderAdminItem:
     try:
         item = create_ldap_provider(db, payload)
@@ -213,7 +213,7 @@ def update_ldap_provider_settings(
     payload: LDAPProviderAdminPayload,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> LDAPProviderAdminItem:
     try:
         item = update_ldap_provider(db, provider_id, payload)
@@ -240,7 +240,7 @@ def delete_ldap_provider_settings(
     provider_id: str,
     current_user: User = Depends(get_current_ui_superadmin),
     db: Session = Depends(get_db),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     try:
         delete_ldap_provider(db, provider_id)

@@ -10,7 +10,7 @@ from app.models.iam import IAMGroup, IAMGroupCreate, IAMUser
 from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     require_iam_capable_manager,
 )
 from app.routers.http_errors import raise_http_exception_from_exception
@@ -44,7 +44,7 @@ def create_group(
     payload: IAMGroupCreate,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMGroup:
     _, service = get_account_and_service(account)
     try:
@@ -71,7 +71,7 @@ def delete_group(
     group_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -107,7 +107,7 @@ def add_user_to_group(
     payload: IAMUser,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMUser:
     _, service = get_account_and_service(account)
     try:
@@ -132,7 +132,7 @@ def remove_user_from_group(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -174,7 +174,7 @@ def put_group_inline_policy(
     payload: InlinePolicy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> InlinePolicy:
     ensure_inline_policy_name(payload, policy_name)
     _, service = get_account_and_service(account)
@@ -206,7 +206,7 @@ def delete_group_inline_policy(
     policy_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -243,7 +243,7 @@ def attach_group_policy(
     payload: Policy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     _, service = get_account_and_service(account)
     try:
@@ -268,7 +268,7 @@ def detach_group_policy(
     policy_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:

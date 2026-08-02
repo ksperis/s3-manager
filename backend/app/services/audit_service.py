@@ -226,7 +226,3 @@ class AuditService:
     @staticmethod
     def _fallback_encoder(value: Any) -> str:
         return str(value)
-
-
-def get_audit_service(db: Session) -> AuditService:
-    return AuditService(db)

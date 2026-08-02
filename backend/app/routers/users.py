@@ -9,7 +9,7 @@ from app.models.user_notification import (
     UserNotificationsResponse,
 )
 from app.models.user import UserOut, UserSelfUpdate
-from app.routers.dependencies import get_audit_logger, get_current_account_user, get_current_user
+from app.routers.dependencies import get_audit_service, get_current_account_user, get_current_user
 from app.services.audit_service import AuditService
 from app.services.user_notifications_service import UserNotificationsService
 from app.services.users_service import UsersService, get_users_service
@@ -61,7 +61,7 @@ def update_users_me(
     payload: UserSelfUpdate,
     current_user: User = Depends(get_current_account_user),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     update_fields = payload.model_fields_set
     try:
@@ -106,7 +106,7 @@ async def upload_my_avatar(
     current_user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     payload = await file.read(MAX_AVATAR_BYTES + 1)
     service = UserAvatarService(db)
@@ -133,7 +133,7 @@ def delete_my_avatar(
     current_user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     service = UserAvatarService(db)
     service.remove_uploaded_image(current_user)

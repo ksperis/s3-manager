@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import User
 from app.models.onboarding import OnboardingStatus
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.app_settings_service import load_app_settings, save_app_settings
 from app.services.storage_endpoints_service import get_storage_endpoints_service
@@ -40,7 +40,7 @@ def get_onboarding_status(
 def dismiss_onboarding(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> OnboardingStatus:
     status = _build_status(db)
     if not status.can_dismiss:

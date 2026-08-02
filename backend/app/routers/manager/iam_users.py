@@ -10,7 +10,7 @@ from app.models.iam import AccessKey, AccessKeyStatusChange, IAMUser, IAMUserCre
 from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     require_iam_capable_manager,
 )
 from app.routers.http_errors import raise_http_exception_from_exception
@@ -58,7 +58,7 @@ def create_user(
     payload: IAMUserCreate,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMUserWithKey:
     _, service = get_account_and_service(account)
     try:
@@ -99,7 +99,7 @@ def delete_user(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
     source = ManagedPrivateAccessService.iam_source_reference(account)
@@ -157,7 +157,7 @@ def create_access_key(
     user_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
     source = ManagedPrivateAccessService.iam_source_reference(account)
@@ -190,7 +190,7 @@ def update_access_key_status(
     payload: AccessKeyStatusChange,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> AccessKey:
     source = ManagedPrivateAccessService.iam_source_reference(account)
@@ -229,7 +229,7 @@ def delete_access_key(
     access_key_id: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> None:
     source = ManagedPrivateAccessService.iam_source_reference(account)
@@ -278,7 +278,7 @@ def put_user_inline_policy(
     payload: InlinePolicy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> InlinePolicy:
     ensure_inline_policy_name(payload, policy_name)
     _, service = get_account_and_service(account)
@@ -310,7 +310,7 @@ def delete_user_inline_policy(
     policy_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -347,7 +347,7 @@ def attach_user_policy(
     payload: Policy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     _, service = get_account_and_service(account)
     try:
@@ -372,7 +372,7 @@ def detach_user_policy(
     policy_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:

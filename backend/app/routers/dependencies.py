@@ -2,12 +2,14 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.routers.dependencies_internal.account_context import (
     _manager_membership_capabilities,
     get_account_context,
 )
-from app.routers.dependencies_internal.audit import get_audit_logger
 from app.routers.dependencies_internal.auth_session import (
     get_current_account_admin,
     get_current_account_user,
@@ -57,3 +59,10 @@ from app.routers.dependencies_internal.portal_access import (
     require_portal_manager,
 )
 from app.routers.dependencies_internal.sse_c import get_optional_sse_customer_context
+from app.services.audit_service import AuditService
+
+
+def get_audit_service(
+    db: Session = Depends(get_db),
+) -> AuditService:
+    return AuditService(db)

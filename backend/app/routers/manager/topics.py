@@ -7,7 +7,7 @@ from app.services.s3_execution_context import S3ExecutionContext
 from app.models.topic import Topic, TopicConfiguration, TopicCreate, TopicPolicy
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     get_current_account_admin,
     require_sns_capable_manager,
 )
@@ -38,7 +38,7 @@ def create_topic(
     service: TopicsService = Depends(get_topics_service),
     _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> Topic:
     try:
         topic = service.create_topic(
@@ -72,7 +72,7 @@ def delete_topic(
     service: TopicsService = Depends(get_topics_service),
     _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         service.delete_topic(account, topic_arn)
@@ -111,7 +111,7 @@ def put_topic_policy(
     service: TopicsService = Depends(get_topics_service),
     _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> TopicPolicy:
     try:
         updated = service.set_topic_policy(account, topic_arn, payload.policy or {})
@@ -154,7 +154,7 @@ def put_topic_configuration(
     service: TopicsService = Depends(get_topics_service),
     _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> TopicConfiguration:
     try:
         updated = service.set_topic_configuration(account, topic_arn, payload.configuration or {})

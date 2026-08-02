@@ -1698,7 +1698,7 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
     app.dependency_overrides[storage_ops_router.require_storage_ops_bucket_quota] = lambda: user
     app.dependency_overrides[dependencies.require_storage_ops_enabled] = lambda: None
     app.dependency_overrides[storage_ops_router.get_buckets_service] = lambda: FakeBucketsService()
-    app.dependency_overrides[storage_ops_router.get_audit_logger] = lambda: FakeAuditService()
+    app.dependency_overrides[storage_ops_router.get_audit_service] = lambda: FakeAuditService()
     try:
         response = client.put(
             "/api/storage-ops/buckets/conn-2%3A%3Ademo-bucket/quota",
@@ -1708,7 +1708,7 @@ def test_storage_ops_bucket_quota_update_resolves_context_and_updates_quota(clie
         app.dependency_overrides.pop(storage_ops_router.require_storage_ops_bucket_quota, None)
         app.dependency_overrides.pop(dependencies.require_storage_ops_enabled, None)
         app.dependency_overrides.pop(storage_ops_router.get_buckets_service, None)
-        app.dependency_overrides.pop(storage_ops_router.get_audit_logger, None)
+        app.dependency_overrides.pop(storage_ops_router.get_audit_service, None)
 
     assert response.status_code == 200, response.text
     assert response.json() == {"message": "Bucket quota updated"}

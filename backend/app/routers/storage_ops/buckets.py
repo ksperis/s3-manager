@@ -40,7 +40,7 @@ from app.routers.ceph_admin.listing_common import (
 )
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     get_current_storage_ops_admin,
     is_manager_bucket_quota_available,
     require_storage_ops_bucket_quota,
@@ -866,7 +866,7 @@ def update_storage_ops_bucket_quota(
     user: User = Depends(require_storage_ops_bucket_quota),
     db: Session = Depends(get_db),
     service: BucketsService = Depends(get_buckets_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     context_id, bucket_name = _decode_bucket_ref(bucket_ref)
     account = get_account_context(request=request, account_ref=context_id, actor=user, db=db)

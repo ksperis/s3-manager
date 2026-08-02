@@ -95,7 +95,7 @@ from app.routers.browser_common import (
 from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     get_current_account_admin,
     get_current_super_admin,
     get_optional_sse_customer_context,
@@ -305,7 +305,7 @@ def create_bucket(
     account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, Any]:
     bucket_name = payload.name.strip()
     if not bucket_name:
@@ -368,7 +368,7 @@ def create_bucket_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, Any]:
     response, audit_metadata = bucket_config_actions.create_bucket_config(
         service=service,
@@ -397,7 +397,7 @@ def delete_bucket_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     response, audit_metadata = bucket_config_actions.delete_bucket_config(
         service=service,
@@ -427,7 +427,7 @@ def update_bucket_quota_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
         service=service,
@@ -472,7 +472,7 @@ def update_bucket_versioning_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, Any]:
     response, audit_metadata = bucket_config_actions.update_bucket_versioning_config(
         service=service,
@@ -517,7 +517,7 @@ def put_bucket_object_lock_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketObjectLock:
     result, audit_metadata = bucket_config_actions.put_bucket_object_lock_config(
         service=service,
@@ -563,7 +563,7 @@ def put_bucket_encryption_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketEncryptionConfiguration:
     _common_require_sse_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_encryption_config(
@@ -593,7 +593,7 @@ def delete_bucket_encryption_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _common_require_sse_feature(account)
     bucket_config_actions.delete_bucket_encryption_config(
@@ -636,7 +636,7 @@ def put_bucket_policy_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketPolicyOut:
     result, audit_metadata = bucket_config_actions.put_bucket_policy_config(
         service=service,
@@ -665,7 +665,7 @@ def delete_bucket_policy_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_policy_config(
         service=service,
@@ -707,7 +707,7 @@ def put_bucket_acl_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketAcl:
     result, audit_metadata = bucket_config_actions.put_bucket_acl_config(
         service=service,
@@ -752,7 +752,7 @@ def put_bucket_public_access_block_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketPublicAccessBlock:
     result, audit_metadata = bucket_config_actions.put_bucket_public_access_block_config(
         service=service,
@@ -797,7 +797,7 @@ def put_bucket_lifecycle_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketLifecycleConfig:
     result, audit_metadata = bucket_config_actions.put_bucket_lifecycle_config(
         service=service,
@@ -826,7 +826,7 @@ def delete_bucket_lifecycle_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_lifecycle_config(
         service=service,
@@ -868,7 +868,7 @@ def put_bucket_cors_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, Any]:
     response, audit_metadata = bucket_config_actions.put_bucket_cors_config(
         service=service,
@@ -897,7 +897,7 @@ def delete_bucket_cors_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_cors_config(
         service=service,
@@ -939,7 +939,7 @@ def put_bucket_notifications_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketNotificationConfiguration:
     result, audit_metadata = bucket_config_actions.put_bucket_notifications_config(
         service=service,
@@ -968,7 +968,7 @@ def delete_bucket_notifications_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_notifications_config(
         service=service,
@@ -1011,7 +1011,7 @@ def put_bucket_replication_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketReplicationConfiguration:
     _common_require_replication_feature(account)
     result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
@@ -1041,7 +1041,7 @@ def delete_bucket_replication_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _common_require_replication_feature(account)
     bucket_config_actions.delete_bucket_replication_config(
@@ -1084,7 +1084,7 @@ def put_bucket_logging_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketLoggingConfiguration:
     result, audit_metadata = bucket_config_actions.put_bucket_logging_config(
         service=service,
@@ -1113,7 +1113,7 @@ def delete_bucket_logging_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_logging_config(
         service=service,
@@ -1155,7 +1155,7 @@ def put_bucket_website_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketWebsiteConfiguration:
     result, audit_metadata = bucket_config_actions.put_bucket_website_config(
         service=service,
@@ -1184,7 +1184,7 @@ def delete_bucket_website_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_website_config(
         service=service,
@@ -1226,7 +1226,7 @@ def put_bucket_tags_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> dict[str, Any]:
     response, audit_metadata = bucket_config_actions.put_bucket_tags_config(
         service=service,
@@ -1255,7 +1255,7 @@ def delete_bucket_tags_config(
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     bucket_config_actions.delete_bucket_tags_config(
         service=service,
@@ -1368,7 +1368,7 @@ def ensure_bucket_cors(
     account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> BucketCorsStatus:
     if not payload.origin:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")

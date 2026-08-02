@@ -36,7 +36,7 @@ from app.models.s3_connection_admin import (
     S3ConnectionSummary,
     S3ConnectionRemediationAction,
 )
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
@@ -369,7 +369,7 @@ def create_s3_connection(
     payload: S3ConnectionAdminCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
     endpoint_url = (payload.endpoint_url or "").strip()
@@ -460,7 +460,7 @@ def update_s3_connection(
     payload: S3ConnectionAdminUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
@@ -574,7 +574,7 @@ def remediate_s3_connection(
     payload: S3ConnectionRemediationAction,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
     conn = _get_admin_shared_connection(db, connection_id)
     if payload.action != "activate_manager":
@@ -617,7 +617,7 @@ def rotate_s3_connection_credentials(
     payload: S3ConnectionCredentialsUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionAdminItem:
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
@@ -663,7 +663,7 @@ def delete_s3_connection(
     connection_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ):
     tags_service = TagsService(db)
     conn = _get_admin_shared_connection(db, connection_id)
@@ -722,7 +722,7 @@ def add_connection_user(
     payload: S3ConnectionUserLinkUpsert,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionUserLink:
     conn = _get_admin_shared_connection(db, connection_id)
     user = db.query(User).filter(User.id == payload.user_id).first()
@@ -773,7 +773,7 @@ def update_connection_user(
     payload: S3ConnectionUserLinkUpsert,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> S3ConnectionUserLink:
     if payload.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id mismatch")
@@ -813,7 +813,7 @@ def remove_connection_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ):
     conn = _get_admin_shared_connection(db, connection_id)
     link = (

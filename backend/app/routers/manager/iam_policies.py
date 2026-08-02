@@ -7,7 +7,7 @@ from app.services.s3_execution_context import S3ExecutionContext
 from app.models.policy import Policy, PolicyCreate
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     require_iam_capable_manager,
 )
 from app.services.audit_service import AuditService
@@ -55,7 +55,7 @@ def create_policy(
     payload: PolicyCreate,
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     account, service = service_and_acc
     try:
@@ -81,7 +81,7 @@ def delete_policy(
     policy_arn: str,
     service_and_acc=Depends(lambda account=Depends(get_account_context): get_account_and_service(account)),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     account, service = service_and_acc
     try:

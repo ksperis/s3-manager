@@ -11,7 +11,7 @@ from app.models.iam import IAMRole, IAMRoleCreate, IAMRoleUpdate
 from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (
     get_account_context,
-    get_audit_logger,
+    get_audit_service,
     require_iam_capable_manager,
 )
 from app.routers.http_errors import raise_http_exception_from_exception
@@ -58,7 +58,7 @@ def create_role(
     payload: IAMRoleCreate,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMRole:
     _, service = get_account_and_service(account)
     assume_policy = payload.assume_role_policy_document or DEFAULT_ASSUME_ROLE
@@ -107,7 +107,7 @@ def delete_role(
     role_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -130,7 +130,7 @@ def update_role(
     payload: IAMRoleUpdate,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> IAMRole:
     _, service = get_account_and_service(account)
     try:
@@ -197,7 +197,7 @@ def put_role_inline_policy(
     payload: InlinePolicy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> InlinePolicy:
     ensure_inline_policy_name(payload, policy_name)
     _, service = get_account_and_service(account)
@@ -229,7 +229,7 @@ def delete_role_inline_policy(
     policy_name: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:
@@ -266,7 +266,7 @@ def attach_role_policy(
     payload: Policy,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> Policy:
     _, service = get_account_and_service(account)
     try:
@@ -291,7 +291,7 @@ def detach_role_policy(
     policy_arn: str,
     account: S3ExecutionContext = Depends(get_account_context),
     current_user: User = Depends(require_iam_capable_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     _, service = get_account_and_service(account)
     try:

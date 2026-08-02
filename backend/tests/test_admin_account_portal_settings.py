@@ -51,7 +51,7 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
 
 def test_admin_put_account_portal_settings_replaces_override_and_audits(client, db_session):
     audit = _CapturingAuditService()
-    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: audit
+    app.dependency_overrides[admin_accounts_router.get_audit_service] = lambda: audit
     account = _seed_account(
         db_session,
         overrides={

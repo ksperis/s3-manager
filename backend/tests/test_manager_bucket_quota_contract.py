@@ -106,7 +106,7 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
     app.dependency_overrides[dependencies.get_current_actor] = lambda: user
     app.dependency_overrides[dependencies.get_account_context] = lambda: account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketsService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
     try:
         response = client.put(
             "/api/manager/buckets/demo-bucket/quota",
@@ -118,7 +118,7 @@ def test_manager_bucket_quota_update_succeeds_with_privileged_access(client, db_
         app.dependency_overrides.pop(dependencies.get_current_actor, None)
         app.dependency_overrides.pop(dependencies.get_account_context, None)
         app.dependency_overrides.pop(manager_buckets_router.get_buckets_service, None)
-        app.dependency_overrides.pop(manager_buckets_router.get_audit_logger, None)
+        app.dependency_overrides.pop(manager_buckets_router.get_audit_service, None)
 
     assert response.status_code == 200, response.text
     assert response.json() == {"message": "Bucket quota updated"}

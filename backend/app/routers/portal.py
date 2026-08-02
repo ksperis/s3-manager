@@ -71,7 +71,7 @@ from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.bucket_purge_stream import SSE_KEEPALIVE_INTERVAL_SECONDS, format_sse_event
 from app.routers.dependencies import (
-    get_audit_logger,
+    get_audit_service,
     get_current_account_user,
     get_portal_account_access,
     require_portal_manager,
@@ -572,7 +572,7 @@ def get_portal_project_settings(
 def update_portal_project_settings(
     payload: PortalSettingsOverride,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalProjectSettings:
     actor = access.actor
@@ -921,7 +921,7 @@ def portal_access_keys(
 def create_portal_access_key(
     payload: Optional[PortalAccessKeyCreate] = None,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalAccessKey:
     actor = access.actor
@@ -958,7 +958,7 @@ def update_portal_access_key_status(
     access_key_id: str,
     payload: PortalAccessKeyStatusChange,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalAccessKey:
     actor = access.actor
@@ -994,7 +994,7 @@ def update_portal_access_key_status(
 def delete_portal_access_key(
     access_key_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> Response:
     actor = access.actor
@@ -1079,7 +1079,7 @@ def portal_storage_spaces(
 def create_portal_storage_space(
     payload: PortalStorageSpaceCreate,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpace:
     actor = access.actor
@@ -1124,7 +1124,7 @@ def create_portal_storage_space(
 def import_portal_storage_space(
     payload: PortalStorageSpaceImport,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpace:
     actor = access.actor
@@ -1169,7 +1169,7 @@ def update_portal_storage_space(
     space_id: str,
     payload: PortalStorageSpaceUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpace:
     actor = access.actor
@@ -1221,7 +1221,7 @@ def update_portal_storage_space(
 def take_portal_storage_space_ownership(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpace:
     actor = access.actor
@@ -1253,7 +1253,7 @@ def update_portal_storage_space_icon(
     space_id: str,
     payload: PortalStorageSpaceIconChoice,
     access: AccountAccess = Depends(require_portal_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
@@ -1292,7 +1292,7 @@ async def upload_portal_storage_space_icon(
     space_id: str,
     file: UploadFile = File(...),
     access: AccountAccess = Depends(require_portal_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
@@ -1331,7 +1331,7 @@ async def upload_portal_storage_space_icon(
 def delete_portal_storage_space_icon(
     space_id: str,
     access: AccountAccess = Depends(require_portal_manager),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceIcon:
     actor = access.actor
@@ -1381,7 +1381,7 @@ def read_portal_storage_space_icon(
 def delete_portal_storage_space(
     space_id: str,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> Response:
     actor = access.actor
@@ -1429,7 +1429,7 @@ def portal_storage_space_version_cleanup_stream(
     space_id: str,
     payload: PortalStorageSpaceVersionCleanupRequest,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> StreamingResponse:
     actor = access.actor
@@ -1558,7 +1558,7 @@ def portal_restore_deleted_prefix_stream(
     space_id: str,
     payload: PortalDeletedPrefixRestoreRequest,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> StreamingResponse:
     actor = access.actor
@@ -1656,7 +1656,7 @@ def create_portal_storage_space_public_link(
     space_id: str,
     payload: PortalPublicLinkCreate,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalPublicLink:
     actor = access.actor
@@ -1694,7 +1694,7 @@ def revoke_portal_storage_space_public_link(
     space_id: str,
     link_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[PortalPublicLink]:
     actor = access.actor
@@ -1797,7 +1797,7 @@ def grant_portal_storage_space_share(
     space_id: str,
     payload: PortalStorageSpaceSharePayload,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceShare:
@@ -1827,7 +1827,7 @@ def update_portal_storage_space_share(
     user_id: int,
     payload: PortalStorageSpaceShareUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceShare:
@@ -1858,7 +1858,7 @@ def revoke_portal_storage_space_share(
     space_id: str,
     user_id: int,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[PortalStorageSpaceShare]:
@@ -1904,7 +1904,7 @@ def update_portal_storage_space_settings(
     space_id: str,
     payload: PortalStorageSpaceSettingsUpdate,
     access: AccountAccess = Depends(get_portal_account_access),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalStorageSpaceSettings:
     actor = access.actor

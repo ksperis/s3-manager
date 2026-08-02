@@ -10,7 +10,7 @@ from app.db import User
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.s3_user import S3UserAccessKey, S3UserAccessKeyStatusChange, S3UserGeneratedKey
 from app.routers.dependencies import (
-    get_audit_logger,
+    get_audit_service,
     get_current_account_user,
     require_manager_ceph_s3_user_keys,
 )
@@ -74,7 +74,7 @@ def create_ceph_access_key(
     account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3UserGeneratedKey:
     s3_user_id = _resolve_s3_user_id(account)
     try:
@@ -100,7 +100,7 @@ def update_ceph_access_key_status(
     account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> S3UserAccessKey:
     s3_user_id = _resolve_s3_user_id(account)
@@ -136,7 +136,7 @@ def delete_ceph_access_key(
     account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> Response:
     s3_user_id = _resolve_s3_user_id(account)

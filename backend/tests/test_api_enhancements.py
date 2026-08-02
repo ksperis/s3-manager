@@ -43,7 +43,7 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
             )
 
     app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
-    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[admin_accounts_router.get_audit_service] = lambda: _FakeAuditService()
 
     response = client.post(
         "/api/admin/accounts",
@@ -109,7 +109,7 @@ def test_admin_unlink_account_endpoint_calls_service(client: TestClient):
             called["id"] = account_id
 
     app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
-    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[admin_accounts_router.get_audit_service] = lambda: _FakeAuditService()
 
     response = client.post("/api/admin/accounts/42/unlink")
 
@@ -137,7 +137,7 @@ def test_manager_create_bucket_passes_versioning_and_location(client: TestClient
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     response = client.post(
         "/api/manager/buckets",

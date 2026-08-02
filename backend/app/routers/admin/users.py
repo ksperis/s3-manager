@@ -17,7 +17,7 @@ from app.models.user import (
     UserSummary,
     UserUpdate,
 )
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.users_service import UsersService, get_users_service
 from app.routers.http_errors import sanitize_error_detail
@@ -97,7 +97,7 @@ def create_user(
     payload: UserCreate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     current_user: DbUser = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     _require_superadmin_for_privileged_change(
         current_user,
@@ -131,7 +131,7 @@ def update_user(
     payload: UserUpdate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     current_user: DbUser = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     _require_superadmin_for_privileged_change(
         current_user,
@@ -162,7 +162,7 @@ def delete_user(
     user_id: int,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     current_user: DbUser = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     if current_user.id == user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own user")
@@ -185,7 +185,7 @@ def assign_account(
     payload: UserAssignS3Account,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     current_user: DbUser = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     try:
         user = users_service.assign_user_to_account(

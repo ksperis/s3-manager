@@ -15,7 +15,7 @@ from app.models.storage_endpoint import (
     StorageEndpointTagsUpdate,
     StorageEndpointUpdate,
 )
-from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
+from app.routers.dependencies import get_audit_service, get_current_super_admin, get_current_ui_superadmin
 from app.services.audit_service import AuditService
 from app.services.storage_endpoints_service import (
     StorageEndpointsService,
@@ -78,7 +78,7 @@ def get_storage_endpoint(
 def create_storage_endpoint(
     payload: StorageEndpointCreate,
     service: StorageEndpointsService = Depends(get_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     current_user=Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
@@ -107,7 +107,7 @@ def update_storage_endpoint(
     endpoint_id: int,
     payload: StorageEndpointUpdate,
     service: StorageEndpointsService = Depends(get_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     current_user=Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
@@ -143,7 +143,7 @@ def update_storage_endpoint_tags(
     endpoint_id: int,
     payload: StorageEndpointTagsUpdate,
     service: StorageEndpointsService = Depends(get_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     current_user=Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
@@ -172,7 +172,7 @@ def update_storage_endpoint_tags(
 def set_default_storage_endpoint(
     endpoint_id: int,
     service: StorageEndpointsService = Depends(get_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     current_user=Depends(get_current_ui_superadmin),
 ) -> StorageEndpoint:
     try:
@@ -204,7 +204,7 @@ def set_default_storage_endpoint(
 def delete_storage_endpoint(
     endpoint_id: int,
     service: StorageEndpointsService = Depends(get_service),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     current_user=Depends(get_current_ui_superadmin),
 ) -> None:
     try:

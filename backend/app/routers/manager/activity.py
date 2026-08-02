@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.services.s3_execution_context import S3ExecutionContext
 from app.models.manager_activity import ManagerActivityEntry
-from app.routers.dependencies import get_account_context, get_audit_logger
+from app.routers.dependencies import get_account_context, get_audit_service
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/manager/activity", tags=["manager-activity"])
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/manager/activity", tags=["manager-activity"])
 def list_manager_activity(
     limit: int = Query(5, ge=1, le=20),
     account: S3ExecutionContext = Depends(get_account_context),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> list[ManagerActivityEntry]:
     account_id = account.id if isinstance(account.id, int) and account.id > 0 else None
     if account_id is None:

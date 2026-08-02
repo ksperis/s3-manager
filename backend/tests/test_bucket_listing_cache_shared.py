@@ -117,7 +117,7 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: service
     app.dependency_overrides[storage_ops_buckets_router.get_buckets_service] = lambda: service
     app.dependency_overrides[manager_buckets_router.get_current_account_admin] = _manager_user
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
     try:
         manager_first = client.get("/api/manager/buckets")
         assert manager_first.status_code == 200, manager_first.text
@@ -138,7 +138,7 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
         app.dependency_overrides.pop(manager_buckets_router.get_buckets_service, None)
         app.dependency_overrides.pop(storage_ops_buckets_router.get_buckets_service, None)
         app.dependency_overrides.pop(manager_buckets_router.get_current_account_admin, None)
-        app.dependency_overrides.pop(manager_buckets_router.get_audit_logger, None)
+        app.dependency_overrides.pop(manager_buckets_router.get_audit_service, None)
         invalidate_bucket_listing_cache()
 
 

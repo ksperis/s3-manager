@@ -20,7 +20,7 @@ from app.models.s3_user import (
     S3UserUpdate,
 )
 from app.routers.dependencies import (
-    get_audit_logger,
+    get_audit_service,
     get_current_super_admin,
 )
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
@@ -80,7 +80,7 @@ def create_s3_user(
     payload: S3UserCreate,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3User:
     try:
         created = service.create_user(payload)
@@ -118,7 +118,7 @@ def import_s3_users(
     payload: list[S3UserImport],
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> list[S3User]:
     try:
         created = service.import_users(payload)
@@ -141,7 +141,7 @@ def update_s3_user(
     payload: S3UserUpdate,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3User:
     try:
         updated = service.update_user(user_id, payload)
@@ -165,7 +165,7 @@ def rotate_s3_user_keys(
     user_id: int,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3User:
     try:
         updated = service.rotate_keys(user_id)
@@ -203,7 +203,7 @@ def create_s3_user_access_key(
     user_id: int,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3UserGeneratedKey:
     try:
         key = service.create_access_key_entry(user_id)
@@ -229,7 +229,7 @@ def update_s3_user_access_key_status(
     payload: S3UserAccessKeyStatusChange,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3UserAccessKey:
     try:
         updated = service.set_key_status(user_id, access_key, payload.active)
@@ -254,7 +254,7 @@ def delete_s3_user_access_key(
     access_key: str,
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         service.delete_key(user_id, access_key)
@@ -278,7 +278,7 @@ def delete_s3_user(
     delete_rgw: bool = Query(False, description="Also delete the RGW user backing this entry"),
     service: S3UsersService = Depends(get_admin_s3_users_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         service.delete_user(user_id, delete_rgw=delete_rgw)

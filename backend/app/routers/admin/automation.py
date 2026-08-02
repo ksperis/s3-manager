@@ -14,7 +14,7 @@ from app.models.admin_automation import (
     UiUserApplyRequest,
 )
 from app.core.database import get_db
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.admin_automation_service import AdminAutomationService, get_admin_automation_service
 from app.services.audit_service import AuditService
 
@@ -29,7 +29,7 @@ def get_service(db: Session = Depends(get_db)) -> AdminAutomationService:
 def apply_admin_automation(
     payload: AdminAutomationApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     return _apply_request(payload, current_user, audit_service, service)
@@ -54,7 +54,7 @@ def _apply_request(
 def apply_storage_endpoint(
     payload: StorageEndpointApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(
@@ -69,7 +69,7 @@ def apply_storage_endpoint(
 def apply_ui_user(
     payload: UiUserApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(
@@ -84,7 +84,7 @@ def apply_ui_user(
 def apply_s3_account(
     payload: S3AccountApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(
@@ -99,7 +99,7 @@ def apply_s3_account(
 def apply_s3_user(
     payload: S3UserApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(
@@ -114,7 +114,7 @@ def apply_s3_user(
 def apply_account_link(
     payload: AccountLinkApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(
@@ -129,7 +129,7 @@ def apply_account_link(
 def apply_s3_connection(
     payload: S3ConnectionApplyRequest,
     current_user=Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     service: AdminAutomationService = Depends(get_service),
 ) -> AdminAutomationApplyResponse:
     request = AdminAutomationApplyRequest(

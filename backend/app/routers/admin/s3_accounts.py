@@ -19,7 +19,7 @@ from app.models.s3_account import (
     S3AccountUpdate,
 )
 from app.routers.dependencies import (
-    get_audit_logger,
+    get_audit_service,
     get_current_super_admin,
 )
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
@@ -157,7 +157,7 @@ def update_account_portal_settings(
     payload: PortalSettingsAdminUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> PortalAccountSettings:
     account = db.query(S3AccountDb).filter(S3AccountDb.id == account_id).first()
     if not account:
@@ -203,7 +203,7 @@ def create_account(
     payload: S3AccountCreate,
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3Account:
     try:
         logger.debug("Creating account %s", payload.name)
@@ -233,7 +233,7 @@ def import_accounts(
     payload: list[S3AccountImport],
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> list[S3Account]:
     try:
         logger.debug("Importing %d accounts", len(payload))
@@ -257,7 +257,7 @@ def update_account(
     payload: S3AccountUpdate,
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> S3Account:
     try:
         logger.debug("Updating account %s", account_id)
@@ -286,7 +286,7 @@ def delete_account(
     delete_rgw: bool = Query(False, description="Also delete the RGW tenant backing this account"),
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         logger.debug("Deleting account %s", account_id)
@@ -308,7 +308,7 @@ def unlink_account(
     account_id: int,
     service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         logger.debug("Unlinking account %s", account_id)

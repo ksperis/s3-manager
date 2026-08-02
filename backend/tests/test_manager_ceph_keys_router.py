@@ -113,7 +113,7 @@ def test_manager_ceph_keys_create_records_audit(client):
     app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
-    app.dependency_overrides[manager_ceph_keys_router.get_audit_logger] = lambda: audit
+    app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
 
     response = client.post("/api/manager/ceph/keys")
 
@@ -132,7 +132,7 @@ def test_manager_ceph_keys_update_status_records_audit(client):
     app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
-    app.dependency_overrides[manager_ceph_keys_router.get_audit_logger] = lambda: audit
+    app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
 
     response = client.put("/api/manager/ceph/keys/AK-2/status", json={"active": False})
 
@@ -150,7 +150,7 @@ def test_manager_ceph_keys_delete_records_audit(client):
     app.dependency_overrides[manager_ceph_keys_router.require_manager_ceph_s3_user_keys] = lambda: _account_context()
     app.dependency_overrides[manager_ceph_keys_router.get_current_account_user] = _ui_user
     app.dependency_overrides[manager_ceph_keys_router.get_manager_ceph_s3_users_service] = lambda: service
-    app.dependency_overrides[manager_ceph_keys_router.get_audit_logger] = lambda: audit
+    app.dependency_overrides[manager_ceph_keys_router.get_audit_service] = lambda: audit
 
     response = client.delete("/api/manager/ceph/keys/AK-2")
 

@@ -15,7 +15,7 @@ from app.models.ui_group import (
     UiGroupUpdate,
 )
 from app.models.user import ManagerToolAccess
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
@@ -78,7 +78,7 @@ def create_group(
     payload: UiGroupCreate,
     groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UiGroupOut:
     _require_superadmin_for_privileged_grant(
         current_user,
@@ -114,7 +114,7 @@ def update_group(
     payload: UiGroupUpdate,
     groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UiGroupOut:
     _require_superadmin_for_privileged_grant(
         current_user,
@@ -144,7 +144,7 @@ async def upload_group_avatar(
     file: UploadFile = File(...),
     groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> UiGroupOut:
     group = groups_service.get_group(group_id)
@@ -174,7 +174,7 @@ def delete_group_avatar(
     group_id: int,
     groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
     db: Session = Depends(get_db),
 ) -> UiGroupOut:
     group = groups_service.get_group(group_id)
@@ -220,7 +220,7 @@ def delete_group(
     group_id: int,
     groups_service: UiGroupsService = Depends(lambda db=Depends(get_db): get_ui_groups_service(db)),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         group = groups_service.get_group(group_id)

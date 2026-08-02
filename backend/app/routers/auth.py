@@ -22,7 +22,7 @@ from app.models.oidc import (
 )
 from app.models.ldap import LDAPLoginRequest, LDAPProviderInfo
 from app.models.user import UserCreate, UserOut
-from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
+from app.routers.dependencies import get_audit_service, get_current_super_admin, get_current_ui_superadmin
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.audit_service import AuditService
 from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
@@ -144,7 +144,7 @@ def create_api_token(
     payload: ApiTokenCreateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> ApiTokenCreateResponse:
     service = ApiTokenService(db)
     try:
@@ -174,7 +174,7 @@ def revoke_api_token(
     token_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     service = ApiTokenService(db)
     try:
@@ -196,7 +196,7 @@ def register_admin(
     payload: UserCreate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     current_user: User = Depends(get_current_ui_superadmin),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> UserOut:
     try:
         user = users_service.create_super_admin(payload)
@@ -219,7 +219,7 @@ def login(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> LoginResponse:
     username = (form_data.username or "").strip()
     rate_limit_key = username.lower()
@@ -304,7 +304,7 @@ def login_with_ldap(
     payload: LDAPLoginRequest,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     ldap_service: LDAPAuthService = Depends(lambda db=Depends(get_db): get_ldap_auth_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> LoginResponse:
     username = (payload.username or "").strip()
     provider_key = provider_id.lower()
@@ -435,7 +435,7 @@ def login_with_s3_keys(
     response: Response,
     payload: S3KeyLogin,
     db: Session = Depends(get_db),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> SessionLoginResponse:
     session_service = SessionService(db)
     general = load_app_settings().general
@@ -559,7 +559,7 @@ def complete_oidc_login(
     payload: OIDCCallbackRequest,
     oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> OidcCallbackResponse:
     try:
         user, redirect_path, created = oidc_service.complete_login(provider_id, payload.code, payload.state)
@@ -645,7 +645,7 @@ def logout(
     response: Response,
     db: Session = Depends(get_db),
     refresh_token: Optional[str] = Cookie(None, alias=settings.refresh_token_cookie_name),
-    audit_service: AuditService = Depends(get_audit_logger),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> None:
     if refresh_token:
         refresh_service = RefreshSessionService(db)

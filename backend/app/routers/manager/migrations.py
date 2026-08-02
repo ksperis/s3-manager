@@ -23,7 +23,7 @@ from app.models.bucket_migration import (
 )
 from app.models.access_context import BucketMigrationAccessScope
 from app.routers.dependencies import (
-    get_audit_logger,
+    get_audit_service,
     get_current_bucket_migration_scope,
 )
 from app.routers.http_errors import raise_http_exception_from_exception, sanitized_error_log_detail
@@ -229,7 +229,7 @@ def delete_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> Response:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -253,7 +253,7 @@ def create_migration(
     payload: BucketMigrationCreateRequest,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationDetail:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -293,7 +293,7 @@ def update_migration(
     payload: BucketMigrationCreateRequest,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationDetail:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -332,7 +332,7 @@ def run_migration_precheck(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationDetail:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -360,7 +360,7 @@ def start_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -387,7 +387,7 @@ def pause_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -412,7 +412,7 @@ def resume_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -437,7 +437,7 @@ def stop_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -462,7 +462,7 @@ def continue_after_presync(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -487,7 +487,7 @@ def rollback_migration(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -511,7 +511,7 @@ def retry_failed_items(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -541,7 +541,7 @@ def rollback_failed_items(
     migration_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -571,7 +571,7 @@ def retry_item(
     item_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)
@@ -601,7 +601,7 @@ def rollback_item(
     item_id: int,
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
-    audit: AuditService = Depends(get_audit_logger),
+    audit: AuditService = Depends(get_audit_service),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
     service = _build_service(db, scope)

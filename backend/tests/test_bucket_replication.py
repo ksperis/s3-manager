@@ -58,7 +58,7 @@ def test_manager_put_bucket_replication_returns_200(client: TestClient):
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
         "configuration": {
@@ -93,7 +93,7 @@ def test_manager_put_bucket_replication_rejects_zone(client: TestClient):
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
         "configuration": {
@@ -122,7 +122,7 @@ def test_manager_put_bucket_replication_requires_endpoint_feature(client: TestCl
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: _build_account(replication_enabled=False)
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     payload = {
         "configuration": {
@@ -146,7 +146,7 @@ def test_manager_delete_bucket_replication_returns_204(client: TestClient):
 
     app.dependency_overrides[manager_buckets_router.get_account_context] = _build_account
     app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeService()
-    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
+    app.dependency_overrides[manager_buckets_router.get_audit_service] = lambda: _FakeAuditService()
 
     response = client.delete("/api/manager/buckets/demo-bucket/replication")
 
