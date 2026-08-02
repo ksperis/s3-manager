@@ -42,7 +42,7 @@ from app.utils.rgw import extract_bucket_list
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb, extract_quota_limits
 from app.utils.size_units import size_to_bytes
-from app.utils.s3_user_ordering import s3_user_name_order_by
+from app.utils.name_ordering import name_order_by
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
@@ -491,7 +491,7 @@ class S3UsersService:
         return group_ids_by_user, group_details_by_user
 
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
-        rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
+        rows = self.db.query(S3UserModel).order_by(*name_order_by(S3UserModel)).all()
         user_ids = [row.id for row in rows]
         link_map, user_details_map = self._load_user_links(user_ids)
         group_ids_map, group_details_map = self._load_group_links(user_ids)
@@ -508,7 +508,7 @@ class S3UsersService:
         ]
 
     def list_users_minimal(self) -> list[S3UserSummary]:
-        rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
+        rows = self.db.query(S3UserModel).order_by(*name_order_by(S3UserModel)).all()
         summaries: list[S3UserSummary] = []
         for row in rows:
             endpoint = self._endpoint_for_user(row)
@@ -582,7 +582,7 @@ class S3UsersService:
                     S3UserModel.id.desc(),
                 )
             else:
-                query = query.order_by(*s3_user_name_order_by(S3UserModel))
+                query = query.order_by(*name_order_by(S3UserModel))
         else:
             sort_column = sort_map[requested_sort]
             if descending:

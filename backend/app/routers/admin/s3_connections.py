@@ -54,7 +54,7 @@ from app.utils.s3_connection_endpoint import (
     custom_endpoint_update_base,
     resolve_connection_details,
 )
-from app.utils.s3_connection_ordering import s3_connection_name_order_by
+from app.utils.name_ordering import name_order_by
 from app.routers.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/admin/s3-connections", tags=["admin-s3-connections"])
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def list_s3_connections(
                 S3Connection.id.desc(),
             )
         else:
-            q = q.order_by(*s3_connection_name_order_by(S3Connection))
+            q = q.order_by(*name_order_by(S3Connection))
     else:
         sort_field = sort_map[requested_sort]
         if descending:
@@ -333,7 +333,7 @@ def list_s3_connections_minimal(
             S3Connection.remediation_required,
         )
         .filter(*S3ConnectionsService.admin_shared_predicates())
-        .order_by(*s3_connection_name_order_by(S3Connection))
+        .order_by(*name_order_by(S3Connection))
         .all()
     )
     return [

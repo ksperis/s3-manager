@@ -20,7 +20,7 @@ from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
     custom_endpoint_update_base,
 )
-from app.utils.s3_connection_ordering import s3_connection_name_order_by
+from app.utils.name_ordering import name_order_by
 from app.utils.s3_endpoint import validate_user_supplied_s3_endpoint
 
 
@@ -42,7 +42,7 @@ class S3ConnectionsService:
                 | ((DBS3Connection.is_shared.is_(True)) & (UserS3Connection.user_id == user_id)),
             )
             .distinct()
-            .order_by(*s3_connection_name_order_by(DBS3Connection))
+            .order_by(*name_order_by(DBS3Connection))
             .all()
         )
         return [self._to_model(r) for r in rows]
@@ -56,7 +56,7 @@ class S3ConnectionsService:
                 DBS3Connection.is_shared.is_(False),
                 DBS3Connection.is_temporary.is_(False),
             )
-            .order_by(*s3_connection_name_order_by(DBS3Connection))
+            .order_by(*name_order_by(DBS3Connection))
             .all()
         )
         return [self._to_model(r) for r in rows]

@@ -31,7 +31,7 @@ from app.db import (
 from app.services.app_settings_service import load_app_settings
 from app.services.s3_client import get_s3_client
 from app.utils.storage_endpoint_features import normalize_features_config
-from app.utils.storage_endpoint_ordering import endpoint_name_order_by
+from app.utils.name_ordering import name_order_by
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -133,7 +133,7 @@ class HealthCheckService:
         self.db = db
 
     def _sorted_endpoints_query(self):
-        return self.db.query(StorageEndpoint).order_by(*endpoint_name_order_by(StorageEndpoint))
+        return self.db.query(StorageEndpoint).order_by(*name_order_by(StorageEndpoint))
 
     def run_checks(self) -> dict:
         app_settings = load_app_settings()

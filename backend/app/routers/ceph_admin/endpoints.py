@@ -26,7 +26,7 @@ from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.services.tags_service import TagsService
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
-from app.utils.storage_endpoint_ordering import endpoint_name_order_by
+from app.utils.name_ordering import name_order_by
 from app.routers.http_errors import sanitize_error_detail
 from app.utils.time import utcnow
 
@@ -186,7 +186,7 @@ def list_ceph_admin_endpoints(
     tags_service = TagsService(db)
     endpoints = (
         db.query(DbStorageEndpoint)
-        .order_by(*endpoint_name_order_by(DbStorageEndpoint))
+        .order_by(*name_order_by(DbStorageEndpoint))
         .all()
     )
     results: list[CephAdminEndpoint] = []

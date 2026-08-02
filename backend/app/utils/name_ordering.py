@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.sql.elements import ColumnElement
 
 
-def s3_user_name_order_by(model: Any) -> tuple[ColumnElement[Any], ColumnElement[Any], ColumnElement[Any]]:
+def name_order_by(model: Any) -> tuple[ColumnElement[Any], ColumnElement[Any], ColumnElement[Any]]:
     return (
         func.lower(model.name).asc(),
         model.name.asc(),
