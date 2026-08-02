@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.core.database import SessionLocal
-from app.db import S3Account, User
+from app.db import User
 from app.models.bucket_purge import BucketPurgeRequest, BucketPurgeResult, bucket_purge_confirmation_phrase
 from app.routers.bucket_purge_stream import stream_bucket_purge
 from app.routers.dependencies import (
@@ -18,6 +18,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.bucket_purge_service import BucketPurgeOptions, BucketPurgeResolvedTarget, BucketPurgeService
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(prefix="/manager/bucket-purge", tags=["manager-bucket-purge"])
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ def _require_buckets_payload(payload: BucketPurgeRequest) -> list[str]:
     return payload.buckets
 
 
-def _require_bucket_management_context(account: S3Account) -> None:
-    caps = getattr(account, "_manager_capabilities", None)
+def _require_bucket_management_context(account: S3ExecutionContext) -> None:
+    caps = getattr(account, "manager_capabilities", None)
     if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
 
@@ -46,7 +47,7 @@ def _record_audit(
     user_email: str,
     user_role: str,
     request_id: str,
-    account: S3Account,
+    account: S3ExecutionContext,
     action: str,
     status: str = "success",
     message: str | None = None,
@@ -79,7 +80,7 @@ def stream_manager_bucket_purge(
     payload: BucketPurgeRequest,
     request: Request,
     tool_user: User = Depends(require_bucket_purge_enabled),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)

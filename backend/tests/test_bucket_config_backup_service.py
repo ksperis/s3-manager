@@ -17,6 +17,7 @@ from app.models.bucket_config_backup import (
 )
 from app.routers.ceph_admin import buckets as buckets_router
 from app.services.bucket_config_backup_service import BucketConfigBackupService
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 class FakeBucketsService:
@@ -62,8 +63,13 @@ def test_bucket_config_backup_request_normalizes_duplicates():
 
 
 def test_bucket_config_backup_collects_selected_features_without_secrets():
-    account = S3Account(name="account-a")
-    account.set_session_credentials("AKIA_TEST", "SECRET_TEST")
+    account = S3ExecutionContext(
+        context_id="account-a",
+        context_kind="account",
+        name="account-a",
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
     service = BucketConfigBackupService(FakeBucketsService())
 
     backup = service.build_backup(

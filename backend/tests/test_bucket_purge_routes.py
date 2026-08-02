@@ -92,7 +92,7 @@ def test_manager_purge_route_rejects_wrong_confirmation_with_400():
     app.dependency_overrides[manager_purge.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_purge.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_purge.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     try:
@@ -115,7 +115,7 @@ def test_manager_delete_with_purge_route_rejects_wrong_confirmation_with_400():
     app.dependency_overrides[manager_buckets.get_account_context] = lambda: SimpleNamespace(
         id=1,
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_buckets.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     try:
@@ -159,7 +159,7 @@ def test_manager_purge_route_streams_progress_and_result(monkeypatch):
     app.dependency_overrides[manager_purge.require_bucket_purge_enabled] = lambda: _manager_tool_user()
     app.dependency_overrides[manager_purge.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_purge.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     monkeypatch.setattr(manager_purge, "BucketPurgeService", FakeService)
@@ -221,7 +221,7 @@ def test_manager_delete_with_purge_route_streams_progress_and_result(monkeypatch
     app.dependency_overrides[manager_buckets.get_account_context] = lambda: SimpleNamespace(
         id=1,
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_buckets.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     monkeypatch.setattr(manager_buckets, "BucketPurgeService", FakeService)

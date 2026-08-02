@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionContext
 from app.routers.dependencies import get_account_context, require_iam_capable_manager
 from app.services.rgw_iam import get_iam_service
 from app.utils.s3_endpoint import resolve_iam_client_options
@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/manager/iam", tags=["manager-iam-overview"])
 
 
-def _service_for_account(account: S3Account):
+def _service_for_account(account: S3ExecutionContext):
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account root keys missing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Execution context credentials are missing")
     endpoint, region, verify_tls = resolve_iam_client_options(account)
     return get_iam_service(
         access_key,
@@ -30,7 +30,7 @@ def _service_for_account(account: S3Account):
 
 @router.get("/overview")
 def iam_overview(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: dict = Depends(require_iam_capable_manager),
 ) -> dict:
     service = _service_for_account(account)

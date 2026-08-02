@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.db import S3Account, User
+from app.db import User
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.policy import Policy, PolicyCreate
 from app.routers.dependencies import (
     get_account_context,
@@ -16,7 +17,7 @@ from app.routers.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/manager/iam/policies", tags=["manager-iam-policies"])
 
 
-def get_account_and_service(account: S3Account) -> tuple[S3Account, PoliciesService]:
+def get_account_and_service(account: S3ExecutionContext) -> tuple[S3ExecutionContext, PoliciesService]:
     try:
         service = get_policies_service(account)
     except ValueError as exc:

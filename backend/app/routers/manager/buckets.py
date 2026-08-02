@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
-from app.db import S3Account, User
+from app.db import User
 from app.models.bucket import (
     Bucket,
     BucketAcl,
@@ -45,6 +45,7 @@ from app.models.bucket_purge import (
 from app.routers.bucket_purge_stream import stream_bucket_purge
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services import bucket_config_actions
 from app.services.bucket_purge_service import (
     BucketPurgeOptions,
@@ -72,7 +73,7 @@ router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
 logger = logging.getLogger(__name__)
 
 
-def _require_sse_feature(account: S3Account) -> None:
+def _require_sse_feature(account: S3ExecutionContext) -> None:
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None:
         return
@@ -83,7 +84,7 @@ def _require_sse_feature(account: S3Account) -> None:
         )
 
 
-def _require_replication_feature(account: S3Account) -> None:
+def _require_replication_feature(account: S3ExecutionContext) -> None:
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None or not resolve_feature_flags(endpoint).replication_enabled:
         raise HTTPException(
@@ -92,7 +93,7 @@ def _require_replication_feature(account: S3Account) -> None:
         )
 
 
-def _context_id_from_account(account: S3Account) -> str:
+def _context_id_from_account(account: S3ExecutionContext) -> str:
     connection_id = getattr(account, "s3_connection_id", None)
     if isinstance(connection_id, int) and connection_id > 0:
         return f"conn-{connection_id}"
@@ -112,12 +113,12 @@ def _context_id_from_account(account: S3Account) -> str:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported account context")
 
 
-def _invalidate_bucket_listing_for_account(account: S3Account) -> None:
+def _invalidate_bucket_listing_for_account(account: S3ExecutionContext) -> None:
     invalidate_bucket_listing_cache_for_account(account)
 
 
-def _require_bucket_management_context(account: S3Account) -> None:
-    caps = getattr(account, "_manager_capabilities", None)
+def _require_bucket_management_context(account: S3ExecutionContext) -> None:
+    caps = getattr(account, "manager_capabilities", None)
     if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
 
@@ -128,7 +129,7 @@ def _record_bucket_delete_with_purge_audit(
     user_email: str,
     user_role: str,
     request_id: str,
-    account: S3Account,
+    account: S3ExecutionContext,
     bucket_name: str,
     action: str,
     status_value: str = "success",
@@ -161,7 +162,7 @@ def _record_bucket_delete_with_purge_audit(
 def list_buckets(
     include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
     with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> list[Bucket]:
@@ -181,7 +182,7 @@ def list_buckets(
 def get_bucket_stats(
     bucket_name: str,
     with_stats: bool = Query(True, description="Include usage/quota stats when available"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> Bucket:
@@ -195,7 +196,7 @@ def get_bucket_stats(
 def update_quota(
     bucket_name: str,
     payload: BucketQuotaUpdate,
-    account: S3Account = Depends(require_manager_bucket_quota),
+    account: S3ExecutionContext = Depends(require_manager_bucket_quota),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_user),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -225,7 +226,7 @@ def compare_bucket_pair(
     request: Request,
     db: Session = Depends(get_db),
     _tool_user: User = Depends(require_bucket_compare_enabled),
-    source_account: S3Account = Depends(get_account_context),
+    source_account: S3ExecutionContext = Depends(get_account_context),
     actor=Depends(get_current_account_admin),
     service: BucketsService = Depends(get_buckets_service),
 ) -> ManagerBucketCompareResult:
@@ -295,7 +296,7 @@ def run_compare_bucket_action(
     request: Request,
     db: Session = Depends(get_db),
     _tool_user: User = Depends(require_bucket_compare_enabled),
-    source_account: S3Account = Depends(get_account_context),
+    source_account: S3ExecutionContext = Depends(get_account_context),
     actor: User = Depends(get_current_account_admin),
     service: BucketsService = Depends(get_buckets_service),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -385,7 +386,7 @@ def run_compare_bucket_action(
 @router.get("/{bucket_name}/properties", response_model=BucketProperties)
 def bucket_properties(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketProperties:
@@ -399,7 +400,7 @@ def bucket_properties(
 @router.get("/{bucket_name}/versioning", response_model=BucketVersioningStatus)
 def get_versioning(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketVersioningStatus:
@@ -414,7 +415,7 @@ def get_versioning(
 def update_versioning(
     bucket_name: str,
     payload: BucketVersioningUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -440,7 +441,7 @@ def update_versioning(
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
 def get_object_lock(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketObjectLock:
@@ -455,7 +456,7 @@ def get_object_lock(
 def put_object_lock(
     bucket_name: str,
     payload: BucketObjectLockUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -482,7 +483,7 @@ def put_object_lock(
 @router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
 def get_bucket_encryption(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
@@ -498,7 +499,7 @@ def get_bucket_encryption(
 def put_bucket_encryption(
     bucket_name: str,
     payload: BucketEncryptionConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -526,7 +527,7 @@ def put_bucket_encryption(
 @router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_encryption(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -551,7 +552,7 @@ def delete_bucket_encryption(
 @router.get("/{bucket_name}/policy", response_model=BucketPolicyOut)
 def get_policy(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketPolicyOut:
@@ -565,7 +566,7 @@ def get_policy(
 @router.get("/{bucket_name}/acl", response_model=BucketAcl)
 def get_acl(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketAcl:
@@ -580,7 +581,7 @@ def get_acl(
 def put_acl(
     bucket_name: str,
     payload: BucketAclUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -607,7 +608,7 @@ def put_acl(
 @router.get("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
 def get_public_access_block(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketPublicAccessBlock:
@@ -622,7 +623,7 @@ def get_public_access_block(
 def put_public_access_block(
     bucket_name: str,
     payload: BucketPublicAccessBlock,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -650,7 +651,7 @@ def put_public_access_block(
 def put_policy(
     bucket_name: str,
     payload: BucketPolicyIn,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -677,7 +678,7 @@ def put_policy(
 @router.delete("/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT)
 def delete_policy(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -701,7 +702,7 @@ def delete_policy(
 @router.get("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
 def get_lifecycle(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketLifecycleConfig:
@@ -716,7 +717,7 @@ def get_lifecycle(
 def put_lifecycle(
     bucket_name: str,
     payload: BucketLifecycleConfig,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -743,7 +744,7 @@ def put_lifecycle(
 @router.delete("/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lifecycle(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -767,7 +768,7 @@ def delete_lifecycle(
 @router.get("/{bucket_name}/cors")
 def get_cors(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ):
@@ -782,7 +783,7 @@ def get_cors(
 def put_cors(
     bucket_name: str,
     payload: BucketCorsUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -809,7 +810,7 @@ def put_cors(
 @router.delete("/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cors(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -833,7 +834,7 @@ def delete_cors(
 @router.get("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
 def get_notifications(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketNotificationConfiguration:
@@ -848,7 +849,7 @@ def get_notifications(
 def put_notifications(
     bucket_name: str,
     payload: BucketNotificationConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -875,7 +876,7 @@ def put_notifications(
 @router.delete("/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT)
 def delete_notifications(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -899,7 +900,7 @@ def delete_notifications(
 @router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
 def get_replication(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
@@ -915,7 +916,7 @@ def get_replication(
 def put_replication(
     bucket_name: str,
     payload: BucketReplicationConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -943,7 +944,7 @@ def put_replication(
 @router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT)
 def delete_replication(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -968,7 +969,7 @@ def delete_replication(
 @router.get("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
 def get_logging(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketLoggingConfiguration:
@@ -983,7 +984,7 @@ def get_logging(
 def put_logging(
     bucket_name: str,
     payload: BucketLoggingConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1010,7 +1011,7 @@ def put_logging(
 @router.delete("/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT)
 def delete_logging(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1034,7 +1035,7 @@ def delete_logging(
 @router.get("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
 def get_website(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketWebsiteConfiguration:
@@ -1049,7 +1050,7 @@ def get_website(
 def put_website(
     bucket_name: str,
     payload: BucketWebsiteConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1076,7 +1077,7 @@ def put_website(
 @router.delete("/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT)
 def delete_website(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1100,7 +1101,7 @@ def delete_website(
 @router.get("/{bucket_name}/tags")
 def get_tags(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ):
@@ -1115,7 +1116,7 @@ def get_tags(
 def put_tags(
     bucket_name: str,
     payload: BucketTagsUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1142,7 +1143,7 @@ def put_tags(
 @router.delete("/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tags(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1166,7 +1167,7 @@ def delete_tags(
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_bucket(
     payload: BucketCreate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1192,7 +1193,7 @@ def create_bucket(
 @router.delete("/{bucket_name}")
 def delete_bucket(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1221,7 +1222,7 @@ def stream_delete_bucket_with_purge(
     payload: BucketDeleteWithPurgeRequest,
     request: Request,
     tool_user: User = Depends(require_bucket_purge_enabled),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: User = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     expected = bucket_delete_with_purge_confirmation_phrase(bucket_name)

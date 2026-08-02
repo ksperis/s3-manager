@@ -5,6 +5,7 @@ from app.main import app
 from app.models.browser import BrowserBucket, PaginatedBrowserBucketsResponse
 from app.routers import browser as browser_router
 from app.routers import dependencies
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 def _account() -> S3Account:
@@ -240,9 +241,7 @@ def test_browser_usage_summary_uses_live_s3_user_usage(client, db_session, monke
     )
     db_session.add(s3_user)
     db_session.flush()
-    account = S3Account(name="browser-s3-user-summary")
-    account.id = -(100_000 + s3_user.id)
-    account.s3_user_id = s3_user.id
+    account = S3ExecutionContext.from_legacy_user(s3_user)
 
     class FakeS3UsersService:
         def __init__(self, db):  # noqa: ANN001
@@ -284,9 +283,7 @@ def test_browser_usage_summary_hides_s3_user_when_live_usage_is_unavailable(clie
     )
     db_session.add(s3_user)
     db_session.flush()
-    account = S3Account(name="browser-s3-user-summary-empty")
-    account.id = -(100_000 + s3_user.id)
-    account.s3_user_id = s3_user.id
+    account = S3ExecutionContext.from_legacy_user(s3_user)
 
     class FakeS3UsersService:
         def __init__(self, db):  # noqa: ANN001
@@ -313,9 +310,10 @@ def test_browser_usage_summary_hides_s3_user_when_live_usage_is_unavailable(clie
 
 
 def test_browser_usage_summary_uses_live_account_usage_for_portal_context(client, db_session, monkeypatch):
-    account = S3Account(name="portal-browser-summary")
-    account.id = 77
-    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
+    persisted_account = S3Account(name="portal-browser-summary")
+    persisted_account.id = 77
+    account = S3ExecutionContext.from_account(persisted_account, context_kind="portal_account")
+    account.portal_browser_role = "portal_manager"
 
     class FakeS3AccountsService:
         def __init__(self, db):  # noqa: ANN001
@@ -347,10 +345,11 @@ def test_browser_usage_summary_uses_live_account_usage_for_portal_context(client
 
 
 def test_browser_usage_summary_does_not_fallback_to_portal_storage_space_rows(client, db_session, monkeypatch):
-    account = S3Account(name="portal-browser-summary")
-    account.id = 77
-    account._portal_browser_role = "portal_manager"  # type: ignore[attr-defined]
-    account._portal_storage_spaces = [  # type: ignore[attr-defined]
+    persisted_account = S3Account(name="portal-browser-summary")
+    persisted_account.id = 77
+    account = S3ExecutionContext.from_account(persisted_account, context_kind="portal_account")
+    account.portal_browser_role = "portal_manager"
+    account.portal_storage_spaces = [
         BrowserBucket(name="space-a", display_name="Space A", used_bytes=900, object_count=90),
     ]
 
@@ -379,9 +378,14 @@ def test_browser_usage_summary_does_not_fallback_to_portal_storage_space_rows(cl
 
 
 def test_browser_usage_summary_hides_connection_usage_without_bucket_listing(client):
-    account = S3Account(name="browser-connection")
-    account.id = 77
-    account.s3_connection_id = 9
+    account = S3ExecutionContext(
+        context_id="conn-9",
+        context_kind="connection",
+        name="browser-connection",
+        access_key="access",
+        secret_key="secret",
+        s3_connection_id=9,
+    )
 
     app.dependency_overrides[dependencies.get_account_context] = lambda: account
 

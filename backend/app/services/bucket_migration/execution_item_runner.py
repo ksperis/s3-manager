@@ -438,9 +438,9 @@ class BucketMigrationItemRunnerMixin:
 
     def _copy_bucket_settings(
         self,
-        source_account: S3Account,
+        source_account: S3ExecutionTarget,
         source_bucket: str,
-        target_account: S3Account,
+        target_account: S3ExecutionTarget,
         target_bucket: str,
         migration: BucketMigration,
         item: BucketMigrationItem,

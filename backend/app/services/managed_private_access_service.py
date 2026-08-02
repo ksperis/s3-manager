@@ -22,6 +22,7 @@ from app.services.effective_access_service import EffectiveAccessService
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.s3_connections_service import S3ConnectionsService
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.s3_users_service import S3UsersService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import build_custom_endpoint_config, resolve_connection_details
@@ -96,7 +97,7 @@ class ManagedPrivateAccessService:
         self,
         *,
         user: User,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ManagedIAMPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
         self._ensure_private_connections_allowed(user)
@@ -197,7 +198,7 @@ class ManagedPrivateAccessService:
         self,
         *,
         user: User,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ManagedRGWUserPrivateAccessRequest,
     ) -> ManagedPrivateAccessResult:
         self._ensure_private_connections_allowed(user)
@@ -376,7 +377,7 @@ class ManagedPrivateAccessService:
         )
 
     @staticmethod
-    def iam_source_reference(account: S3Account) -> tuple[str, int] | None:
+    def iam_source_reference(account: S3ExecutionTarget) -> tuple[str, int] | None:
         connection_id = getattr(account, "s3_connection_id", None)
         if isinstance(connection_id, int) and connection_id > 0:
             return "connection", connection_id
@@ -391,7 +392,7 @@ class ManagedPrivateAccessService:
         if not self.access.private_connections_allowed(user):
             raise ManagedPrivateAccessForbidden("Private S3 connections are not allowed for this user")
 
-    def _resolve_iam_source(self, user: User, account: S3Account) -> _Source:
+    def _resolve_iam_source(self, user: User, account: S3ExecutionTarget) -> _Source:
         effective = self.access.resolve_user(user)
         connection_id = getattr(account, "s3_connection_id", None)
         if isinstance(connection_id, int):
@@ -429,7 +430,7 @@ class ManagedPrivateAccessService:
         username = self._iam_username(user.id, "account", account_id)
         return _Source("account", account_id, "iam_user", username, username)
 
-    def _resolve_rgw_user_source(self, user: User, account: S3Account) -> _Source:
+    def _resolve_rgw_user_source(self, user: User, account: S3ExecutionTarget) -> _Source:
         s3_user_id = getattr(account, "s3_user_id", None)
         if not isinstance(s3_user_id, int) or s3_user_id <= 0:
             raise ManagedPrivateAccessForbidden("An assigned RGW User context is required")
@@ -706,7 +707,7 @@ class ManagedPrivateAccessService:
             raise ManagedPrivateAccessError("; ".join(str(error) for error in errors))
 
     @staticmethod
-    def _iam_service_for_account(account: S3Account) -> RGWIAMService:
+    def _iam_service_for_account(account: S3ExecutionTarget) -> RGWIAMService:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise ManagedPrivateAccessError("The source context has no IAM administration credentials")

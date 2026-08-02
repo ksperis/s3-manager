@@ -26,6 +26,7 @@ from app.routers import dependencies
 from app.routers.dependencies_internal import settings_loader
 from app.routers.manager import context as manager_context_router
 from app.services.connection_identity_service import ConnectionIdentityResolution
+from app.services.s3_execution_context import S3ExecutionContext
 from tests.s3_account_factory import make_s3_account
 
 
@@ -246,12 +247,15 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
         db=db_session,
     )
 
+    assert isinstance(account_ctx, S3ExecutionContext)
+    assert account_ctx.context_kind == "portal_account"
+    assert account_ctx.context_id == str(account.id)
     assert account_ctx.effective_rgw_credentials() == ("AK-PORTAL", "SK-PORTAL")
-    caps = getattr(account_ctx, "_manager_capabilities", None)
+    caps = getattr(account_ctx, "manager_capabilities", None)
     assert caps is not None
     assert caps.using_root_key is False
     assert caps.can_manage_iam is False
-    assert getattr(account_ctx, "_portal_allowed_buckets") == set()
+    assert getattr(account_ctx, "portal_allowed_buckets") == set()
 
 
 def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_session, monkeypatch):
@@ -451,7 +455,11 @@ def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enable
         actor=user,
         db=db_session,
     )
-    caps = getattr(account, "_manager_capabilities", None)
+    assert isinstance(account, S3ExecutionContext)
+    assert account.id is None
+    assert account.context_kind == "connection"
+    assert account.context_id == f"conn-{connection.id}"
+    caps = getattr(account, "manager_capabilities", None)
     assert caps is not None
     assert caps.can_manage_iam is False
 
@@ -804,9 +812,13 @@ def test_manager_workspace_accepts_s3_user_context(db_session):
         db=db_session,
     )
 
+    assert isinstance(account, S3ExecutionContext)
+    assert account.id is None
+    assert account.context_kind == "legacy_user"
+    assert account.context_id == f"s3u-{s3_user.id}"
     assert getattr(account, "s3_user_id", None) == s3_user.id
     assert account.effective_rgw_credentials() == ("AK-S3U", "SK-S3U")
-    caps = getattr(account, "_manager_capabilities", None)
+    caps = getattr(account, "manager_capabilities", None)
     assert caps is not None
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is False
@@ -1053,6 +1065,10 @@ def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_se
         db=db_session,
     )
 
+    assert isinstance(account, S3ExecutionContext)
+    assert account.id is None
+    assert account.context_kind == "ceph_admin"
+    assert account.context_id == f"ceph-admin-{endpoint.id}"
     assert account.storage_endpoint_id == endpoint.id
     assert account.effective_rgw_credentials() == ("AK-CEPH-ADMIN", "SK-CEPH-ADMIN")
 

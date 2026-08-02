@@ -11,19 +11,25 @@ from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
-from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_endpoint
 from app.utils.time import utcnow
 
 from .auth_session import get_current_actor, settings
 from .ceph_admin_context import _resolve_default_endpoint
 from . import service_loaders, settings_loader
-from .types import AccountAccess, AccountCapabilities, ManagerActor
+from .types import AccountCapabilities, ManagerActor
 
 
-def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: int, *, surface: str) -> S3Account:
+def _resolve_ceph_admin_browser_context(
+    db: Session,
+    actor: User,
+    endpoint_id: int,
+    *,
+    surface: str,
+) -> S3ExecutionContext:
     from .ceph_admin_context import _resolve_ceph_admin_browser_context as resolve_context
 
     return resolve_context(db, actor, endpoint_id, surface=surface)
@@ -42,7 +48,7 @@ def _resolve_portal_browser_context(
     link: UserS3Account | EffectiveAccountLink,
     *,
     request: Request,
-) -> S3Account:
+) -> S3ExecutionContext:
     from .portal_access import _resolve_portal_browser_context as resolve_context
 
     return resolve_context(db, user, account, link, request=request)
@@ -76,60 +82,39 @@ def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account identifier")
 
 
-def _build_s3_connection_account(conn: S3Connection) -> S3Account:
-    """Builds an S3Account-like context for a user-scoped connection.
-
-    We intentionally keep manager routers and services working with S3Account
-    for now. This wrapper is an implementation detail and must remain hidden
-    from the admin UX.
-    """
-    account = S3Account(
-        name=conn.name,
-        rgw_account_id=None,
-        email=None,
-        rgw_user_uid=None,
+def _build_s3_connection_context(
+    connection: S3Connection,
+    *,
+    capabilities: Optional[AccountCapabilities] = None,
+) -> S3ExecutionContext:
+    return S3ExecutionContext.from_connection(
+        connection,
+        manager_capabilities=capabilities,
     )
-    # Use an out-of-band negative id range to avoid clashes with s3_users.
-    account.id = -(1_000_000 + conn.id)
-    account.rgw_access_key = conn.access_key_id
-    account.rgw_secret_key = conn.secret_access_key
-    account.storage_endpoint_id = conn.storage_endpoint_id
-    account.storage_endpoint = conn.storage_endpoint
-    endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
-    account._session_endpoint = endpoint_url  # type: ignore[attr-defined]
-    account._session_region = region  # type: ignore[attr-defined]
-    account._session_force_path_style = force_path_style  # type: ignore[attr-defined]
-    account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
-    account.s3_connection_id = conn.id  # type: ignore[attr-defined]
-    account._session_token = conn.session_token  # type: ignore[attr-defined]
-    account._source_connection = conn  # type: ignore[attr-defined]
-    return account
 
 
 def _connection_iam_capable(conn: S3Connection) -> bool:
     return s3_connection_can_manage_iam(conn.capabilities_json)
 
 
-def _build_s3_user_account(s3_user: S3User) -> S3Account:
-    account = S3Account(
-        name=s3_user.name,
-        rgw_account_id=None,
-        email=s3_user.email,
-        rgw_user_uid=s3_user.rgw_user_uid,
+def _build_s3_user_context(
+    s3_user: S3User,
+    *,
+    capabilities: Optional[AccountCapabilities] = None,
+) -> S3ExecutionContext:
+    return S3ExecutionContext.from_legacy_user(
+        s3_user,
+        manager_capabilities=capabilities,
     )
-    # Keep an out-of-band negative id to avoid collisions with RGW account ids.
-    account.id = -(100_000 + s3_user.id)
-    account.rgw_access_key = s3_user.rgw_access_key
-    account.rgw_secret_key = s3_user.rgw_secret_key
-    account.storage_endpoint_id = s3_user.storage_endpoint_id
-    account.storage_endpoint = s3_user.storage_endpoint
-    account.allow_manager_bucket_quota = bool(s3_user.allow_manager_bucket_quota)
-    account.allow_manager_ceph_s3_user_keys = bool(s3_user.allow_manager_ceph_s3_user_keys)  # type: ignore[attr-defined]
-    account.s3_user_id = s3_user.id  # type: ignore[attr-defined]
-    return account
 
 
-def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int, *, surface: str) -> S3Account:
+def _resolve_s3_user_context(
+    db: Session,
+    user: User,
+    s3_user_id: int,
+    *,
+    surface: str,
+) -> S3ExecutionContext:
     if surface != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 users are not available in Browser")
     effective = service_loaders.get_effective_access_service(db).resolve_user(user)
@@ -140,15 +125,15 @@ def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int, *, surfac
     if not s3_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
 
-    account = _build_s3_user_account(s3_user)
-    account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=True,
-        can_manage_iam=False,
-        can_view_root_key=False,
-        using_root_key=False,
+    return _build_s3_user_context(
+        s3_user,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
     )
-    return account
 
 def _resolve_connection_context(
     db: Session,
@@ -157,7 +142,7 @@ def _resolve_connection_context(
     *,
     surface: str,
     touch_usage: bool = True,
-) -> S3Account:
+) -> S3ExecutionContext:
     """Resolve a connection through the same policy used by the catalogue."""
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
@@ -179,16 +164,16 @@ def _resolve_connection_context(
             db.refresh(conn)
         except Exception:
             db.rollback()
-    account = _build_s3_connection_account(conn)
-    account.set_session_credentials(conn.access_key_id, conn.secret_access_key)
     can_manage_iam = _connection_iam_capable(conn)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=True,
-        can_manage_iam=can_manage_iam,
-        can_view_root_key=False,
-        using_root_key=False,
+    return _build_s3_connection_context(
+        conn,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_iam=can_manage_iam,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
     )
-    return account
 
 def _resolve_workspace_surface(request: Optional[Request]) -> str:
     if not request:
@@ -211,7 +196,6 @@ def _resolve_account_by_id(db: Session, account_id: int) -> S3Account:
     account = db.query(S3Account).filter(S3Account.id == account_id).first()
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-    account.clear_session_credentials()
     return account
 
 
@@ -251,7 +235,7 @@ def _resolve_session_account(
     actor: ManagerSessionPrincipal,
     account_id: Optional[int],
     requested_endpoint: Optional[str] = None,
-) -> S3Account:
+) -> S3ExecutionContext:
     if not actor.account_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Account context unavailable for session")
     account: Optional[S3Account] = None
@@ -265,12 +249,12 @@ def _resolve_session_account(
             .filter(S3Account.rgw_account_id == actor.account_id)
             .first()
         )
-        if not account:
-            account = S3Account(
-                name=actor.account_name or actor.account_id,
-                rgw_account_id=actor.account_id,
-            )
-    account.set_session_credentials(actor.access_key, actor.secret_key)
+    context_name = account.name if account is not None else actor.account_name or actor.account_id
+    context_rgw_account_id = account.rgw_account_id if account is not None else actor.account_id
+    context_rgw_user_uid = account.rgw_user_uid if account is not None else actor.user_uid
+    context_email = account.email if account is not None else None
+    context_endpoint = account.storage_endpoint if account is not None else None
+    context_endpoint_id = account.storage_endpoint_id if account is not None else None
     resolved_endpoint: Optional[StorageEndpoint] = None
     if not requested_endpoint and not resolve_s3_endpoint(account):
         endpoint = _resolve_default_endpoint(db)
@@ -283,11 +267,28 @@ def _resolve_session_account(
             .first()
         )
     if resolved_endpoint:
-        account.storage_endpoint_id = resolved_endpoint.id
-        account.storage_endpoint = resolved_endpoint
-    if requested_endpoint:
-        account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
-    return account
+        context_endpoint_id = resolved_endpoint.id
+        context_endpoint = resolved_endpoint
+    return S3ExecutionContext(
+        context_id=str(account.id) if account is not None else f"session:{actor.account_id}",
+        context_kind="session",
+        id=account.id if account is not None else None,
+        name=context_name,
+        rgw_account_id=context_rgw_account_id,
+        email=context_email,
+        rgw_user_uid=context_rgw_user_uid,
+        access_key=actor.access_key,
+        secret_key=actor.secret_key,
+        storage_endpoint_id=context_endpoint_id,
+        storage_endpoint=context_endpoint,
+        session_endpoint=requested_endpoint,
+        manager_capabilities=AccountCapabilities(
+            can_manage_buckets=actor.capabilities.can_manage_buckets,
+            can_manage_iam=actor.capabilities.can_manage_iam,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
 
 
 def _resolve_requested_session_endpoint(
@@ -317,7 +318,7 @@ def get_account_context(
     account_ref: Optional[str] = Query(default=None, alias="account_id"),
     actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
-) -> S3Account:
+) -> S3ExecutionContext:
     account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
     surface = _resolve_workspace_surface(request)
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
@@ -357,62 +358,14 @@ def get_account_context(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Admin credentials are not configured for this account",
             )
-        account.set_session_credentials(access_key, secret_key)
-        account._manager_capabilities = capabilities  # type: ignore[attr-defined]
-        return account
+        return S3ExecutionContext.from_account(
+            account,
+            access_key=access_key,
+            secret_key=secret_key,
+            manager_capabilities=capabilities,
+        )
 
     if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessions cannot assume this context")
 
-    account = _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=actor.capabilities.can_manage_buckets,
-        can_manage_iam=actor.capabilities.can_manage_iam,
-        can_view_root_key=False,
-        using_root_key=False,
-    )
-    return account
-
-
-def _membership_capabilities(link: Optional[UserS3Account | EffectiveAccountLink], actor: ManagerActor) -> AccountCapabilities:
-    if link:
-        is_account_admin = EffectiveAccessService.manager_account_allowed(link.role)
-        if not is_account_admin:
-            return AccountCapabilities()
-        return AccountCapabilities(
-            can_manage_buckets=True,
-            can_manage_iam=True,
-            can_view_root_key=True,
-            using_root_key=is_account_admin,
-        )
-    if isinstance(actor, ManagerSessionPrincipal):
-        return AccountCapabilities(
-            can_manage_buckets=actor.capabilities.can_manage_buckets,
-            can_manage_iam=actor.capabilities.can_manage_iam,
-            can_view_root_key=False,
-            using_root_key=False,
-        )
-    return AccountCapabilities()
-
-
-def get_account_access(
-    account_ref: Optional[str] = Query(default=None, alias="account_id"),
-    actor: ManagerActor = Depends(get_current_actor),
-    db: Session = Depends(get_db),
-) -> AccountAccess:
-    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
-    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-
-    # Resolve target account
-    if isinstance(actor, User):
-        account, link = _resolve_user_account_link(db, actor, account_id, allow_default=True)
-        capabilities = _membership_capabilities(link, actor)
-        if not capabilities.can_manage_buckets:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-        return AccountAccess(account=account, actor=actor, membership=link, capabilities=capabilities)
-
-    # Session principal
-    account = _resolve_session_account(db, actor, account_id)
-    capabilities = _membership_capabilities(None, actor)
-    return AccountAccess(account=account, actor=actor, membership=None, capabilities=capabilities)
+    return _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)

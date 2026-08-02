@@ -7,7 +7,8 @@ import logging
 from typing import Any, Optional
 from urllib.parse import parse_qsl
 
-from app.db import S3Account, StorageProvider
+from app.db import StorageProvider
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.topic import Topic
 from app.services import sns_client
 from app.utils.s3_endpoint import resolve_s3_client_options
@@ -51,13 +52,13 @@ class TopicsService:
     }
     _CEPH_NOTIFICATION_ENDPOINT_KEYS = {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
 
-    def _account_credentials(self, account: S3Account) -> tuple[str, str]:
+    def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
-            raise RuntimeError("S3Account is missing SNS credentials")
+            raise RuntimeError("S3ExecutionTarget is missing SNS credentials")
         return access_key, secret_key
 
-    def _client_kwargs(self, account: S3Account) -> dict:
+    def _client_kwargs(self, account: S3ExecutionTarget) -> dict:
         endpoint, region, _, verify_tls = resolve_s3_client_options(account)
         if not endpoint:
             raise RuntimeError("S3 endpoint is not configured for this account")
@@ -72,7 +73,7 @@ class TopicsService:
             return arn.split(":")[-1]
         return arn
 
-    def _is_ceph_endpoint(self, account: S3Account) -> bool:
+    def _is_ceph_endpoint(self, account: S3ExecutionTarget) -> bool:
         endpoint = getattr(account, "storage_endpoint", None)
         provider = getattr(endpoint, "provider", None)
         provider_value = getattr(provider, "value", provider)
@@ -239,7 +240,7 @@ class TopicsService:
             )
         return items
 
-    def list_topics(self, account: S3Account) -> list[Topic]:
+    def list_topics(self, account: S3ExecutionTarget) -> list[Topic]:
         access_key, secret_key = self._account_credentials(account)
         client_kwargs = self._client_kwargs(account)
         if self._is_ceph_endpoint(account):
@@ -265,7 +266,7 @@ class TopicsService:
 
     def create_topic(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         name: str,
         configuration: Optional[dict] = None,
     ) -> Topic:
@@ -286,17 +287,17 @@ class TopicsService:
         )
         return self._topic_from_attributes(arn, attrs)
 
-    def delete_topic(self, account: S3Account, topic_arn: str) -> None:
+    def delete_topic(self, account: S3ExecutionTarget, topic_arn: str) -> None:
         access_key, secret_key = self._account_credentials(account)
         sns_client.delete_topic(topic_arn, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
 
-    def get_topic_policy(self, account: S3Account, topic_arn: str) -> Optional[dict]:
+    def get_topic_policy(self, account: S3ExecutionTarget, topic_arn: str) -> Optional[dict]:
         access_key, secret_key = self._account_credentials(account)
         return sns_client.get_topic_policy(
             topic_arn, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
-    def set_topic_policy(self, account: S3Account, topic_arn: str, policy: dict) -> dict:
+    def set_topic_policy(self, account: S3ExecutionTarget, topic_arn: str, policy: dict) -> dict:
         access_key, secret_key = self._account_credentials(account)
         sns_client.set_topic_policy(
             topic_arn, policy, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
@@ -304,7 +305,7 @@ class TopicsService:
         updated = self.get_topic_policy(account, topic_arn)
         return updated or {}
 
-    def get_topic_configuration(self, account: S3Account, topic_arn: str) -> dict:
+    def get_topic_configuration(self, account: S3ExecutionTarget, topic_arn: str) -> dict:
         access_key, secret_key = self._account_credentials(account)
         attrs = sns_client.get_topic_attributes(
             topic_arn, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
@@ -314,7 +315,7 @@ class TopicsService:
 
     def set_topic_configuration(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         topic_arn: str,
         configuration: Optional[dict],
     ) -> dict:

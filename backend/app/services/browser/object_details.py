@@ -9,7 +9,7 @@ class BrowserObjectDetailsMixin:
     def head_object(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         version_id: Optional[str] = None,
         sse_customer: Optional[SseCustomerContext] = None,
@@ -44,7 +44,7 @@ class BrowserObjectDetailsMixin:
     def _get_object_lazy_head_columns(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         *,
         sse_customer: Optional[SseCustomerContext] = None,
@@ -89,7 +89,7 @@ class BrowserObjectDetailsMixin:
     def _get_object_lazy_tags_columns(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
     ) -> _ObjectLazyTagsCacheValue:
         account_cache_key = self._account_cache_key(account)
@@ -118,7 +118,7 @@ class BrowserObjectDetailsMixin:
     def get_object_columns(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         *,
         keys: list[str],
         columns: set[BrowserObjectLazyColumn],
@@ -169,7 +169,7 @@ class BrowserObjectDetailsMixin:
     def get_object_tags(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         version_id: Optional[str] = None,
     ) -> ObjectTags:
@@ -192,7 +192,7 @@ class BrowserObjectDetailsMixin:
     def put_object_tags(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         tags: list[ObjectTag],
         version_id: Optional[str] = None,
@@ -218,7 +218,7 @@ class BrowserObjectDetailsMixin:
     def update_object_metadata(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ObjectMetadataUpdate,
     ) -> ObjectMetadata:
         client = self._client(account)
@@ -344,7 +344,7 @@ class BrowserObjectDetailsMixin:
     def get_object_acl(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         version_id: Optional[str] = None,
     ) -> ObjectAcl:
@@ -402,7 +402,7 @@ class BrowserObjectDetailsMixin:
     def put_object_acl(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ObjectAcl,
     ) -> ObjectAcl:
         client = self._client(account)
@@ -418,7 +418,7 @@ class BrowserObjectDetailsMixin:
     def get_object_legal_hold(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         version_id: Optional[str] = None,
     ) -> ObjectLegalHold:
@@ -440,7 +440,7 @@ class BrowserObjectDetailsMixin:
     def put_object_legal_hold(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ObjectLegalHold,
     ) -> ObjectLegalHold:
         client = self._client(account)
@@ -463,7 +463,7 @@ class BrowserObjectDetailsMixin:
     def get_object_retention(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         version_id: Optional[str] = None,
     ) -> ObjectRetention:
@@ -490,7 +490,7 @@ class BrowserObjectDetailsMixin:
     def put_object_retention(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ObjectRetention,
     ) -> ObjectRetention:
         client = self._client(account)
@@ -515,7 +515,7 @@ class BrowserObjectDetailsMixin:
     def restore_object(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: ObjectRestoreRequest,
     ) -> None:
         client = self._client(account)

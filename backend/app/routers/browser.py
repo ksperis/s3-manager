@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3User as S3UserModel, User
+from app.db import S3User as S3UserModel, User
 from app.models.app_settings import BrowserSettings
 from app.models.bucket import (
     Bucket,
@@ -107,6 +107,7 @@ from app.services import bucket_config_actions
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_accounts_service import S3AccountsService
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.s3_users_service import S3UsersService
 from app.utils.http_headers import build_attachment_content_disposition
 from app.utils.size_units import size_to_bytes
@@ -127,7 +128,7 @@ class CreateBucketPayload(BaseModel):
 
 def _invalidate_browser_listing_cache(
     browser_service: BrowserService,
-    account: S3Account,
+    account: S3ExecutionContext,
     *,
     bucket_name: Optional[str] = None,
 ) -> None:
@@ -141,8 +142,8 @@ def get_browser_settings(_: BrowserActor = Depends(get_current_account_admin)) -
     return load_app_settings().browser
 
 
-def _usage_summary_source(account: S3Account) -> tuple[str, str]:
-    if getattr(account, "_portal_browser_role", None):
+def _usage_summary_source(account: S3ExecutionContext) -> tuple[str, str]:
+    if getattr(account, "portal_browser_role", None):
         return "portal", "Storage Spaces"
     if getattr(account, "s3_connection_id", None) is not None:
         return "connection", "Connection"
@@ -188,7 +189,7 @@ def _available_usage_summary(
 
 def _build_account_live_usage_summary(
     *,
-    account: S3Account,
+    account: S3ExecutionContext,
     db: Session,
     source: str,
     label: str,
@@ -210,7 +211,7 @@ def _build_account_live_usage_summary(
 
 def _build_s3_user_live_usage_summary(
     *,
-    account: S3Account,
+    account: S3ExecutionContext,
     db: Session,
     source: str,
     label: str,
@@ -236,7 +237,7 @@ def _build_s3_user_live_usage_summary(
     )
 
 
-def _build_browser_usage_summary(account: S3Account, db: Session) -> BrowserUsageSummary:
+def _build_browser_usage_summary(account: S3ExecutionContext, db: Session) -> BrowserUsageSummary:
     source, label = _usage_summary_source(account)
     if source == "connection":
         return _unavailable_usage_summary(source=source, label=label)
@@ -249,7 +250,7 @@ def _build_browser_usage_summary(account: S3Account, db: Session) -> BrowserUsag
 
 @router.get("/buckets", response_model=list[BrowserBucket], response_model_exclude_none=True)
 def list_buckets(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> list[BrowserBucket]:
@@ -269,7 +270,7 @@ def search_buckets(
     exact: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> PaginatedBrowserBucketsResponse:
@@ -291,7 +292,7 @@ def search_buckets(
     response_model_exclude_none=True,
 )
 def get_usage_summary(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     db: Session = Depends(get_db),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BrowserUsageSummary:
@@ -301,7 +302,7 @@ def get_usage_summary(
 @router.post("/buckets", status_code=status.HTTP_201_CREATED)
 def create_bucket(
     payload: CreateBucketPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -331,7 +332,7 @@ def create_bucket(
 def list_bucket_configs(
     include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
     with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -348,7 +349,7 @@ def list_bucket_configs(
 def get_bucket_config_stats(
     bucket_name: str,
     with_stats: bool = Query(True, description="Include usage/quota stats when available"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> Bucket:
@@ -363,7 +364,7 @@ def get_bucket_config_stats(
 @router.post("/buckets/config", status_code=status.HTTP_201_CREATED)
 def create_bucket_config(
     payload: BucketCreate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -392,7 +393,7 @@ def create_bucket_config(
 def delete_bucket_config(
     bucket_name: str,
     force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -422,7 +423,7 @@ def delete_bucket_config(
 def update_bucket_quota_config(
     bucket_name: str,
     payload: BucketQuotaUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: User = Depends(get_current_super_admin),
@@ -451,7 +452,7 @@ def update_bucket_quota_config(
 @router.get("/buckets/config/{bucket_name}/properties", response_model=BucketProperties)
 def get_bucket_properties_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -467,7 +468,7 @@ def get_bucket_properties_config(
 def update_bucket_versioning_config(
     bucket_name: str,
     payload: BucketVersioningUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -496,7 +497,7 @@ def update_bucket_versioning_config(
 @router.get("/buckets/config/{bucket_name}/object-lock", response_model=BucketObjectLock)
 def get_bucket_object_lock_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -512,7 +513,7 @@ def get_bucket_object_lock_config(
 def put_bucket_object_lock_config(
     bucket_name: str,
     payload: BucketObjectLockUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -541,7 +542,7 @@ def put_bucket_object_lock_config(
 @router.get("/buckets/config/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
 def get_bucket_encryption_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -558,7 +559,7 @@ def get_bucket_encryption_config(
 def put_bucket_encryption_config(
     bucket_name: str,
     payload: BucketEncryptionConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -588,7 +589,7 @@ def put_bucket_encryption_config(
 @router.delete("/buckets/config/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_encryption_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -615,7 +616,7 @@ def delete_bucket_encryption_config(
 @router.get("/buckets/config/{bucket_name}/policy", response_model=BucketPolicyOut)
 def get_bucket_policy_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -631,7 +632,7 @@ def get_bucket_policy_config(
 def put_bucket_policy_config(
     bucket_name: str,
     payload: BucketPolicyIn,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -660,7 +661,7 @@ def put_bucket_policy_config(
 @router.delete("/buckets/config/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_policy_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -686,7 +687,7 @@ def delete_bucket_policy_config(
 @router.get("/buckets/config/{bucket_name}/acl", response_model=BucketAcl)
 def get_bucket_acl_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -702,7 +703,7 @@ def get_bucket_acl_config(
 def put_bucket_acl_config(
     bucket_name: str,
     payload: BucketAclUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -731,7 +732,7 @@ def put_bucket_acl_config(
 @router.get("/buckets/config/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
 def get_bucket_public_access_block_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -747,7 +748,7 @@ def get_bucket_public_access_block_config(
 def put_bucket_public_access_block_config(
     bucket_name: str,
     payload: BucketPublicAccessBlock,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -776,7 +777,7 @@ def put_bucket_public_access_block_config(
 @router.get("/buckets/config/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
 def get_bucket_lifecycle_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -792,7 +793,7 @@ def get_bucket_lifecycle_config(
 def put_bucket_lifecycle_config(
     bucket_name: str,
     payload: BucketLifecycleConfig,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -821,7 +822,7 @@ def put_bucket_lifecycle_config(
 @router.delete("/buckets/config/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_lifecycle_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -847,7 +848,7 @@ def delete_bucket_lifecycle_config(
 @router.get("/buckets/config/{bucket_name}/cors")
 def get_bucket_cors_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -863,7 +864,7 @@ def get_bucket_cors_config(
 def put_bucket_cors_config(
     bucket_name: str,
     payload: BucketCorsUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -892,7 +893,7 @@ def put_bucket_cors_config(
 @router.delete("/buckets/config/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_cors_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -918,7 +919,7 @@ def delete_bucket_cors_config(
 @router.get("/buckets/config/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
 def get_bucket_notifications_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -934,7 +935,7 @@ def get_bucket_notifications_config(
 def put_bucket_notifications_config(
     bucket_name: str,
     payload: BucketNotificationConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -963,7 +964,7 @@ def put_bucket_notifications_config(
 @router.delete("/buckets/config/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_notifications_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -989,7 +990,7 @@ def delete_bucket_notifications_config(
 @router.get("/buckets/config/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
 def get_bucket_replication_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1006,7 +1007,7 @@ def get_bucket_replication_config(
 def put_bucket_replication_config(
     bucket_name: str,
     payload: BucketReplicationConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1036,7 +1037,7 @@ def put_bucket_replication_config(
 @router.delete("/buckets/config/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_replication_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1063,7 +1064,7 @@ def delete_bucket_replication_config(
 @router.get("/buckets/config/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
 def get_bucket_logging_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1079,7 +1080,7 @@ def get_bucket_logging_config(
 def put_bucket_logging_config(
     bucket_name: str,
     payload: BucketLoggingConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1108,7 +1109,7 @@ def put_bucket_logging_config(
 @router.delete("/buckets/config/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_logging_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1134,7 +1135,7 @@ def delete_bucket_logging_config(
 @router.get("/buckets/config/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
 def get_bucket_website_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1150,7 +1151,7 @@ def get_bucket_website_config(
 def put_bucket_website_config(
     bucket_name: str,
     payload: BucketWebsiteConfiguration,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1179,7 +1180,7 @@ def put_bucket_website_config(
 @router.delete("/buckets/config/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_website_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1205,7 +1206,7 @@ def delete_bucket_website_config(
 @router.get("/buckets/config/{bucket_name}/tags")
 def get_bucket_tags_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1221,7 +1222,7 @@ def get_bucket_tags_config(
 def put_bucket_tags_config(
     bucket_name: str,
     payload: BucketTagsUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1250,7 +1251,7 @@ def put_bucket_tags_config(
 @router.delete("/buckets/config/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bucket_tags_config(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
@@ -1276,7 +1277,7 @@ def delete_bucket_tags_config(
 @router.get("/buckets/{bucket_name}/versioning", response_model=BucketVersioningStatus)
 def get_bucket_versioning(
     bucket_name: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketVersioningStatus:
@@ -1303,7 +1304,7 @@ def list_objects(
     sort_by: BrowserObjectSortBy = Query(default="name"),
     sort_dir: BrowserObjectSortDir = Query(default="asc"),
     force_refresh: bool = Query(default=False),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListBrowserObjectsResponse:
@@ -1332,7 +1333,7 @@ def list_objects(
 def get_object_columns(
     bucket_name: str,
     payload: ObjectColumnsRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1353,7 +1354,7 @@ def get_object_columns(
 def get_bucket_cors(
     bucket_name: str,
     origin: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketCorsStatus:
@@ -1364,7 +1365,7 @@ def get_bucket_cors(
 def ensure_bucket_cors(
     bucket_name: str,
     payload: EnsureCorsPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -1387,7 +1388,7 @@ def ensure_bucket_cors(
 
 @router.get("/sts", response_model=StsStatus)
 def get_sts_status(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> StsStatus:
@@ -1396,7 +1397,7 @@ def get_sts_status(
 
 @router.get("/sts/credentials", response_model=BrowserStsCredentials)
 def get_sts_credentials(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BrowserStsCredentials:
@@ -1415,7 +1416,7 @@ def list_versions(
     key_marker: Optional[str] = None,
     version_id_marker: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListObjectVersionsResponse:
@@ -1439,7 +1440,7 @@ def head_object(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1458,7 +1459,7 @@ def head_object(
 def update_object_metadata(
     bucket_name: str,
     payload: ObjectMetadataUpdate,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectMetadata:
@@ -1473,7 +1474,7 @@ def get_object_tags(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectTags:
@@ -1489,7 +1490,7 @@ def get_object_tags(
 def put_object_tags(
     bucket_name: str,
     payload: ObjectTags,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectTags:
@@ -1512,7 +1513,7 @@ def get_object_acl(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectAcl:
@@ -1528,7 +1529,7 @@ def get_object_acl(
 def put_object_acl(
     bucket_name: str,
     payload: ObjectAcl,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectAcl:
@@ -1543,7 +1544,7 @@ def get_object_legal_hold(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectLegalHold:
@@ -1559,7 +1560,7 @@ def get_object_legal_hold(
 def put_object_legal_hold(
     bucket_name: str,
     payload: ObjectLegalHold,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectLegalHold:
@@ -1574,7 +1575,7 @@ def get_object_retention(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectRetention:
@@ -1590,7 +1591,7 @@ def get_object_retention(
 def put_object_retention(
     bucket_name: str,
     payload: ObjectRetention,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectRetention:
@@ -1604,7 +1605,7 @@ def put_object_retention(
 def delete_objects(
     bucket_name: str,
     payload: DeleteObjectsPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1621,7 +1622,7 @@ def delete_objects(
 def copy_object(
     bucket_name: str,
     payload: CopyObjectPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1638,7 +1639,7 @@ def copy_object(
 def create_folder(
     bucket_name: str,
     payload: CreateFolderPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1657,7 +1658,7 @@ def upload_via_proxy(
     file: UploadFile = File(...),
     key: str = Form(...),
     content_type: Optional[str] = Form(default=None),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1685,7 +1686,7 @@ def download_object(
     bucket_name: str,
     key: str,
     version_id: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1714,7 +1715,7 @@ def download_object(
 def presign(
     bucket_name: str,
     payload: PresignRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1731,7 +1732,7 @@ def presign(
 def multipart_init(
     bucket_name: str,
     payload: MultipartUploadInitRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1758,7 +1759,7 @@ def list_multipart_uploads(
     key_marker: Optional[str] = None,
     upload_id_marker: Optional[str] = None,
     max_uploads: int = Query(default=1000, ge=1, le=1000),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListMultipartUploadsResponse:
@@ -1782,7 +1783,7 @@ def list_parts_for_upload(
     key: str,
     part_number_marker: Optional[int] = None,
     max_parts: int = Query(default=1000, ge=1, le=1000),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListPartsResponse:
@@ -1804,7 +1805,7 @@ def presign_part_for_upload(
     bucket_name: str,
     upload_id: str,
     payload: PresignPartRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: BrowserActor = Depends(get_current_account_admin),
@@ -1826,7 +1827,7 @@ def complete_multipart_upload(
     upload_id: str,
     key: str,
     payload: CompleteMultipartUploadRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1844,7 +1845,7 @@ def abort_multipart_upload(
     bucket_name: str,
     upload_id: str,
     key: str,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1861,7 +1862,7 @@ def abort_multipart_upload(
 def restore_object(
     bucket_name: str,
     payload: ObjectRestoreRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict:
@@ -1875,7 +1876,7 @@ def restore_object(
 def cleanup_object_versions(
     bucket_name: str,
     payload: CleanupObjectVersionsPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> CleanupObjectVersionsResponse:

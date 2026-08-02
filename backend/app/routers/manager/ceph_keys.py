@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, User
+from app.db import User
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.s3_user import S3UserAccessKey, S3UserAccessKeyStatusChange, S3UserGeneratedKey
 from app.routers.dependencies import (
     get_audit_logger,
@@ -27,7 +28,7 @@ def get_manager_ceph_s3_users_service(
     return get_s3_users_service(db)
 
 
-def _resolve_s3_user_id(account: S3Account) -> int:
+def _resolve_s3_user_id(account: S3ExecutionContext) -> int:
     s3_user_id = getattr(account, "s3_user_id", None)
     if not isinstance(s3_user_id, int) or s3_user_id <= 0:
         raise HTTPException(
@@ -45,7 +46,7 @@ def _translate_s3_user_error(exc: ValueError) -> HTTPException:
 
 @router.get("", response_model=list[S3UserAccessKey])
 def list_ceph_access_keys(
-    account: S3Account = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     _: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
@@ -70,7 +71,7 @@ def list_ceph_access_keys(
 
 @router.post("", response_model=S3UserGeneratedKey, status_code=status.HTTP_201_CREATED)
 def create_ceph_access_key(
-    account: S3Account = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -96,7 +97,7 @@ def create_ceph_access_key(
 def update_ceph_access_key_status(
     access_key: str,
     payload: S3UserAccessKeyStatusChange,
-    account: S3Account = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -132,7 +133,7 @@ def update_ceph_access_key_status(
 )
 def delete_ceph_access_key(
     access_key: str,
-    account: S3Account = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     service: S3UsersService = Depends(get_manager_ceph_s3_users_service),
     current_user: User = Depends(get_current_account_user),
     audit_service: AuditService = Depends(get_audit_logger),

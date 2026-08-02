@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from app.core.database import get_db
 from app.routers.dependencies_internal.account_context import (
-    _build_s3_connection_account,
-    _build_s3_user_account,
+    _build_s3_connection_context,
+    _build_s3_user_context,
     _connection_iam_capable,
     _manager_membership_capabilities,
-    _membership_capabilities,
     _parse_account_selector,
     _resolve_account_by_id,
     _resolve_connection_context,
@@ -18,7 +17,6 @@ from app.routers.dependencies_internal.account_context import (
     _resolve_session_account,
     _resolve_user_account_link,
     _resolve_workspace_surface,
-    get_account_access,
     get_account_context,
 )
 from app.routers.dependencies_internal.audit import get_audit_logger
@@ -37,7 +35,7 @@ from app.routers.dependencies_internal.auth_session import (
     settings,
 )
 from app.routers.dependencies_internal.ceph_admin_context import (
-    _build_ceph_admin_browser_account,
+    _build_ceph_admin_browser_context,
     _resolve_admin_rgw_context,
     _resolve_ceph_admin_browser_context,
     _resolve_default_endpoint,

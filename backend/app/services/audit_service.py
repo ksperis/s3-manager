@@ -12,7 +12,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.sensitive_data import sanitize_audit_metadata
-from app.db import S3Account, AuditLog, User
+from app.db import AuditLog, User
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.audit_policy import should_persist_audit_action
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class AuditService:
 
     @staticmethod
     def _resolve_account_reference(
-        account: Optional[S3Account],
+        account: Optional[S3ExecutionTarget],
         account_id: Optional[int],
         account_name: Optional[str],
     ) -> tuple[Optional[int], Optional[str]]:
@@ -79,7 +80,7 @@ class AuditService:
         action: str,
         entity_type: Optional[str] = None,
         entity_id: Optional[str] = None,
-        account: Optional[S3Account] = None,
+        account: Optional[S3ExecutionTarget] = None,
         account_id: Optional[int] = None,
         account_name: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,

@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlencode
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.browser import (
     BrowserBucket,
     BrowserObjectLazyColumn,
@@ -294,7 +294,7 @@ _OBJECT_LAZY_TAGS_CACHE: _TtlLruCache[tuple, _ObjectLazyTagsCacheValue] = _TtlLr
 )
 
 
-def _resolve_endpoint(account: S3Account) -> str:
+def _resolve_endpoint(account: S3ExecutionTarget) -> str:
     endpoint, _, _, _ = resolve_s3_client_options(account)
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured for this account")

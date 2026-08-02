@@ -6,7 +6,7 @@ from ._shared import *
 
 
 class BrowserVersionsMixin:
-    def get_bucket_versioning(self, bucket_name: str, account: S3Account) -> Optional[str]:
+    def get_bucket_versioning(self, bucket_name: str, account: S3ExecutionTarget) -> Optional[str]:
         client = self._client(account)
         try:
             resp = client.get_bucket_versioning(Bucket=bucket_name)
@@ -17,7 +17,7 @@ class BrowserVersionsMixin:
     def cleanup_object_versions(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: CleanupObjectVersionsPayload,
     ) -> CleanupObjectVersionsResponse:
         if not (payload.keep_last_n or payload.older_than_days or payload.delete_orphan_markers):

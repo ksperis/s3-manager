@@ -34,7 +34,7 @@ class BrowserListingMixin:
     def _list_objects_default_order(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         *,
         prefix: str = "",
         continuation_token: Optional[str] = None,
@@ -254,7 +254,7 @@ class BrowserListingMixin:
     def _scan_sorted_object_snapshot(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         *,
         prefix: str = "",
         query: Optional[str] = None,
@@ -432,7 +432,7 @@ class BrowserListingMixin:
     def list_objects(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         prefix: str = "",
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
@@ -526,7 +526,7 @@ class BrowserListingMixin:
     def list_object_versions(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         prefix: str = "",
         delimiter: Optional[str] = None,
         key: Optional[str] = None,

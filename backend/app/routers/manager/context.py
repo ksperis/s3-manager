@@ -47,10 +47,10 @@ class ManagerContext(BaseModel):
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
     connection_id = getattr(account, "s3_connection_id", None)
     if connection_id is not None:
-        caps = getattr(account, "_manager_capabilities", None)
+        caps = getattr(account, "manager_capabilities", None)
         if not caps or not caps.can_manage_buckets:
             return False, "Metrics are not available for this connection.", None
-        source_connection = getattr(account, "_source_connection", None)
+        source_connection = getattr(account, "source_connection", None)
         if source_connection is None:
             return False, "Metrics are unavailable: connection context is incomplete.", None
         resolution = ConnectionIdentityService().resolve_metrics_identity(source_connection)
@@ -69,7 +69,7 @@ def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[
         return False, None, None
     if getattr(account, "s3_user_id", None) is not None and not getattr(account, "rgw_user_uid", None):
         return False, None, None
-    caps = getattr(account, "_manager_capabilities", None)
+    caps = getattr(account, "manager_capabilities", None)
     if not caps or not caps.can_manage_buckets:
         return False, None, None
     if isinstance(actor, ManagerSessionPrincipal):
@@ -128,7 +128,7 @@ def get_manager_context(
         if s3_user_id is not None:
             manager_private_access_enabled = manager_ceph_keys_enabled
         else:
-            capabilities = getattr(account, "_manager_capabilities", None)
+            capabilities = getattr(account, "manager_capabilities", None)
             endpoint = getattr(account, "storage_endpoint", None)
             manager_private_access_enabled = bool(
                 capabilities

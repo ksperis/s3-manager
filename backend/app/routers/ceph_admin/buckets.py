@@ -15,7 +15,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account
 from app.models.bucket import (
     BucketAcl,
     BucketAclUpdate,
@@ -133,6 +132,7 @@ from app.services.bucket_owner_enrichment import (
 from app.services.buckets_service import BucketsService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.rgw_admin import RGWAdminError
+from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import compute_usage_ratio_percent, extract_usage_stats
@@ -146,28 +146,20 @@ _BUCKET_STATS_UNAVAILABLE_WARNING = (
 )
 
 
-def _build_endpoint_account(ctx: CephAdminContext) -> S3Account:
-    account = S3Account(
-        name=f"ceph-admin:{ctx.endpoint.id}",
-        rgw_account_id=None,
-        email=None,
-        rgw_user_uid=None,
+def _build_endpoint_context(ctx: CephAdminContext) -> S3ExecutionContext:
+    return S3ExecutionContext.from_ceph_admin_endpoint(
+        ctx.endpoint,
+        access_key=ctx.access_key,
+        secret_key=ctx.secret_key,
     )
-    account.storage_endpoint = ctx.endpoint  # type: ignore[assignment]
-    account.set_session_credentials(ctx.access_key, ctx.secret_key)
-    return account
 
 
-def _build_endpoint_account_from_credentials(endpoint_id: int, endpoint, access_key: str, secret_key: str) -> S3Account:
-    account = S3Account(
-        name=f"ceph-admin:{endpoint_id}",
-        rgw_account_id=None,
-        email=None,
-        rgw_user_uid=None,
+def _build_endpoint_context_from_credentials(endpoint, access_key: str, secret_key: str) -> S3ExecutionContext:
+    return S3ExecutionContext.from_ceph_admin_endpoint(
+        endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
     )
-    account.storage_endpoint = endpoint  # type: ignore[assignment]
-    account.set_session_credentials(access_key, secret_key)
-    return account
 
 
 def _sync_bucket_listing_cache_clock() -> None:
@@ -229,8 +221,8 @@ def _record_bucket_config_mutation(
     )
 
 
-def _ceph_admin_bucket_config_account(ctx: CephAdminContext) -> tuple[BucketsService, S3Account]:
-    return BucketsService(), _build_endpoint_account(ctx)
+def _ceph_admin_bucket_config_account(ctx: CephAdminContext) -> tuple[BucketsService, S3ExecutionContext]:
+    return BucketsService(), _build_endpoint_context(ctx)
 
 
 def _run_bucket_config_update(
@@ -546,7 +538,7 @@ def _compute_bucket_listing(
                     rule.field in (_OWNER_USAGE_FIELDS | _OWNER_USAGE_PERCENT_FIELDS) for rule in expensive_field_rules
                 )
                 service = BucketsService()
-                account = _build_endpoint_account(ctx)
+                account = _build_endpoint_context(ctx)
                 expensive_candidates = results
 
                 if feature_param_rules:
@@ -844,7 +836,7 @@ def _compute_bucket_listing(
     requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
     if requested or ("tags" in requested_features):
         service = BucketsService()
-        account = _build_endpoint_account(ctx)
+        account = _build_endpoint_context(ctx)
         progress.emit(
             percent=96,
             stage="page_enrichment",
@@ -962,7 +954,7 @@ def backup_bucket_configs(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketConfigBackupResponse:
     service = BucketConfigBackupService(BucketsService())
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
 
     def quota_loader(bucket_name: str) -> dict[str, int | None]:
         try:
@@ -994,7 +986,7 @@ def compare_bucket_pair(
     db: Session = Depends(get_db),
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminBucketCompareResult:
-    source_account = _build_endpoint_account(ctx)
+    source_account = _build_endpoint_context(ctx)
     target_endpoint = _resolve_storage_endpoint(db, payload.target_endpoint_id)
     target_access_key = getattr(target_endpoint, "ceph_admin_access_key", None)
     target_secret_key = getattr(target_endpoint, "ceph_admin_secret_key", None)
@@ -1003,8 +995,7 @@ def compare_bucket_pair(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Target endpoint Ceph Admin credentials are not configured",
         )
-    target_account = _build_endpoint_account_from_credentials(
-        payload.target_endpoint_id,
+    target_account = _build_endpoint_context_from_credentials(
         target_endpoint,
         target_access_key,
         target_secret_key,
@@ -1067,7 +1058,7 @@ def list_bucket_objects(
     try:
         return service.list_objects(
             bucket_name,
-            _build_endpoint_account(ctx),
+            _build_endpoint_context(ctx),
             prefix=prefix,
             continuation_token=continuation_token,
             max_keys=max_keys,
@@ -1082,7 +1073,7 @@ def bucket_properties(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketProperties:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_properties_config(
         service=service,
         account=account,
@@ -1096,7 +1087,7 @@ def get_versioning(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketVersioningStatus:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_versioning_config(
         service=service,
         account=account,
@@ -1126,7 +1117,7 @@ def update_quota(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     try:
         bucket_info = ctx.rgw_admin.get_bucket_info(bucket_name, stats=False, allow_not_found=True)
     except RGWAdminError as exc:
@@ -1174,7 +1165,7 @@ def get_lifecycle(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketLifecycleConfig:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_lifecycle_config(
         service=service,
         account=account,
@@ -1216,7 +1207,7 @@ def get_cors(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_cors_config(
         service=service,
         account=account,
@@ -1258,7 +1249,7 @@ def get_policy(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketPolicyOut:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_policy_config(
         service=service,
         account=account,
@@ -1300,7 +1291,7 @@ def get_notifications(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketNotificationConfiguration:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_notifications_config(
         service=service,
         account=account,
@@ -1343,7 +1334,7 @@ def get_replication(
 ) -> BucketReplicationConfiguration:
     _require_replication_feature(ctx)
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_replication_config(
         service=service,
         account=account,
@@ -1387,7 +1378,7 @@ def get_logging(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketLoggingConfiguration:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_logging_config(
         service=service,
         account=account,
@@ -1429,7 +1420,7 @@ def get_website(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketWebsiteConfiguration:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_website_config(
         service=service,
         account=account,
@@ -1471,7 +1462,7 @@ def get_tags(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_tags_config(
         service=service,
         account=account,
@@ -1513,7 +1504,7 @@ def get_acl(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketAcl:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_acl_config(
         service=service,
         account=account,
@@ -1542,7 +1533,7 @@ def get_public_access_block(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketPublicAccessBlock:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_public_access_block_config(
         service=service,
         account=account,
@@ -1571,7 +1562,7 @@ def get_object_lock(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> BucketObjectLock:
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_object_lock_config(
         service=service,
         account=account,
@@ -1601,7 +1592,7 @@ def get_bucket_encryption(
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(ctx)
     service = BucketsService()
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     return bucket_config_actions.get_bucket_encryption_config(
         service=service,
         account=account,

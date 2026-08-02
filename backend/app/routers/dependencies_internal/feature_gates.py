@@ -12,6 +12,7 @@ from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, Us
 from app.models.session import ManagerSessionPrincipal
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 
@@ -54,8 +55,8 @@ _MANAGER_TOOL_ROLES = {
     UserRole.UI_USER.value,
 }
 
-def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, require_usage: bool = False) -> None:
-    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+def _ensure_manager_capabilities(account: S3ExecutionTarget, require_iam: bool = False, require_usage: bool = False) -> None:
+    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)  # type: ignore[attr-defined]
     if not caps:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account context unavailable")
     if require_iam and not caps.can_manage_iam:
@@ -69,17 +70,17 @@ def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, 
 
 
 def _require_supervision_access(
-    account: S3Account,
+    account: S3ExecutionTarget,
     actor: ManagerActor,
     disabled_detail: str,
     required_feature: str,
 ) -> ManagerActor:
-    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+    caps: Optional[AccountCapabilities] = getattr(account, "manager_capabilities", None)  # type: ignore[attr-defined]
     endpoint = getattr(account, "storage_endpoint", None)
 
     connection_id = getattr(account, "s3_connection_id", None)
     if connection_id is not None:
-        source_connection = getattr(account, "_source_connection", None)
+        source_connection = getattr(account, "source_connection", None)
         if source_connection is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -117,7 +118,7 @@ def _require_supervision_access(
 
 
 def require_iam_capable_manager(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     _ensure_manager_capabilities(account, require_iam=True)
@@ -125,7 +126,7 @@ def require_iam_capable_manager(
 
 
 def require_usage_capable_manager(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     return _require_supervision_access(
@@ -137,7 +138,7 @@ def require_usage_capable_manager(
 
 
 def require_sns_capable_manager(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     _ensure_manager_capabilities(account)
@@ -150,7 +151,7 @@ def require_sns_capable_manager(
 
 
 def require_metrics_capable_manager(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     return _require_supervision_access(
@@ -280,7 +281,7 @@ def require_manager_feature_rules_enabled(user: User = Depends(get_current_user)
     return user
 
 
-def _is_ceph_endpoint_admin_available(account: S3Account) -> bool:
+def _is_ceph_endpoint_admin_available(account: S3ExecutionTarget) -> bool:
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None:
         return False
@@ -302,7 +303,7 @@ def _is_ceph_endpoint_admin_available(account: S3Account) -> bool:
 
 
 def is_manager_bucket_quota_available(
-    account: S3Account,
+    account: S3ExecutionTarget,
     user: Optional[User] = None,
     db: Session | None = None,
 ) -> bool:
@@ -314,7 +315,7 @@ def is_manager_bucket_quota_available(
 
 
 def _s3_user_flag_enabled(
-    account: S3Account,
+    account: S3ExecutionTarget,
     flag_name: str,
     *,
     db: Session | None = None,
@@ -329,7 +330,7 @@ def _s3_user_flag_enabled(
     return bool(getattr(account, flag_name, False))
 
 
-def _target_allows_manager_bucket_quota(account: S3Account, *, db: Session | None = None) -> bool:
+def _target_allows_manager_bucket_quota(account: S3ExecutionTarget, *, db: Session | None = None) -> bool:
     if getattr(account, "s3_connection_id", None) is not None:
         return False
     if getattr(account, "s3_user_id", None) is not None:
@@ -344,9 +345,9 @@ def _target_allows_manager_bucket_quota(account: S3Account, *, db: Session | Non
 
 def require_manager_bucket_quota(
     user: User = Depends(get_current_user),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     db: Session = Depends(get_db),
-) -> S3Account:
+) -> S3ExecutionTarget:
     ensure_manager_tool_allowed(user, "bucket_quota", db=db)
     if not is_manager_bucket_quota_available(account, user, db=db):
         raise HTTPException(
@@ -365,7 +366,7 @@ def require_storage_ops_bucket_quota(
 
 
 def is_manager_ceph_s3_user_keys_available(
-    account: S3Account,
+    account: S3ExecutionTarget,
     user: Optional[User] = None,
     db: Session | None = None,
 ) -> bool:
@@ -386,9 +387,9 @@ def is_manager_ceph_s3_user_keys_available(
 
 def require_manager_ceph_s3_user_keys(
     user: User = Depends(get_current_user),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionTarget = Depends(get_account_context),
     db: Session = Depends(get_db),
-) -> S3Account:
+) -> S3ExecutionTarget:
     ensure_manager_tool_allowed(user, "ceph_s3_user_keys", db=db)
     if not is_manager_ceph_s3_user_keys_available(account, user, db=db):
         raise HTTPException(

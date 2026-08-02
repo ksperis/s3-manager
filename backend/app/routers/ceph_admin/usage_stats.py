@@ -19,7 +19,7 @@ from app.models.bucket_usage_stats import (
 from app.routers.bucket_usage_stats_stream import stream_bucket_usage_stats
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.routers.ceph_admin.buckets import _get_cached_rgw_bucket_entries
-from app.routers.ceph_admin.integrity import _build_endpoint_account
+from app.routers.ceph_admin.integrity import _build_endpoint_context
 from app.routers.dependencies import get_current_ceph_admin
 from app.routers.http_errors import sanitize_error_detail
 from app.services.bucket_usage_stats_service import (
@@ -44,7 +44,7 @@ def _require_buckets_payload(payload: BucketUsageStatsRequest) -> list[str]:
 
 
 def _target_for_bucket(ctx: CephAdminContext, bucket_name: str) -> BucketUsageStatsResolvedTarget:
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     context_id = f"ceph-admin-{ctx.endpoint.id}"
     return BucketUsageStatsResolvedTarget(
         account=account,

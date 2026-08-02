@@ -7,7 +7,8 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from app.db import QuotaUsageDaily, S3Account
+from app.db import QuotaUsageDaily
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.manager_stats import ManagerUsageTrendBaseline, ManagerUsageTrendsResponse
 from app.utils.time import utcnow
 
@@ -20,7 +21,7 @@ USAGE_TREND_WINDOWS: tuple[tuple[UsageTrendWindow, str, int], ...] = (
 )
 
 
-def account_usage_trend_filters(account: S3Account, model=QuotaUsageDaily) -> list | None:
+def account_usage_trend_filters(account: S3ExecutionTarget, model=QuotaUsageDaily) -> list | None:
     if getattr(account, "s3_connection_id", None) is not None:
         return None
     endpoint_id = getattr(account, "storage_endpoint_id", None)
@@ -86,7 +87,7 @@ def select_usage_trend_baseline(
 
 def build_account_usage_trends(
     db: Session,
-    account: S3Account,
+    account: S3ExecutionTarget,
     *,
     reference_date: date | None = None,
 ) -> ManagerUsageTrendsResponse:

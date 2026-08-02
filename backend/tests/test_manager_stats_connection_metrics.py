@@ -15,6 +15,7 @@ from app.routers import dependencies
 from app.routers.manager import stats as manager_stats_router
 from app.services.rgw_admin import RGWAdminError
 from app.services import usage_history_service
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.traffic_service import TrafficWindow
 
 
@@ -392,15 +393,7 @@ def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monk
     )
     db_session.commit()
 
-    legacy_context = S3Account(
-        id=-(100000 + int(s3_user.id)),
-        name=s3_user.name,
-        rgw_user_uid=s3_user.rgw_user_uid,
-        rgw_access_key=s3_user.rgw_access_key,
-        rgw_secret_key=s3_user.rgw_secret_key,
-        storage_endpoint_id=endpoint.id,
-    )
-    legacy_context.s3_user_id = s3_user.id
+    legacy_context = S3ExecutionContext.from_legacy_user(s3_user)
 
     payload = manager_stats_router.account_usage_trends(account=legacy_context, _={}, db=db_session)
 
@@ -414,13 +407,16 @@ def test_manager_usage_trends_are_scoped_to_legacy_user_subject(db_session, monk
 
 def test_manager_usage_trends_return_empty_for_connection_context(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    account = S3Account(
-        id=-1,
+    account = S3ExecutionContext(
+        context_id="conn-1",
+        context_kind="connection",
         name="connection-context",
+        access_key="access",
+        secret_key="secret",
         rgw_user_uid="resolved-user",
         storage_endpoint_id=1,
+        s3_connection_id=1,
     )
-    account.s3_connection_id = 1
 
     payload = manager_stats_router.account_usage_trends(account=account, _={}, db=db_session)
 
@@ -552,15 +548,7 @@ def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_sessi
     )
     db_session.commit()
 
-    legacy_context = S3Account(
-        id=-(100000 + int(s3_user.id)),
-        name=s3_user.name,
-        rgw_user_uid=s3_user.rgw_user_uid,
-        rgw_access_key=s3_user.rgw_access_key,
-        rgw_secret_key=s3_user.rgw_secret_key,
-        storage_endpoint_id=endpoint.id,
-    )
-    legacy_context.s3_user_id = s3_user.id
+    legacy_context = S3ExecutionContext.from_legacy_user(s3_user)
 
     payload = manager_stats_router.account_usage_history_trends(window="month", account=legacy_context, _={}, db=db_session)
 
@@ -575,13 +563,16 @@ def test_manager_usage_history_trends_are_scoped_to_legacy_user_subject(db_sessi
 
 def test_manager_usage_history_trends_return_unavailable_for_connection_context(db_session, monkeypatch):
     monkeypatch.setattr(manager_stats_router, "load_app_settings", lambda: _usage_history_settings(True))
-    account = S3Account(
-        id=-1,
+    account = S3ExecutionContext(
+        context_id="conn-1",
+        context_kind="connection",
         name="connection-context",
+        access_key="access",
+        secret_key="secret",
         rgw_user_uid="resolved-user",
         storage_endpoint_id=1,
+        s3_connection_id=1,
     )
-    account.s3_connection_id = 1
 
     payload = manager_stats_router.account_usage_history_trends(window="month", account=account, _={}, db=db_session)
 

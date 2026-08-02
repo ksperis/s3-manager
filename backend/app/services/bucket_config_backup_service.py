@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket_config_backup import (
     BucketConfigBackupBucket,
     BucketConfigBackupFeature,
@@ -35,7 +35,7 @@ class BucketConfigBackupService:
     def build_backup(
         self,
         *,
-        account: S3Account,
+        account: S3ExecutionTarget,
         bucket_names: list[str],
         features: list[BucketConfigBackupFeature],
         source: BucketConfigBackupSource,
@@ -60,7 +60,7 @@ class BucketConfigBackupService:
     def _build_bucket_backup(
         self,
         *,
-        account: S3Account,
+        account: S3ExecutionTarget,
         bucket_name: str,
         features: list[BucketConfigBackupFeature],
         quota_loader: QuotaSnapshotLoader | None,
@@ -78,7 +78,7 @@ class BucketConfigBackupService:
 
     def _load_feature(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         bucket_name: str,
         feature: BucketConfigBackupFeature,
         quota_loader: QuotaSnapshotLoader | None,
@@ -108,7 +108,7 @@ class BucketConfigBackupService:
 
     def _load_quota(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         bucket_name: str,
         quota_loader: QuotaSnapshotLoader | None,
     ) -> dict[str, int | None]:

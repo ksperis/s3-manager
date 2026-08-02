@@ -62,7 +62,7 @@ def configured_s3_endpoint() -> Optional[str]:
 
 
 def resolve_s3_endpoint(account: object) -> Optional[str]:
-    override = getattr(account, "_session_endpoint", None)
+    override = getattr(account, "session_endpoint", None)
     if override:
         return override
     endpoint = getattr(account, "storage_endpoint", None)
@@ -77,18 +77,18 @@ def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[
     """Resolve S3 client options (endpoint, region, force_path_style, verify_tls)."""
     endpoint = resolve_s3_endpoint(account)
     endpoint_obj = getattr(account, "storage_endpoint", None)
-    region = getattr(account, "_session_region", None)
+    region = getattr(account, "session_region", None)
     if region is None:
         if endpoint_obj is not None:
             region = getattr(endpoint_obj, "region", None)
-    session_force_path_style = getattr(account, "_session_force_path_style", None)
+    session_force_path_style = getattr(account, "session_force_path_style", None)
     if session_force_path_style is not None:
         force_path_style = bool(session_force_path_style)
     elif endpoint_obj is not None:
         force_path_style = bool(getattr(endpoint_obj, "force_path_style", False))
     else:
         force_path_style = False
-    session_verify_tls = getattr(account, "_session_verify_tls", None)
+    session_verify_tls = getattr(account, "session_verify_tls", None)
     if session_verify_tls is not None:
         verify_tls = bool(session_verify_tls)
     elif endpoint_obj is not None:
@@ -108,7 +108,7 @@ def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional
     )
 
     endpoint_obj = getattr(account, "storage_endpoint", None)
-    region: Optional[str] = getattr(account, "_session_region", None)
+    region: Optional[str] = getattr(account, "session_region", None)
     verify_tls = True
     if endpoint_obj is not None:
         endpoint = resolve_iam_endpoint(endpoint_obj)
@@ -120,7 +120,7 @@ def resolve_iam_client_options(account: object) -> tuple[Optional[str], Optional
         verify_tls = bool(getattr(endpoint_obj, "verify_tls", True))
         return endpoint, region, verify_tls
 
-    source_connection = getattr(account, "_source_connection", None)
+    source_connection = getattr(account, "source_connection", None)
     if source_connection is not None:
         details = resolve_connection_details(source_connection)
         provider = (details.provider or "").strip().lower()

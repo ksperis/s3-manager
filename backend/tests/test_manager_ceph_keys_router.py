@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-from app.db import S3Account, User, UserRole
+from app.db import User, UserRole
 from app.main import app
 from app.models.s3_user import S3UserAccessKey, S3UserGeneratedKey
 from app.routers.manager import ceph_keys as manager_ceph_keys_router
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 class _FakeAuditService:
@@ -68,13 +69,16 @@ class _FakePortalKeyLockedService(_FakeS3UsersService):
         raise ValueError("Cannot delete the interface access key; rotate it instead")
 
 
-def _account_context(*, s3_user_id: int | None = 77) -> S3Account:
-    account = S3Account(name="managed-s3-user", rgw_access_key="AK", rgw_secret_key="SK")
-    account.id = -100_077
-    account.storage_endpoint_id = 12
-    if s3_user_id is not None:
-        account.s3_user_id = s3_user_id  # type: ignore[attr-defined]
-    return account
+def _account_context(*, s3_user_id: int | None = 77) -> S3ExecutionContext:
+    return S3ExecutionContext(
+        context_id=f"s3u-{s3_user_id}" if s3_user_id is not None else "s3u-missing",
+        context_kind="legacy_user",
+        name="managed-s3-user",
+        access_key="AK",
+        secret_key="SK",
+        storage_endpoint_id=12,
+        s3_user_id=s3_user_id,
+    )
 
 
 def _ui_user() -> User:

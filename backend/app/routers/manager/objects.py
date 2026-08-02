@@ -5,7 +5,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
-from app.db import S3Account, User
+from app.db import User
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.services.objects_service import ObjectsService, get_objects_service
@@ -37,7 +38,7 @@ def list_objects(
     bucket_name: str,
     prefix: str = "",
     continuation_token: Optional[str] = None,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: User = Depends(get_current_account_admin),
 ):
@@ -53,7 +54,7 @@ async def upload_object(
     file: UploadFile = File(...),
     prefix: str = Form(""),
     key: Optional[str] = Form(None),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: User = Depends(get_current_account_admin),
 ):
@@ -79,7 +80,7 @@ async def upload_object(
 def create_folder(
     bucket_name: str,
     payload: CreateFolderPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: User = Depends(get_current_account_admin),
 ):
@@ -94,7 +95,7 @@ def create_folder(
 def delete_objects(
     bucket_name: str,
     payload: DeleteObjectsPayload,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: dict = Depends(get_current_account_admin),
 ):
@@ -112,7 +113,7 @@ def get_download_url(
     bucket_name: str,
     key: str,
     expires_in: int = 300,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: ObjectsService = Depends(get_objects_service),
     _: dict = Depends(get_current_account_admin),
 ):

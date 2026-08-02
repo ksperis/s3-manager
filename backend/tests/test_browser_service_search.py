@@ -10,6 +10,7 @@ from app.db import S3Account, StorageEndpoint
 from app.models.portal import PortalStorageSpaceIcon
 from app.services import browser_service
 from app.services.browser_service import BrowserService
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 def _account() -> S3Account:
@@ -30,9 +31,15 @@ def _clear_browser_caches():
     browser_service._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
 
 
-def test_list_portal_storage_spaces_includes_descriptions():
-    account = _account()
-    account._portal_storage_spaces = [  # type: ignore[attr-defined]
+def test_listportal_storage_spaces_includes_descriptions():
+    persisted_account = _account()
+    account = S3ExecutionContext.from_account(
+        persisted_account,
+        context_kind="portal_account",
+        access_key="access-key",
+        secret_key="secret-key",
+    )
+    account.portal_storage_spaces = [
         SimpleNamespace(
             id="space-1",
             internal_bucket_name="internal-space-1",

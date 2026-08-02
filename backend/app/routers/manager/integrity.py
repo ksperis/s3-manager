@@ -7,7 +7,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
-from app.db import S3Account
 from app.models.bucket_integrity import BucketIntegrityCheckRequest
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers.dependencies import (
@@ -20,6 +19,7 @@ from app.services.bucket_integrity_service import (
     BucketIntegrityOptions,
     BucketIntegrityResolvedTarget,
 )
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(prefix="/manager/bucket-integrity", tags=["manager-bucket-integrity"])
 logger = logging.getLogger(__name__)
@@ -36,8 +36,8 @@ def _require_buckets_payload(payload: BucketIntegrityCheckRequest) -> list[str]:
     return payload.buckets
 
 
-def _require_bucket_management_context(account: S3Account) -> None:
-    caps = getattr(account, "_manager_capabilities", None)
+def _require_bucket_management_context(account: S3ExecutionContext) -> None:
+    caps = getattr(account, "manager_capabilities", None)
     if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
 
@@ -47,7 +47,7 @@ def stream_manager_bucket_integrity_check(
     payload: BucketIntegrityCheckRequest,
     request: Request,
     _tool_user: object = Depends(require_bucket_integrity_check_enabled),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)

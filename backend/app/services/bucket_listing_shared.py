@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketFilterRule, CephAdminBucketSummary
 from app.services.buckets_service import BucketsService
 from app.routers.http_errors import sanitize_error_detail
@@ -113,7 +113,7 @@ def _load_feature_param_snapshots(
     buckets: list[CephAdminBucketSummary],
     rules: list[CephAdminBucketFilterRule],
     service: BucketsService,
-    account: S3Account,
+    account: S3ExecutionTarget,
 ) -> tuple[dict[str, dict[str, object]], set[str]]:
     # Reused logic currently implemented in ceph_admin buckets router.
     from app.routers.ceph_admin import buckets as ceph_buckets
@@ -126,7 +126,7 @@ def _enrich_buckets(
     requested: set[str],
     include_tags: bool,
     service: BucketsService,
-    account: S3Account,
+    account: S3ExecutionTarget,
 ) -> list[CephAdminBucketSummary]:
     # Reused logic currently implemented in ceph_admin buckets router.
     from app.routers.ceph_admin import buckets as ceph_buckets

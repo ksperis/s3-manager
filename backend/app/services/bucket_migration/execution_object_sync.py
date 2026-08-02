@@ -2094,7 +2094,7 @@ class BucketMigrationObjectSyncMixin:
 
     def _finalize_target_versioning_state(
         self,
-        target_account: S3Account,
+        target_account: S3ExecutionTarget,
         target_bucket: str,
         migration: BucketMigration,
         item: BucketMigrationItem,

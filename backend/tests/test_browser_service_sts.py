@@ -5,9 +5,10 @@ from datetime import datetime, timedelta, timezone
 from app.db import S3Account, StorageEndpoint, StorageProvider
 from app.services import browser_service
 from app.services.browser import context as browser_context
+from app.services.s3_execution_context import S3ExecutionContext
 
 
-def _account_with_sts_endpoint() -> S3Account:
+def _account_with_sts_endpoint() -> S3ExecutionContext:
     endpoint = StorageEndpoint(
         name="ceph-sts",
         endpoint_url="https://ceph-sts.example.test",
@@ -21,7 +22,11 @@ def _account_with_sts_endpoint() -> S3Account:
     account = S3Account(rgw_access_key="root", rgw_secret_key="secret")
     account.storage_endpoint = endpoint
     account.storage_endpoint_id = 1
-    return account
+    return S3ExecutionContext.from_account(
+        account,
+        access_key="root",
+        secret_key="secret",
+    )
 
 
 def test_browser_service_prefers_sts_credentials(monkeypatch):
@@ -60,9 +65,9 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
 def test_browser_service_falls_back_on_sts_error(monkeypatch):
     browser_service._STS_CACHE.clear()
     account = _account_with_sts_endpoint()
-    account.rgw_access_key = "root-access"
-    account.rgw_secret_key = "root-secret"
-    account._session_token = "session-token"
+    account.access_key = "root-access"
+    account.secret_key = "root-secret"
+    account.session_token_value = "session-token"
 
     def fake_get_session_token(*args, **kwargs):
         raise RuntimeError("STS unavailable")

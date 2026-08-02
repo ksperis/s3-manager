@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.db import QuotaUsageDaily, S3Account
+from app.db import QuotaUsageDaily
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
@@ -23,6 +23,7 @@ from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.healthcheck_service import HealthCheckService
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.traffic_service import TrafficService, TrafficWindow
 from app.services.usage_trends_service import account_usage_trend_filters, build_account_usage_trends
 from app.services.usage_history_service import UsageHistoryService
@@ -41,13 +42,13 @@ def _safe_list(operation: str, func):
         logger.warning("Unable to fetch IAM %s stats: %s", operation, exc)
         return []
 
-def _usage_history_trend_filters(account: S3Account, model) -> list | None:
+def _usage_history_trend_filters(account: S3ExecutionContext, model) -> list | None:
     return account_usage_trend_filters(account, model)
 
 
 @router.get("/overview")
 def account_stats(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     bucket_service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(require_usage_capable_manager),
 ) -> dict:
@@ -62,7 +63,7 @@ def account_stats(
             detail=f"Unable to fetch buckets: {sanitized_error_log_detail(exc)}",
         ) from exc
 
-    caps = getattr(account, "_manager_capabilities", None)
+    caps = getattr(account, "manager_capabilities", None)
     users: list = []
     groups: list = []
     roles: list = []
@@ -70,7 +71,7 @@ def account_stats(
     if not caps or caps.can_manage_iam:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
-            raise HTTPException(status_code=400, detail="S3Account root keys missing")
+            raise HTTPException(status_code=400, detail="Execution context credentials are missing")
         endpoint, region, verify_tls = resolve_iam_client_options(account)
         iam = get_iam_service(
             access_key,
@@ -130,7 +131,7 @@ def account_stats(
 
 @router.get("/usage-trends", response_model=ManagerUsageTrendsResponse, response_model_exclude_none=True)
 def account_usage_trends(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: dict = Depends(require_usage_capable_manager),
     db: Session = Depends(get_db),
 ) -> ManagerUsageTrendsResponse:
@@ -142,7 +143,7 @@ def account_usage_trends(
 @router.get("/usage-history-trends", response_model=UsageHistoryTrendResponse)
 def account_usage_history_trends(
     window: UsageHistoryTrendWindow = Query("month"),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: dict = Depends(require_usage_capable_manager),
     db: Session = Depends(get_db),
 ) -> UsageHistoryTrendResponse:
@@ -169,7 +170,7 @@ def account_usage_history_trends(
 def account_traffic(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: dict = Depends(require_metrics_capable_manager),
 ) -> dict:
     try:
@@ -189,7 +190,7 @@ def account_traffic(
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
 def endpoint_health_overview(
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     db: Session = Depends(get_db),
 ) -> WorkspaceEndpointHealthOverviewResponse:
     app_settings = load_app_settings()

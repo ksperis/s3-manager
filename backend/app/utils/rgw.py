@@ -3,7 +3,8 @@
 import re
 from typing import Any, Optional, Tuple
 
-from app.db import S3Account, StorageEndpoint
+from app.db import StorageEndpoint
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 
@@ -78,7 +79,7 @@ def resolve_admin_uid(account_id: Optional[str], user_uid: Optional[str]) -> Opt
     return None
 
 
-def has_supervision_credentials(account: S3Account) -> bool:
+def has_supervision_credentials(account: S3ExecutionTarget) -> bool:
     return get_supervision_credentials(account) is not None
 
 
@@ -92,7 +93,7 @@ def _supervision_credentials_from_endpoint(endpoint: Optional[StorageEndpoint]) 
     return access_key, secret_key
 
 
-def get_supervision_credentials(account: S3Account) -> Optional[tuple[str, str]]:
+def get_supervision_credentials(account: S3ExecutionTarget) -> Optional[tuple[str, str]]:
     return _supervision_credentials_from_endpoint(getattr(account, "storage_endpoint", None))
 
 

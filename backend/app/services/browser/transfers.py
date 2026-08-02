@@ -6,13 +6,13 @@ from ._shared import *
 
 
 class BrowserTransfersMixin:
-    def check_sts(self, account: S3Account) -> StsStatus:
+    def check_sts(self, account: S3ExecutionTarget) -> StsStatus:
         if not self._sts_enabled(account):
             return StsStatus(available=False, error="STS is disabled for this endpoint")
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             return StsStatus(available=False, error="S3 credentials missing for this account")
-        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        session_token = account.session_token()
         _, region, _, verify_tls = resolve_s3_client_options(account)
         endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
         if not endpoint:
@@ -46,13 +46,13 @@ class BrowserTransfersMixin:
         _store_sts_credentials(cache_key, credentials)
         return StsStatus(available=True)
 
-    def get_sts_credentials(self, account: S3Account) -> BrowserStsCredentials:
+    def get_sts_credentials(self, account: S3ExecutionTarget) -> BrowserStsCredentials:
         if not self._sts_enabled(account):
             raise RuntimeError("STS is disabled for this endpoint")
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
-        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        session_token = account.session_token()
         _, region, _, verify_tls = resolve_s3_client_options(account)
         endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
         if not endpoint:
@@ -103,7 +103,7 @@ class BrowserTransfersMixin:
     def proxy_upload(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         file_obj,
         content_type: Optional[str],
@@ -127,7 +127,7 @@ class BrowserTransfersMixin:
     def upload_via_proxy(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         file,
         *,
         key: str,
@@ -141,7 +141,7 @@ class BrowserTransfersMixin:
     def proxy_download(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         sse_customer: Optional[SseCustomerContext] = None,
     ):
@@ -177,7 +177,7 @@ class BrowserTransfersMixin:
     def download_object(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         *,
         version_id: Optional[str] = None,

@@ -66,7 +66,7 @@ def test_resolve_s3_client_options_uses_storage_endpoint_force_path_style():
     )
 
 
-def test_resolve_s3_client_options_uses_explicit_session_endpoint_override():
+def test_resolve_s3_client_options_uses_explicitsession_endpoint_override():
     endpoint = StorageEndpoint(
         name="Configured",
         endpoint_url="https://configured.example.test",
@@ -80,7 +80,7 @@ def test_resolve_s3_client_options_uses_explicit_session_endpoint_override():
         (),
         {
             "storage_endpoint": endpoint,
-            "_session_endpoint": "https://session.example.test",
+            "session_endpoint": "https://session.example.test",
         },
     )()
 
@@ -92,7 +92,7 @@ def test_resolve_s3_client_options_uses_explicit_session_endpoint_override():
     )
 
 
-def test_resolve_s3_client_options_session_force_path_style_overrides_endpoint():
+def test_resolve_s3_client_optionssession_force_path_style_overrides_endpoint():
     endpoint = StorageEndpoint(
         name="Path Style",
         endpoint_url="https://s3.path-style.example.test",
@@ -106,7 +106,7 @@ def test_resolve_s3_client_options_session_force_path_style_overrides_endpoint()
         (),
         {
             "storage_endpoint": endpoint,
-            "_session_force_path_style": False,
+            "session_force_path_style": False,
         },
     )()
 
@@ -131,7 +131,7 @@ def test_resolve_iam_client_options_uses_aws_iam_signing_region_for_connection_c
         (),
         {
             "storage_endpoint": endpoint,
-            "_session_region": "eu-west-1",
+            "session_region": "eu-west-1",
         },
     )()
 

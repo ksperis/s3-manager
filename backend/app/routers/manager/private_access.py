@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, User
+from app.db import User
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.managed_private_access import (
     ManagedIAMPrivateAccessRequest,
     ManagedPrivateAccessResult,
@@ -47,7 +48,7 @@ def _translate_error(exc: ManagedPrivateAccessError) -> HTTPException:
 @router.post("/iam", response_model=ManagedPrivateAccessResult, status_code=status.HTTP_201_CREATED)
 def create_iam_private_access(
     payload: ManagedIAMPrivateAccessRequest,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: object = Depends(require_iam_capable_manager),
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
@@ -65,7 +66,7 @@ def create_iam_private_access(
 @router.post("/rgw-user", response_model=ManagedPrivateAccessResult, status_code=status.HTTP_201_CREATED)
 def create_rgw_user_private_access(
     payload: ManagedRGWUserPrivateAccessRequest,
-    account: S3Account = Depends(require_manager_ceph_s3_user_keys),
+    account: S3ExecutionContext = Depends(require_manager_ceph_s3_user_keys),
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> ManagedPrivateAccessResult:

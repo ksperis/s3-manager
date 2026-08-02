@@ -41,6 +41,14 @@ credentials perform S3, IAM, or RGW operations.
 - Backend services resolve the executor from the requested context and reject
   incompatible contexts instead of silently switching to another identity.
 
+The transversal execution-context boundary uses the explicit, non-persistent
+`S3ExecutionContext`. Persistent RGW accounts selected through this boundary
+are copied before credentials are attached. Connections, legacy S3 users,
+direct sessions, Portal Browser identities, and Ceph Admin endpoints never
+instantiate synthetic `S3Account` ORM records. `context_id` and `context_kind`
+are authoritative; database-like negative IDs and dynamically attached private
+attributes are not part of the contract.
+
 ## Canonical UI roles
 
 `users.role` stores exactly one role: `ui_none`, `ui_user`, `ui_admin`, or

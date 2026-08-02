@@ -1441,7 +1441,7 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
                 rgw_account_id=None,
                 rgw_user_uid=None,
                 storage_endpoint=SimpleNamespace(id=12),
-                _source_connection=SimpleNamespace(id=22),
+                source_connection=SimpleNamespace(id=22),
             )
         raise AssertionError(f"unexpected context {account_ref}")
 
@@ -1819,7 +1819,7 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
             rgw_account_id=None,
             rgw_user_uid=None,
             storage_endpoint=SimpleNamespace(id=13),
-            _source_connection=SimpleNamespace(id=33),
+            source_connection=SimpleNamespace(id=33),
         )
 
     class FakeBucketsService:

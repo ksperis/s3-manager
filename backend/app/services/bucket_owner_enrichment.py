@@ -9,7 +9,8 @@ from threading import Lock
 from time import monotonic
 from typing import Callable, Literal, Optional
 
-from app.db import S3Account, StorageEndpoint, StorageProvider
+from app.db import StorageEndpoint, StorageProvider
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.quota_stats import extract_quota_limits
@@ -269,7 +270,7 @@ class BucketOwnerMetadataService:
         endpoint_id: int,
         endpoint: StorageEndpoint | None = None,
         rgw_admin: RGWAdminClient | None = None,
-        account: S3Account | None = None,
+        account: S3ExecutionTarget | None = None,
     ) -> None:
         self.endpoint_id = int(endpoint_id)
         self.endpoint = endpoint or getattr(account, "storage_endpoint", None)

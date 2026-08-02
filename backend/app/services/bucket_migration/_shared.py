@@ -44,10 +44,10 @@ from app.services.bucket_migration.precheck import (
 )
 from app.services.object_diff_common import compare_object_entries
 from app.services.effective_access_service import EffectiveAccessService
+from app.services.s3_execution_context import S3ExecutionContext, S3ExecutionTarget
 from app.services.s3_client import _delete_objects_count, get_s3_client, purge_bucket_contents
 from app.utils.rgw import resolve_admin_uid
 from app.utils.network_targets import validate_outbound_url
-from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
 from app.utils.time import utcnow
 
@@ -101,7 +101,7 @@ class _MigrationControlRequested(RuntimeError):
 @dataclass
 class _ResolvedContext:
     context_id: str
-    account: S3Account
+    account: S3ExecutionTarget
     endpoint: Optional[str]
     region: Optional[str]
     force_path_style: bool

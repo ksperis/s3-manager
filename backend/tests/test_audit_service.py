@@ -15,6 +15,7 @@ from app.services.audit_service import (
     AuditService,
     parse_audit_metadata,
 )
+from app.services.s3_execution_context import S3ExecutionContext
 from tests.s3_account_factory import make_s3_account
 
 
@@ -57,8 +58,14 @@ def test_record_action_keeps_persisted_account_fk(db_session) -> None:
 
 def test_record_action_omits_fk_for_synthetic_account_context(db_session) -> None:
     user = _create_user(db_session)
-    synthetic_account = S3Account(name="synthetic-connection-context")
-    synthetic_account.id = -1_000_001
+    synthetic_account = S3ExecutionContext(
+        context_id="conn-1",
+        context_kind="connection",
+        name="synthetic-connection-context",
+        access_key="access",
+        secret_key="secret",
+        s3_connection_id=1,
+    )
 
     service = AuditService(db_session)
     service.record_action(

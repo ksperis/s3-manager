@@ -241,7 +241,7 @@ class BucketMigrationProgressMixin:
 
     def _verify_restored_bucket_policy(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         bucket_name: str,
         expected_policy: Any,
     ) -> None:

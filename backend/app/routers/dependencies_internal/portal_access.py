@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
 from app.routers.http_errors import raise_http_exception_from_exception
 from app.services.effective_access_service import EffectiveAccountLink
+from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.account_roles import portal_role_for
 
@@ -134,7 +135,7 @@ def _resolve_portal_browser_context(
     link: UserS3Account,
     *,
     request: Request,
-) -> S3Account:
+) -> S3ExecutionContext:
     app_settings = settings_loader.load_app_settings()
     if not app_settings.general.portal_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
@@ -174,19 +175,24 @@ def _resolve_portal_browser_context(
     if target_bucket and target_bucket not in allowed_buckets:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Space is not available in Portal")
 
-    account.set_session_credentials(access_key, secret_key)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=True,
-        can_manage_portal_users=portal_capabilities.can_manage_portal_users,
-        can_manage_iam=False,
-        can_view_root_key=False,
-        using_root_key=False,
+    context = S3ExecutionContext.from_account(
+        account,
+        context_kind="portal_account",
+        access_key=access_key,
+        secret_key=secret_key,
+        manager_capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=portal_capabilities.can_manage_portal_users,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
     )
-    account._portal_browser_role = role  # type: ignore[attr-defined]
-    account._portal_browser_access = portal_access  # type: ignore[attr-defined]
-    account._portal_allowed_buckets = allowed_buckets  # type: ignore[attr-defined]
-    account._portal_storage_spaces = browse_spaces  # type: ignore[attr-defined]
-    return account
+    context.portal_browser_role = role
+    context.portal_browser_access = portal_access
+    context.portal_allowed_buckets = allowed_buckets
+    context.portal_storage_spaces = browse_spaces
+    return context
 
 
 def get_portal_account_access(

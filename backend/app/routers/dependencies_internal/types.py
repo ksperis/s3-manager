@@ -6,19 +6,11 @@ from dataclasses import dataclass, field
 from typing import Optional, Union
 
 from app.db import S3Account, User, UserS3Account
+from app.models.account_capabilities import AccountCapabilities
 from app.models.session import ManagerSessionPrincipal
 from app.services.effective_access_service import EffectiveAccountLink
 
 ManagerActor = Union[User, ManagerSessionPrincipal]
-
-
-@dataclass
-class AccountCapabilities:
-    can_manage_buckets: bool = False
-    can_manage_portal_users: bool = False
-    can_manage_iam: bool = False
-    can_view_root_key: bool = False
-    using_root_key: bool = False
 
 
 @dataclass

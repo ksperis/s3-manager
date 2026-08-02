@@ -23,7 +23,6 @@ def test_dependencies_facade_reexports_internal_groups():
     assert dependencies.require_internal_cron_token is auth_session.require_internal_cron_token
     assert dependencies.get_optional_sse_customer_context is sse_c.get_optional_sse_customer_context
     assert dependencies.get_account_context is account_context.get_account_context
-    assert dependencies.get_account_access is account_context.get_account_access
     assert dependencies.get_portal_account_access is portal_access.get_portal_account_access
     assert dependencies.require_portal_browser_basic_route is portal_access.require_portal_browser_basic_route
     assert dependencies.ensure_manager_tool_allowed is feature_gates.ensure_manager_tool_allowed

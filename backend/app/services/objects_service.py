@@ -6,7 +6,7 @@ from io import BytesIO
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.object import ListObjectsResponse, S3Object
 from app.services.aws_client_config import StorageRequestProfile
 from app.services.s3_client import _delete_objects, get_s3_client
@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectsService:
-    def _client(self, account: S3Account, *, request_profile: StorageRequestProfile = "interactive"):
+    def _client(self, account: S3ExecutionTarget, *, request_profile: StorageRequestProfile = "interactive"):
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
-            raise RuntimeError("S3Account root keys missing")
-        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+            raise RuntimeError("Execution context credentials are missing")
+        session_token = account.session_token()
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         client_options = {
             "endpoint": endpoint,
@@ -40,7 +40,7 @@ class ObjectsService:
     def list_objects(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         prefix: str = "",
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
@@ -87,7 +87,7 @@ class ObjectsService:
             next_continuation_token=resp.get("NextContinuationToken"),
         )
 
-    def create_folder(self, bucket_name: str, account: S3Account, folder_prefix: str) -> None:
+    def create_folder(self, bucket_name: str, account: S3ExecutionTarget, folder_prefix: str) -> None:
         client = self._client(account)
         key = folder_prefix if folder_prefix.endswith("/") else f"{folder_prefix}/"
         try:
@@ -96,7 +96,7 @@ class ObjectsService:
             raise RuntimeError(f"Unable to create folder '{key}' in bucket '{bucket_name}': {exc}") from exc
         logger.debug("Created folder %s in bucket %s", key, bucket_name)
 
-    def delete_objects(self, bucket_name: str, account: S3Account, keys: List[str]) -> None:
+    def delete_objects(self, bucket_name: str, account: S3ExecutionTarget, keys: List[str]) -> None:
         if not keys:
             return
         client = self._client(account)
@@ -109,7 +109,7 @@ class ObjectsService:
     def upload_object(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         file_obj,
         content_type: Optional[str] = None,
@@ -128,7 +128,7 @@ class ObjectsService:
     def generate_download_url(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         expires_in: int = 300,
     ) -> str:

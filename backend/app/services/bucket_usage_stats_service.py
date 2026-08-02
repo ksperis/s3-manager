@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterable
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db import S3Account, User
+from app.db import User
 from app.db.bucket_usage_stats import BucketUsageStatsSnapshot as BucketUsageStatsSnapshotRow
 from app.models.bucket_usage_stats import (
     BucketUsageStatsAggregate,
@@ -26,6 +26,7 @@ from app.models.bucket_usage_stats import (
     BucketUsageStatsSnapshot,
     BucketUsageStatsStatus,
 )
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.time import utcnow
@@ -161,7 +162,7 @@ class BucketUsageStatsCancelled(RuntimeError):
 
 @dataclass(frozen=True)
 class BucketUsageStatsResolvedTarget:
-    account: S3Account
+    account: S3ExecutionTarget
     bucket_name: str
     scope_kind: str
     scope_id: str
@@ -354,15 +355,15 @@ class BucketUsageStatsService:
     def __init__(self, session_factory: sessionmaker[Session] | Callable[[], Session] | None = None) -> None:
         self.session_factory = session_factory
 
-    def _account_credentials(self, account: S3Account) -> tuple[str, str]:
+    def _account_credentials(self, account: S3ExecutionTarget) -> tuple[str, str]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 account is missing credentials")
         return access_key, secret_key
 
-    def _client_kwargs(self, account: S3Account) -> dict[str, Any]:
+    def _client_kwargs(self, account: S3ExecutionTarget) -> dict[str, Any]:
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        session_token = account.session_token()
         return {
             "endpoint": endpoint,
             "region": region,
@@ -372,7 +373,7 @@ class BucketUsageStatsService:
             "user_agent_extra": "s3-manager-bucket-usage-stats",
         }
 
-    def _build_client(self, account: S3Account):
+    def _build_client(self, account: S3ExecutionTarget):
         access_key, secret_key = self._account_credentials(account)
         return s3_client.get_s3_client(
             access_key=access_key,

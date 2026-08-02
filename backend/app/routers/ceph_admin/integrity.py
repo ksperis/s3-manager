@@ -7,7 +7,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
-from app.db import S3Account
 from app.models.bucket_integrity import BucketIntegrityCheckRequest
 from app.routers.bucket_integrity_stream import stream_bucket_integrity_check
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
@@ -16,6 +15,7 @@ from app.services.bucket_integrity_service import (
     BucketIntegrityOptions,
     BucketIntegrityResolvedTarget,
 )
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(
     prefix="/ceph-admin/endpoints/{endpoint_id}/buckets/integrity-check",
@@ -24,18 +24,12 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
-def _build_endpoint_account(ctx: CephAdminContext) -> S3Account:
-    account = S3Account(
-        name=f"ceph-admin:{ctx.endpoint.id}",
-        rgw_account_id=None,
-        email=None,
-        rgw_user_uid=None,
+def _build_endpoint_context(ctx: CephAdminContext) -> S3ExecutionContext:
+    return S3ExecutionContext.from_ceph_admin_endpoint(
+        ctx.endpoint,
+        access_key=ctx.access_key,
+        secret_key=ctx.secret_key,
     )
-    account.id = -(2_000_000 + int(ctx.endpoint.id or 0))
-    account.storage_endpoint = ctx.endpoint  # type: ignore[assignment]
-    account.storage_endpoint_id = ctx.endpoint.id
-    account.set_session_credentials(ctx.access_key, ctx.secret_key)
-    return account
 
 
 def _require_buckets_payload(payload: BucketIntegrityCheckRequest) -> list[str]:
@@ -56,7 +50,7 @@ def stream_ceph_admin_bucket_integrity_check(
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
     bucket_names = _require_buckets_payload(payload)
-    account = _build_endpoint_account(ctx)
+    account = _build_endpoint_context(ctx)
     options = BucketIntegrityOptions(
         parallelism=payload.parallelism,
         all_versions=payload.all_versions,

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, User
+from app.db import User
 from app.models.bucket import BucketQuotaUpdate
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketListingRequest
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary, StorageOpsContextKind
@@ -48,6 +48,7 @@ from app.routers.dependencies import (
 from app.routers.execution_contexts import list_execution_contexts
 from app.services import bucket_config_actions
 from app.services.audit_service import AuditService
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.bucket_listing_cache import (
     get_cached_bucket_listing_for_account,
     invalidate_bucket_listing_cache_for_account,
@@ -80,7 +81,7 @@ class _StorageOpsContextRef:
 @dataclass(frozen=True)
 class _StorageOpsResolvedContext:
     ref: _StorageOpsContextRef
-    account: S3Account
+    account: S3ExecutionContext
 
 
 @dataclass(frozen=True)
@@ -399,14 +400,14 @@ def _collect_filter_fields(parsed_filter: CephAdminBucketFilterQuery | None) -> 
     return {rule.field for rule in parsed_filter.rules if rule.field}
 
 
-def _resolve_context_owner(account: S3Account) -> _StorageOpsContextOwner:
+def _resolve_context_owner(account: S3ExecutionContext) -> _StorageOpsContextOwner:
     account_id = str(getattr(account, "rgw_account_id", "") or "").strip()
     if account_id:
         return _StorageOpsContextOwner(owner=account_id)
     user_uid = str(getattr(account, "rgw_user_uid", "") or "").strip()
     if user_uid:
         return _StorageOpsContextOwner(owner=user_uid, tenant=account_id or None)
-    source_connection = getattr(account, "_source_connection", None)
+    source_connection = getattr(account, "source_connection", None)
     if source_connection is None:
         return _StorageOpsContextOwner(owner=None)
     resolution = ConnectionIdentityService().resolve_rgw_identity(source_connection)

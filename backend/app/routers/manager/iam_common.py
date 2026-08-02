@@ -6,16 +6,16 @@ from typing import Any, Callable
 
 from fastapi import HTTPException, status
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.policy import InlinePolicy, Policy
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.s3_endpoint import resolve_iam_client_options
 
 
-def get_account_and_service(account: S3Account) -> tuple[S3Account, RGWIAMService]:
+def get_account_and_service(account: S3ExecutionContext) -> tuple[S3ExecutionContext, RGWIAMService]:
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account root keys missing")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Execution context credentials are missing")
     endpoint, region, verify_tls = resolve_iam_client_options(account)
     service = get_iam_service(
         access_key,

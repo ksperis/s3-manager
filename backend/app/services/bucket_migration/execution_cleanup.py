@@ -6,7 +6,7 @@ from ._shared import *
 
 
 class BucketMigrationCleanupMixin:
-    def _delete_source_bucket_with_retry(self, source_bucket: str, source_account: S3Account) -> None:
+    def _delete_source_bucket_with_retry(self, source_bucket: str, source_account: S3ExecutionTarget) -> None:
         last_exc: Optional[RuntimeError] = None
         for attempt in range(1, 4):
             try:

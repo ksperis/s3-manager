@@ -114,7 +114,7 @@ def test_manager_integrity_route_streams_progress_and_result(monkeypatch):
     app.dependency_overrides[manager_integrity.require_bucket_integrity_check_enabled] = lambda: None
     app.dependency_overrides[manager_integrity.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_integrity.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     monkeypatch.setattr(manager_integrity, "BucketIntegrityCheckService", FakeService)
@@ -147,7 +147,7 @@ def test_manager_integrity_route_returns_403_when_flag_disabled(monkeypatch):
     app.dependency_overrides[dependencies_router.require_manager_enabled] = lambda: None
     app.dependency_overrides[manager_integrity.get_account_context] = lambda: SimpleNamespace(
         name="Tenant A",
-        _manager_capabilities=SimpleNamespace(can_manage_buckets=True),
+        manager_capabilities=SimpleNamespace(can_manage_buckets=True),
     )
     app.dependency_overrides[manager_integrity.get_current_account_admin] = lambda: SimpleNamespace(id=1)
     app.dependency_overrides[dependencies_router.get_current_user] = lambda: _manager_tool_user()

@@ -64,7 +64,7 @@ def _account() -> S3Account:
 
 def test_client_requires_root_keys():
     account = S3Account(name="missing-keys", rgw_access_key=None, rgw_secret_key=None)
-    with pytest.raises(RuntimeError, match="root keys missing"):
+    with pytest.raises(RuntimeError, match="Execution context credentials are missing"):
         ObjectsService()._client(account)
 
 

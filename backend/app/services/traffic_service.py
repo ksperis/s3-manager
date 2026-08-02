@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.rgw import get_supervision_credentials, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -333,7 +333,7 @@ def aggregate_usage(
 class TrafficService:
     def __init__(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         rgw_client: Optional[RGWAdminClient] = None,
         admin_client: Optional[RGWAdminClient] = None,
     ) -> None:
@@ -341,7 +341,7 @@ class TrafficService:
         _ = rgw_client
         self.admin_client = admin_client or self._admin_for_account(account)
 
-    def _admin_for_account(self, account: S3Account) -> RGWAdminClient:
+    def _admin_for_account(self, account: S3ExecutionTarget) -> RGWAdminClient:
         endpoint = getattr(account, "storage_endpoint", None)
         creds = get_supervision_credentials(account)
         if not creds or not endpoint:
@@ -419,7 +419,7 @@ class TrafficService:
         )
         entries = flatten_usage_entries(payload)
         logger.debug(
-            "S3Account %s fetched %s usage entries via RGW admin (uid=%s)",
+            "S3 execution context %s fetched %s usage entries via RGW admin (uid=%s)",
             self.account.rgw_account_id or self.account.id,
             len(entries),
             account_uid,

@@ -19,8 +19,8 @@ def _bucket_search_values(bucket: BrowserBucket) -> list[str]:
 
 
 class BrowserBucketsMixin:
-    def _list_portal_storage_space_buckets(self, account: S3Account) -> Optional[list[BrowserBucket]]:
-        spaces = getattr(account, "_portal_storage_spaces", None)
+    def _list_portal_storage_space_buckets(self, account: S3ExecutionTarget) -> Optional[list[BrowserBucket]]:
+        spaces = getattr(account, "portal_storage_spaces", None)
         if spaces is None:
             return None
         buckets: list[BrowserBucket] = []
@@ -47,11 +47,11 @@ class BrowserBucketsMixin:
         buckets.sort(key=lambda bucket: (bucket.display_name or bucket.name).lower())
         return buckets
 
-    def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
+    def list_buckets(self, account: S3ExecutionTarget) -> list[BrowserBucket]:
         portal_buckets = self._list_portal_storage_space_buckets(account)
         if portal_buckets is not None:
             return portal_buckets
-        allowed_portal_buckets = getattr(account, "_portal_allowed_buckets", None)
+        allowed_portal_buckets = getattr(account, "portal_allowed_buckets", None)
         account_key = self._account_cache_key(account)
         cached = _BUCKET_LIST_CACHE.get(account_key)
         if cached is not None:
@@ -79,7 +79,7 @@ class BrowserBucketsMixin:
 
     def search_buckets(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         *,
         search: Optional[str] = None,
         exact: bool = False,
@@ -121,7 +121,7 @@ class BrowserBucketsMixin:
     def create_bucket(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         *,
         versioning: bool = False,
     ) -> None:

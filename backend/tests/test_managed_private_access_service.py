@@ -39,6 +39,7 @@ from app.services.managed_private_access_service import (
     ManagedPrivateAccessService,
 )
 from app.services.s3_connections_service import S3ConnectionsService
+from app.services.s3_execution_context import S3ExecutionContext
 
 
 class FakeIAM:
@@ -182,12 +183,8 @@ def _disable_capability_probe(monkeypatch):
     )
 
 
-def _connection_context(source: S3Connection) -> S3Account:
-    context = S3Account(name="synthetic")
-    context.id = -(1_000_000 + source.id)
-    context.s3_connection_id = source.id
-    context.set_session_credentials(source.access_key_id, source.secret_access_key)
-    return context
+def _connection_context(source: S3Connection) -> S3ExecutionContext:
+    return S3ExecutionContext.from_connection(source)
 
 
 def test_iam_provisioning_never_serializes_or_audits_secret_and_is_idempotent(db_session, monkeypatch):
@@ -499,9 +496,7 @@ def test_rgw_user_provisioning_uses_distinct_key_and_endpoint(db_session, monkey
     db_session.flush()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
-    context = S3Account(name="rgw-context")
-    context.id = -(100_000 + s3_user.id)
-    context.s3_user_id = s3_user.id
+    context = S3ExecutionContext.from_legacy_user(s3_user)
     monkeypatch.setattr(
         "app.services.managed_private_access_service.S3UsersService.create_access_key_entry",
         lambda _service, user_id: S3UserGeneratedKey(
@@ -545,9 +540,7 @@ def test_rgw_user_provisioning_requires_key_management_permission(db_session):
     db_session.flush()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
-    context = S3Account(name="rgw-denied-context")
-    context.id = -(100_000 + s3_user.id)
-    context.s3_user_id = s3_user.id
+    context = S3ExecutionContext.from_legacy_user(s3_user)
 
     with pytest.raises(ManagedPrivateAccessForbidden, match="not allowed"):
         ManagedPrivateAccessService(db_session).provision_rgw_user(

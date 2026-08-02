@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.bucket import (
     BucketTag,
     FeatureRuleInventoryBucket,
@@ -445,7 +445,7 @@ def _unavailable_bucket(bucket_name: str, feature: FeatureRuleInventoryFeature, 
 @router.get("", response_model=list[FeatureRuleInventoryBucket])
 def list_feature_rule_inventory(
     feature: FeatureRuleInventoryFeature = Query(..., description="Bucket feature to inventory."),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _tool_user: object = Depends(require_manager_feature_rules_enabled),
     _: dict = Depends(get_current_account_admin),

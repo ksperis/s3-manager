@@ -70,7 +70,7 @@ class BucketMigrationExecutionContextMixin:
             verify_tls=verify_tls,
         )
 
-    def _context_to_account(self, context_id: str) -> S3Account:
+    def _context_to_account(self, context_id: str) -> S3ExecutionTarget:
         value = (context_id or "").strip()
         if not value:
             raise ValueError("Invalid context id")
@@ -82,25 +82,7 @@ class BucketMigrationExecutionContextMixin:
             conn = self.db.query(S3Connection).filter(S3Connection.id == int(suffix)).first()
             if not conn:
                 raise ValueError("S3Connection not found")
-            account = S3Account(
-                name=conn.name,
-                rgw_account_id=None,
-                email=None,
-                rgw_user_uid=None,
-            )
-            account.id = -(1_000_000 + conn.id)
-            account.rgw_access_key = conn.access_key_id
-            account.rgw_secret_key = conn.secret_access_key
-            account.storage_endpoint_id = conn.storage_endpoint_id
-            endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
-            account._session_endpoint = endpoint_url  # type: ignore[attr-defined]
-            account._session_region = region  # type: ignore[attr-defined]
-            account._session_force_path_style = force_path_style  # type: ignore[attr-defined]
-            account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
-            account._session_token = conn.session_token  # type: ignore[attr-defined]
-            if conn.storage_endpoint is not None:
-                account.storage_endpoint = conn.storage_endpoint
-            return account
+            return S3ExecutionContext.from_connection(conn)
 
         if value.startswith("s3u-"):
             suffix = value.split("s3u-", 1)[1]
@@ -109,19 +91,7 @@ class BucketMigrationExecutionContextMixin:
             s3_user = self.db.query(S3User).filter(S3User.id == int(suffix)).first()
             if not s3_user:
                 raise ValueError("S3 user not found")
-            account = S3Account(
-                name=s3_user.name,
-                rgw_account_id=None,
-                email=s3_user.email,
-                rgw_user_uid=s3_user.rgw_user_uid,
-            )
-            account.id = -(100_000 + s3_user.id)
-            account.rgw_access_key = s3_user.rgw_access_key
-            account.rgw_secret_key = s3_user.rgw_secret_key
-            account.storage_endpoint_id = s3_user.storage_endpoint_id
-            account.storage_endpoint = s3_user.storage_endpoint
-            account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
-            return account
+            return S3ExecutionContext.from_legacy_user(s3_user)
 
         if not value.isdigit():
             raise ValueError("Invalid account context id")

@@ -44,6 +44,12 @@ It defines the executor identity used for S3 operations and may be:
 - legacy S3 user: `s3u-<id>`
 - Ceph Admin endpoint: `ceph-admin-<endpoint_id>` for browser-only admin flows
 
+Execution-context selectors must return the explicit, non-persistent
+`S3ExecutionContext`. Never emulate a selected context by constructing an
+unpersisted `S3Account`, assigning it a negative ID, or attaching private
+runtime attributes to an ORM instance. `context_id` and `context_kind` carry
+the execution identity.
+
 ## Non-negotiable principles
 
 ### Storage execution and Portal grants have distinct authorities

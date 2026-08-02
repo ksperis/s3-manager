@@ -8,7 +8,7 @@ from ._shared import *
 
 
 class BrowserContextMixin:
-    def _sts_enabled(self, account: S3Account) -> bool:
+    def _sts_enabled(self, account: S3ExecutionTarget) -> bool:
         if getattr(account, "s3_user_id", None) is not None:
             return False
         if getattr(account, "s3_connection_id", None) is not None:
@@ -19,11 +19,11 @@ class BrowserContextMixin:
         flags = resolve_feature_flags(endpoint)
         return flags.sts_enabled
 
-    def _resolve_s3_credentials(self, account: S3Account) -> tuple[str, str, Optional[str]]:
+    def _resolve_s3_credentials(self, account: S3ExecutionTarget) -> tuple[str, str, Optional[str]]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
-        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        session_token = account.session_token()
         if not self._sts_enabled(account):
             return access_key, secret_key, session_token
         sts_credentials = self._get_sts_credentials(account, access_key, secret_key, session_token)
@@ -31,7 +31,7 @@ class BrowserContextMixin:
             return sts_credentials.access_key_id, sts_credentials.secret_access_key, sts_credentials.session_token
         return access_key, secret_key, session_token
 
-    def _s3_client_kwargs(self, account: S3Account) -> dict:
+    def _s3_client_kwargs(self, account: S3ExecutionTarget) -> dict:
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         return {
             "endpoint": endpoint,
@@ -40,7 +40,7 @@ class BrowserContextMixin:
             "verify_tls": verify_tls,
         }
 
-    def _client(self, account: S3Account, *, request_profile: StorageRequestProfile = "interactive"):
+    def _client(self, account: S3ExecutionTarget, *, request_profile: StorageRequestProfile = "interactive"):
         access_key, secret_key, session_token = self._resolve_s3_credentials(account)
         client_options = self._s3_client_kwargs(account)
         client_options["session_token"] = session_token
@@ -72,7 +72,7 @@ class BrowserContextMixin:
 
     def _get_sts_credentials(
         self,
-        account: S3Account,
+        account: S3ExecutionTarget,
         access_key: str,
         secret_key: str,
         session_token: Optional[str],
@@ -118,20 +118,17 @@ class BrowserContextMixin:
             return None
         return etag.strip('"')
 
-    def _account_context_kind(self, account: S3Account) -> str:
+    def _account_context_kind(self, account: S3ExecutionTarget) -> str:
+        context_kind = getattr(account, "context_kind", None)
+        if context_kind:
+            return str(context_kind)
         if getattr(account, "s3_connection_id", None) is not None:
             return "connection"
         if getattr(account, "s3_user_id", None) is not None:
-            return "s3_user"
-        account_id = getattr(account, "id", None)
-        account_name = str(getattr(account, "name", "") or "")
-        if isinstance(account_id, int) and account_id < 0:
-            if account_name.startswith("ceph-admin:"):
-                return "ceph_admin"
-            return "s3_user"
+            return "legacy_user"
         return "account"
 
-    def _account_cache_key(self, account: S3Account) -> str:
+    def _account_cache_key(self, account: S3ExecutionTarget) -> str:
         access_key, _ = account.effective_rgw_credentials()
         if not access_key:
             raise RuntimeError("S3 credentials missing for this account")
@@ -273,14 +270,14 @@ class BrowserContextMixin:
         if removed > 0:
             logger.debug("Browser object cache invalidated: account=%s bucket=%s entries=%s", account_key, bucket_name, removed)
 
-    def invalidate_bucket_list_cache_for_account(self, account: S3Account) -> None:
+    def invalidate_bucket_list_cache_for_account(self, account: S3ExecutionTarget) -> None:
         try:
             account_key = self._account_cache_key(account)
         except RuntimeError:
             return
         self.invalidate_bucket_list_cache(account_key)
 
-    def invalidate_object_list_cache_for_account(self, account: S3Account, bucket_name: str) -> None:
+    def invalidate_object_list_cache_for_account(self, account: S3ExecutionTarget, bucket_name: str) -> None:
         if not bucket_name:
             return
         try:
@@ -292,7 +289,7 @@ class BrowserContextMixin:
     def get_bucket_cors_status(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         origin: Optional[str] = None,
     ) -> BucketCorsStatus:
         client = self._client(account)
@@ -346,7 +343,7 @@ class BrowserContextMixin:
             enabled = any(rule_allows(rule) for rule in raw_rules)
         return BucketCorsStatus(enabled=enabled, rules=rules)
 
-    def ensure_bucket_cors(self, bucket_name: str, account: S3Account, origin: str) -> BucketCorsStatus:
+    def ensure_bucket_cors(self, bucket_name: str, account: S3ExecutionTarget, origin: str) -> BucketCorsStatus:
         if not origin:
             raise RuntimeError("Missing origin")
         client = self._client(account)

@@ -52,27 +52,11 @@ class S3Account(Base):
     )
     tag_links = relationship("S3AccountTag", back_populates="account", cascade="all, delete-orphan")
 
-    def set_session_credentials(self, access_key: Optional[str], secret_key: Optional[str]) -> None:
-        self._session_access_key = access_key
-        self._session_secret_key = secret_key
-
-    def clear_session_credentials(self) -> None:
-        if hasattr(self, "_session_access_key"):
-            delattr(self, "_session_access_key")
-        if hasattr(self, "_session_secret_key"):
-            delattr(self, "_session_secret_key")
-        if hasattr(self, "_session_token"):
-            delattr(self, "_session_token")
-
     def effective_rgw_credentials(self) -> tuple[Optional[str], Optional[str]]:
-        override_access = getattr(self, "_session_access_key", None)
-        override_secret = getattr(self, "_session_secret_key", None)
-        if override_access and override_secret:
-            return override_access, override_secret
         return self.rgw_access_key, self.rgw_secret_key
 
     def session_token(self) -> Optional[str]:
-        return getattr(self, "_session_token", None)
+        return None
 
 
 class UserS3Account(Base):

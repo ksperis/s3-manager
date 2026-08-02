@@ -10,7 +10,7 @@ from threading import Lock
 from time import monotonic
 from typing import Callable
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket import Bucket
 from app.utils.s3_endpoint import resolve_s3_client_options
 
@@ -61,7 +61,7 @@ def _normalize_include_key(include: set[str]) -> str:
     return ",".join(normalized)
 
 
-def _account_scope_key(account: S3Account) -> str:
+def _account_scope_key(account: S3ExecutionTarget) -> str:
     connection_id = getattr(account, "s3_connection_id", None)
     if isinstance(connection_id, int) and connection_id > 0:
         return f"conn-{connection_id}"
@@ -93,7 +93,7 @@ def _account_scope_key(account: S3Account) -> str:
     return "unknown"
 
 
-def _account_credentials_key(account: S3Account) -> str:
+def _account_credentials_key(account: S3ExecutionTarget) -> str:
     access_key = ""
     secret_key = ""
     if hasattr(account, "effective_rgw_credentials"):
@@ -101,7 +101,8 @@ def _account_credentials_key(account: S3Account) -> str:
         access_key = str(raw_access or "")
         secret_key = str(raw_secret or "")
     endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
-    session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+    session_token_resolver = getattr(account, "session_token", None)
+    session_token = session_token_resolver() if callable(session_token_resolver) else None
     raw = "|".join(
         [
             access_key,
@@ -118,7 +119,7 @@ def _account_credentials_key(account: S3Account) -> str:
 
 def get_cached_bucket_listing_for_account(
     *,
-    account: S3Account,
+    account: S3ExecutionTarget,
     include: set[str],
     with_stats: bool,
     builder: Callable[[], list[Bucket]],
@@ -181,5 +182,5 @@ def invalidate_bucket_listing_cache(scope_key: str | None = None) -> None:
             _BUCKET_LISTING_CACHE.pop(key, None)
 
 
-def invalidate_bucket_listing_cache_for_account(account: S3Account) -> None:
+def invalidate_bucket_listing_cache_for_account(account: S3ExecutionTarget) -> None:
     invalidate_bucket_listing_cache(_account_scope_key(account))

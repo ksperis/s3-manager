@@ -1937,8 +1937,8 @@ def test_portal_browser_allowed_buckets_use_content_access(monkeypatch, db_sessi
         request=request,
     )
 
-    assert scoped_account._portal_allowed_buckets == {"shared-data"}
-    assert [space.id for space in scoped_account._portal_storage_spaces] == ["shared-data"]
+    assert scoped_account.portal_allowed_buckets == {"shared-data"}
+    assert [space.id for space in scoped_account.portal_storage_spaces] == ["shared-data"]
 
 
 def _storage_space_policy_statement(policy: dict, sid: str) -> dict:

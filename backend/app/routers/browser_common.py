@@ -7,7 +7,8 @@ from typing import Any, Optional, Union
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from app.db import S3Account, User
+from app.db import User
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.session import ManagerSessionPrincipal
 from app.services.audit_service import AuditService
 from app.utils.storage_endpoint_features import resolve_feature_flags
@@ -28,7 +29,7 @@ class EnsureCorsPayload(BaseModel):
     origin: Optional[str] = None
 
 
-def require_sse_feature(account: S3Account) -> None:
+def require_sse_feature(account: S3ExecutionTarget) -> None:
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None:
         return
@@ -39,7 +40,7 @@ def require_sse_feature(account: S3Account) -> None:
         )
 
 
-def require_replication_feature(account: S3Account) -> None:
+def require_replication_feature(account: S3ExecutionTarget) -> None:
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None or not resolve_feature_flags(endpoint).replication_enabled:
         raise HTTPException(
@@ -56,7 +57,7 @@ def record_browser_action(
     action: str,
     entity_type: Optional[str] = None,
     entity_id: Optional[str] = None,
-    account: Optional[S3Account] = None,
+    account: Optional[S3ExecutionTarget] = None,
     metadata: Optional[dict[str, Any]] = None,
     status: str = "success",
     message: Optional[str] = None,

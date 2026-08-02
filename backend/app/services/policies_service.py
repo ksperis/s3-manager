@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.policy import Policy
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.s3_endpoint import resolve_iam_client_options
@@ -25,10 +25,10 @@ class PoliciesService:
         self.iam.delete_policy(arn)
 
 
-def get_policies_service(account: S3Account) -> PoliciesService:
+def get_policies_service(account: S3ExecutionTarget) -> PoliciesService:
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
-        raise ValueError("S3Account root keys missing")
+        raise ValueError("Execution context credentials are missing")
     endpoint, region, verify_tls = resolve_iam_client_options(account)
     iam_service = get_iam_service(
         access_key,

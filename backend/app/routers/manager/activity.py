@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionContext
 from app.models.manager_activity import ManagerActivityEntry
 from app.routers.dependencies import get_account_context, get_audit_logger
 from app.services.audit_service import AuditService
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/manager/activity", tags=["manager-activity"])
 @router.get("", response_model=list[ManagerActivityEntry])
 def list_manager_activity(
     limit: int = Query(5, ge=1, le=20),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> list[ManagerActivityEntry]:
     account_id = account.id if isinstance(account.id, int) and account.id > 0 else None

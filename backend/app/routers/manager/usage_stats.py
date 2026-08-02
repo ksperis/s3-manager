@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
-from app.db import S3Account, User
+from app.db import User
 from app.models.bucket_usage_stats import (
     BucketUsageStatsAggregateResponse,
     BucketUsageStatsLatestResponse,
@@ -30,18 +30,19 @@ from app.services.bucket_usage_stats_service import (
     BucketUsageStatsService,
 )
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.s3_execution_context import S3ExecutionContext
 
 router = APIRouter(tags=["manager-bucket-usage-stats"])
 logger = logging.getLogger(__name__)
 
 
-def _require_bucket_management_context(account: S3Account) -> None:
-    caps = getattr(account, "_manager_capabilities", None)
+def _require_bucket_management_context(account: S3ExecutionContext) -> None:
+    caps = getattr(account, "manager_capabilities", None)
     if caps is not None and not bool(getattr(caps, "can_manage_buckets", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management is not allowed for this context")
 
 
-def _target_for_bucket(account: S3Account, bucket_name: str, *, context_id: str | None = None) -> BucketUsageStatsResolvedTarget:
+def _target_for_bucket(account: S3ExecutionContext, bucket_name: str, *, context_id: str | None = None) -> BucketUsageStatsResolvedTarget:
     resolved_context_id = context_id or _context_id_from_account(account)
     context_name = getattr(account, "name", None)
     return BucketUsageStatsResolvedTarget(
@@ -55,7 +56,7 @@ def _target_for_bucket(account: S3Account, bucket_name: str, *, context_id: str 
     )
 
 
-def _list_manager_bucket_names(account: S3Account, service: BucketsService) -> list[str]:
+def _list_manager_bucket_names(account: S3ExecutionContext, service: BucketsService) -> list[str]:
     try:
         buckets = get_cached_bucket_listing_for_account(
             account=account,
@@ -72,7 +73,7 @@ def _list_manager_bucket_names(account: S3Account, service: BucketsService) -> l
 def get_manager_usage_stats_aggregate(
     db: Session = Depends(get_db),
     _feature_user: object = Depends(require_bucket_usage_stats_enabled),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: object = Depends(get_current_account_admin),
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> BucketUsageStatsAggregateResponse:
@@ -94,7 +95,7 @@ def stream_manager_usage_stats_aggregate(
     payload: BucketUsageStatsScopeRequest,
     request: Request,
     _feature_user: object = Depends(require_bucket_usage_stats_enabled),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     actor: object = Depends(get_current_account_admin),
     bucket_service: BucketsService = Depends(get_buckets_service),
 ) -> StreamingResponse:
@@ -123,7 +124,7 @@ def stream_manager_usage_stats_aggregate(
 def get_manager_bucket_usage_stats(
     bucket_name: str,
     db: Session = Depends(get_db),
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     _: object = Depends(get_current_account_admin),
 ) -> BucketUsageStatsLatestResponse:
     _require_bucket_management_context(account)
@@ -141,7 +142,7 @@ def get_manager_bucket_usage_stats(
 def stream_manager_bucket_usage_stats_for_bucket(
     bucket_name: str,
     request: Request,
-    account: S3Account = Depends(get_account_context),
+    account: S3ExecutionContext = Depends(get_account_context),
     actor: object = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     _require_bucket_management_context(account)

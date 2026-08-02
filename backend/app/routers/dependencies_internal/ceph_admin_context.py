@@ -8,8 +8,9 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, StorageEndpoint, StorageProvider, User, is_admin_ui_role
+from app.db import StorageEndpoint, StorageProvider, User, is_admin_ui_role
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
+from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -19,29 +20,27 @@ from . import service_loaders, settings_loader
 from .types import AccountCapabilities
 
 
-def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
-    account = S3Account(
-        name=f"ceph-admin:{endpoint.id}",
-        rgw_account_id=None,
-        email=None,
-        rgw_user_uid=None,
+def _build_ceph_admin_browser_context(endpoint: StorageEndpoint) -> S3ExecutionContext:
+    return S3ExecutionContext.from_ceph_admin_endpoint(
+        endpoint,
+        access_key=endpoint.ceph_admin_access_key,
+        secret_key=endpoint.ceph_admin_secret_key,
+        manager_capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
     )
-    account.id = -(2_000_000 + endpoint.id)
-    account.rgw_access_key = endpoint.ceph_admin_access_key
-    account.rgw_secret_key = endpoint.ceph_admin_secret_key
-    account.storage_endpoint_id = endpoint.id
-    account.storage_endpoint = endpoint
-    account.ceph_admin_endpoint_id = endpoint.id  # type: ignore[attr-defined]
-    account.set_session_credentials(endpoint.ceph_admin_access_key, endpoint.ceph_admin_secret_key)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=True,
-        can_manage_iam=False,
-        can_view_root_key=False,
-        using_root_key=False,
-    )
-    return account
 
-def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: int, *, surface: str) -> S3Account:
+
+def _resolve_ceph_admin_browser_context(
+    db: Session,
+    actor: User,
+    endpoint_id: int,
+    *,
+    surface: str,
+) -> S3ExecutionContext:
     if surface != "browser":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin context is only allowed in browser workspace")
     app_settings = settings_loader.load_app_settings()
@@ -77,7 +76,7 @@ def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: i
     identity_validation_error = validate_ceph_admin_service_identity(endpoint)
     if identity_validation_error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=identity_validation_error)
-    return _build_ceph_admin_browser_account(endpoint)
+    return _build_ceph_admin_browser_context(endpoint)
 
 def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
     service = get_storage_endpoints_service(db)

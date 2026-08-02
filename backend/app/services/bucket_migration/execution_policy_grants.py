@@ -103,7 +103,7 @@ class BucketMigrationPolicyGrantsMixin:
     def _restore_source_copy_grant_policy(
         self,
         source_bucket: str,
-        source_account: S3Account,
+        source_account: S3ExecutionTarget,
         backup_policy: Optional[dict[str, Any]],
     ) -> None:
         restored = self._without_managed_source_copy_grant_statement(backup_policy)
@@ -375,7 +375,7 @@ class BucketMigrationPolicyGrantsMixin:
             policy_doc["Version"] = "2012-10-17"
         return policy_doc
 
-    def _remove_managed_read_only_statement(self, source_bucket: str, source_account: S3Account) -> None:
+    def _remove_managed_read_only_statement(self, source_bucket: str, source_account: S3ExecutionTarget) -> None:
         existing_policy = self._buckets.get_policy(source_bucket, source_account)
         cleaned = self._without_managed_read_only_statement(existing_policy)
         if isinstance(cleaned, dict):
@@ -383,7 +383,7 @@ class BucketMigrationPolicyGrantsMixin:
             return
         self._buckets.delete_policy(source_bucket, source_account)
 
-    def _remove_managed_target_write_lock_statement(self, target_bucket: str, target_account: S3Account) -> None:
+    def _remove_managed_target_write_lock_statement(self, target_bucket: str, target_account: S3ExecutionTarget) -> None:
         existing_policy = self._buckets.get_policy(target_bucket, target_account)
         cleaned = self._without_managed_target_write_lock_statement(existing_policy)
         if isinstance(cleaned, dict):
@@ -391,7 +391,7 @@ class BucketMigrationPolicyGrantsMixin:
             return
         self._buckets.delete_policy(target_bucket, target_account)
 
-    def _set_managed_block_policy(self, source_bucket: str, source_account: S3Account, *, deny_delete: bool) -> None:
+    def _set_managed_block_policy(self, source_bucket: str, source_account: S3ExecutionTarget, *, deny_delete: bool) -> None:
         try:
             existing_policy = self._buckets.get_policy(source_bucket, source_account)
             policy_doc = self._build_read_only_policy(
@@ -409,7 +409,7 @@ class BucketMigrationPolicyGrantsMixin:
                 ) from exc
             raise
 
-    def _precheck_policy_roundtrip(self, source_account: S3Account, source_bucket: str) -> None:
+    def _precheck_policy_roundtrip(self, source_account: S3ExecutionTarget, source_bucket: str) -> None:
         try:
             existing_policy = self._buckets.get_policy(source_bucket, source_account)
         except RuntimeError as exc:
@@ -446,7 +446,7 @@ class BucketMigrationPolicyGrantsMixin:
                 f"Unable to restore source bucket policy after precheck on '{source_bucket}': {exc}"
             ) from exc
 
-    def _apply_read_only_policy(self, source_account: S3Account, source_bucket: str, item: BucketMigrationItem) -> None:
+    def _apply_read_only_policy(self, source_account: S3ExecutionTarget, source_bucket: str, item: BucketMigrationItem) -> None:
         existing_policy = self._buckets.get_policy(source_bucket, source_account)
         item.source_policy_backup_json = (
             _json_dumps(existing_policy) if isinstance(existing_policy, dict) else None
@@ -497,14 +497,14 @@ class BucketMigrationPolicyGrantsMixin:
             raise
         self._validate_target_lock_worker_access(target_ctx, target_bucket)
 
-    def _restore_target_write_lock_policy(self, target_account: S3Account, target_bucket: str, item: BucketMigrationItem) -> None:
+    def _restore_target_write_lock_policy(self, target_account: S3ExecutionTarget, target_bucket: str, item: BucketMigrationItem) -> None:
         backup = _json_loads(item.target_policy_backup_json)
         if isinstance(backup, dict):
             self._buckets.put_policy(target_bucket, target_account, backup)
             return
         self._buckets.delete_policy(target_bucket, target_account)
 
-    def _restore_source_policy(self, source_bucket: str, source_account: S3Account, item: BucketMigrationItem) -> None:
+    def _restore_source_policy(self, source_bucket: str, source_account: S3ExecutionTarget, item: BucketMigrationItem) -> None:
         backup = _json_loads(item.source_policy_backup_json)
         if isinstance(backup, dict):
             self._buckets.put_policy(source_bucket, source_account, backup)

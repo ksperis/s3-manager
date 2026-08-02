@@ -9,7 +9,7 @@ class BrowserObjectOperationsMixin:
     def presign(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: PresignRequest,
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> PresignedUrl:
@@ -78,7 +78,7 @@ class BrowserObjectOperationsMixin:
     def copy_object(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: CopyObjectPayload,
     ) -> None:
         client = self._client(account, request_profile="long_running")
@@ -176,7 +176,7 @@ class BrowserObjectOperationsMixin:
     def delete_objects(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: DeleteObjectsPayload,
     ) -> int:
         if not payload.objects:
@@ -202,7 +202,7 @@ class BrowserObjectOperationsMixin:
     def create_folder(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         prefix: str,
     ) -> None:
         client = self._client(account)
@@ -216,7 +216,7 @@ class BrowserObjectOperationsMixin:
     def initiate_multipart_upload(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: MultipartUploadInitRequest,
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> MultipartUploadInitResponse:
@@ -245,7 +245,7 @@ class BrowserObjectOperationsMixin:
     def list_multipart_uploads(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         prefix: Optional[str] = None,
         key_marker: Optional[str] = None,
         upload_id_marker: Optional[str] = None,
@@ -284,7 +284,7 @@ class BrowserObjectOperationsMixin:
     def list_parts(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         upload_id: str,
         part_number_marker: Optional[int] = None,
@@ -322,7 +322,7 @@ class BrowserObjectOperationsMixin:
     def presign_part(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         payload: PresignPartRequest,
         sse_customer: Optional[SseCustomerContext] = None,
     ) -> PresignPartResponse:
@@ -351,7 +351,7 @@ class BrowserObjectOperationsMixin:
     def complete_multipart_upload(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         upload_id: str,
         payload: CompleteMultipartUploadRequest,
@@ -375,7 +375,7 @@ class BrowserObjectOperationsMixin:
     def abort_multipart_upload(
         self,
         bucket_name: str,
-        account: S3Account,
+        account: S3ExecutionTarget,
         key: str,
         upload_id: str,
     ) -> None:

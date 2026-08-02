@@ -5,7 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Literal
 
-from app.db import S3Account
+from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.bucket import (
     BucketEncryptionConfiguration,
     BucketFeatureStatus,
@@ -1533,7 +1533,7 @@ def _load_feature_param_snapshot_for_bucket(
     bucket: CephAdminBucketSummary,
     required_sources: set[str],
     service: BucketsService,
-    account: S3Account,
+    account: S3ExecutionTarget,
 ) -> dict[str, object]:
     snapshot: dict[str, object] = {}
     if "props" in required_sources:
@@ -1581,7 +1581,7 @@ def _load_feature_param_snapshots(
     buckets: list[CephAdminBucketSummary],
     rules: list[CephAdminBucketFilterRule],
     service: BucketsService,
-    account: S3Account,
+    account: S3ExecutionTarget,
     *,
     progress: _BucketListingProgressEmitter | None = None,
     progress_stage: str = "feature_param_enrichment",
@@ -1776,7 +1776,7 @@ def _enrich_buckets(
     requested: set[str],
     include_tags: bool,
     service: BucketsService,
-    account: S3Account,
+    account: S3ExecutionTarget,
     *,
     progress: _BucketListingProgressEmitter | None = None,
     progress_stage: str = "bucket_enrichment",
