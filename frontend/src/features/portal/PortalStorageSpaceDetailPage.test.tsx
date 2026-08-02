@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
       account_role: "portal_manager",
       iam_user: {},
       access_keys: [],
+      quota_max_size_bytes: 10 * 1024 ** 3,
+      quota_max_objects: 1000,
       storage_space_version_cleanup_enabled: true,
     },
     selectedAccount: {
@@ -51,8 +53,6 @@ const mocks = vi.hoisted(() => ({
       name: "Account 1",
       rgw_account_id: "portal-project",
       tags: [],
-      quota_max_size_gb: 10,
-      quota_max_objects: 1000,
       storage_endpoint_capabilities: { sse: true, sts: true },
     },
     workspace: {

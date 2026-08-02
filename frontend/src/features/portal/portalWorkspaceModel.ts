@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import type { S3Account } from "../../api/accounts";
+import type { PortalAccount } from "../../api/portal";
 import type {
   PortalState,
   PortalStorageSpaceAccountMemberRole,
@@ -164,7 +164,7 @@ export function buildPortalWorkspaceModel({
   locale = "en",
   t = translate,
 }: {
-  account: S3Account | null;
+  account: PortalAccount | null;
   state: PortalState | null;
   storageSpaces?: PortalStorageSpaceSummary[] | null;
   usage: PortalUsage | null;

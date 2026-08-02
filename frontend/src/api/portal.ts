@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client, { LONG_RUNNING_REQUEST_TIMEOUT_MS, timeoutForRequestProfile } from "./client";
-import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { PortalSettings, PortalSettingsOverride } from "./appSettings";
 import type { BucketUsageStatsAggregateResponse, BucketUsageStatsSnapshot } from "./bucketUsageStats";
@@ -32,6 +31,17 @@ export type PortalAccessKey = {
   storage_space_name?: string | null;
   bucket_name?: string | null;
   permission?: "read_only" | "read_write" | null;
+};
+
+export type PortalAccount = {
+  id: string;
+  name: string;
+  rgw_account_id: string;
+  account_role: "portal_user" | "portal_manager";
+  storage_endpoint_name: string;
+  storage_endpoint_url: string;
+  storage_endpoint_is_default: boolean;
+  storage_endpoint_capabilities: Record<string, boolean>;
 };
 
 export type PortalAccessKeyCreate = {
@@ -530,8 +540,8 @@ export type PortalProjectSettings = {
   can_update: boolean;
 };
 
-export async function listPortalAccounts(options?: { signal?: AbortSignal }): Promise<S3Account[]> {
-  const { data } = await client.get<S3Account[]>("/portal/accounts", {
+export async function listPortalAccounts(options?: { signal?: AbortSignal }): Promise<PortalAccount[]> {
+  const { data } = await client.get<PortalAccount[]>("/portal/accounts", {
     signal: options?.signal,
     timeout: timeoutForRequestProfile("interactive"),
   });

@@ -3,11 +3,24 @@
 from datetime import datetime
 from typing import Literal, Optional, Union
 
-from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride
 from app.models.bucket_usage_stats import BucketUsageStatsDistributionEntry, BucketUsageStatsScanMode
 from app.models.user import UserAvatar
+
+
+class PortalAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    rgw_account_id: str
+    account_role: Literal["portal_user", "portal_manager"]
+    storage_endpoint_name: str
+    storage_endpoint_url: str
+    storage_endpoint_is_default: bool
+    storage_endpoint_capabilities: dict[str, bool]
 
 
 class PortalAccessKey(BaseModel):

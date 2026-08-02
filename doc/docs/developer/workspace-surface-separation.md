@@ -202,6 +202,12 @@ default Portal account are UI defaults only; they never grant account access.
 Portal clients must not call the removed legacy endpoints listed above.
 Use these replacement surfaces instead:
 
+- `GET /portal/accounts` returns the Portal project catalog only: project ID,
+  name, RGW account ID, required effective Portal role, and endpoint display and
+  capability metadata. Admin account fields and the always-empty account quota
+  placeholders are no longer part of this response; use `/portal/state` for
+  effective account quotas.
+
 - Storage Space list/detail/create/update: `/portal/storage-spaces*`.
 - Simple object list/detail/upload/download/delete/folders:
   `/portal/storage-spaces/{spaceId}` for the locked Browser file profile and

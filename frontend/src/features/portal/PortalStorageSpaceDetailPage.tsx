@@ -1362,8 +1362,12 @@ export default function PortalStorageSpaceDetailPage() {
             lockedBucketName={lockedBucketName}
             lockedBucketLabel={space.name}
             storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
-            quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}
-            quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
+            quotaMaxSizeGb={
+              state?.quota_max_size_bytes != null
+                ? state.quota_max_size_bytes / 1024 ** 3
+                : null
+            }
+            quotaMaxObjects={state?.quota_max_objects ?? null}
             onOpenObjectDetailsRoute={(target) => {
               if (target.bucketName !== lockedBucketName) return;
               const params = new URLSearchParams();

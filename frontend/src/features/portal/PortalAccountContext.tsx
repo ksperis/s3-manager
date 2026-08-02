@@ -5,9 +5,8 @@
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
-import { S3Account } from "../../api/accounts";
 import { useI18n } from "../../i18n";
-import { listPortalAccounts } from "../../api/portal";
+import { listPortalAccounts, type PortalAccount } from "../../api/portal";
 import { extractApiError } from "../../utils/apiError";
 import { CLIENT_STORAGE_KEYS, readClientStorage, removeClientStorage, writeClientStorage } from "../../utils/clientStorage";
 import { readStoredUser } from "../../utils/workspaces";
@@ -17,12 +16,12 @@ const PORTAL_ACCOUNT_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedPortalAccount;
 const PORTAL_ACCOUNT_URL_PARAM = "project";
 
 type PortalAccountContextType = {
-  accounts: S3Account[];
+  accounts: PortalAccount[];
   selectedAccountId: string | null;
   setSelectedAccountId: (id: string | null) => void;
   hasAccountContext: boolean;
   accountIdForApi: S3AccountSelector;
-  selectedAccount: S3Account | null;
+  selectedAccount: PortalAccount | null;
   loading: boolean;
   error: string | null;
 };
@@ -40,7 +39,7 @@ const PortalAccountContext = createContext<PortalAccountContextType>({
 
 export function PortalAccountProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const [accounts, setAccounts] = useState<S3Account[]>([]);
+  const [accounts, setAccounts] = useState<PortalAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);

@@ -31,8 +31,6 @@ export type S3Account = {
   db_id?: number | null;
   name: string;
   tags: TagDefinitionSummary[];
-  /** Portal-only projected role; Admin account associations use user_links/group_links.role. */
-  account_role?: "portal_user" | "portal_manager" | null;
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   rgw_account_id?: string;

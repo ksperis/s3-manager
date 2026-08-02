@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.db import AccountRole, QuotaUsageDaily, S3Account, User, UserS3Account, is_admin_ui_role
+from app.db import AccountRole, QuotaUsageDaily, S3Account, User
 from app.models.bucket_usage_stats import BucketUsageStatsAggregateResponse
 from app.models.portal import (
     PortalAccessKey,
     PortalAccessKeyCreate,
     PortalAccessKeysState,
     PortalAccessKeyStatusChange,
+    PortalAccount,
     PortalActivityItem,
     PortalAlert,
     PortalCollaboratorsResponse,
@@ -67,7 +68,6 @@ from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
 from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
-from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.bucket_purge_stream import SSE_KEEPALIVE_INTERVAL_SECONDS, format_sse_event
 from app.routers.dependencies import (
     AccountAccess,
@@ -488,57 +488,40 @@ def _stream_portal_deleted_prefix_restore(
     )
 
 
-@router.get("/accounts", response_model=list[S3AccountSchema])
+@router.get("/accounts", response_model=list[PortalAccount])
 def list_portal_accounts(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
-) -> list[S3AccountSchema]:
+) -> list[PortalAccount]:
     access_service = EffectiveAccessService(db)
-    links = [
-        link
-        for link in access_service.resolve_user(user).account_links
+    resolved = access_service.resolve_user(user)
+    portal_roles = {
+        link.account_id: link.portal_role
+        for link in resolved.account_links
         if link.portal_role is not None
-    ]
-    account_role_by_id = {link.account_id: link.portal_role for link in links}
+    }
     accounts = sorted(
-        access_service.list_portal_accounts(user),
+        access_service.list_portal_accounts(user, resolved=resolved),
         key=lambda account: (account.name or "").lower(),
     )
-    results: list[S3AccountSchema] = []
-    for acc in accounts:
-        endpoint = acc.storage_endpoint
-        root_link = None
-        if is_admin_ui_role(user.role):
-            root_link = (
-                db.query(UserS3Account)
-                .filter(
-                    UserS3Account.account_id == acc.id,
-                    UserS3Account.is_root.is_(True),
+    return [
+        PortalAccount(
+            id=str(account.id),
+            name=account.name,
+            rgw_account_id=account.rgw_account_id,
+            account_role=portal_roles[account.id],
+            storage_endpoint_name=account.storage_endpoint.name,
+            storage_endpoint_url=account.storage_endpoint.endpoint_url,
+            storage_endpoint_is_default=bool(account.storage_endpoint.is_default),
+            storage_endpoint_capabilities=features_to_capabilities(
+                normalize_features_config(
+                    account.storage_endpoint.provider,
+                    account.storage_endpoint.features_config,
                 )
-                .join(User)
-                .with_entities(User.email, User.id)
-                .first()
-            )
-        results.append(
-            S3AccountSchema(
-                id=str(acc.id),
-                name=acc.name,
-                rgw_account_id=acc.rgw_account_id,
-                quota_max_size_gb=None,
-                quota_max_objects=None,
-                root_user_email=root_link[0] if root_link else None,
-                root_user_id=root_link[1] if root_link else None,
-                storage_endpoint_id=endpoint.id,
-                storage_endpoint_name=endpoint.name,
-                storage_endpoint_url=endpoint.endpoint_url,
-                storage_endpoint_is_default=bool(endpoint.is_default),
-                storage_endpoint_capabilities=features_to_capabilities(
-                    normalize_features_config(endpoint.provider, endpoint.features_config)
-                ),
-                account_role=account_role_by_id.get(acc.id),
-            )
+            ),
         )
-    return results
+        for account in accounts
+    ]
 
 
 @router.get("/eligibility", response_model=PortalEligibility)

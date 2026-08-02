@@ -3,9 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ExecutionContext } from "../../api/executionContexts";
-import { S3Account } from "../../api/accounts";
 
-type AccountLike = ExecutionContext | S3Account;
+type StoredAccount = {
+  name: string;
+  is_s3_user?: boolean;
+  storage_endpoint_name: string;
+  storage_endpoint_is_default: boolean;
+};
+
+type AccountLike = ExecutionContext | StoredAccount;
 
 function isExecutionContext(value: AccountLike): value is ExecutionContext {
   return "display_name" in value;
@@ -34,7 +40,7 @@ export function formatAccountLabel(
 ): string {
   const isLegacyUser = isExecutionContext(context)
     ? context.kind === "legacy_user"
-    : context.is_s3_user;
+    : Boolean(context.is_s3_user);
   const isConnection = isExecutionContext(context) && context.kind === "connection";
   const badge = includeContextBadge
     ? isConnection

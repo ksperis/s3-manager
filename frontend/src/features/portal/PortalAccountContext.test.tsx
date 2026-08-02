@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PortalAccount } from "../../api/portal";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 
 const listPortalAccountsMock = vi.fn();
@@ -17,9 +18,27 @@ vi.mock("../../i18n", () => ({
 }));
 
 const ACCOUNTS = [
-  { id: "101", name: "Project 101", tags: [] },
-  { id: "102", name: "Project 102", tags: [] },
-];
+  {
+    id: "101",
+    name: "Project 101",
+    rgw_account_id: "rgw-101",
+    account_role: "portal_user",
+    storage_endpoint_name: "Primary",
+    storage_endpoint_url: "https://s3.example.test",
+    storage_endpoint_is_default: true,
+    storage_endpoint_capabilities: {},
+  },
+  {
+    id: "102",
+    name: "Project 102",
+    rgw_account_id: "rgw-102",
+    account_role: "portal_manager",
+    storage_endpoint_name: "Primary",
+    storage_endpoint_url: "https://s3.example.test",
+    storage_endpoint_is_default: true,
+    storage_endpoint_capabilities: {},
+  },
+] satisfies PortalAccount[];
 
 function Probe() {
   const { selectedAccountId } = usePortalAccountContext();

@@ -56,12 +56,17 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
         _seed_account(db_session, name="alpha", rgw_account_id="RGW-PORTAL-02", endpoint_id=endpoint.id),
         _seed_account(db_session, name="Beta", rgw_account_id="RGW-PORTAL-03", endpoint_id=endpoint.id),
     ]
-    for account in accounts:
+    roles = [
+        AccountRole.PORTAL_USER.value,
+        AccountRole.PORTAL_MANAGER.value,
+        AccountRole.PORTAL_USER.value,
+    ]
+    for account, role in zip(accounts, roles, strict=True):
         db_session.add(
             UserS3Account(
                 user_id=actor.id,
                 account_id=account.id,
-                role=AccountRole.PORTAL_USER.value,
+                role=role,
                 is_root=False,
             )
         )
@@ -91,3 +96,18 @@ def test_portal_accounts_are_sorted_case_insensitive(client, db_session, monkeyp
     assert response.status_code == 200, response.text
     payload = response.json()
     assert [item["name"] for item in payload] == ["alpha", "Beta", "Zulu"]
+    assert [item["account_role"] for item in payload] == [
+        AccountRole.PORTAL_MANAGER.value,
+        AccountRole.PORTAL_USER.value,
+        AccountRole.PORTAL_USER.value,
+    ]
+    assert set(payload[0]) == {
+        "id",
+        "name",
+        "rgw_account_id",
+        "account_role",
+        "storage_endpoint_name",
+        "storage_endpoint_url",
+        "storage_endpoint_is_default",
+        "storage_endpoint_capabilities",
+    }
