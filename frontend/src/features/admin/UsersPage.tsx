@@ -8,6 +8,7 @@ import {
   type EffectiveAccountMembership,
   UpdateUserPayload,
   User,
+  type UiRole,
   assignUserToS3Account,
   createUser,
   deleteUser,
@@ -846,23 +847,14 @@ export default function UsersPage() {
   const visibleCreateS3Connections = limitedOptions(availableCreateS3Connections);
   const visibleEditS3Users = limitedOptions(availableEditS3Users);
   const visibleEditS3Connections = limitedOptions(availableEditS3Connections);
-  const normalizeUiRoleValue = (role?: string | null): string => {
-    const value = (role || "").toLowerCase();
-    if (value === "ui_superadmin" || value === "super_admin" || value === "superadmin") return "ui_superadmin";
-    if (value === "ui_admin" || value === "account_admin" || value === "admin") return "ui_admin";
-    if (value === "ui_none" || value === "none") return "ui_none";
-    return "ui_user";
+  const displayUiRole = (role: UiRole) => {
+    if (role === "ui_superadmin") return "Superadmin";
+    if (role === "ui_admin") return "Admin";
+    if (role === "ui_user") return "User";
+    return "No access";
   };
-  const displayUiRole = (role?: string | null) => {
-    const value = (role || "").toLowerCase();
-    if (value === "ui_superadmin" || value === "super_admin" || value === "superadmin") return "Superadmin";
-    if (value === "ui_admin" || value === "account_admin" || value === "admin") return "Admin";
-    if (value === "ui_user" || value === "account_user") return "User";
-    if (value === "ui_none" || value === "none") return "No access";
-    return role || "-";
-  };
-  const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
-  const createRoleValue = normalizeUiRoleValue(form.role);
+  const editRoleValue = editForm.role ?? editingUser?.role ?? "ui_user";
+  const createRoleValue = form.role ?? "ui_user";
   const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
   const createTargetSupportsStorageOps =
     createRoleValue === "ui_user" || createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
@@ -1467,17 +1459,17 @@ export default function UsersPage() {
       setActionError("Email and password are required.");
       return;
     }
-    const normalizedRole = normalizeUiRoleValue(form.role);
+    const role = form.role ?? "ui_user";
     const payload: CreateUserPayload = {
       email: form.email,
       password: form.password,
-      role: normalizedRole,
+      role,
       can_access_ceph_admin:
-        currentIsSuperAdmin && (normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
+        currentIsSuperAdmin && (role === "ui_admin" || role === "ui_superadmin")
           ? Boolean(form.can_access_ceph_admin)
           : false,
       can_access_storage_ops:
-        currentIsAdminLike && (normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
+        currentIsAdminLike && (role === "ui_user" || role === "ui_admin" || role === "ui_superadmin")
           ? Boolean(form.can_access_storage_ops)
           : false,
       browser_advanced_features_enabled: Boolean(form.browser_advanced_features_enabled),
@@ -1521,17 +1513,17 @@ export default function UsersPage() {
   };
 
   const startEdit = (user: User) => {
-    const normalizedRole = normalizeUiRoleValue(user.role);
+    const role = user.role;
     const nextEditForm = {
       email: user.email,
       password: "",
-      role: normalizedRole,
+      role,
       can_access_ceph_admin:
-        normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
+        role === "ui_admin" || role === "ui_superadmin"
           ? Boolean(user.can_access_ceph_admin)
           : false,
       can_access_storage_ops:
-        normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
+        role === "ui_user" || role === "ui_admin" || role === "ui_superadmin"
           ? Boolean(user.can_access_storage_ops)
           : false,
       manager_tool_access: normalizeManagerToolAccess(user.manager_tool_access),
@@ -1622,7 +1614,7 @@ export default function UsersPage() {
     setActionMessage(null);
     try {
       const payload: UpdateUserPayload = {};
-      const nextRole = normalizeUiRoleValue(editForm.role ?? editingUser.role);
+      const nextRole = editForm.role ?? editingUser.role;
       if (editForm.email) {
         payload.email = editForm.email;
       }
@@ -1732,8 +1724,7 @@ export default function UsersPage() {
         <div className="flex flex-wrap items-center gap-2">
           <span>{displayUiRole(user.role)}</span>
           {cephAdminFeatureEnabled &&
-            (normalizeUiRoleValue(user.role) === "ui_admin" ||
-              normalizeUiRoleValue(user.role) === "ui_superadmin") &&
+            (user.role === "ui_admin" || user.role === "ui_superadmin") &&
             user.can_access_ceph_admin && (
               <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                 Ceph Admin
@@ -1872,7 +1863,7 @@ export default function UsersPage() {
                     className={userModalFieldClass}
                     value={createRoleValue}
                     onChange={(e) => {
-                      const value = normalizeUiRoleValue(e.target.value);
+                      const value = e.target.value as UiRole;
                       const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
                       const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
                       setForm((f) => ({
@@ -2158,7 +2149,7 @@ export default function UsersPage() {
                     className={userModalFieldClass}
                     value={editRoleValue}
                     onChange={(e) => {
-                      const value = normalizeUiRoleValue(e.target.value);
+                      const value = e.target.value as UiRole;
                       const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
                       const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
                       setEditForm((f) => ({

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.security import get_password_hash
 from app.db import (
@@ -15,6 +16,7 @@ from app.db import (
     UserS3Account,
     UserS3Connection,
 )
+from app.models.admin_automation import UiUserSpec
 from app.models.user import PASSWORD_POLICY_ERROR, UserCreate, UserUpdate
 from app.services.users_service import UsersService
 
@@ -101,10 +103,19 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     with pytest.raises(ValueError, match=PASSWORD_POLICY_ERROR):
         service.create_user(UserCreate(email="short@example.com", password="short", full_name="Short"))
 
-    with pytest.raises(ValueError, match="Invalid role"):
-        service.create_user(
-            UserCreate(email="invalid-role@example.com", password="verylongpass123", full_name="Invalid", role="bad-role")
+    with pytest.raises(ValidationError):
+        UserCreate(
+            email="invalid-role@example.com",
+            password="verylongpass123",
+            full_name="Invalid",
+            role="bad-role",  # type: ignore[arg-type]
         )
+
+    with pytest.raises(ValidationError):
+        UserUpdate(role="admin")  # type: ignore[arg-type]
+
+    with pytest.raises(ValidationError):
+        UiUserSpec(role="user")  # type: ignore[arg-type]
 
     created = service.create_user(
         UserCreate(

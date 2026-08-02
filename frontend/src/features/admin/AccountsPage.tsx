@@ -218,9 +218,7 @@ export default function S3AccountsPage() {
   const [userPortalRoleChoice, setUserPortalRoleChoice] = useState<Record<number, AccountAccessRole>>({});
   const [groupPortalRoleChoice, setGroupPortalRoleChoice] = useState<Record<number, AccountAccessRole>>({});
   const MAX_LINK_OPTIONS = 10;
-  const currentUser = useMemo(() => {
-    return readStoredUser() as { role?: string | null } | null;
-  }, []);
+  const currentUser = useMemo(() => readStoredUser(), []);
   const isSuperAdmin = isAdminLikeRole(currentUser?.role);
   const canManagePrivilegedTargets = isAdminLikeRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;

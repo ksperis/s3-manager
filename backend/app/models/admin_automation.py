@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db import StorageProvider
 from app.models.s3_connection import CredentialOwnerType
-from app.models.user import ManagerToolAccess
+from app.models.user import ManagerToolAccess, UiRole
 from app.utils.account_roles import CanonicalAccountRole
 
 
@@ -68,7 +68,7 @@ class UiUserSpec(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     full_name: Optional[str] = None
-    role: Optional[str] = None
+    role: Optional[UiRole] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
     manager_tool_access: Optional[ManagerToolAccess] = None

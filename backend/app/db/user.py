@@ -3,7 +3,7 @@
 from app.db.utc_datetime import UTCDateTime
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -15,6 +15,10 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("auth_provider", "auth_provider_subject", name="uq_users_provider_subject"),
+        CheckConstraint(
+            "role IN ('ui_superadmin', 'ui_admin', 'ui_user', 'ui_none')",
+            name="ck_users_role",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -28,7 +32,12 @@ class User(Base):
     avatar_updated_at = Column(UTCDateTime(), nullable=True)
     hashed_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    role = Column(String, nullable=False, default=UserRole.UI_USER.value)
+    role = Column(
+        String,
+        nullable=False,
+        default=UserRole.UI_USER.value,
+        server_default=UserRole.UI_USER.value,
+    )
     is_root = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_ceph_admin = Column(Boolean, default=False, nullable=False, server_default="0")
     can_access_storage_ops = Column(Boolean, default=False, nullable=False, server_default="0")

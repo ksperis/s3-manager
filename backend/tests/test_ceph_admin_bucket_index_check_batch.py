@@ -107,7 +107,7 @@ def test_batch_route_builds_stream_runner_and_invalidates_once(client: TestClien
     ctx = SimpleNamespace(
         endpoint=SimpleNamespace(id=7, name="Lab"),
         rgw_admin=FakeAdmin(),
-        actor=SimpleNamespace(id=1, email="admin@example.test", role="superadmin"),
+        actor=SimpleNamespace(id=1, email="admin@example.test", role="ui_superadmin"),
     )
 
     class FakeService:

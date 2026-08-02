@@ -25,21 +25,6 @@ from app.routers.http_errors import sanitize_error_detail
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 
-def _normalize_role(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    if normalized in {"ui_superadmin", "super_admin", "superadmin"}:
-        return UserRole.UI_SUPERADMIN.value
-    if normalized in {"ui_admin", "admin"}:
-        return UserRole.UI_ADMIN.value
-    if normalized in {"ui_user", "user"}:
-        return UserRole.UI_USER.value
-    if normalized in {"ui_none", "none"}:
-        return UserRole.UI_NONE.value
-    return value
-
-
 def _manager_access_grants_bucket_quota(manager_tool_access: Optional[ManagerToolAccess]) -> bool:
     return bool(manager_tool_access and manager_tool_access.bucket_quota is True)
 
@@ -114,7 +99,6 @@ def create_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
-    payload.role = _normalize_role(payload.role)
     _require_superadmin_for_privileged_change(
         current_user,
         role=payload.role,
@@ -149,7 +133,6 @@ def update_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
-    payload.role = _normalize_role(payload.role)
     _require_superadmin_for_privileged_change(
         current_user,
         role=payload.role,

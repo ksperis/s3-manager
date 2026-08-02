@@ -17,7 +17,7 @@ import {
 } from "../../api/s3Users";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
 import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
-import { listMinimalUsers, UserSummary } from "../../api/users";
+import { listMinimalUsers, type UserSummary } from "../../api/users";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import ListPageSection from "../../components/list/ListPageSection";
 import PageHeader from "../../components/PageHeader";
@@ -73,6 +73,10 @@ import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type SortField = "name" | "uid";
 type EditTab = "general" | "users" | "groups" | "privileged";
+
+function missingUserSummary(id: number): UserSummary {
+  return { id, email: `User #${id}`, role: "ui_none" };
+}
 
 function getS3UserSearchCandidates(user: S3User): Array<string | number | null | undefined> {
   return [
@@ -381,7 +385,9 @@ export default function S3UsersPage() {
   const renderUserAssociations = (user: S3User) => {
     const userItems: AssociationPrincipalItem[] = (user.user_details && user.user_details.length > 0
       ? user.user_details
-      : (user.user_ids ?? []).map((id) => portalUsersById.get(id) ?? { id, email: `User #${id}` })
+      : (user.user_ids ?? []).map(
+          (id) => portalUsersById.get(id) ?? missingUserSummary(id),
+        )
     ).map((uiUser) => {
       return {
         id: uiUser.id,

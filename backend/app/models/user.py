@@ -9,6 +9,7 @@ from app.utils.account_roles import CanonicalAccountRole
 
 UiLanguage = Literal["en", "fr", "de"]
 UiThemePreference = Literal["light", "dark"]
+UiRole = Literal["ui_superadmin", "ui_admin", "ui_user", "ui_none"]
 UserAvatarPreference = Literal["auto", "uploaded", "gravatar", "initials"]
 UserAvatarSource = Literal["uploaded", "provider", "gravatar", "initials"]
 MIN_PASSWORD_LENGTH = 12
@@ -97,7 +98,7 @@ class UserSummary(BaseModel):
     full_name: Optional[str] = None
     display_name: Optional[str] = None
     avatar: Optional[UserAvatar] = None
-    role: Optional[str] = None
+    role: UiRole
     iam_username: Optional[str] = None
 
 
@@ -135,7 +136,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
-    role: Optional[str] = None
+    role: Optional[UiRole] = None
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False
@@ -147,7 +148,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
-    role: Optional[str] = None
+    role: Optional[UiRole] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
     can_access_ceph_admin: Optional[bool] = None
@@ -200,7 +201,7 @@ class UserOut(BaseModel):
     avatar: UserAvatar
     is_active: bool = True
     is_admin: bool = False
-    role: Optional[str] = None
+    role: UiRole
     is_root: bool = False
     can_access_ceph_admin: bool = False
     can_access_storage_ops: bool = False

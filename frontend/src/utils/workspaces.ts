@@ -5,7 +5,13 @@
 import type { GeneralSettings } from "../api/appSettings";
 import type { AccountAccessRole } from "../api/accountRoles";
 import type { WorkspaceAccess } from "../api/executionContexts";
-import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "../api/users";
+import type {
+  EffectiveUserAccess,
+  ManagerToolAccess,
+  UiPreferences,
+  UiRole,
+  UserAvatarDescriptor,
+} from "../api/users";
 import { CLIENT_STORAGE_KEYS, readClientJson, readClientStorage } from "./clientStorage";
 
 export const WORKSPACE_STORAGE_KEY = CLIENT_STORAGE_KEYS.selectedWorkspace;
@@ -35,7 +41,7 @@ export type SessionUser = {
   full_name?: string | null;
   display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
-  role?: string | null;
+  role?: UiRole | null;
   ui_language?: "en" | "fr" | "de" | null;
   ui_preferences?: UiPreferences | null;
   can_access_ceph_admin?: boolean | null;
@@ -74,14 +80,12 @@ const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "browser", label: "Browser (objects)", path: "/browser" },
 ];
 
-export function isSuperAdminRole(role?: string | null): boolean {
-  const normalized = (role ?? "").trim().toLowerCase();
-  return normalized === SUPERADMIN_ROLE || normalized === "super_admin" || normalized === "superadmin";
+export function isSuperAdminRole(role?: UiRole | null): boolean {
+  return role === SUPERADMIN_ROLE;
 }
 
-export function isAdminLikeRole(role?: string | null): boolean {
-  const normalized = (role ?? "").trim().toLowerCase();
-  return normalized === ADMIN_ROLE || isSuperAdminRole(normalized);
+export function isAdminLikeRole(role?: UiRole | null): boolean {
+  return role === ADMIN_ROLE || isSuperAdminRole(role);
 }
 
 export function getManagerToolAccess(user: SessionUser | null): ManagerToolAccess | null {

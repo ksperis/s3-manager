@@ -168,6 +168,7 @@ import {
 import { extractApiError, isApiFeatureNotImplemented } from "../../utils/apiError";
 import { formatBytes } from "../../utils/format";
 import { createUiDraftId } from "../../utils/uiDraftId";
+import type { UiRole } from "../../api/users";
 
 type ReplicationRuleDraft = GraphicalReplicationRule & { uiId: string };
 type BucketTagDraft = BucketTag & { uiId: string };
@@ -182,7 +183,7 @@ function createBucketTagDraft(tag: BucketTag = { key: "", value: "" }): BucketTa
   return { ...tag, uiId: createUiDraftId("bucket-tag") };
 }
 
-function getUserRole(): string | null {
+function getUserRole(): UiRole | null {
   return readStoredUser()?.role ?? null;
 }
 

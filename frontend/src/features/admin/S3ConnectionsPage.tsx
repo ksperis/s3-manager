@@ -44,7 +44,7 @@ import {
 } from "../../api/s3ConnectionsAdmin";
 import type { CredentialOwnerType } from "../../api/connections";
 import { listMinimalGroups, type UiGroupSummary } from "../../api/groups";
-import { listMinimalUsers, UserSummary } from "../../api/users";
+import { listMinimalUsers, type UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import ActiveFiltersBar from "../../components/ActiveFiltersBar";
 import { extractApiError } from "../../utils/apiError";
@@ -80,6 +80,10 @@ const credentialOwnerTypeOptions = [
   { value: "s3_user", label: "S3 user" },
 ];
 type EditTab = "general" | "users" | "groups";
+
+function missingUserSummary(id: number): UserSummary {
+  return { id, email: `User #${id}`, role: "ui_none" };
+}
 
 function getConnectionSearchCandidates(connection: S3ConnectionAdminItem): Array<string | number | null | undefined> {
   return [
@@ -415,7 +419,9 @@ export default function S3ConnectionsPage() {
     const userItems: AssociationPrincipalItem[] = (
       connection.user_details && connection.user_details.length > 0
         ? connection.user_details
-        : (connection.user_ids ?? []).map((id) => portalUsersById.get(id) ?? { id, email: `User #${id}` })
+        : (connection.user_ids ?? []).map(
+            (id) => portalUsersById.get(id) ?? missingUserSummary(id),
+          )
     ).map((user) => {
       return {
         id: user.id,

@@ -2,13 +2,17 @@
 # Licensed under the Apache License, Version 2.0
 from types import SimpleNamespace
 
-from app.db import S3Account, User
+from app.db import S3Account, User, UserRole
 from app.routers.manager import context as context_router
 
 
 def _prepare_context(db_session, monkeypatch):
     account = S3Account(name="limits-account", rgw_account_id="RGW-LIMITS")
-    actor = User(email="limits@example.test", hashed_password="x", role="admin")
+    actor = User(
+        email="limits@example.test",
+        hashed_password="x",
+        role=UserRole.UI_ADMIN.value,
+    )
     db_session.add_all([account, actor])
     db_session.commit()
     monkeypatch.setattr(context_router, "_manager_stats_state", lambda *_args: (False, None, None))

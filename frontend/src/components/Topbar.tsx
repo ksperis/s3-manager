@@ -8,7 +8,7 @@ import {
   markUserNotificationsRead,
   type UserNotification,
 } from "../api/userNotifications";
-import type { UserAvatarDescriptor } from "../api/users";
+import type { UiRole, UserAvatarDescriptor } from "../api/users";
 import {
   isAdminLikeRole,
   isSuperAdminRole,
@@ -47,7 +47,7 @@ type StoredTopbarUser = {
   full_name?: string | null;
   display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
-  role?: string | null;
+  role?: UiRole | null;
   authType?: "password" | "s3_session" | "oidc" | "ldap" | null;
   account_links?: StoredAccountLink[] | null;
 };
@@ -55,11 +55,10 @@ type StoredTopbarUser = {
 function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
   if (!user) return "Unknown";
   if (user.authType === "s3_session") return "S3 Session";
-  const role = (user.role ?? "").trim().toLowerCase();
-  if (role === "ui_superadmin" || role === "super_admin" || role === "superadmin") return "Superadmin";
-  if (role === "ui_admin" || role === "admin") return "Admin";
-  if (role === "ui_user" || role === "user") return "User";
-  if (role === "ui_none" || role === "none") return "No access";
+  if (user.role === "ui_superadmin") return "Superadmin";
+  if (user.role === "ui_admin") return "Admin";
+  if (user.role === "ui_user") return "User";
+  if (user.role === "ui_none") return "No access";
   return "Unknown";
 }
 

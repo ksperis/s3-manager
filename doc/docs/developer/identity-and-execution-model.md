@@ -8,7 +8,7 @@ credentials perform S3, IAM, or RGW operations.
 
 | Identity | What it controls | Examples |
 |---|---|---|
-| UI identity | Workspace visibility, Admin settings, Manager tool access, and audit actor. | `ui_user`, `ui_admin`, `ui_superadmin`, UI groups, `can_access_storage_ops`, `can_access_ceph_admin`. |
+| UI identity | Workspace visibility, Admin settings, Manager tool access, and audit actor. | `ui_none`, `ui_user`, `ui_admin`, `ui_superadmin`, UI groups, `can_access_storage_ops`, `can_access_ceph_admin`. |
 | Execution context | Credentials and account scope used by storage actions. | RGW account, S3 connection, legacy S3 user, session context, Ceph Admin endpoint. |
 | Portal grant model | User-facing Storage Space visibility and role. | Private Owner, team Viewer/Editor grants, project Manager, Portal account links. |
 | Backend workflow identity | Explicit technical credential used for controlled orchestration. | Portal IAM provisioning, healthchecks, billing, quota, key rotation. |
@@ -40,6 +40,16 @@ credentials perform S3, IAM, or RGW operations.
   use.
 - Backend services resolve the executor from the requested context and reject
   incompatible contexts instead of silently switching to another identity.
+
+## Canonical UI roles
+
+`users.role` stores exactly one role: `ui_none`, `ui_user`, `ui_admin`, or
+`ui_superadmin`. The database constraint, backend request models, automation
+models, and frontend API types share this contract. Historical aliases are
+migrated by revision `0092`; they are not accepted or normalized at runtime.
+
+`ui_none` is the explicit no-workspace role. Unknown historical values migrate
+to `ui_none` so canonicalization cannot grant access accidentally.
 
 ## Canonical account access
 

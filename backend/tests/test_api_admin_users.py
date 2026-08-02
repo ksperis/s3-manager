@@ -96,6 +96,34 @@ def test_assign_user_to_account_rejects_internal_root_flag(
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "legacy_role",
+    ["super_admin", "superadmin", "account_admin", "admin", "account_user", "user", "none"],
+)
+def test_admin_user_api_rejects_legacy_ui_roles(
+    client: TestClient,
+    seed_user_account,
+    legacy_role: str,
+):
+    user, _ = seed_user_account
+
+    create_response = client.post(
+        "/api/admin/users",
+        json={
+            "email": f"legacy-{legacy_role}@example.com",
+            "password": "secret-pass-01",
+            "role": legacy_role,
+        },
+    )
+    update_response = client.put(
+        f"/api/admin/users/{user.id}",
+        json={"role": legacy_role},
+    )
+
+    assert create_response.status_code == 422
+    assert update_response.status_code == 422
+
+
 def test_update_user_replaces_account_links_atomically(client: TestClient, db_session, seed_user_account):
     usr, first_account = seed_user_account
     second_account = S3Account(name="api-acc-2", rgw_account_id="RGW00000000000000003")

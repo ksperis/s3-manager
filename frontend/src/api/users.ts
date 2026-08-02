@@ -6,6 +6,8 @@ import client, { timeoutForRequestProfile } from "./client";
 import { PaginatedResponse } from "./types";
 import type { AccountAccessRole } from "./accountRoles";
 
+export type UiRole = "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
+
 export type AccountMembership = {
   account_id: number;
   role: AccountAccessRole;
@@ -73,7 +75,7 @@ export type User = {
   display_name?: string | null;
   picture_url?: string | null;
   avatar?: UserAvatarDescriptor | null;
-  role?: string | null;
+  role: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
@@ -106,13 +108,13 @@ export type UserSummary = {
   full_name?: string | null;
   display_name?: string | null;
   avatar?: UserAvatarDescriptor | null;
-  role?: string | null;
+  role: UiRole;
 };
 
 export type CreateUserPayload = {
   email: string;
   password: string;
-  role?: string;
+  role?: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;
@@ -123,7 +125,7 @@ export type CreateUserPayload = {
 export type UpdateUserPayload = {
   email?: string;
   password?: string;
-  role?: string;
+  role?: UiRole;
   can_access_ceph_admin?: boolean;
   can_access_storage_ops?: boolean;
   manager_tool_access?: ManagerToolAccess | null;

@@ -3,7 +3,13 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import type { EffectiveUserAccess, ManagerToolAccess, UiPreferences, UserAvatarDescriptor } from "./users";
+import type {
+  EffectiveUserAccess,
+  ManagerToolAccess,
+  UiPreferences,
+  UiRole,
+  UserAvatarDescriptor,
+} from "./users";
 import type { AccountAccessRole } from "./accountRoles";
 
 type LoginResponse = {
@@ -16,7 +22,7 @@ type LoginResponse = {
     display_name?: string | null;
     picture_url?: string | null;
     avatar?: UserAvatarDescriptor | null;
-    role?: string | null;
+    role: UiRole;
     is_admin?: boolean;
     is_root?: boolean;
     can_access_ceph_admin?: boolean;

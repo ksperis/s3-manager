@@ -113,8 +113,6 @@ class UsersService:
             raise ValueError("User already exists")
         validate_password_policy(payload.password)
         role = payload.role or UserRole.UI_USER.value
-        if role not in {entry.value for entry in UserRole}:
-            raise ValueError("Invalid role")
         is_root = bool(payload.is_root)
         can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
         can_access_storage_ops = (
@@ -185,8 +183,6 @@ class UsersService:
             validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)
         next_role = payload.role or user.role
-        if payload.role and payload.role not in {entry.value for entry in UserRole}:
-            raise ValueError("Invalid role")
         if payload.role:
             user.role = payload.role
         if payload.is_active is not None:

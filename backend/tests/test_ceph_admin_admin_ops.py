@@ -103,7 +103,7 @@ def _context(admin: FakeAdmin | None = None):
         endpoint=SimpleNamespace(id=91, name="Lab"),
         rgw_admin=admin or FakeAdmin(),
         access_key="AKIA-LAB",
-        actor=SimpleNamespace(id=1, email="admin@example.test", role="superadmin"),
+        actor=SimpleNamespace(id=1, email="admin@example.test", role="ui_superadmin"),
         audit_service=audit,
     )
     return ctx, audit
