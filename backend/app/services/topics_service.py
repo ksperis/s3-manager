@@ -51,9 +51,6 @@ class TopicsService:
     }
     _CEPH_NOTIFICATION_ENDPOINT_KEYS = {"EndpointAddress", "EndpointArgs", "EndpointTopic"}
 
-    def __init__(self) -> None:
-        pass
-
     def _account_credentials(self, account: S3Account) -> tuple[str, str]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:

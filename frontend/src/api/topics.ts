@@ -8,9 +8,9 @@ import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 export type Topic = {
   name: string;
   arn: string;
-  owner?: string | null;
-  is_ceph?: boolean;
-  configuration?: Record<string, unknown> | null;
+  owner: string | null;
+  is_ceph: boolean;
+  configuration: Record<string, unknown> | null;
 };
 
 type CreateTopicPayload = {
