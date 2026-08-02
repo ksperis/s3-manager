@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from app.db.utc_datetime import UTCDateTime
+from app.utils.s3_connection_capabilities import DEFAULT_S3_CONNECTION_CAPABILITIES_JSON
 from app.utils.time import utcnow
 
 from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
@@ -70,8 +71,13 @@ class S3Connection(Base):
     temp_user_uid = Column(String, nullable=True)
     temp_access_key_id = Column(String, nullable=True)
 
-    # Cached capability profile (JSON) computed from probes (optional)
-    capabilities_json = Column(Text, nullable=False, default="{}", server_default="{}")
+    # Cached capability profile (JSON) computed from probes.
+    capabilities_json = Column(
+        Text,
+        nullable=False,
+        default=DEFAULT_S3_CONNECTION_CAPABILITIES_JSON,
+        server_default=DEFAULT_S3_CONNECTION_CAPABILITIES_JSON,
+    )
     tags_json = Column(Text, nullable=False, default="[]", server_default="[]")
 
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)

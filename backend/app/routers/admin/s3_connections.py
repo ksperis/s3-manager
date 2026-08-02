@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.utils.time import utcnow
-import json
 import logging
 from typing import Optional
 
@@ -169,18 +168,6 @@ def _sync_group_links(db: Session, conn: S3Connection, group_ids: list[int]) -> 
         db.add(UiGroupS3Connection(group_id=group_id, s3_connection_id=conn.id))
 
 
-def _parse_capabilities(value: Optional[str]) -> dict:
-    return parse_s3_connection_capabilities(value)
-
-
-def _refresh_detected_capabilities(conn: S3Connection) -> None:
-    refresh_connection_detected_capabilities(conn)
-
-
-def _connection_iam_capable(conn: S3Connection) -> bool:
-    return s3_connection_can_manage_iam(conn.capabilities_json)
-
-
 def _to_admin_item(
     conn: S3Connection,
     *,
@@ -194,8 +181,7 @@ def _to_admin_item(
     tags_service: TagsService,
 ) -> S3ConnectionAdminItem:
     details = resolve_connection_details(conn)
-    capabilities = _parse_capabilities(conn.capabilities_json)
-    capabilities["can_manage_iam"] = _connection_iam_capable(conn)
+    capabilities = parse_s3_connection_capabilities(conn.capabilities_json)
     return S3ConnectionAdminItem(
         id=conn.id,
         name=conn.name,
@@ -422,7 +408,6 @@ def create_s3_connection(
         credential_owner_identifier=payload.credential_owner_identifier,
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
-        capabilities_json=json.dumps({}),
         tags_json="[]",
         created_at=utcnow(),
         updated_at=utcnow(),
@@ -431,7 +416,7 @@ def create_s3_connection(
         db.add(conn)
         db.flush()
         tags_service.replace_connection_tags(conn, payload.tags)
-        _refresh_detected_capabilities(conn)
+        refresh_connection_detected_capabilities(conn)
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -452,7 +437,7 @@ def create_s3_connection(
                 "created_by_user_id": conn.created_by_user_id,
                 "access_manager": bool(conn.access_manager),
                 "access_browser": bool(conn.access_browser),
-                "can_manage_iam": _connection_iam_capable(conn),
+                "can_manage_iam": s3_connection_can_manage_iam(conn.capabilities_json),
                 "access_key_id": _mask_access_key(conn.access_key_id),
                 "tags": serialize_tag_summaries(tags_service.get_connection_tags(conn)),
             },
@@ -554,7 +539,7 @@ def update_s3_connection(
     if payload.group_ids is not None:
         _sync_group_links(db, conn, payload.group_ids)
     if should_probe_iam:
-        _refresh_detected_capabilities(conn)
+        refresh_connection_detected_capabilities(conn)
     conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
@@ -644,7 +629,7 @@ def rotate_s3_connection_credentials(
         )
     conn.access_key_id = payload.access_key_id
     conn.secret_access_key = payload.secret_access_key
-    _refresh_detected_capabilities(conn)
+    refresh_connection_detected_capabilities(conn)
     conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)

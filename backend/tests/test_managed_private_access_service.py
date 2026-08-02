@@ -582,7 +582,7 @@ def test_server_managed_connection_generic_updates_protect_provenance_and_creden
         custom_endpoint_config='{"endpoint_url":"https://managed.example.test","verify_tls":true}',
         access_key_id="MANAGED-AK",
         secret_access_key="MANAGED-SK",
-        capabilities_json="{}",
+        capabilities_json='{"can_manage_iam":false}',
     )
     db_session.add(connection)
     db_session.commit()

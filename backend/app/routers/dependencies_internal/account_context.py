@@ -109,7 +109,7 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
 
 
 def _connection_iam_capable(conn: S3Connection) -> bool:
-    return s3_connection_can_manage_iam(getattr(conn, "capabilities_json", None))
+    return s3_connection_can_manage_iam(conn.capabilities_json)
 
 
 def _build_s3_user_account(s3_user: S3User) -> S3Account:

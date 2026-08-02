@@ -46,6 +46,6 @@ def probe_connection_can_manage_iam(connection) -> bool:
 
 def refresh_connection_detected_capabilities(connection) -> None:
     connection.capabilities_json = dump_s3_connection_capabilities(
-        getattr(connection, "capabilities_json", None),
+        connection.capabilities_json,
         can_manage_iam=probe_connection_can_manage_iam(connection),
     )

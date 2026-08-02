@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.utils.time import utcnow
-import json
 from datetime import datetime
 from typing import Any, Optional
 
@@ -165,7 +164,6 @@ class S3ConnectionsService:
             expires_at=expires_at,
             temp_user_uid=temp_user_uid,
             temp_access_key_id=temp_access_key_id,
-            capabilities_json=json.dumps({}),
             created_at=now,
             updated_at=now,
             last_used_at=now,
@@ -212,7 +210,6 @@ class S3ConnectionsService:
             credential_owner_identifier=payload.credential_owner_identifier,
             access_key_id=payload.access_key_id,
             secret_access_key=payload.secret_access_key,
-            capabilities_json=json.dumps({}),
             tags_json="[]",
             created_at=utcnow(),
             updated_at=utcnow(),
@@ -346,15 +343,6 @@ class S3ConnectionsService:
         row = self.get_visible(user_id, connection_id)
         return self._capabilities(row)
 
-    def set_capabilities(self, user_id: int, connection_id: int, caps: dict[str, Any]) -> None:
-        row = self.get_owned(user_id, connection_id)
-        row.capabilities_json = json.dumps(caps)
-        row.updated_at = utcnow()
-        self.db.commit()
-
-    def _parse_capabilities(self, value: Optional[str]) -> dict[str, Any]:
-        return parse_s3_connection_capabilities(value)
-
     def _resolve_access_flags(self, *, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:
         manager = bool(access_manager)
         browser = bool(access_browser)
@@ -365,13 +353,8 @@ class S3ConnectionsService:
     def _refresh_detected_capabilities(self, row: DBS3Connection) -> None:
         refresh_connection_detected_capabilities(row)
 
-    def _can_manage_iam(self, row: DBS3Connection) -> bool:
-        return s3_connection_can_manage_iam(row.capabilities_json)
-
     def _capabilities(self, row: DBS3Connection) -> dict[str, Any]:
-        caps = self._parse_capabilities(row.capabilities_json)
-        caps["can_manage_iam"] = self._can_manage_iam(row)
-        return caps
+        return parse_s3_connection_capabilities(row.capabilities_json)
 
     def _to_model(self, row: DBS3Connection) -> S3Connection:
         return s3_connection_from_db(

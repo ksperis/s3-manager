@@ -387,7 +387,7 @@ def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_ma
     assert "active-flag-conn" in owned_private_names
 
 
-def test_touch_last_used_set_get_capabilities_and_delete(db_session):
+def test_touch_last_used_get_capabilities_and_delete(db_session):
     owner = _user(db_session, "owner5@example.test")
     row = _create_row(
         db_session,
@@ -404,10 +404,6 @@ def test_touch_last_used_set_get_capabilities_and_delete(db_session):
     caps = service.get_capabilities(owner.id, row.id)
     assert caps["x"] == 1
     assert caps["can_manage_iam"] is False
-
-    service.set_capabilities(owner.id, row.id, {"can_manage_iam": True, "flag": "ok"})
-    db_session.refresh(row)
-    assert json.loads(row.capabilities_json)["flag"] == "ok"
 
     service.delete(owner.id, row.id)
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None

@@ -29,7 +29,7 @@ def _conn(**kwargs):
     base = {
         "access_key_id": "AKIA-CONN",
         "secret_access_key": "SECRET-CONN",
-        "capabilities_json": "{}",
+        "capabilities_json": '{"can_manage_iam":false}',
         "custom_endpoint_config": '{"endpoint_url":"https://s3.example.test","region":"eu-west-1","verify_tls":true}',
         "storage_endpoint": None,
     }
@@ -150,9 +150,9 @@ def test_probe_connection_can_manage_iam_handles_errors(monkeypatch):
 
 
 def test_refresh_connection_detected_capabilities_updates_json(monkeypatch):
-    connection = _conn(capabilities_json='{"iam_capable":true,"x":1}')
+    connection = _conn(capabilities_json='{"can_manage_iam":false,"x":1}')
     monkeypatch.setattr(svc, "probe_connection_can_manage_iam", lambda conn: True)
 
     svc.refresh_connection_detected_capabilities(connection)
     assert '"can_manage_iam": true' in connection.capabilities_json
-    assert "iam_capable" not in connection.capabilities_json
+    assert '"x": 1' in connection.capabilities_json

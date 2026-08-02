@@ -605,7 +605,6 @@ class ManagedPrivateAccessService:
             custom_endpoint_config=destination.custom_endpoint_config,
             access_key_id=access_key_id,
             secret_access_key=secret_access_key,
-            capabilities_json="{}",
             tags_json="[]",
             created_at=utcnow(),
             updated_at=utcnow(),

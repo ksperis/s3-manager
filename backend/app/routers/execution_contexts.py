@@ -34,7 +34,7 @@ def _provider_value(provider: object | None) -> Optional[str]:
 
 
 def _connection_can_manage_iam(connection: S3Connection) -> bool:
-    return s3_connection_can_manage_iam(getattr(connection, "capabilities_json", None))
+    return s3_connection_can_manage_iam(connection.capabilities_json)
 
 
 def _build_account_context(

@@ -1250,7 +1250,6 @@ class AdminAutomationService:
             credential_owner_identifier=spec.credential_owner_identifier,
             access_key_id=spec.access_key_id,
             secret_access_key=spec.secret_access_key,
-            capabilities_json="{}",
         )
         self.db.add(conn)
         self.db.flush()

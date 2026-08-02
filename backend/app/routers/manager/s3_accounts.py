@@ -21,7 +21,7 @@ router = APIRouter(prefix="/manager/accounts", tags=["manager-accounts"])
 
 
 def _connection_iam_capable(conn: S3Connection) -> bool:
-    return s3_connection_can_manage_iam(getattr(conn, "capabilities_json", None))
+    return s3_connection_can_manage_iam(conn.capabilities_json)
 
 
 @router.get("", response_model=list[S3AccountSchema])

@@ -1,5 +1,18 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical S3 connection capabilities
+
+Migration `0077_canonical_s3_connection_capabilities` rewrites every cached S3
+connection capability profile to a JSON object containing the required boolean
+`can_manage_iam`. Malformed profiles and the removed `iam_capable` key resolve
+to the safe value `false`; unrelated current extension fields are retained. The
+database default is changed to the same canonical profile.
+
+Deploy the migration and backend together. The backend now treats missing,
+malformed, or non-canonical profiles as data corruption instead of repairing
+them at runtime. Downgrade restores the old empty-object default but cannot
+recreate discarded malformed or legacy values.
+
 ## 2026-08 schema index reconciliation
 
 Migration `0076_remove_redundant_provider_indexes` removes the non-unique LDAP
