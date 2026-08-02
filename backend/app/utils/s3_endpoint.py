@@ -70,9 +70,6 @@ def resolve_s3_endpoint(account: object) -> Optional[str]:
         endpoint_url = getattr(endpoint, "endpoint_url", None)
         if endpoint_url:
             return endpoint_url
-    endpoint_url = getattr(account, "storage_endpoint_url", None)
-    if endpoint_url:
-        return endpoint_url
     return None
 
 

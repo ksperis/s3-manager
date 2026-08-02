@@ -93,7 +93,7 @@ class BucketMigrationExecutionContextMixin:
             account.rgw_secret_key = conn.secret_access_key
             account.storage_endpoint_id = conn.storage_endpoint_id
             endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
-            account.storage_endpoint_url = endpoint_url  # type: ignore[attr-defined]
+            account._session_endpoint = endpoint_url  # type: ignore[attr-defined]
             account._session_region = region  # type: ignore[attr-defined]
             account._session_force_path_style = force_path_style  # type: ignore[attr-defined]
             account._session_verify_tls = verify_tls  # type: ignore[attr-defined]

@@ -66,6 +66,32 @@ def test_resolve_s3_client_options_uses_storage_endpoint_force_path_style():
     )
 
 
+def test_resolve_s3_client_options_uses_explicit_session_endpoint_override():
+    endpoint = StorageEndpoint(
+        name="Configured",
+        endpoint_url="https://configured.example.test",
+        provider=StorageProvider.OTHER.value,
+        region="eu-west-1",
+        force_path_style=True,
+        verify_tls=True,
+    )
+    account = type(
+        "Account",
+        (),
+        {
+            "storage_endpoint": endpoint,
+            "_session_endpoint": "https://session.example.test",
+        },
+    )()
+
+    assert resolve_s3_client_options(account) == (
+        "https://session.example.test",
+        "eu-west-1",
+        True,
+        True,
+    )
+
+
 def test_resolve_s3_client_options_session_force_path_style_overrides_endpoint():
     endpoint = StorageEndpoint(
         name="Path Style",

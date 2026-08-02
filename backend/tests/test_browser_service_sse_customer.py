@@ -6,7 +6,7 @@ from io import BytesIO
 
 import pytest
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint
 from app.models.browser import (
     MultipartUploadInitRequest,
     PresignPartRequest,
@@ -21,7 +21,7 @@ def _account() -> S3Account:
     account.id = 17
     account.rgw_access_key = "access-key"
     account.rgw_secret_key = "secret-key"
-    account.storage_endpoint_url = "https://s3.example.test"
+    account.storage_endpoint = StorageEndpoint(name="browser-sse-c", endpoint_url="https://s3.example.test")
     return account
 
 

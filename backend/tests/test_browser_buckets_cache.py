@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint
 from app.services import browser_service
 
 
@@ -9,7 +9,7 @@ def _account() -> S3Account:
     account.id = 101
     account.rgw_access_key = "access-key"
     account.rgw_secret_key = "secret-key"
-    account.storage_endpoint_url = "https://s3.example.test"
+    account.storage_endpoint = StorageEndpoint(name="browser-cache-test", endpoint_url="https://s3.example.test")
     return account
 
 

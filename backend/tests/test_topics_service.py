@@ -13,13 +13,11 @@ from app.services.topics_service import TopicsService
 
 def _account(provider: str | None = None) -> S3Account:
     account = S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
-    account.storage_endpoint_url = "https://ceph-sns.example.test"
-    if provider:
-        account.storage_endpoint = StorageEndpoint(
-            name=f"{provider}-sns",
-            endpoint_url="https://ceph-sns.example.test",
-            provider=provider,
-        )
+    account.storage_endpoint = StorageEndpoint(
+        name=f"{provider or StorageProvider.OTHER.value}-sns",
+        endpoint_url="https://ceph-sns.example.test",
+        provider=provider or StorageProvider.OTHER.value,
+    )
     return account
 
 

@@ -512,7 +512,7 @@ class PortalIamMixin:
         bucket_name: str,
         metadata: PortalStorageSpaceMetadata,
     ) -> None:
-        if not getattr(account, "storage_endpoint", None) and not getattr(account, "storage_endpoint_url", None):
+        if not resolve_s3_endpoint(account):
             logger.debug("Skipping Portal Storage Space bucket policy sync without S3 endpoint: %s", bucket_name)
             return
         access_key, secret_key = self._account_credentials(account)

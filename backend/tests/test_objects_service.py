@@ -8,7 +8,7 @@ from io import BytesIO
 import pytest
 from botocore.exceptions import ClientError
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint
 from app.services.objects_service import ObjectsService, get_objects_service
 
 
@@ -58,7 +58,7 @@ class _FakeS3Client:
 
 def _account() -> S3Account:
     account = S3Account(name="objects-account", rgw_access_key="AKIA-OBJ", rgw_secret_key="SECRET-OBJ")
-    account.storage_endpoint_url = "https://s3.example.test"
+    account.storage_endpoint = StorageEndpoint(name="objects-endpoint", endpoint_url="https://s3.example.test")
     return account
 
 
