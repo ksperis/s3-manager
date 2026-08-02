@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.db import S3Account, StorageEndpoint, StorageProvider
 from app.services import browser_service
+from app.services.browser import _shared as browser_shared
 from app.services.browser import context as browser_context
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -30,7 +31,7 @@ def _account_with_sts_endpoint() -> S3ExecutionContext:
 
 
 def test_browser_service_prefers_sts_credentials(monkeypatch):
-    browser_service._STS_CACHE.clear()
+    browser_shared._STS_CACHE.clear()
     account = _account_with_sts_endpoint()
 
     def fake_get_session_token(*args, **kwargs):
@@ -63,7 +64,7 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
 
 
 def test_browser_service_falls_back_on_sts_error(monkeypatch):
-    browser_service._STS_CACHE.clear()
+    browser_shared._STS_CACHE.clear()
     account = _account_with_sts_endpoint()
     account.access_key = "root-access"
     account.secret_key = "root-secret"

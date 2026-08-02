@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from .browser._shared import *
 from .browser.buckets import BrowserBucketsMixin
 from .browser.context import BrowserContextMixin
 from .browser.listing import BrowserListingMixin

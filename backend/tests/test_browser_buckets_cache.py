@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.db import S3Account, StorageEndpoint
 from app.services import browser_service
+from app.services.browser import _shared as browser_shared
 from app.services.browser import buckets as browser_buckets
 
 
@@ -15,11 +16,11 @@ def _account() -> S3Account:
 
 
 def _reset_browser_caches() -> None:
-    browser_service._BUCKET_LIST_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_LIST_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._BUCKET_LIST_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LIST_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
 
 
 def test_bucket_cache_reused_between_pages(monkeypatch):

@@ -8,7 +8,7 @@ import pytest
 
 from app.db import S3Account, StorageEndpoint
 from app.models.portal import PortalStorageSpaceIcon
-from app.services import browser_service
+from app.services.browser import _shared as browser_shared
 from app.services.browser_service import BrowserService
 from app.services.s3_execution_context import S3ExecutionContext
 
@@ -24,11 +24,11 @@ def _account() -> S3Account:
 
 @pytest.fixture(autouse=True)
 def _clear_browser_caches():
-    browser_service._OBJECT_LIST_CACHE.invalidate_where(lambda _key: True)
-    browser_service._BUCKET_LIST_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
-    browser_service._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LIST_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._BUCKET_LIST_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_SORT_SNAPSHOT_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LAZY_HEAD_CACHE.invalidate_where(lambda _key: True)
+    browser_shared._OBJECT_LAZY_TAGS_CACHE.invalidate_where(lambda _key: True)
 
 
 def test_listportal_storage_spaces_includes_descriptions():
