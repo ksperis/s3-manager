@@ -31,11 +31,11 @@ export type ExecutionContext = {
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
   endpoint_id?: number | null;
-  endpoint_name?: string | null;
-  endpoint_is_default?: boolean | null;
+  endpoint_name: string;
+  endpoint_is_default: boolean;
   endpoint_provider?: "ceph" | "aws" | "other" | null;
-  endpoint_url?: string | null;
-  storage_endpoint_capabilities?: Record<string, boolean> | null;
+  endpoint_url: string;
+  storage_endpoint_capabilities: Record<string, boolean>;
   capabilities: ExecutionContextCapabilities;
 };
 

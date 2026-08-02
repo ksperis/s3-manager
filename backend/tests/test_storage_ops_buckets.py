@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app.db import S3Account, S3Connection, User, UserRole
 from app.models.bucket import Bucket, BucketEncryptionConfiguration, BucketLifecycleConfig, BucketNotificationConfiguration
 from app.models.ceph_admin import CephAdminBucketFilterQuery, CephAdminBucketSummary
-from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
+from app.models.execution_context import ExecutionContextCapabilities
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
 from app.routers import dependencies
 from app.routers.dependencies_internal import service_loaders, settings_loader
@@ -22,6 +22,7 @@ from app.routers.storage_ops import summary as storage_ops_summary_router
 from app.services import app_settings_service
 from app.services.connection_identity_service import ConnectionIdentityResolution
 from app.main import app
+from tests.execution_context_factory import make_execution_context
 
 
 def _admin_user() -> User:
@@ -184,7 +185,7 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
@@ -192,7 +193,7 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A duplicate",
@@ -200,7 +201,7 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Shared connection",
@@ -208,7 +209,7 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-3",
                 display_name="Private connection",
@@ -216,7 +217,7 @@ def test_storage_ops_summary_counts_authorized_accounts_connections_and_endpoint
                 endpoint_name="Endpoint Two",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="legacy_user",
                 id="s3u-9",
                 display_name="Legacy user",
@@ -250,7 +251,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
@@ -258,7 +259,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -266,7 +267,7 @@ def test_storage_ops_listing_aggregates_contexts_and_exposes_context_fields(clie
                 endpoint_name="Endpoint Two",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=False),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="legacy_user",
                 id="s3u-9",
                 display_name="Legacy User C",
@@ -395,7 +396,7 @@ def test_storage_ops_stream_hides_unexpected_error_details(client, monkeypatch):
 
 def test_storage_ops_listing_reports_context_progress(monkeypatch):
     contexts = [
-        ExecutionContext(
+        make_execution_context(
             kind="account",
             id=f"acct-{idx}",
             display_name=f"Account {idx}",
@@ -449,14 +450,14 @@ def test_storage_ops_query_endpoint_matches_get(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Endpoint One",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -518,19 +519,19 @@ def test_storage_ops_listing_fanout_runs_in_parallel(client, monkeypatch):
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="2",
                 display_name="Account B",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-3",
                 display_name="Connection C",
@@ -946,14 +947,14 @@ def test_storage_ops_list_and_stream_apply_context_advanced_filters(client, monk
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Primary Endpoint",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -1019,14 +1020,14 @@ def test_storage_ops_context_prefilter_skips_non_matching_contexts_for_match_all
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Primary",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -1077,14 +1078,14 @@ def test_storage_ops_context_id_prefilter_skips_non_matching_contexts(client, mo
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Primary",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -1135,14 +1136,14 @@ def test_storage_ops_context_prefilter_keeps_other_contexts_for_match_any_mixed_
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Primary",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -1198,7 +1199,7 @@ def test_storage_ops_applies_cheap_field_prefilter_before_feature_enrichment(cli
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
@@ -1410,14 +1411,14 @@ def test_storage_ops_owner_quota_and_usage_use_context_principal_and_resolve_con
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
                 endpoint_name="Primary",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection B",
@@ -1523,7 +1524,7 @@ def test_storage_ops_bucket_quota_usage_percent_filter_forces_stats_and_filters_
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
@@ -1575,7 +1576,7 @@ def test_storage_ops_bucket_listing_marks_quota_available_for_ceph_admin_context
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account A",
@@ -1622,7 +1623,7 @@ def test_storage_ops_bucket_listing_marks_quota_unavailable_for_connection_conte
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-2",
                 display_name="Connection",
@@ -1727,14 +1728,14 @@ def test_storage_ops_bucket_listing_filters_by_owner_suspended_status(client, mo
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="active",
                 display_name="Active user",
                 endpoint_name="Primary",
                 capabilities=ExecutionContextCapabilities(can_manage_iam=True, sts_capable=False, admin_api_capable=True),
             ),
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="suspended",
                 display_name="Suspended user",
@@ -1803,7 +1804,7 @@ def test_storage_ops_owner_identity_failures_leave_owner_quota_fields_null(clien
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="connection",
                 id="conn-3",
                 display_name="Connection C",

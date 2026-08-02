@@ -51,12 +51,10 @@ def _build_account_context(
     manager_account_is_admin: Optional[bool] = None,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
-    endpoint_caps = (
-        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-        if endpoint
-        else None
+    endpoint_caps = features_to_capabilities(
+        normalize_features_config(endpoint.provider, endpoint.features_config)
     )
-    sts_capable = bool(endpoint_caps.get("sts")) if endpoint_caps else False
+    sts_capable = bool(endpoint_caps.get("sts"))
     return ExecutionContext(
         kind="account",
         id=str(account.id),
@@ -70,14 +68,14 @@ def _build_account_context(
         max_groups=max_groups,
         quota_max_size_gb=quota_max_size_gb,
         quota_max_objects=quota_max_objects,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=endpoint.name if endpoint else None,
-        endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=endpoint.endpoint_url if endpoint else None,
+        endpoint_id=endpoint.id,
+        endpoint_name=endpoint.name,
+        endpoint_is_default=bool(endpoint.is_default),
+        endpoint_provider=_provider_value(endpoint.provider),
+        endpoint_url=endpoint.endpoint_url,
         storage_endpoint_capabilities=endpoint_caps,
         tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=True,
             sts_capable=sts_capable,
@@ -94,10 +92,8 @@ def _build_portal_account_context(
     manager_account_is_admin: bool,
 ) -> ExecutionContext:
     endpoint = account.storage_endpoint
-    endpoint_caps = (
-        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-        if endpoint
-        else None
+    endpoint_caps = features_to_capabilities(
+        normalize_features_config(endpoint.provider, endpoint.features_config)
     )
     return ExecutionContext(
         kind="portal_account",
@@ -106,14 +102,14 @@ def _build_portal_account_context(
         role=role,
         manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=endpoint.name if endpoint else None,
-        endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=endpoint.endpoint_url if endpoint else None,
+        endpoint_id=endpoint.id,
+        endpoint_name=endpoint.name,
+        endpoint_is_default=bool(endpoint.is_default),
+        endpoint_provider=_provider_value(endpoint.provider),
+        endpoint_url=endpoint.endpoint_url,
         storage_endpoint_capabilities=endpoint_caps,
         tags=tags_service.filter_selector_visible(tags_service.get_account_tags(account)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=False,
             sts_capable=False,
@@ -131,10 +127,8 @@ def _build_legacy_user_context(
     tags_service: TagsService,
 ) -> ExecutionContext:
     endpoint = s3_user.storage_endpoint
-    endpoint_caps = (
-        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
-        if endpoint
-        else None
+    endpoint_caps = features_to_capabilities(
+        normalize_features_config(endpoint.provider, endpoint.features_config)
     )
     return ExecutionContext(
         kind="legacy_user",
@@ -143,14 +137,14 @@ def _build_legacy_user_context(
         max_buckets=max_buckets,
         quota_max_size_gb=quota_max_size_gb,
         quota_max_objects=quota_max_objects,
-        endpoint_id=endpoint.id if endpoint else None,
-        endpoint_name=endpoint.name if endpoint else None,
-        endpoint_is_default=bool(endpoint.is_default) if endpoint else None,
-        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
-        endpoint_url=endpoint.endpoint_url if endpoint else None,
+        endpoint_id=endpoint.id,
+        endpoint_name=endpoint.name,
+        endpoint_is_default=bool(endpoint.is_default),
+        endpoint_provider=_provider_value(endpoint.provider),
+        endpoint_url=endpoint.endpoint_url,
         storage_endpoint_capabilities=endpoint_caps,
         tags=tags_service.filter_selector_visible(tags_service.get_s3_user_tags(s3_user)),
-        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)) if endpoint else [],
+        endpoint_tags=tags_service.filter_selector_visible(tags_service.get_storage_endpoint_tags(endpoint)),
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=False,
             sts_capable=False,

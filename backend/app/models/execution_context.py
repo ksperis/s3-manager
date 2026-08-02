@@ -27,11 +27,11 @@ class ExecutionContext(BaseModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     endpoint_id: Optional[int] = None
-    endpoint_name: Optional[str] = None
-    endpoint_is_default: Optional[bool] = None
+    endpoint_name: str
+    endpoint_is_default: bool
     endpoint_provider: Optional[str] = None
-    endpoint_url: Optional[str] = None
-    storage_endpoint_capabilities: Optional[dict[str, bool]] = None
+    endpoint_url: str
+    storage_endpoint_capabilities: dict[str, bool]
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
     endpoint_tags: list[TagDefinitionSummary] = Field(default_factory=list)
     capabilities: ExecutionContextCapabilities

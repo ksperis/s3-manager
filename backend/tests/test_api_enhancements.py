@@ -38,6 +38,7 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
                 storage_endpoint_id=1,
                 storage_endpoint_name="Ceph",
                 storage_endpoint_url="https://s3.example.test",
+                storage_endpoint_is_default=True,
                 storage_endpoint_capabilities={"account": True},
             )
 
@@ -62,6 +63,7 @@ def test_admin_create_account_delegates_to_service(client: TestClient):
     assert body["quota_max_objects"] == 1000000
     assert body["storage_endpoint_id"] == 1
     assert body["storage_endpoint_name"] == "Ceph"
+    assert body["storage_endpoint_is_default"] is True
     assert captured == {
         "name": "quota-acc",
         "email": "quota@example.com",

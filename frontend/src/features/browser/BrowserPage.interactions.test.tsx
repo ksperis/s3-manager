@@ -239,6 +239,10 @@ function makeExecutionContext(overrides: Partial<ExecutionContext>): ExecutionCo
     display_name: "Research account",
     tags: [],
     endpoint_tags: [],
+    endpoint_name: "Default endpoint",
+    endpoint_is_default: true,
+    endpoint_url: "https://s3.example.test",
+    storage_endpoint_capabilities: {},
     capabilities: {
       can_manage_iam: false,
       sts_capable: false,

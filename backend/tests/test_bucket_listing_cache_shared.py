@@ -7,7 +7,7 @@ import threading
 from app.db import S3Account, User, UserRole
 from app.main import app
 from app.models.bucket import Bucket
-from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
+from app.models.execution_context import ExecutionContextCapabilities
 from app.routers import dependencies
 from app.routers.manager import buckets as manager_buckets_router
 from app.routers.storage_ops import buckets as storage_ops_buckets_router
@@ -15,6 +15,7 @@ from app.services.bucket_listing_cache import (
     get_cached_bucket_listing_for_account,
     invalidate_bucket_listing_cache,
 )
+from tests.execution_context_factory import make_execution_context
 
 
 class _FakeAuditService:
@@ -96,7 +97,7 @@ def test_manager_mutation_invalidates_shared_cache_for_storage_ops(client, monke
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account One",
@@ -149,7 +150,7 @@ def test_storage_ops_bucket_listing_cache_refresh_endpoint_invalidates_shared_ca
     def fake_list_execution_contexts(*, workspace, user, db):  # noqa: ARG001
         assert workspace == "manager"
         return [
-            ExecutionContext(
+            make_execution_context(
                 kind="account",
                 id="1",
                 display_name="Account One",

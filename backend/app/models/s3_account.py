@@ -60,7 +60,7 @@ class S3Account(BaseModel):
     storage_endpoint_id: int
     storage_endpoint_name: str
     storage_endpoint_url: str
-    storage_endpoint_is_default: Optional[bool] = None
+    storage_endpoint_is_default: bool
     storage_endpoint_capabilities: dict[str, bool]
     allow_manager_bucket_quota: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)
@@ -128,6 +128,7 @@ class S3AccountSummary(BaseModel):
     storage_endpoint_id: int
     storage_endpoint_name: str
     storage_endpoint_url: str
+    storage_endpoint_is_default: bool
     storage_endpoint_capabilities: dict[str, bool]
     allow_manager_bucket_quota: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)

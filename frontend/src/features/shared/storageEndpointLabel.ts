@@ -14,19 +14,15 @@ function isExecutionContext(value: AccountLike): value is ExecutionContext {
 function isDefaultStorageEndpoint(context: AccountLike): boolean {
   // User-scoped connections are always explicit targets and should display their endpoint.
   if (isExecutionContext(context) && context.kind === "connection") return false;
-  const explicitDefault = isExecutionContext(context)
+  return isExecutionContext(context)
     ? context.endpoint_is_default
     : context.storage_endpoint_is_default;
-  if (explicitDefault != null) return explicitDefault;
-  return isExecutionContext(context)
-    ? context.endpoint_id == null
-    : context.storage_endpoint_id == null;
 }
 
 function getStorageSuffix(context: AccountLike): string {
   if (isDefaultStorageEndpoint(context)) return "";
   const endpointName = isExecutionContext(context)
-    ? context.endpoint_name || context.endpoint_url
+    ? context.endpoint_name
     : context.storage_endpoint_name;
   const label = endpointName || "Custom endpoint";
   return ` (${label})`;

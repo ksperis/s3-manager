@@ -7,7 +7,9 @@ already uses `GET /api/me/execution-contexts?workspace=manager`, whose explicit
 context kinds and capabilities replace the heterogeneous account-shaped
 response. Requests to the removed endpoint now return `404`. Canonical account
 responses now always include a non-null Storage Endpoint ID, name, URL, and
-capability map.
+capability map, plus an explicit default-endpoint flag. Execution-context
+responses likewise always include endpoint name, URL, default flag, and
+capabilities; only the endpoint ID remains nullable for custom connections.
 
 ## 2026-08 removal of the dead Portal key setting
 
