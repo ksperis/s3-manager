@@ -216,18 +216,6 @@ describe("PortalSharesPage", () => {
     expect(screen.queryByRole("link", { name: "Editor User" })).not.toBeInTheDocument();
   });
 
-  it("normalizes the obsolete access view back to project members", async () => {
-    renderPage("/portal/shares?project=101&view=access");
-
-    expect(
-      await screen.findByRole("tabpanel", { name: "Project members" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Access by space" })).not.toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/portal/shares?project=101"),
-    );
-  });
-
   it("filters project members client-side", async () => {
     const user = userEvent.setup();
     renderPage();

@@ -331,14 +331,6 @@ export default function PortalSharesPage() {
     null;
 
   useEffect(() => {
-    if (searchParams.get("view") !== "access") return;
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("view");
-    setActiveViewTab("members");
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
     const requestedSpaceId = searchParams.get("space_id");
     if (requestedSpaceId && workspace.spaces.some((space) => space.id === requestedSpaceId)) {
       setSelectedLinkSpaceId(requestedSpaceId);
