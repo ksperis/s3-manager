@@ -911,6 +911,9 @@ describe("BrowserPage interactions", () => {
     renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
+    expect(
+      within(rowA).getByRole("button", { name: "Open file a.txt" }),
+    ).not.toHaveClass("min-h-11");
     for (const actionName of [
       "Download a.txt",
       "Delete a.txt",
@@ -940,8 +943,24 @@ describe("BrowserPage interactions", () => {
 
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
-    expect(screen.getByRole("button", { name: "Selected storage space" })).toHaveTextContent("Research Data");
-    expect(screen.getByRole("textbox", { name: "Search files" })).toHaveAttribute("placeholder", "Search files");
+    expect(
+      within(rowA).getByRole("button", { name: "Open file a.txt" }),
+    ).not.toHaveClass("min-h-11");
+    for (const actionName of [
+      "Download a.txt",
+      "Delete a.txt",
+      "More actions for a.txt",
+    ]) {
+      expect(
+        within(rowA).getByRole("button", { name: actionName }),
+      ).toHaveClass("!h-6", "!w-6");
+    }
+    expect(
+      screen.getByRole("button", { name: "Selected storage space" }),
+    ).toHaveTextContent("Research Data");
+    expect(
+      screen.getByRole("textbox", { name: "Search files" }),
+    ).toHaveAttribute("placeholder", "Search files");
     expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Bucket" })).not.toBeInTheDocument();
     expect(searchBrowserBucketsMock).not.toHaveBeenCalled();
@@ -1285,7 +1304,16 @@ describe("BrowserPage interactions", () => {
 
     renderPage({ initialEntry: "/browser" });
 
-    await findRowByLabel("a.txt");
+    const rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
+    expect(
+      within(rowA).getByRole("button", { name: "Open file a.txt" }),
+    ).not.toHaveClass("min-h-11");
+    const headerConfigMenu = openHeaderConfigMenu();
+    expect(
+      within(headerConfigMenu).queryByText("Compact view"),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
     expect(fetchBrowserSettingsMock).toHaveBeenCalledWith("acc-portal", { workspaceSurface: "portal" });
     expect(searchBrowserBucketsMock).toHaveBeenCalledWith(
       "acc-portal",
@@ -1954,6 +1982,9 @@ describe("BrowserPage interactions", () => {
 
     let rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-16");
+    expect(
+      within(rowA).getByRole("button", { name: "Open file a.txt" }),
+    ).toHaveClass("min-h-11");
     expect(within(rowA).getByText("Object")).toBeInTheDocument();
 
     let menu = openHeaderConfigMenu();

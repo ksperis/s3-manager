@@ -1132,15 +1132,25 @@ export default function BrowserPage({
   const [inspectorTab, setInspectorTab] = useState<
     "context" | "bucket" | "selection" | "details"
   >("context");
-  const [density, setDensity] = useState<BrowserDensity>(() =>
-    densityOverride ??
-    (isMainBrowserPath
-      ? resolvedFunctionalProfile === "advanced"
-        ? (initialStoredRootUiState?.density ?? "comfortable")
+  const enforcedRootProfileDensity: BrowserDensity | null =
+    isMainBrowserPath && resolvedFunctionalProfile !== "advanced"
+      ? resolvedFunctionalProfile === "portal"
+        ? "compact"
         : "comfortable"
-      : "compact"),
+      : null;
+  const [density, setDensity] = useState<BrowserDensity>(
+    () =>
+      densityOverride ??
+      enforcedRootProfileDensity ??
+      (isMainBrowserPath
+        ? (initialStoredRootUiState?.density ?? "comfortable")
+        : "compact"),
   );
-  const compactMode = density === "compact";
+  const effectiveDensity: BrowserDensity =
+    densityOverride ?? enforcedRootProfileDensity ?? density;
+  const compactMode = effectiveDensity === "compact";
+  const canConfigureRootBrowserView =
+    isMainBrowserPath && resolvedFunctionalProfile === "advanced";
   const rowActionTargetSizePx = compactMode
     ? COMPACT_ROW_ACTION_TARGET_SIZE_PX
     : COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX;
@@ -5200,6 +5210,7 @@ export default function BrowserPage({
   const headerPadding = compactMode ? "!py-1" : "py-3";
   const iconBoxClasses = compactMode ? "h-6 w-6" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-1.5" : "gap-3";
+  const primaryItemButtonHeightClasses = compactMode ? "" : "min-h-11";
   const rowActionButtonClasses = compactMode
     ? `${iconButtonClasses} !h-6 !w-6`
     : iconButtonClasses;
@@ -14083,7 +14094,7 @@ export default function BrowserPage({
                                       ? `Open folder ${item.name}`
                                       : `Open file ${item.name}`
                                 }
-                                className={`flex min-h-11 w-full min-w-0 items-center ${nameGapClasses} text-left`}
+                                className={`flex ${primaryItemButtonHeightClasses} w-full min-w-0 items-center ${nameGapClasses} text-left`}
                                 title={item.name}
                               >
                                 <span
@@ -15031,10 +15042,10 @@ export default function BrowserPage({
         onToggleShowDeleted={() =>
           setDeletedObjectsVisibility(!showDeletedObjects)
         }
-        isMainBrowserPath={isMainBrowserPath && rootBrowserAdvancedFeaturesEnabled}
+        isMainBrowserPath={canConfigureRootBrowserView}
         compactMode={compactMode}
         onSetCompactMode={(value) => {
-          if (!isMainBrowserPath || !rootBrowserAdvancedFeaturesEnabled) return;
+          if (!canConfigureRootBrowserView) return;
           setCompactMode(value);
         }}
         columnOptions={COLUMN_DEFINITIONS.map((column) => ({
