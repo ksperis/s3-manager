@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 import hashlib
-import json
 import logging
 import uuid
 from typing import Optional
@@ -157,14 +156,7 @@ class SessionService:
         )
 
     def _capabilities_from_row(self, session: S3Session) -> SessionCapabilities:
-        raw = session.capabilities
-        if not raw:
-            return SessionCapabilities()
-        try:
-            data = json.loads(raw)
-            return SessionCapabilities(**data)
-        except (TypeError, ValueError):
-            return SessionCapabilities()
+        return SessionCapabilities.model_validate_json(session.capabilities)
 
     def _hash_key(self, access_key: str) -> str:
         return hashlib.sha256(access_key.encode()).hexdigest()

@@ -21,6 +21,6 @@ class S3Session(Base):
     account_id = Column(String, nullable=True)
     account_name = Column(String, nullable=True)
     user_uid = Column(String, nullable=True)
-    capabilities = Column(Text, nullable=True)
+    capabilities = Column(Text, nullable=False)
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     last_used_at = Column(UTCDateTime(), default=utcnow, nullable=False)

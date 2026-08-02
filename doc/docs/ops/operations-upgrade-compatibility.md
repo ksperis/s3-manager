@@ -1,5 +1,19 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical S3 session capabilities
+
+Migration `0075_canonical_s3_session_capabilities` materializes a complete
+capability snapshot for every existing direct S3 session, replaces missing or
+malformed snapshots with the current safe defaults, and makes
+`s3_sessions.capabilities` non-nullable. The backend no longer repairs invalid
+session capability data at runtime.
+
+Stop backend instances while applying the migration so no session is created
+during the table alteration. Existing direct S3 sessions remain usable with
+their canonicalized snapshot. Downgrade makes the column nullable again but
+does not recreate missing or malformed values; deploy matching code if a
+downgrade is unavoidable.
+
 ## 2026-08 timezone-aware UTC migration
 
 Migration `0074_timezone_aware_utc_timestamps` converts every persisted
