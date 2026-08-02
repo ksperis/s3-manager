@@ -19,7 +19,6 @@ from app.db import BackendOperationLease
 from app.utils.time import utcnow
 
 
-STARTUP_INIT_DB_OPERATION = "startup:init_db"
 HEALTHCHECK_RUN_OPERATION = "healthchecks:run"
 QUOTA_MONITOR_ALERTS_OPERATION = "quota-monitor:alerts"
 USAGE_HISTORY_COLLECT_OPERATION = "quota-monitor:usage-history"

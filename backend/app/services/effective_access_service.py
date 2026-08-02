@@ -107,10 +107,6 @@ class ResolvedUserAccess:
     def has_s3_user(self, s3_user_id: int) -> bool:
         return s3_user_id in set(self.s3_user_ids)
 
-    def has_s3_connection(self, connection_id: int) -> bool:
-        return connection_id in set(self.s3_connection_ids)
-
-
 class EffectiveAccessService:
     """Single source for role aggregation and executable UI-user contexts."""
 

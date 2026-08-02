@@ -31,12 +31,3 @@ def normalize_string_list(values: Optional[list[str]]) -> list[str]:
         normalized.append(cleaned)
     return normalized
 
-
-def validate_string_list_input(value: object, *, allow_none: bool = False) -> Optional[list[str]]:
-    if value is None:
-        return None if allow_none else []
-    if not isinstance(value, list):
-        raise ValueError("tags must be a list of strings.")
-    if any(not isinstance(entry, str) for entry in value):
-        raise ValueError("tags must be a list of strings.")
-    return normalize_string_list(value)

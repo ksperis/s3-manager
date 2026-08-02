@@ -65,10 +65,6 @@ class BucketContentCountResult:
     missing_bucket: bool = False
 
 
-class BucketContentPurgeCancelled(RuntimeError):
-    pass
-
-
 def get_s3_client(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
@@ -1688,29 +1684,6 @@ def purge_bucket_contents(
         failed_count=failed_count,
         failures_sample=failures,
     )
-
-
-def _delete_versions(client, bucket_name: str) -> None:
-    key_marker = None
-    version_marker = None
-    while True:
-        list_kwargs = {"Bucket": bucket_name}
-        if key_marker:
-            list_kwargs["KeyMarker"] = key_marker
-        if version_marker:
-            list_kwargs["VersionIdMarker"] = version_marker
-        page = client.list_object_versions(**list_kwargs)
-        objects = []
-        for version in page.get("Versions", []):
-            objects.append({"Key": version["Key"], "VersionId": version["VersionId"]})
-        for marker in page.get("DeleteMarkers", []):
-            objects.append({"Key": marker["Key"], "VersionId": marker["VersionId"]})
-        if objects:
-            _delete_objects(client, bucket_name, objects)
-        key_marker = page.get("NextKeyMarker")
-        version_marker = page.get("NextVersionIdMarker")
-        if not key_marker and not version_marker:
-            break
 
 
 def delete_bucket(

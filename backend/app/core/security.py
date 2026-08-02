@@ -98,10 +98,6 @@ def _get_jwt_key_ring() -> JwtKeyRing:
     return JwtKeyRing(list(settings.jwt_keys))
 
 
-def reset_jwt_key_ring() -> None:
-    _get_jwt_key_ring.cache_clear()
-
-
 def _get_credential_keys() -> list[str]:
     if _credential_keys_override is not None:
         return list(_credential_keys_override)

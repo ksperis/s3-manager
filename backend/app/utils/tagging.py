@@ -120,11 +120,6 @@ def normalize_tag_items_input(value: object, *, allow_none: bool = False) -> Opt
     return normalized
 
 
-def extract_tag_labels(items: Optional[list[object]]) -> list[str]:
-    normalized = normalize_tag_items_input(items, allow_none=False) or []
-    return [item["label"] for item in normalized]
-
-
 def tag_definition_sort_key(item: object) -> tuple[str, int]:
     label = str(_get_mapping_value(item, "label") or "")
     identifier = _get_mapping_value(item, "id")

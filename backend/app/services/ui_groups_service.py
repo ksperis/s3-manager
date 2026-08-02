@@ -359,16 +359,6 @@ class UiGroupsService:
             updated_at=group.updated_at,
         )
 
-    def group_ids_grant_ceph_admin(self, group_ids: list[int] | None) -> bool:
-        cleaned = self._clean_ids(group_ids or [])
-        if not cleaned:
-            return False
-        return bool(
-            self.db.query(UiGroup.id)
-            .filter(UiGroup.id.in_(cleaned), UiGroup.can_access_ceph_admin.is_(True))
-            .first()
-        )
-
     def _set_user_links(self, group: UiGroup, target_ids: list[int]) -> None:
         cleaned_ids = self._clean_ids(target_ids)
         self._ensure_users_exist(cleaned_ids)

@@ -156,10 +156,6 @@ def apply_bucket_owner_usage_map(
     return buckets
 
 
-def apply_bucket_owner_usage(buckets: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:
-    return apply_bucket_owner_usage_map(buckets, compute_bucket_owner_usage(buckets))
-
-
 def _prune_cache(cache: OrderedDict[object, _CacheEntry], *, now: float, max_entries: int) -> None:
     expired = [key for key, entry in cache.items() if entry.expires_at <= now]
     for key in expired:
