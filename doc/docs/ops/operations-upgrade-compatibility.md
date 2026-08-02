@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical managed-access IAM state
+
+Migration `0084_canonical_managed_access_iam_lists` rewrites the tracked IAM
+groups, managed policies, and inline policy names for every managed private
+access as ordered, deduplicated JSON lists of non-empty strings. Malformed or
+non-list values become empty lists.
+
+Deploy the migration and backend together. Saga replay and cleanup now reject
+any remaining malformed or non-string IAM state instead of coercing or dropping
+values at runtime. The data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical UI-managed OIDC scopes
 
 Migration `0083_canonical_oidc_provider_scopes` rewrites every UI-managed OIDC

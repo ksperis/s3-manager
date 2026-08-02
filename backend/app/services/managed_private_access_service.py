@@ -833,12 +833,13 @@ class ManagedPrivateAccessService:
         return f"s3m-private-u{user_id}-{kind}{source_id}"
 
     @staticmethod
-    def _json_list(value: str | None) -> list[str]:
-        try:
-            parsed = json.loads(value or "[]")
-        except (TypeError, ValueError):
-            return []
-        return [str(item) for item in parsed] if isinstance(parsed, list) else []
+    def _json_list(value: str) -> list[str]:
+        parsed = json.loads(value)
+        if not isinstance(parsed, list):
+            raise ValueError("Managed private access IAM state must be a JSON list")
+        if any(not isinstance(item, str) or not item for item in parsed):
+            raise ValueError("Managed private access IAM state must contain non-empty strings")
+        return parsed
 
     def _append_json_value(self, provisioning, field_name: str, value: str) -> None:
         values = self._json_list(getattr(provisioning, field_name))

@@ -166,6 +166,15 @@ def _payload(name="Private account access"):
     )
 
 
+def test_managed_access_iam_state_requires_string_lists():
+    assert ManagedPrivateAccessService._json_list('["operators"]') == [
+        "operators"
+    ]
+    for raw in ("{", "{}", '"operators"', '["operators",42]', '[""]'):
+        with pytest.raises(ValueError):
+            ManagedPrivateAccessService._json_list(raw)
+
+
 def _disable_capability_probe(monkeypatch):
     monkeypatch.setattr(
         "app.services.managed_private_access_service.refresh_connection_detected_capabilities",
