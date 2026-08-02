@@ -119,18 +119,27 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _parse_ops_breakdown(raw: str) -> dict[str, int]:
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("Billing operation breakdown must be a JSON object")
+    if any(
+        not isinstance(key, str)
+        or not isinstance(value, int)
+        or isinstance(value, bool)
+        for key, value in payload.items()
+    ):
+        raise ValueError("Billing operation breakdown must map strings to integers")
+    return payload
+
+
 def _merge_ops_breakdown(rows: Iterable[BillingUsageDaily]) -> dict[str, int]:
     merged: dict[str, int] = defaultdict(int)
     for row in rows:
         if not row.ops_breakdown:
             continue
-        try:
-            data = json.loads(row.ops_breakdown)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(data, dict):
-            for key, value in data.items():
-                merged[str(key)] += _safe_int(value)
+        for key, value in _parse_ops_breakdown(row.ops_breakdown).items():
+            merged[key] += value
     return dict(merged)
 
 

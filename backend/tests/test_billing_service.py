@@ -6,7 +6,11 @@ from datetime import date, datetime
 import pytest
 
 from app.db import BillingRateCard, BillingStorageDaily, BillingUsageDaily, S3Account, StorageEndpoint
-from app.services.billing_service import BillingService, _parse_month
+from app.services.billing_service import (
+    BillingService,
+    _parse_month,
+    _parse_ops_breakdown,
+)
 
 
 def _seed_endpoint(db_session) -> StorageEndpoint:
@@ -37,6 +41,16 @@ def test_parse_month():
     assert period.start == date(2026, 1, 1)
     assert period.end == date(2026, 2, 1)
     assert period.days_in_month == 31
+
+
+def test_billing_ops_breakdown_requires_integer_values():
+    assert _parse_ops_breakdown('{"get":12,"put":3}') == {
+        "get": 12,
+        "put": 3,
+    }
+    for raw in ("{", "[]", '{"get":"12"}', '{"get":true}'):
+        with pytest.raises(ValueError):
+            _parse_ops_breakdown(raw)
 
 
 def test_billing_summary_and_cost(db_session):

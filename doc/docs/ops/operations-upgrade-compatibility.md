@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical billing operation breakdowns
+
+Migration `0086_canonical_billing_ops_breakdown` rewrites each available daily
+operation breakdown as a JSON object mapping operation names to integer counts.
+Malformed, non-object, and empty payloads become `NULL`, which remains the
+canonical representation when detailed operation data was not collected.
+
+Deploy the migration and backend together. Billing aggregation now rejects any
+remaining non-canonical breakdown instead of skipping it or coercing values at
+runtime. The data cleanup is not reversed on downgrade.
+
 ## 2026-08 canonical bucket usage statistics JSON
 
 Migration `0085_canonical_bucket_usage_stats_json` rewrites every persisted
