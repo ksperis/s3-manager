@@ -2,7 +2,35 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+from datetime import datetime
+from typing import Optional
+from urllib.parse import urlencode
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.models.browser import (
+    BrowserObjectLazyColumn,
+    ObjectAcl,
+    ObjectColumnValues,
+    ObjectColumnsResponse,
+    ObjectLegalHold,
+    ObjectMetadata,
+    ObjectMetadataUpdate,
+    ObjectRestoreRequest,
+    ObjectRetention,
+    ObjectTag,
+    ObjectTags,
+    SseCustomerContext,
+)
+from app.services.s3_execution_context import S3ExecutionTarget
+
+from ._shared import (
+    _OBJECT_LAZY_HEAD_CACHE,
+    _OBJECT_LAZY_TAGS_CACHE,
+    _ObjectLazyHeadCacheValue,
+    _ObjectLazyTagsCacheValue,
+    _is_missing_object_lock_configuration,
+)
 
 
 class BrowserObjectDetailsMixin:
