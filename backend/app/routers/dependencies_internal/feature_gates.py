@@ -228,11 +228,6 @@ def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -
     return admin_account_context_ids
 
 
-def get_current_bucket_migration_user(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
-    _ensure_bucket_migration_allowed(user, db=db)
-    return user
-
-
 def get_current_bucket_migration_scope(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

@@ -2,22 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from typing import Optional
-
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User, is_admin_ui_role
 from app.models.account_capabilities import AccountCapabilities
 from app.services import app_settings_service, effective_access_service
-from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_endpoint import normalize_s3_endpoint
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
-
-from .auth_session import get_current_super_admin
 
 
 def _build_ceph_admin_browser_context(endpoint: StorageEndpoint) -> S3ExecutionContext:
@@ -94,45 +87,3 @@ def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
         )
     return endpoint
 
-
-def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str, Optional[str], bool]:
-    endpoint = _resolve_default_endpoint(db)
-    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Default endpoint does not support RGW admin operations",
-        )
-    flags = resolve_feature_flags(endpoint)
-    if not flags.admin_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin operations are disabled for the default endpoint",
-        )
-    admin_endpoint = resolve_admin_endpoint(endpoint)
-    if not admin_endpoint:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin endpoint is not configured for the default endpoint",
-        )
-    access_key = endpoint.admin_access_key
-    secret_key = endpoint.admin_secret_key
-    if not access_key or not secret_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="RGW admin credentials are not configured",
-        )
-    return access_key, secret_key, admin_endpoint, endpoint.region, bool(getattr(endpoint, "verify_tls", True))
-
-
-def get_super_admin_rgw_client(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_super_admin),
-) -> RGWAdminClient:
-    access_key, secret_key, admin_endpoint, region, verify_tls = _resolve_admin_rgw_context(db, user)
-    return get_rgw_admin_client(
-        access_key=access_key,
-        secret_key=secret_key,
-        endpoint=admin_endpoint,
-        region=region,
-        verify_tls=verify_tls,
-    )

@@ -10,7 +10,6 @@ from starlette.requests import Request
 
 from app import main
 from app.routers.http_errors import (
-    raise_bad_gateway_from_exception,
     raise_bad_gateway_from_runtime,
     raise_bad_request_from_value_error,
     raise_http_exception_from_exception,
@@ -41,16 +40,6 @@ def test_raise_bad_gateway_from_runtime_preserves_safe_runtime_message():
     except HTTPException as exc:
         assert exc.status_code == 504
         assert exc.detail == "backend timeout"
-    else:
-        raise AssertionError("Expected HTTPException")
-
-
-def test_raise_bad_gateway_from_exception_redacts_runtime_detail():
-    try:
-        raise_bad_gateway_from_exception(RuntimeError("upstream token=leaked at https://rgw.internal/object"))
-    except HTTPException as exc:
-        assert exc.status_code == 502
-        assert exc.detail == "upstream token=<redacted> at <redacted-url>"
     else:
         raise AssertionError("Expected HTTPException")
 

@@ -218,8 +218,3 @@ def require_portal_manager(access: AccountAccess = Depends(get_portal_account_ac
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager rights required for this account")
     return access
 
-
-def require_portal_buckets(access: AccountAccess = Depends(get_portal_account_access)) -> AccountAccess:
-    if not access.capabilities.can_manage_buckets:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management not allowed for this account")
-    return access
