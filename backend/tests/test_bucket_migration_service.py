@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
-from botocore.parsers import ResponseParserError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -2017,41 +2016,6 @@ def test_run_precheck_fails_when_copy_bucket_settings_hits_unsupported_source_se
     )
 
 
-def test_delete_objects_batch_falls_back_to_individual_deletes_on_invalid_xml_response(db_session):
-    service = BucketMigrationService(db_session)
-
-    class InvalidXmlDeleteClient:
-        def __init__(self):
-            self.batch_calls = []
-            self.single_calls = []
-
-        def delete_objects(self, **kwargs):
-            self.batch_calls.append(kwargs)
-            raise ResponseParserError("Unable to parse response, invalid XML received")
-
-        def delete_object(self, **kwargs):
-            self.single_calls.append(kwargs)
-            return {}
-
-    client = InvalidXmlDeleteClient()
-
-    deleted = service._delete_objects_batch(
-        client,
-        "bucket-a",
-        [
-            {"Key": "one.txt"},
-            {"Key": "two.txt", "VersionId": "v2"},
-        ],
-    )
-
-    assert deleted == 2
-    assert len(client.batch_calls) == 1
-    assert client.single_calls == [
-        {"Bucket": "bucket-a", "Key": "one.txt"},
-        {"Bucket": "bucket-a", "Key": "two.txt", "VersionId": "v2"},
-    ]
-
-
 def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled(db_session):
     service = BucketMigrationService(db_session)
     source_ctx = SimpleNamespace(endpoint="https://same.example.test", context_id="src", account=SimpleNamespace())
@@ -2733,10 +2697,6 @@ def test_replay_bucket_versions_returns_incremental_watermark(db_session):
     service._iter_bucket_version_timelines = lambda *_args, **_kwargs: iter(timelines)  # type: ignore[method-assign]
     service._copy_single_object_version = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._replay_delete_marker = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
-    service._build_version_replay_watermark = (  # type: ignore[method-assign]
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("watermark must be incremental"))
-    )
-
     copied, watermark = service._replay_bucket_versions(
         source_ctx,
         target_ctx,

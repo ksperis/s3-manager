@@ -16,7 +16,6 @@ from urllib.parse import urlencode
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import BucketMigration, BucketMigrationItem
-from app.services.s3_client import _delete_objects_count
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.time import utcnow
@@ -1737,16 +1736,6 @@ class BucketMigrationObjectSyncMixin:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to delete target object '{key}': {exc}") from exc
 
-    def _delete_objects_batch(self, client: Any, bucket_name: str, objects: list[dict[str, str]]) -> int:
-        if not objects:
-            return 0
-        try:
-            return _delete_objects_count(client, bucket_name, objects)
-        except RuntimeError:
-            raise
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
-
     def _iter_bucket_objects(
         self,
         ctx: _ResolvedContext,
@@ -1925,12 +1914,6 @@ class BucketMigrationObjectSyncMixin:
             "last_modified": builder.latest_dt.isoformat(),
             "tie_entries": list(builder.tie_entries),
         }
-
-    def _build_version_replay_watermark(self, entries: list[_BucketVersionEntry]) -> Optional[dict[str, Any]]:
-        builder = _VersionReplayWatermarkBuilder()
-        for entry in entries:
-            self._add_version_replay_watermark_entry(builder, entry)
-        return self._finish_version_replay_watermark(builder)
 
     def _entry_is_after_watermark(self, entry: _BucketVersionEntry, watermark: Optional[dict[str, Any]]) -> bool:
         if not isinstance(watermark, dict):
