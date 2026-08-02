@@ -5320,8 +5320,13 @@ export default function BrowserPage({
   );
   const toolbarMorePathActions = useMemo(
     () =>
-      getVisibleBrowserActions(pathActionStates, TOOLBAR_MORE_PATH_ACTION_IDS),
-    [pathActionStates],
+      getVisibleBrowserActions(
+        pathActionStates,
+        isPortalProfile && deletedObjectsOptions?.showToggle
+          ? [...TOOLBAR_MORE_PATH_ACTION_IDS, "toggleShowDeleted"]
+          : TOOLBAR_MORE_PATH_ACTION_IDS,
+      ),
+    [deletedObjectsOptions?.showToggle, isPortalProfile, pathActionStates],
   );
   const toolbarMoreSelectionFullActions = useMemo(
     () =>
@@ -12343,6 +12348,7 @@ export default function BrowserPage({
     versions: <ListIcon className="h-3.5 w-3.5" />,
     restoreToDate: <HistoryIcon className="h-3.5 w-3.5" />,
     cleanOldVersions: <TrashIcon className="h-3.5 w-3.5" />,
+    toggleShowDeleted: <TrashIcon className="h-3.5 w-3.5" />,
     multipartUploads: <UploadIcon className="h-3.5 w-3.5" />,
     configureBucket: <SettingsIcon className="h-3.5 w-3.5" />,
     copyPath: <CopyIcon className="h-3.5 w-3.5" />,
@@ -13141,7 +13147,8 @@ export default function BrowserPage({
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                {deletedObjectsOptions?.showToggle &&
+                {!isPortalProfile &&
+                  deletedObjectsOptions?.showToggle &&
                   isVersioningEnabled &&
                   bucketName && (
                     <button

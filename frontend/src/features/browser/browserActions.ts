@@ -531,7 +531,9 @@ export const resolveBrowserActions = ({
         enabled: canUseContextActions,
       });
       setState("toggleShowDeleted", {
-        label: showDeletedObjects ? "Hide deleted" : "Show deleted",
+        label: showDeletedObjects
+          ? "Hide deleted files"
+          : "Show deleted files",
         visible: true,
         enabled: true,
       });

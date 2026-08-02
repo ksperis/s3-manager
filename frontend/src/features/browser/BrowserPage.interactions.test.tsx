@@ -1016,6 +1016,44 @@ describe("BrowserPage interactions", () => {
     expect(within(moreMenu).queryByRole("menuitem", { name: /Restore/i })).not.toBeInTheDocument();
   });
 
+  it("moves the Portal deleted-files toggle into More", async () => {
+    const user = userEvent.setup();
+    const onVisibilityChange = vi.fn();
+    getBucketVersioningMock.mockResolvedValue({
+      enabled: true,
+      status: "Enabled",
+    });
+
+    renderPage({
+      initialEntry: "/portal/storage-spaces/research-data",
+      accountIdForApi: "acc-portal",
+      workspaceSurface: "portal",
+      functionalProfile: "portal",
+      lockedBucketName: "portal-bucket",
+      lockedBucketLabel: "Research Data",
+      deletedObjectsOptions: {
+        visible: false,
+        showToggle: true,
+        canRestore: true,
+        onVisibilityChange,
+      },
+    });
+
+    await findRowByLabel("a.txt");
+    expect(
+      screen.queryByRole("button", { name: "Show deleted files" }),
+    ).not.toBeInTheDocument();
+
+    const moreMenu = await openContextMoreMenu(user);
+    await user.click(
+      within(moreMenu).getByRole("menuitem", {
+        name: "Show deleted files",
+      }),
+    );
+
+    expect(onVisibilityChange).toHaveBeenCalledWith(true);
+  });
+
   it("keeps historical folders reachable after dense version pages in the Portal mixed view", async () => {
     const restoreDeletedObject = vi.fn();
     const restoreDeletedPrefix = vi.fn();
