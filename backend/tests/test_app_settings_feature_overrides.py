@@ -24,8 +24,6 @@ def _runtime_settings(**overrides):
         "feature_storage_ops_enabled": None,
         "feature_billing_enabled": None,
         "feature_endpoint_status_enabled": None,
-        "billing_enabled": True,
-        "healthcheck_enabled": True,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -154,8 +152,6 @@ def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
             feature_portal_enabled=True,
             feature_billing_enabled=None,
             feature_endpoint_status_enabled=None,
-            billing_enabled=False,
-            healthcheck_enabled=False,
         ),
     )
 

@@ -10,9 +10,6 @@ incident history for Admin, Manager, Portal, and Ceph Admin status views.
   backend environment.
 - Each storage endpoint can select a healthcheck mode and optional probe URL
   from Admin **Storage Backends**.
-- `HEALTHCHECK_ENABLED` is a legacy runtime setting and is not the feature-lock
-  mechanism. Prefer `endpoint_status_enabled` or `FEATURE_ENDPOINT_STATUS_ENABLED`
-  when deciding whether the product should collect and show endpoint status.
 
 ## Manual trigger
 

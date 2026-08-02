@@ -4,12 +4,12 @@ Billing collection is disabled by default and must be enabled explicitly.
 
 ## Enablement model
 
-Billing requires both:
+Billing uses the `billing_enabled` application setting. Administrators can
+change it in general settings; deployments can force it with
+`FEATURE_BILLING_ENABLED=true` or `false`.
 
-1. Global runtime switch: `BILLING_ENABLED=true`.
-2. UI app setting: `billing_enabled=true`.
-
-The Portal **Costs** tab is shown only when the UI app setting is enabled. When it is disabled, Portal does not call the billing source endpoint.
+The Portal **Costs** tab is shown only when the effective setting is enabled.
+When it is disabled, Portal does not call the billing source endpoint.
 
 ## Rate cards
 

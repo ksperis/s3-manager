@@ -316,7 +316,9 @@ Current behavior after cleanup:
 - API context selectors reject legacy account inputs (`-1`, `null`, negative ids) with `400`.
 - Frontend context persistence uses `selectedExecutionContextId` (and `ctx` URL param).
 - Legacy local storage keys (`selectedS3AccountId`, `selectedBrowserContextId`) are ignored.
-- Feature locking no longer maps legacy env flags (`BILLING_ENABLED`, `HEALTHCHECK_ENABLED`) into `general_feature_locks`.
+- Removed runtime env flags `BILLING_ENABLED` and `HEALTHCHECK_ENABLED` are no
+  longer accepted; use the explicit `FEATURE_BILLING_ENABLED` and
+  `FEATURE_ENDPOINT_STATUS_ENABLED` force-locks.
 
 ## Operator guidance
 

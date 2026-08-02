@@ -333,7 +333,6 @@ class Settings(BaseSettings):
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
     ldap_providers: dict[str, LDAPProviderSettings] = Field(default_factory=dict)
 
-    billing_enabled: bool = Field(True, description="Enable billing endpoints and collection")
     feature_manager_enabled: Optional[bool] = Field(
         None,
         description="Force Manager feature on/off (FEATURE_MANAGER_ENABLED)",
@@ -409,10 +408,6 @@ class Settings(BaseSettings):
         description="SMTP password used for quota notifications (SMTP_PASSWORD)",
     )
 
-    healthcheck_enabled: bool = Field(
-        True,
-        description="Enable endpoint healthchecks (HEALTHCHECK_ENABLED)",
-    )
     healthcheck_timeout_seconds: int = Field(
         5,
         description="HTTP timeout for endpoint healthchecks in seconds (HEALTHCHECK_TIMEOUT_SECONDS)",

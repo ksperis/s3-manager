@@ -203,14 +203,3 @@ export LDAP_PROVIDERS__corp__subject_attribute="entryUUID"
 Default seeded admin for quickstart:
 - email: `admin@example.com`
 - password: `changeme`
-
-## RGW capability maintenance
-
-S3Account-level admin users rely on RGW capabilities (info/usage/buckets/metadata read) to call the Ceph admin API with their own access keys. 
-If you already have tenants in RGW, run the helper script once after deploying the updated backend to grant those caps:
-
-```bash
-python -m app.scripts.grant_account_caps
-```
-
-The script uses the credentials defined by `SEED_RGW_ADMIN_ACCESS_KEY` / `SEED_RGW_ADMIN_SECRET_KEY` to update each `<tenant>-admin` user.
