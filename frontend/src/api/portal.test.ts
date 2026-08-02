@@ -29,6 +29,7 @@ import {
   fetchPortalAlerts,
   fetchPortalAccessKeysState,
   fetchPortalCollaborators,
+  fetchPortalCollaboratorAccessReview,
   downloadPortalServerAccessRawLogs,
   fetchPortalServerAccessLogPage,
   fetchPortalServerAccessLogs,
@@ -414,6 +415,14 @@ describe("portal storage spaces api", () => {
     });
     expect(clientMock.get).toHaveBeenCalledWith("/portal/alerts", {
       params: { account_id: "101", limit: 5 },
+    });
+  });
+
+  it("fetches a collaborator access review for the selected project", async () => {
+    await fetchPortalCollaboratorAccessReview("101", 13);
+
+    expect(clientMock.get).toHaveBeenCalledWith("/portal/collaborators/13/access", {
+      params: { account_id: "101" },
     });
   });
 

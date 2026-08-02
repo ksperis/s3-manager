@@ -4,7 +4,10 @@
  */
 import type { I18nMessage } from "../../i18n";
 import type { UiLanguage } from "../../components/language";
-import type { PortalStorageSpaceVisibility } from "../../api/portal";
+import type {
+  PortalCollaboratorStorageSpaceAccessSource,
+  PortalStorageSpaceVisibility,
+} from "../../api/portal";
 import type {
   PortalWorkspaceRole,
   PortalWorkspaceStatus,
@@ -75,6 +78,16 @@ export function portalTransferEtaLabel(label: string, t: TFunction): string {
   if (label === "Queued") return t({ en: "Queued", fr: "En attente", de: "In Warteschlange" });
   if (label === "In progress") return t({ en: "In progress", fr: "En cours", de: "In Bearbeitung" });
   return label;
+}
+
+export function portalCollaboratorSpaceAccessSourceLabel(
+  source: PortalCollaboratorStorageSpaceAccessSource,
+  t: TFunction,
+): string {
+  if (source === "direct") return t({ en: "Direct access", fr: "Accès direct", de: "Direkter Zugriff" });
+  if (source === "team") return t({ en: "Project team", fr: "Équipe projet", de: "Projektteam" });
+  if (source === "owner") return t({ en: "Ownership", fr: "Propriété", de: "Eigentum" });
+  return t({ en: "Manager role", fr: "Rôle de gestionnaire", de: "Managerrolle" });
 }
 
 export function portalAccessKeyStatusLabel(status: string | null | undefined, active: boolean, t: TFunction): string {

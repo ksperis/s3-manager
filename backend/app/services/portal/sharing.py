@@ -204,6 +204,7 @@ class PortalSharingMixin:
                 access_source=self._portal_access_source(sources),
                 member_since=self._portal_collaborator_member_since(target, sources, source_dates.get(user_id)),
                 avatar=UserAvatarService(self.db).descriptor(target),
+                can_review_access=access.capabilities.can_manage_portal_users or user.id == user_id,
             )
             for user_id, (target, account_role, sources) in member_map.items()
         ]
@@ -215,6 +216,98 @@ class PortalSharingMixin:
                 trend=self._portal_collaborator_trend(collaborators),
             ),
             collaborators=collaborators,
+        )
+
+    def get_portal_collaborator_access_review(
+        self,
+        user: User,
+        access: "AccountAccess",
+        target_user_id: int,
+    ) -> PortalCollaboratorAccessReview:
+        member_map = self._portal_account_member_map(access.account)
+        member = member_map.get(target_user_id)
+        if member is None:
+            raise RuntimeError("Portal collaborator not found.")
+        if user.id != target_user_id and not access.capabilities.can_manage_portal_users:
+            raise RuntimeError("Reviewing this collaborator is not allowed.")
+
+        target, account_role, sources = member
+        source_dates = self._portal_collaborator_source_dates(access.account, {target_user_id})
+        collaborator = PortalCollaborator(
+            user_id=target.id,
+            email=target.email,
+            display_name=target.display_name or target.full_name,
+            account_role=account_role,
+            access_source=self._portal_access_source(sources),
+            member_since=self._portal_collaborator_member_since(
+                target,
+                sources,
+                source_dates.get(target_user_id),
+            ),
+            avatar=UserAvatarService(self.db).descriptor(target),
+            can_review_access=True,
+        )
+
+        rows = (
+            self.db.query(PortalStorageSpaceMetadata, PortalStorageSpaceGrant.role)
+            .outerjoin(
+                PortalStorageSpaceGrant,
+                (PortalStorageSpaceGrant.storage_space_metadata_id == PortalStorageSpaceMetadata.id)
+                & (PortalStorageSpaceGrant.user_id == target_user_id),
+            )
+            .filter(
+                PortalStorageSpaceMetadata.account_id == access.account.id,
+                PortalStorageSpaceMetadata.archived_at.is_(None),
+            )
+            .all()
+        )
+        space_accesses: list[PortalCollaboratorStorageSpaceAccess] = []
+        for metadata, grant_role in rows:
+            role: PortalStorageSpaceRole | None = None
+            source = None
+            if metadata.owner_user_id == target_user_id:
+                role = "Owner"
+                source = "owner"
+            elif account_role == AccountRole.PORTAL_MANAGER.value:
+                role = "Manager"
+                source = "project_manager"
+            elif (
+                self._metadata_visibility(metadata) == "shared"
+                and self._metadata_share_scope(metadata) == "account"
+            ):
+                role = self._metadata_account_member_role(metadata) or "Editor"
+                source = "team"
+            elif (
+                self._metadata_visibility(metadata) == "shared"
+                and self._metadata_share_scope(metadata) == "restricted"
+                and grant_role in {"Viewer", "Editor"}
+            ):
+                role = grant_role
+                source = "direct"
+            if role is None or source is None:
+                continue
+            space_accesses.append(
+                PortalCollaboratorStorageSpaceAccess(
+                    storage_space_id=metadata.bucket_name,
+                    storage_space_name=self._display_storage_space_name(metadata.bucket_name, metadata),
+                    role=role,
+                    source=source,
+                    can_revoke=(
+                        source == "direct"
+                        and access.capabilities.can_manage_portal_users
+                    ),
+                )
+            )
+
+        space_accesses.sort(key=lambda item: (item.storage_space_name.lower(), item.storage_space_id.lower()))
+        return PortalCollaboratorAccessReview(
+            collaborator=collaborator,
+            can_request_project_removal=(
+                access.capabilities.can_manage_portal_users
+                and account_role == AccountRole.PORTAL_USER.value
+                and self._portal_access_source(sources) == "direct"
+            ),
+            space_accesses=space_accesses,
         )
 
     def _storage_space_share_card(

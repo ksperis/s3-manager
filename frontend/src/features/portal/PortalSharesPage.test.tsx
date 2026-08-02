@@ -1,11 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import PortalSharesPage from "./PortalSharesPage";
 
 const mocks = vi.hoisted(() => ({
-  listSharesMock: vi.fn(),
   listPublicLinksMock: vi.fn(),
   revokePublicLinkMock: vi.fn(),
   createPortalRequestMock: vi.fn(),
@@ -56,6 +55,7 @@ const mocks = vi.hoisted(() => ({
             url: null,
             initials: "MU",
           },
+          can_review_access: true,
         },
         {
           user_id: 13,
@@ -70,6 +70,7 @@ const mocks = vi.hoisted(() => ({
             url: "https://idp.example.test/editor.png",
             initials: "EU",
           },
+          can_review_access: true,
         },
       ],
     },
@@ -86,8 +87,6 @@ vi.mock("./usePortalWorkspaceData", () => ({
 vi.mock("../../api/portal", () => ({
   listPortalStorageSpacePublicLinks: (...args: unknown[]) =>
     mocks.listPublicLinksMock(...args),
-  listPortalStorageSpaceShares: (...args: unknown[]) =>
-    mocks.listSharesMock(...args),
   revokePortalStorageSpacePublicLink: (...args: unknown[]) =>
     mocks.revokePublicLinkMock(...args),
 }));
@@ -97,10 +96,16 @@ vi.mock("../../api/portalRequests", () => ({
     mocks.createPortalRequestMock(...args),
 }));
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{`${location.pathname}${location.search}`}</span>;
+}
+
+function renderPage(initialEntry = "/portal/shares") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <PortalSharesPage />
+      <LocationProbe />
     </MemoryRouter>,
   );
 }
@@ -123,18 +128,8 @@ describe("PortalSharesPage", () => {
         shareCount: 1,
       },
     ];
-    mocks.listSharesMock.mockResolvedValue([
-      {
-        id: "research-data:12",
-        storage_space_id: "research-data",
-        storage_space_name: "Research Data",
-        user_id: 12,
-        email: "viewer@example.com",
-        role: "Viewer",
-        direction: "by_me",
-        activity_label: "Active",
-      },
-    ]);
+    mocks.hookResult.collaborators.collaborators[0].can_review_access = true;
+    mocks.hookResult.collaborators.collaborators[1].can_review_access = true;
     mocks.listPublicLinksMock.mockResolvedValue([
       {
         id: 42,
@@ -152,7 +147,7 @@ describe("PortalSharesPage", () => {
     mocks.createPortalRequestMock.mockResolvedValue({ id: 73, status: "pending" });
   });
 
-  it("separates project membership, space access, and external links", async () => {
+  it("separates project members from external links and offers access reviews", async () => {
     renderPage();
 
     expect(
@@ -160,7 +155,6 @@ describe("PortalSharesPage", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
       "Project members",
-      "Access by space",
       "External links",
     ]);
     expect(screen.queryByText(/A project member does not automatically have access to every file/i)).not.toBeInTheDocument();
@@ -174,7 +168,12 @@ describe("PortalSharesPage", () => {
     expect(screen.getByText("Project role")).toBeInTheDocument();
     expect(screen.queryByText("Workspace role")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request member" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Request removal" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request removal" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Review access" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Review access" })[1]).toHaveAttribute(
+      "href",
+      "/portal/shares/13",
+    );
     expect(
       screen
         .getAllByRole("link", { name: "Open spaces" })
@@ -182,7 +181,7 @@ describe("PortalSharesPage", () => {
     ).toBe(true);
   });
 
-  it("submits project member addition and removal requests from the members view", async () => {
+  it("submits project member addition requests from the members view", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -202,57 +201,25 @@ describe("PortalSharesPage", () => {
       }),
     );
     expect(await screen.findByText("Member request sent. Track it in Help requests.")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Request removal" }));
-    const removeDialog = screen.getByRole("dialog", { name: "Request member removal" });
-    expect(within(removeDialog).getByText("Editor User")).toBeInTheDocument();
-    await user.click(within(removeDialog).getByRole("button", { name: "Send removal request" }));
-
-    await waitFor(() =>
-      expect(mocks.createPortalRequestMock).toHaveBeenLastCalledWith("101", {
-        request_type: "portal_user_removal",
-        target_name: "Editor User",
-        target_email: "editor@example.com",
-        reason: null,
-      }),
-    );
-    expect(await screen.findByText("Removal request sent. Track it in Help requests.")).toBeInTheDocument();
   });
 
-  it("keeps the global access overview read-only and routes management to the space", async () => {
-    const user = userEvent.setup();
+  it("does not expose a review link when the API denies that row", async () => {
+    mocks.hookResult.collaborators.collaborators[1].can_review_access = false;
     renderPage();
 
-    await user.click(await screen.findByRole("tab", { name: "Access by space" }));
-    await user.click(screen.getByRole("tab", { name: "Granted by me" }));
-
-    expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Viewer")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: /Access for/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage in space" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces/research-data?tab=collaborators",
-    );
-    expect(screen.getByRole("link", { name: "Research Data" })).toHaveAttribute(
-      "href",
-      "/portal/storage-spaces/research-data?tab=collaborators",
-    );
+    expect(await screen.findByText("Editor User")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Review access" })).toHaveLength(1);
   });
 
-  it("opens the canonical access view from the URL", async () => {
-    window.history.pushState({}, "", "/portal/shares?view=access");
-    renderPage();
+  it("normalizes the obsolete access view back to project members", async () => {
+    renderPage("/portal/shares?project=101&view=access");
 
     expect(
-      await screen.findByRole("tabpanel", { name: "Access by space" }),
+      await screen.findByRole("tabpanel", { name: "Project members" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Access by space" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Shared with me" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    expect(screen.queryByRole("tab", { name: "Access by space" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/portal/shares?project=101"),
     );
   });
 
@@ -266,31 +233,6 @@ describe("PortalSharesPage", () => {
     expect(within(membersPanel).getByText("Manager User")).toBeInTheDocument();
     expect(within(membersPanel).queryByText("Editor User")).not.toBeInTheDocument();
     expect(within(membersPanel).getByText("1 of 2 members")).toBeInTheDocument();
-  });
-
-  it("loads access for every active space but excludes archived spaces", async () => {
-    mocks.hookResult.workspace.spaces = [
-      mocks.hookResult.workspace.spaces[0],
-      {
-        ...mocks.hookResult.workspace.spaces[0],
-        id: "private-data",
-        name: "Private Data",
-        role: "Owner",
-        visibility: "private",
-      },
-      {
-        ...mocks.hookResult.workspace.spaces[0],
-        id: "archived-data",
-        name: "Archived Data",
-        status: "Archived",
-      },
-    ];
-    renderPage();
-
-    await waitFor(() => expect(mocks.listSharesMock).toHaveBeenCalledTimes(2));
-    expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "research-data");
-    expect(mocks.listSharesMock).toHaveBeenCalledWith("101", "private-data");
-    expect(mocks.listSharesMock).not.toHaveBeenCalledWith("101", "archived-data");
   });
 
   it("lists, filters, and copies external links", async () => {

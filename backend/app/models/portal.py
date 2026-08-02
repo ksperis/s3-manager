@@ -491,6 +491,29 @@ class PortalCollaborator(BaseModel):
     access_source: Literal["direct", "group", "direct_and_group"]
     member_since: Optional[datetime] = None
     avatar: Optional[UserAvatar] = None
+    can_review_access: bool = False
+
+
+PortalCollaboratorStorageSpaceAccessSource = Literal[
+    "direct",
+    "team",
+    "owner",
+    "project_manager",
+]
+
+
+class PortalCollaboratorStorageSpaceAccess(BaseModel):
+    storage_space_id: str
+    storage_space_name: str
+    role: PortalStorageSpaceRole
+    source: PortalCollaboratorStorageSpaceAccessSource
+    can_revoke: bool = False
+
+
+class PortalCollaboratorAccessReview(BaseModel):
+    collaborator: PortalCollaborator
+    can_request_project_removal: bool = False
+    space_accesses: list[PortalCollaboratorStorageSpaceAccess] = Field(default_factory=list)
 
 
 class PortalCollaboratorTrend(BaseModel):

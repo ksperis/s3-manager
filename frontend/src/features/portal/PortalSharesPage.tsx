@@ -7,17 +7,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   listPortalStorageSpacePublicLinks,
-  listPortalStorageSpaceShares,
   revokePortalStorageSpacePublicLink,
   type PortalCollaborator,
   type PortalPublicLink,
-  type PortalStorageSpaceShare,
 } from "../../api/portal";
 import { createPortalRequest } from "../../api/portalRequests";
 import ConfirmActionDialog from "../../components/ConfirmActionDialog";
@@ -27,7 +24,6 @@ import DataTableShell, {
 import ListPageSection from "../../components/list/ListPageSection";
 import PageBanner from "../../components/PageBanner";
 import PageShell from "../../components/PageShell";
-import PageTabs from "../../components/PageTabs";
 import Modal from "../../components/Modal";
 import {
   tableActionButtonClasses,
@@ -55,158 +51,19 @@ import PortalPageTabs, { PortalTabPanel } from "./PortalPageTabs";
 import { portalBreadcrumbs } from "./portalBreadcrumbs";
 import {
   storageSpacePath,
-  type PortalWorkspaceRole,
 } from "./portalWorkspaceModel";
-import { portalRoleTone, resolvePortalWorkspacePageState } from "./portalUi";
+import { resolvePortalWorkspacePageState } from "./portalUi";
 import {
   portalAccessSourceLabel,
   portalAccountRoleLabel,
   portalDateLabel,
   portalPublicLinkStatusLabel,
-  portalRoleLabel,
 } from "./portalI18n";
 import { usePortalWorkspaceData } from "./usePortalWorkspaceData";
 
-type ShareTab = "with" | "by";
-type CollaboratorsViewTab = "members" | "access" | "links";
-type PendingShareAction =
-  | { type: "revoke-public-link"; link: PortalPublicLink }
-  | { type: "request-member-removal"; collaborator: PortalCollaborator };
-type ShareRow = {
-  id: string;
-  userId?: number | null;
-  spaceId: string;
-  spaceName: string;
-  person: string;
-  access: PortalWorkspaceRole;
-  activityLabel: string;
-};
+type CollaboratorsViewTab = "members" | "links";
+type PendingShareAction = { type: "revoke-public-link"; link: PortalPublicLink };
 type PublicLinkRow = PortalPublicLink & { rowKey: string };
-
-function fromApiShare(share: PortalStorageSpaceShare): ShareRow {
-  return {
-    id: share.id,
-    userId: share.user_id,
-    spaceId: share.storage_space_id,
-    spaceName: share.storage_space_name,
-    person: share.email,
-    access: share.role,
-    activityLabel: share.activity_label ?? "Active",
-  };
-}
-
-function SharesTable({
-  shares,
-  direction,
-}: {
-  shares: ShareRow[];
-  direction: ShareTab;
-}) {
-  const { t } = useI18n();
-  const sharedByMe = direction === "by";
-  const tableStatus = shares.length === 0 ? "empty" : "ready";
-  const columns = useMemo<DataTableColumn<ShareRow>[]>(
-    () => [
-      {
-        id: "name",
-        label: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-        mobileLabel: t({ en: "Space", fr: "Espace", de: "Bereich" }),
-        primary: true,
-        render: (share) => (
-          <Link
-            to={`/portal/storage-spaces/${encodeURIComponent(share.spaceId)}?tab=collaborators`}
-            className="font-bold text-primary hover:underline dark:text-primary-200"
-          >
-            {share.spaceName}
-          </Link>
-        ),
-      },
-      {
-        id: "person",
-        label: sharedByMe
-          ? t({ en: "Collaborator", fr: "Collaborateur", de: "Mitwirkende" })
-          : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
-        mobileLabel: sharedByMe
-          ? t({ en: "Person", fr: "Personne", de: "Person" })
-          : t({ en: "Shared by", fr: "Partagé par", de: "Geteilt von" }),
-        render: (share) => share.person,
-      },
-      {
-        id: "access",
-        label: t({ en: "Access", fr: "Accès", de: "Zugriff" }),
-        render: (share) => (
-          <UiBadge tone={portalRoleTone(share.access)}>
-            {portalRoleLabel(share.access, t)}
-          </UiBadge>
-        ),
-      },
-      {
-        id: "activity",
-        label: t({ en: "Activity", fr: "Activité", de: "Aktivität" }),
-        render: (share) =>
-          share.activityLabel === "Active"
-            ? t({ en: "Active", fr: "Actif", de: "Aktiv" })
-            : share.activityLabel,
-      },
-      ...(sharedByMe
-        ? [
-            {
-              id: "action",
-              label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-              align: "right" as const,
-              mobileRole: "actions" as const,
-              render: (share: ShareRow) => (
-                <Link
-                  to={`/portal/storage-spaces/${encodeURIComponent(share.spaceId)}?tab=collaborators`}
-                  className={tableActionButtonClasses}
-                >
-                  {t({
-                    en: "Manage in space",
-                    fr: "Gérer dans l'espace",
-                    de: "Im Bereich verwalten",
-                  })}
-                </Link>
-              ),
-            },
-          ]
-        : []),
-    ],
-    [sharedByMe, t],
-  );
-
-  return (
-    <DataTableShell
-      columns={columns}
-      rows={shares}
-      rowKey={(share) => share.id}
-      status={tableStatus}
-      loadingMessage={t({
-        en: "Loading collaborators...",
-        fr: "Chargement des collaborateurs...",
-        de: "Mitwirkende werden geladen...",
-      })}
-      errorMessage={t({
-        en: "Unable to load collaborators.",
-        fr: "Impossible de charger les collaborateurs.",
-        de: "Mitwirkende können nicht geladen werden.",
-      })}
-      emptyMessage={
-        sharedByMe
-          ? t({
-              en: "No direct access has been granted yet.",
-              fr: "Aucun accès direct n'a encore été accordé.",
-              de: "Es wurde noch kein direkter Zugriff vergeben.",
-            })
-          : t({
-              en: "No spaces have been shared with you yet.",
-              fr: "Aucun espace n'a encore été partagé avec vous.",
-              de: "Noch keine Bereiche wurden mit Ihnen geteilt.",
-            })
-      }
-      responsiveCards
-    />
-  );
-}
 
 function CollaboratorsInventory({
   collaborators,
@@ -214,18 +71,12 @@ function CollaboratorsInventory({
   error,
   query,
   onQueryChange,
-  canRequestRemoval,
-  requestBusy,
-  onRequestRemoval,
 }: {
   collaborators: PortalCollaborator[];
   loading: boolean;
   error?: string | null;
   query: string;
   onQueryChange: (value: string) => void;
-  canRequestRemoval: boolean;
-  requestBusy: boolean;
-  onRequestRemoval: (collaborator: PortalCollaborator) => void;
 }) {
   const { locale, t } = useI18n();
   const term = query.trim().toLowerCase();
@@ -319,35 +170,29 @@ function CollaboratorsInventory({
             ? portalDateLabel(collaborator.member_since, locale)
             : "-",
       },
-      ...(canRequestRemoval
-        ? [
-            {
-              id: "action",
-              label: t({ en: "Action", fr: "Action", de: "Aktion" }),
-              align: "right" as const,
-              mobileRole: "actions" as const,
-              render: (collaborator: PortalCollaborator) =>
-                collaborator.account_role === "portal_user" && collaborator.access_source === "direct" ? (
-                  <button
-                    type="button"
-                    className={tableDeleteActionClasses}
-                    disabled={requestBusy}
-                    onClick={() => onRequestRemoval(collaborator)}
-                  >
-                    {t({
-                      en: "Request removal",
-                      fr: "Demander le retrait",
-                      de: "Entfernung anfragen",
-                    })}
-                  </button>
-                ) : (
-                  <span className={uiMutedTextClass}>-</span>
-                ),
-            },
-          ]
-        : []),
+      {
+        id: "action",
+        label: t({ en: "Action", fr: "Action", de: "Aktion" }),
+        align: "right" as const,
+        mobileRole: "actions" as const,
+        render: (collaborator) =>
+          collaborator.can_review_access ? (
+            <Link
+              to={`/portal/shares/${encodeURIComponent(collaborator.user_id)}`}
+              className={tableActionButtonClasses}
+            >
+              {t({
+                en: "Review access",
+                fr: "Revoir les accès",
+                de: "Zugriff prüfen",
+              })}
+            </Link>
+          ) : (
+            <span className={uiMutedTextClass}>-</span>
+          ),
+      },
     ],
-    [canRequestRemoval, locale, onRequestRemoval, requestBusy, t],
+    [locale, t],
   );
 
   return (
@@ -358,9 +203,9 @@ function CollaboratorsInventory({
         de: "Projektmitglieder",
       })}
       description={t({
-            en: "Project membership makes someone available for collaboration. Access to files is granted separately in each space.",
-            fr: "L'appartenance au projet rend une personne disponible pour collaborer. L'accès aux fichiers est accordé séparément dans chaque espace.",
-            de: "Die Projektmitgliedschaft macht eine Person für die Zusammenarbeit verfügbar. Der Dateizugriff wird in jedem Bereich separat vergeben.",
+            en: "Review each person's effective access across active Storage Spaces.",
+            fr: "Revoyez les accès effectifs de chaque personne dans les Storage Spaces actifs.",
+            de: "Prüfen Sie den effektiven Zugriff jeder Person auf aktive Storage Spaces.",
       })}
       countLabel={t({
         en: `${visibleCollaborators.length} of ${collaborators.length} member${collaborators.length === 1 ? "" : "s"}`,
@@ -425,13 +270,10 @@ function CollaboratorsInventory({
 
 export default function PortalSharesPage() {
   const { locale, t } = useI18n();
-  const [activeViewTab, setActiveViewTab] =
-    useState<CollaboratorsViewTab>("members");
-  const [activeTab, setActiveTab] = useState<ShareTab>("with");
-  const [apiShares, setApiShares] = useState<PortalStorageSpaceShare[] | null>(
-    null,
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeViewTab, setActiveViewTab] = useState<CollaboratorsViewTab>(
+    searchParams.get("view") === "links" ? "links" : "members",
   );
-  const [sharesLoadedKey, setSharesLoadedKey] = useState<string | null>(null);
   const [publicLinks, setPublicLinks] = useState<PortalPublicLink[]>([]);
   const [sharesError, setSharesError] = useState<string | null>(null);
   const [selectedLinkSpaceId, setSelectedLinkSpaceId] = useState("");
@@ -466,7 +308,6 @@ export default function PortalSharesPage() {
       state?.account_role === "portal_manager" ||
       state?.can_manage_portal_users,
   );
-  const initialUrlContextApplied = useRef(false);
   const activeCollaboratorSpaces = useMemo(
     () => workspace.spaces.filter((space) => space.status !== "Archived"),
     [workspace.spaces],
@@ -476,87 +317,30 @@ export default function PortalSharesPage() {
     [activeCollaboratorSpaces],
   );
 
-  const activeCollaboratorSpaceIds = useMemo(
-    () => activeCollaboratorSpaces.map((space) => space.id).join("|"),
-    [activeCollaboratorSpaces],
-  );
-  const sharesRequestKey = useMemo(
-    () =>
-      accountIdForApi ? `${accountIdForApi}:${activeCollaboratorSpaceIds}` : "",
-    [accountIdForApi, activeCollaboratorSpaceIds],
-  );
   const selectedPublicLinkSpace =
     activeManagedTeamSpaces.find((space) => space.id === selectedLinkSpaceId) ??
     null;
 
   useEffect(() => {
-    if (initialUrlContextApplied.current || workspace.spaces.length === 0)
-      return;
-    const params = new URLSearchParams(window.location.search);
-    const requestedSpaceId = params.get("space_id");
-    const requestedView = params.get("view");
-    if (requestedView === "members" || requestedView === "access" || requestedView === "links") {
-      setActiveViewTab(requestedView);
-    }
-    if (
-      requestedSpaceId &&
-      workspace.spaces.some((space) => space.id === requestedSpaceId)
-    ) {
+    if (searchParams.get("view") !== "access") return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("view");
+    setActiveViewTab("members");
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const requestedSpaceId = searchParams.get("space_id");
+    if (requestedSpaceId && workspace.spaces.some((space) => space.id === requestedSpaceId)) {
       setSelectedLinkSpaceId(requestedSpaceId);
     }
-    initialUrlContextApplied.current = true;
-  }, [workspace.spaces]);
+  }, [searchParams, workspace.spaces]);
 
   useEffect(() => {
     if (selectedLinkSpaceId && !activeManagedTeamSpaces.some((space) => space.id === selectedLinkSpaceId)) {
       setSelectedLinkSpaceId("");
     }
   }, [activeManagedTeamSpaces, selectedLinkSpaceId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!accountIdForApi || activeCollaboratorSpaces.length === 0) {
-      setApiShares([]);
-      setSharesLoadedKey(sharesRequestKey);
-      setSharesError(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-    setApiShares(null);
-    setSharesError(null);
-    Promise.all(
-      activeCollaboratorSpaces.map((space) =>
-        listPortalStorageSpaceShares(accountIdForApi, space.id),
-      ),
-    )
-      .then((results) => {
-        if (!cancelled) {
-          setApiShares(results.flat());
-          setSharesLoadedKey(sharesRequestKey);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled) {
-          setApiShares(null);
-          setSharesLoadedKey(null);
-          setSharesError(
-            extractApiError(
-              err,
-              t({
-                en: "Unable to load collaborators.",
-                fr: "Impossible de charger les collaborateurs.",
-                de: "Mitwirkende können nicht geladen werden.",
-              }),
-            ),
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountIdForApi, activeCollaboratorSpaces, sharesRequestKey, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -584,18 +368,6 @@ export default function PortalSharesPage() {
       cancelled = true;
     };
   }, [accountIdForApi, activeManagedTeamSpaces]);
-
-  const rows = useMemo(() => {
-    return {
-      with: (apiShares ?? [])
-        .filter((share) => share.direction === "with_me")
-        .map(fromApiShare),
-      by: (apiShares ?? [])
-        .filter((share) => share.direction === "by_me")
-        .map(fromApiShare),
-      links: [],
-    };
-  }, [apiShares]);
 
   const handleRevokePublicLink = useCallback(
     (link: PortalPublicLink) => {
@@ -658,44 +430,6 @@ export default function PortalSharesPage() {
     }
   };
 
-  const confirmMemberRemovalRequest = async (collaborator: PortalCollaborator) => {
-    if (!accountIdForApi || !canRequestMemberChanges) return;
-    setMemberRequestBusy(true);
-    setSharesError(null);
-    setSharesMessage(null);
-    try {
-      await createPortalRequest(accountIdForApi, {
-        request_type: "portal_user_removal",
-        target_name: collaborator.display_name || null,
-        target_email: collaborator.email,
-        reason: null,
-      });
-      setPendingAction(null);
-      setSharesMessage(
-        t({
-          en: "Removal request sent. Track it in Help requests.",
-          fr: "Demande de retrait envoyée. Suivez-la dans les demandes d'aide.",
-          de: "Entfernungsanfrage gesendet. Verfolgen Sie sie unter Hilfeanfragen.",
-        }),
-      );
-    } catch (err) {
-      console.error(err);
-      setSharesError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to send the removal request.",
-            fr: "Impossible d'envoyer la demande de retrait.",
-            de: "Entfernungsanfrage kann nicht gesendet werden.",
-          }),
-        ),
-      );
-      setPendingAction(null);
-    } finally {
-      setMemberRequestBusy(false);
-    }
-  };
-
   const copyPublicLink = useCallback(
     async (link: PortalPublicLink) => {
       setSharesMessage(null);
@@ -753,7 +487,6 @@ export default function PortalSharesPage() {
     }
   };
 
-  const shares = rows[activeTab];
   const publicLinkRows = useMemo<PublicLinkRow[]>(
     () =>
       publicLinks
@@ -836,15 +569,9 @@ export default function PortalSharesPage() {
     [busyShareId, copyPublicLink, handleRevokePublicLink, locale, t],
   );
 
-  const sharesInitialLoading = Boolean(
-    accountIdForApi &&
-    activeCollaboratorSpaces.length > 0 &&
-    !sharesError &&
-    sharesLoadedKey !== sharesRequestKey,
-  );
   const pageState = resolvePortalWorkspacePageState({
     accountLoading,
-    loading: loading || sharesInitialLoading,
+    loading,
     accountError,
     error,
     hasAccountContext,
@@ -869,9 +596,9 @@ export default function PortalSharesPage() {
           de: "Mitwirkende",
         })}
         description={t({
-          en: "See who belongs to the project, review access by space, and track links shared outside it.",
-          fr: "Consultez les membres du projet, contrôlez les accès par espace et suivez les liens partagés à l'extérieur.",
-          de: "Sehen Sie Projektmitglieder, prüfen Sie Zugriffe pro Bereich und verfolgen Sie extern geteilte Links.",
+          en: "Review project members and track links shared outside the project.",
+          fr: "Revoyez les membres du projet et suivez les liens partagés à l'extérieur.",
+          de: "Prüfen Sie Projektmitglieder und verfolgen Sie extern geteilte Links.",
         })}
         breadcrumbs={portalBreadcrumbs({
           label: t({
@@ -926,14 +653,6 @@ export default function PortalSharesPage() {
             }),
           },
           {
-            id: "access",
-            label: t({
-              en: "Access by space",
-              fr: "Accès par espace",
-              de: "Zugriff nach Bereich",
-            }),
-          },
-          {
             id: "links",
             label: t({
               en: "External links",
@@ -943,7 +662,14 @@ export default function PortalSharesPage() {
           },
         ]}
         activeTab={activeViewTab}
-        onChange={(tab) => setActiveViewTab(tab as CollaboratorsViewTab)}
+        onChange={(tab) => {
+          const nextTab = tab as CollaboratorsViewTab;
+          const nextParams = new URLSearchParams(searchParams);
+          if (nextTab === "links") nextParams.set("view", "links");
+          else nextParams.delete("view");
+          setActiveViewTab(nextTab);
+          setSearchParams(nextParams, { replace: true });
+        }}
         ariaLabel={t({
           en: "Collaborator overview",
           fr: "Vue d'ensemble des collaborateurs",
@@ -963,67 +689,7 @@ export default function PortalSharesPage() {
             error={collaboratorsError}
             query={collaboratorQuery}
             onQueryChange={setCollaboratorQuery}
-            canRequestRemoval={canRequestMemberChanges}
-            requestBusy={memberRequestBusy}
-            onRequestRemoval={(collaborator) =>
-              setPendingAction({ type: "request-member-removal", collaborator })
-            }
           />
-        </PortalTabPanel>
-      ) : null}
-
-      {activeViewTab === "access" ? (
-        <PortalTabPanel idPrefix="portal-collaborators" tabId="access">
-          <UiCard>
-            <p className={cx("mb-3 ui-caption", uiMutedTextClass)}>
-              {t({
-                en: "This overview is read-only. Open a space to invite someone, change a role, or remove access.",
-                fr: "Cette vue est en lecture seule. Ouvrez un espace pour inviter une personne, modifier un rôle ou retirer un accès.",
-                de: "Diese Übersicht ist schreibgeschützt. Öffnen Sie einen Bereich, um Personen einzuladen, Rollen zu ändern oder Zugriffe zu entfernen.",
-              })}
-            </p>
-            <div className="mb-3">
-              <PageTabs
-                tabs={[
-                  {
-                    id: "with",
-                    label: t({
-                      en: "Shared with me",
-                      fr: "Partagés avec moi",
-                      de: "Mit mir geteilt",
-                    }),
-                  },
-                  {
-                    id: "by",
-                    label: t({
-                      en: "Granted by me",
-                      fr: "Accordés par moi",
-                      de: "Von mir vergeben",
-                    }),
-                  },
-                ]}
-                activeTab={activeTab}
-                onChange={(tab) => setActiveTab(tab as ShareTab)}
-                variant="line"
-                ariaLabel={t({
-                  en: "Access direction",
-                  fr: "Direction des accès",
-                  de: "Zugriffsrichtung",
-                })}
-                idPrefix="portal-space-access"
-              />
-            </div>
-            <PortalTabPanel idPrefix="portal-space-access" tabId={activeTab}>
-              <SharesTable shares={shares} direction={activeTab} />
-              <div className={cx("mt-4 text-[11px] font-semibold", uiMutedTextClass)}>
-                {t({
-                  en: `${shares.length} ${shares.length === 1 ? "entry" : "entries"}`,
-                  fr: `${shares.length} entrée${shares.length > 1 ? "s" : ""}`,
-                  de: `${shares.length} Eintrag${shares.length === 1 ? "" : "e"}`,
-                })}
-              </div>
-            </PortalTabPanel>
-          </UiCard>
         </PortalTabPanel>
       ) : null}
 
@@ -1185,51 +851,6 @@ export default function PortalSharesPage() {
             </div>
           </form>
         </Modal>
-      ) : null}
-
-      {pendingAction?.type === "request-member-removal" ? (
-        <ConfirmActionDialog
-          title={t({
-            en: "Request member removal",
-            fr: "Demander le retrait du membre",
-            de: "Mitgliedsentfernung anfragen",
-          })}
-          description={t({
-            en: "Send this project membership removal request to a storage admin for approval.",
-            fr: "Envoyez cette demande de retrait du projet à un administrateur du stockage pour approbation.",
-            de: "Senden Sie diese Anfrage zur Entfernung aus dem Projekt an einen Speicheradministrator.",
-          })}
-          confirmLabel={t({
-            en: "Send removal request",
-            fr: "Envoyer la demande de retrait",
-            de: "Entfernungsanfrage senden",
-          })}
-          loading={memberRequestBusy}
-          details={[
-            {
-              label: t({ en: "Person", fr: "Personne", de: "Person" }),
-              value: pendingAction.collaborator.display_name || pendingAction.collaborator.email,
-            },
-            {
-              label: t({ en: "Email", fr: "E-mail", de: "E-Mail" }),
-              value: pendingAction.collaborator.email,
-            },
-          ]}
-          impacts={[
-            t({
-              en: "Nothing changes until a storage admin approves the request.",
-              fr: "Rien ne change tant qu'un administrateur du stockage n'a pas approuvé la demande.",
-              de: "Bis zur Genehmigung durch einen Speicheradministrator ändert sich nichts.",
-            }),
-            t({
-              en: "Approval removes this person's direct project membership and Portal access for the project.",
-              fr: "L'approbation retire l'appartenance directe de cette personne au projet et son accès Portal à ce projet.",
-              de: "Die Genehmigung entfernt die direkte Projektmitgliedschaft und den Portal-Zugriff dieser Person.",
-            }),
-          ]}
-          onCancel={() => setPendingAction(null)}
-          onConfirm={() => confirmMemberRemovalRequest(pendingAction.collaborator)}
-        />
       ) : null}
 
       {pendingAction?.type === "revoke-public-link" ? (

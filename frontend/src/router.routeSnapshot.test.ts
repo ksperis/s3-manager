@@ -98,6 +98,7 @@ describe("route snapshot", () => {
       "/portal/storage-spaces/:spaceId",
       "/portal/access-keys",
       "/portal/shares",
+      "/portal/shares/:userId",
       "/portal/requests",
       "/portal/history",
       "/portal/usage",

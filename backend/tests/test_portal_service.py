@@ -4547,6 +4547,151 @@ def test_portal_collaborators_summarize_effective_members_and_visible_external_a
     assert grouped_row.member_since.date() == (now - timedelta(days=10)).date()
 
 
+def test_portal_collaborator_access_review_reports_effective_sources_and_revoke_scope(db_session):
+    account = S3Account(name="portal-access-review", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = S3Account(name="portal-access-review-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
+    manager = User(email="manager-review@example.com", display_name="Manager", hashed_password="x", role="ui_user")
+    member = User(email="member-review@example.com", display_name="Member", hashed_password="x", role="ui_user")
+    outsider = User(email="outsider-review@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, other_account, manager, member, outsider])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=outsider.id, account_id=other_account.id, role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    owned = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="owned-space",
+        display_name="Alpha owned",
+        owner_user_id=member.id,
+        visibility="private",
+    )
+    direct = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="direct-space",
+        display_name="Beta direct",
+        visibility="shared",
+        share_scope="restricted",
+    )
+    team = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="team-space",
+        display_name="Gamma team",
+        visibility="shared",
+        share_scope="account",
+        account_member_role="Viewer",
+    )
+    hidden = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="hidden-space",
+        display_name="Hidden private",
+        owner_user_id=manager.id,
+        visibility="private",
+    )
+    archived = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="archived-space",
+        display_name="Archived direct",
+        visibility="shared",
+        share_scope="restricted",
+        archived_at=utcnow(),
+    )
+    other_space = PortalStorageSpaceMetadata(
+        account_id=other_account.id,
+        bucket_name="other-space",
+        display_name="Other project",
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add_all([owned, direct, team, hidden, archived, other_space])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PortalStorageSpaceGrant(storage_space_metadata_id=direct.id, user_id=member.id, role="Editor"),
+            PortalStorageSpaceGrant(storage_space_metadata_id=team.id, user_id=member.id, role="Editor"),
+            PortalStorageSpaceGrant(storage_space_metadata_id=archived.id, user_id=member.id, role="Viewer"),
+            PortalStorageSpaceGrant(storage_space_metadata_id=other_space.id, user_id=member.id, role="Viewer"),
+        ]
+    )
+    db_session.commit()
+
+    service = PortalService(db_session)
+    manager_access = _portal_access(account, manager, role=AccountRole.PORTAL_MANAGER.value)
+
+    result = service.get_portal_collaborator_access_review(manager, manager_access, member.id)
+
+    assert result.collaborator.email == "member-review@example.com"
+    assert result.collaborator.can_review_access is True
+    assert result.can_request_project_removal is True
+    assert [
+        (item.storage_space_name, item.role, item.source, item.can_revoke)
+        for item in result.space_accesses
+    ] == [
+        ("Alpha owned", "Owner", "owner", False),
+        ("Beta direct", "Editor", "direct", True),
+        ("Gamma team", "Viewer", "team", False),
+    ]
+
+    manager_result = service.get_portal_collaborator_access_review(manager, manager_access, manager.id)
+    manager_sources = {item.storage_space_id: (item.role, item.source, item.can_revoke) for item in manager_result.space_accesses}
+    assert manager_sources["direct-space"] == ("Manager", "project_manager", False)
+    assert manager_sources["hidden-space"] == ("Owner", "owner", False)
+    assert "archived-space" not in manager_sources
+    assert "other-space" not in manager_sources
+
+
+def test_portal_collaborator_access_review_authorizes_manager_or_self_and_isolates_projects(db_session):
+    account = S3Account(name="portal-access-review-auth", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    other_account = S3Account(name="portal-access-review-auth-other", rgw_access_key="OTHER-AK", rgw_secret_key="OTHER-SK")
+    manager = User(email="manager-review-auth@example.com", hashed_password="x", role="ui_user")
+    member = User(email="member-review-auth@example.com", hashed_password="x", role="ui_user")
+    peer = User(email="peer-review-auth@example.com", hashed_password="x", role="ui_user")
+    outsider = User(email="outsider-review-auth@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, other_account, manager, member, peer, outsider])
+    db_session.commit()
+    db_session.add_all(
+        [
+            UserS3Account(user_id=manager.id, account_id=account.id, role=AccountRole.PORTAL_MANAGER.value),
+            UserS3Account(user_id=member.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=peer.id, account_id=account.id, role=AccountRole.PORTAL_USER.value),
+            UserS3Account(user_id=outsider.id, account_id=other_account.id, role=AccountRole.PORTAL_USER.value),
+        ]
+    )
+    space = PortalStorageSpaceMetadata(
+        account_id=account.id,
+        bucket_name="member-direct-space",
+        display_name="Member direct",
+        visibility="shared",
+        share_scope="restricted",
+    )
+    db_session.add(space)
+    db_session.flush()
+    db_session.add(PortalStorageSpaceGrant(storage_space_metadata_id=space.id, user_id=member.id, role="Viewer"))
+    db_session.commit()
+
+    service = PortalService(db_session)
+    member_access = _portal_access(account, member)
+    self_result = service.get_portal_collaborator_access_review(member, member_access, member.id)
+    assert self_result.space_accesses[0].can_revoke is False
+    assert self_result.can_request_project_removal is False
+
+    with pytest.raises(RuntimeError, match="not allowed"):
+        service.get_portal_collaborator_access_review(member, member_access, peer.id)
+    with pytest.raises(RuntimeError, match="not found"):
+        service.get_portal_collaborator_access_review(manager, _portal_access(account, manager, AccountRole.PORTAL_MANAGER.value), outsider.id)
+
+    manager_rows = service.list_portal_collaborators(
+        manager,
+        _portal_access(account, manager, AccountRole.PORTAL_MANAGER.value),
+    ).collaborators
+    assert all(item.can_review_access for item in manager_rows)
+    member_rows = service.list_portal_collaborators(member, member_access).collaborators
+    assert [item.user_id for item in member_rows if item.can_review_access] == [member.id]
+
+
 def test_storage_space_access_summary_reflects_modes_counts_and_manager_access(monkeypatch, db_session):
     account = S3Account(name="portal-access-summary", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     owner = User(email="owner-access-summary@example.com", display_name="Owner Summary", hashed_password="x", role="ui_user")

@@ -49,6 +49,8 @@ from app.models.portal import (
     PortalActivityItem,
     PortalAlert,
     PortalCollaborator,
+    PortalCollaboratorAccessReview,
+    PortalCollaboratorStorageSpaceAccess,
     PortalCollaboratorSummary,
     PortalCollaboratorTrend,
     PortalCollaboratorsResponse,

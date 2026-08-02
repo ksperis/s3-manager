@@ -1,14 +1,15 @@
 # Portal: Collaborators
 
-Use this page when you need to review project members, check access across
-spaces, or review links that send a file outside the project. Invitations and
-role changes are managed from the relevant space so the affected files and
-permissions always remain clear.
+Use this page when you need to review project members, audit one person's
+effective access across active spaces, or review links that send a file outside
+the project. Invitations and role changes are managed from the relevant space
+so the affected files and permissions always remain clear.
 
 ## Before you start
 
 - The space is active.
-- You are a Portal manager; team-space sharing is a project-management action.
+- Every member can review their own access. You must be a Portal manager to
+  review another member or change direct access.
 - The person you want to add appears in the people list, or you know their name
   and email so you can request that they be added to the project.
 - Public links are enabled when you need to share one file by link.
@@ -39,31 +40,39 @@ Portal managers can browse and manage every project space.
 2. **Project members** opens by default. Use it to search every active member
    of the selected project.
 3. Use **Request member** to ask a storage admin to add someone to the project.
-   For a direct Portal member, use **Request removal** in the row actions to
-   ask for their removal. Follow both requests in **Portal > Help requests**.
-4. Open **Access by space** for a read-only overview of spaces shared with you
-   and direct access you granted. Choose **Manage in space** on a row when a
-   role or access needs to change.
-5. To invite someone, open **Portal > Spaces**, choose the space, then open its
+4. Choose **Review access** for a member. Portal managers can review every
+   member; other members can open only their own review.
+5. The review lists every active Storage Space the person can access, their
+   effective role, and why they have it: direct access, project team,
+   ownership, or project-manager role. Archived spaces are excluded.
+6. Only a direct Viewer or Editor grant on a **Selected people** space can be
+   removed from this page. Choose **Remove access**, review the confirmation,
+   then confirm. Team, owner, and manager access is inherited and cannot be
+   removed individually.
+7. For a direct project member, choose **Request project removal** in their
+   access review to ask a storage admin to remove their project membership.
+   Follow this and member-addition requests in **Portal > Help requests**.
+8. To invite someone, open **Portal > Spaces**, choose the space, then open its
    **Collaborators** tab. You can also use **Invite people** from the space
    header or file area to open the same contextual workflow.
-6. Choose **Add people**, search by name or email, select the least-powerful
+9. Choose **Add people**, search by name or email, select the least-powerful
    role that fits the work, then confirm **Add people**.
-7. If no person matches, choose **Request collaborator access**, add their name
+10. If no person matches, choose **Request collaborator access**, add their name
    and email, then send the request. An admin must add them to the project
    before you can invite them to a space. Follow the status in **Portal > Help
    requests**, then return to the same space to finish the invitation.
-8. Change a direct collaborator's role from the space's **Collaborators** tab.
+11. Change a direct collaborator's role from the space's **Collaborators** tab.
    Review the person, current role, new role, and space in the confirmation
    dialog before applying the change.
-9. To share outside the project, open **External links** in the global
+12. To share outside the project, open **External links** in the global
    Collaborators page. Filter by space to copy or revoke an existing link. New
    links are always created from the actions of the file being shared.
 
 ## You are done when
 
-The intended collaborator appears in the relevant space with the right role,
-or the external link appears with the expected status and expiry.
+The member's access review explains every active space and effective role, the
+intended direct access is present or removed, or the external link appears with
+the expected status and expiry.
 
 ## If sharing is unavailable
 

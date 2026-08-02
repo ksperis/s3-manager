@@ -30,8 +30,9 @@ simple preferences.
    stay hidden.
 5. Use **External tools** to generate S3 credentials for external tools. The
    Portal runtime key is not shown in this list.
-6. Use **Collaborators** to review workspace members, spaces shared with you,
-   people you invited, and public links when enabled.
+6. Use **Collaborators** to review workspace members, open a person's effective
+   access review across active spaces, and manage public links when enabled.
+   Managers can review every member; other members can review themselves.
 7. Use **History** and **Storage health** for collaboration history, file
    movement, technical access logs when allowed, storage health, and cost
    checks.

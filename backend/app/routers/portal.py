@@ -23,6 +23,7 @@ from app.models.portal import (
     PortalActivityItem,
     PortalAlert,
     PortalCollaboratorsResponse,
+    PortalCollaboratorAccessReview,
     PortalDeletedPrefixRestoreProgress,
     PortalDeletedPrefixRestoreRequest,
     PortalDeletedPrefixRestoreResult,
@@ -733,6 +734,21 @@ def portal_collaborators(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
         return service.list_portal_collaborators(actor, access)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.get("/collaborators/{user_id}/access", response_model=PortalCollaboratorAccessReview)
+def portal_collaborator_access_review(
+    user_id: int,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalCollaboratorAccessReview:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.get_portal_collaborator_access_review(actor, access, user_id)
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
 
