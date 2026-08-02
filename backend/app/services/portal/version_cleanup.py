@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.db import User
 from app.models.portal import (
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupResult,
@@ -17,7 +18,8 @@ from app.services.bucket_purge_service import BucketPurgeCancelled
 from app.services.object_listing_temp_store import TemporarySqliteStore
 from app.services import s3_client
 
-from ._shared import *
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
 
 
 PortalVersionCleanupProgressCallback = Callable[[PortalStorageSpaceVersionCleanupProgress], None]
