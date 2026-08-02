@@ -12,6 +12,21 @@ type ParsedRawMappingResult = {
   invalidLines: string[];
 };
 
+type BucketCompareMapping = {
+  sourceBucket: string;
+  targetBucket: string;
+};
+
+type BucketCompareMappingModel = {
+  availableTargetBucketNames: string[];
+  resolvedManualMapping: Map<string, string>;
+  comparePlan: {
+    mappings: BucketCompareMapping[];
+    error: string | null;
+  };
+  missingByName: string[];
+};
+
 type CompareDiffTone = "added" | "removed";
 
 type CompareDiffLine = {
@@ -385,4 +400,105 @@ export const parseRawMappingText = (value: string): ParsedRawMappingResult => {
       mapping.set(source, target);
     });
   return { mapping, invalidLines };
+};
+
+export const buildBucketCompareMappingModel = ({
+  targetSelected,
+  targetKind,
+  sourceBuckets,
+  targetBuckets,
+  sameTargetSelected,
+  mappingMode,
+  rawMapping,
+  manualMapping,
+}: {
+  targetSelected: boolean;
+  targetKind: "endpoint" | "context";
+  sourceBuckets: string[];
+  targetBuckets: string[];
+  sameTargetSelected: boolean;
+  mappingMode: "by_name" | "manual";
+  rawMapping: ReadonlyMap<string, string>;
+  manualMapping: Readonly<Record<string, string>>;
+}): BucketCompareMappingModel => {
+  const sourceBucketNames = new Set(sourceBuckets);
+  const availableTargetBucketNames = sameTargetSelected
+    ? targetBuckets.filter((name) => !sourceBucketNames.has(name))
+    : targetBuckets;
+  const availableTargetNames = new Set(availableTargetBucketNames);
+  const resolvedManualMapping = new Map<string, string>();
+
+  sourceBuckets.forEach((sourceBucket) => {
+    const rawMapped = rawMapping.get(sourceBucket);
+    if (rawMapped) {
+      resolvedManualMapping.set(sourceBucket, rawMapped);
+      return;
+    }
+    const uiMapped = (manualMapping[sourceBucket] ?? "").trim();
+    if (uiMapped) {
+      resolvedManualMapping.set(sourceBucket, uiMapped);
+      return;
+    }
+    if (availableTargetNames.has(sourceBucket)) {
+      resolvedManualMapping.set(sourceBucket, sourceBucket);
+    }
+  });
+
+  let comparePlan: BucketCompareMappingModel["comparePlan"];
+  if (!targetSelected) {
+    comparePlan = { mappings: [], error: `Select a target ${targetKind}.` };
+  } else if (sourceBuckets.length === 0) {
+    comparePlan = { mappings: [], error: "Select source buckets first." };
+  } else if (sameTargetSelected && mappingMode !== "manual") {
+    comparePlan = {
+      mappings: [],
+      error: `Same-${targetKind} comparison requires manual mapping.`,
+    };
+  } else if (mappingMode === "by_name") {
+    comparePlan = {
+      mappings: sourceBuckets.map((bucket) => ({
+        sourceBucket: bucket,
+        targetBucket: bucket,
+      })),
+      error: null,
+    };
+  } else {
+    const mappings: BucketCompareMapping[] = [];
+    let hasInvalidTarget = false;
+    sourceBuckets.forEach((sourceBucket) => {
+      const targetBucket = (resolvedManualMapping.get(sourceBucket) ?? "").trim();
+      if (!targetBucket) return;
+      if (sameTargetSelected && sourceBucketNames.has(targetBucket)) {
+        hasInvalidTarget = true;
+        return;
+      }
+      mappings.push({ sourceBucket, targetBucket });
+    });
+    if (hasInvalidTarget) {
+      comparePlan = {
+        mappings: [],
+        error: `When source and target ${targetKind} are the same, mapped target buckets must be outside the selected source set.`,
+      };
+    } else if (mappings.length === 0) {
+      comparePlan = {
+        mappings: [],
+        error: "No mapping resolved. Add raw mapping lines, fill manual fields, or rely on 1:1 fallback when available.",
+      };
+    } else {
+      comparePlan = { mappings, error: null };
+    }
+  }
+
+  const targetBucketNames = new Set(targetBuckets);
+  const missingByName =
+    mappingMode === "by_name"
+      ? sourceBuckets.filter((name) => !targetBucketNames.has(name))
+      : [];
+
+  return {
+    availableTargetBucketNames,
+    resolvedManualMapping,
+    comparePlan,
+    missingByName,
+  };
 };

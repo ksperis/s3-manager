@@ -36,6 +36,7 @@ import {
   bucketCompareMappingTableHeaderClass,
   bucketCompareMappingTargetCellClass,
   bucketComparisonCancelledMessage,
+  buildBucketCompareMappingModel,
   copyCompareObjectKeysToClipboard,
   extractCompareError,
   formatCompareDisplayLimitMessage,
@@ -55,11 +56,6 @@ import {
   triggerBlobDownload,
   triggerDownload,
 } from "../../utils/download";
-
-type CompareMapping = {
-  sourceBucket: string;
-  targetBucket: string;
-};
 
 type CompareRunItem = {
   sourceBucket: string;
@@ -353,92 +349,33 @@ export default function ManagerBucketCompareModal({
     });
   }, [mappingMode, parsedRawMapping.mapping, sortedSourceBuckets]);
 
-  const availableTargetBucketNames = useMemo(() => {
-    if (!sameContextSelected) return targetBucketNames;
-    return targetBucketNames.filter((name) => !sourceBucketNameSet.has(name));
-  }, [sameContextSelected, sourceBucketNameSet, targetBucketNames]);
-
-  const fallbackByNameMapping = useMemo(() => {
-    const mapping = new Map<string, string>();
-    sortedSourceBuckets.forEach((sourceBucket) => {
-      const candidate = availableTargetBucketNames.find((bucketName) => bucketName === sourceBucket);
-      if (!candidate) return;
-      mapping.set(sourceBucket, candidate);
-    });
-    return mapping;
-  }, [availableTargetBucketNames, sortedSourceBuckets]);
-
-  const resolvedManualMapping = useMemo(() => {
-    const mapping = new Map<string, string>();
-    sortedSourceBuckets.forEach((sourceBucket) => {
-      const rawMapped = parsedRawMapping.mapping.get(sourceBucket);
-      if (rawMapped) {
-        mapping.set(sourceBucket, rawMapped);
-        return;
-      }
-      const uiMapped = (manualMapping[sourceBucket] ?? "").trim();
-      if (uiMapped) {
-        mapping.set(sourceBucket, uiMapped);
-        return;
-      }
-      const fallbackMapped = fallbackByNameMapping.get(sourceBucket);
-      if (fallbackMapped) {
-        mapping.set(sourceBucket, fallbackMapped);
-      }
-    });
-    return mapping;
-  }, [fallbackByNameMapping, manualMapping, parsedRawMapping.mapping, sortedSourceBuckets]);
-
-  const comparePlan = useMemo(() => {
-    if (!targetContextId) {
-      return { mappings: [] as CompareMapping[], error: "Select a target context." };
-    }
-    if (sortedSourceBuckets.length === 0) {
-      return { mappings: [] as CompareMapping[], error: "Select source buckets first." };
-    }
-    if (sameContextSelected && mappingMode !== "manual") {
-      return { mappings: [] as CompareMapping[], error: "Same-context comparison requires manual mapping." };
-    }
-    if (mappingMode === "by_name") {
-      return {
-        mappings: sortedSourceBuckets.map((bucket) => ({ sourceBucket: bucket, targetBucket: bucket })),
-        error: null,
-      };
-    }
-
-    const mappings: CompareMapping[] = [];
-    const invalidTargets: string[] = [];
-    sortedSourceBuckets.forEach((sourceBucket) => {
-      const targetBucket = (resolvedManualMapping.get(sourceBucket) ?? "").trim();
-      if (!targetBucket) {
-        return;
-      }
-      if (sameContextSelected && sourceBucketNameSet.has(targetBucket)) {
-        invalidTargets.push(targetBucket);
-        return;
-      }
-      mappings.push({ sourceBucket, targetBucket });
-    });
-    if (invalidTargets.length > 0) {
-      return {
-        mappings: [] as CompareMapping[],
-        error: "When source and target context are the same, mapped target buckets must be outside the selected source set.",
-      };
-    }
-    if (mappings.length === 0) {
-      return {
-        mappings: [] as CompareMapping[],
-        error: "No mapping resolved. Add raw mapping lines, fill manual fields, or rely on 1:1 fallback when available.",
-      };
-    }
-    return { mappings, error: null };
-  }, [mappingMode, resolvedManualMapping, sameContextSelected, sortedSourceBuckets, sourceBucketNameSet, targetContextId]);
-
-  const targetNameSet = useMemo(() => new Set(targetBucketNames), [targetBucketNames]);
-  const missingByName = useMemo(() => {
-    if (mappingMode !== "by_name") return [];
-    return sortedSourceBuckets.filter((name) => !targetNameSet.has(name));
-  }, [mappingMode, sortedSourceBuckets, targetNameSet]);
+  const {
+    availableTargetBucketNames,
+    resolvedManualMapping,
+    comparePlan,
+    missingByName,
+  } = useMemo(
+    () =>
+      buildBucketCompareMappingModel({
+        targetSelected: Boolean(targetContextId),
+        targetKind: "context",
+        sourceBuckets: sortedSourceBuckets,
+        targetBuckets: targetBucketNames,
+        sameTargetSelected: sameContextSelected,
+        mappingMode,
+        rawMapping: parsedRawMapping.mapping,
+        manualMapping,
+      }),
+    [
+      manualMapping,
+      mappingMode,
+      parsedRawMapping.mapping,
+      sameContextSelected,
+      sortedSourceBuckets,
+      targetBucketNames,
+      targetContextId,
+    ]
+  );
   const progressPercent = useMemo(() => {
     if (progress.total <= 0) return 0;
     return Math.min(100, Math.round((progress.completed / progress.total) * 100));
