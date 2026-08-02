@@ -131,7 +131,7 @@ import { saveBucketListReturnContext } from "./bucketListReturnContext";
 import { buildBucketUiTagsStorageKey } from "./bucketUiTags";
 
 const STORAGE_OPS_COLUMNS_STORAGE_KEY = "storage-ops.bucket_list.columns.v2";
-const STORAGE_OPS_LIST_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v1";
+const STORAGE_OPS_LIST_STATE_STORAGE_KEY = "storage-ops.bucket_list.state.v2";
 
 const baseResponse = {
   total: 1,
@@ -402,7 +402,6 @@ describe("BucketOpsWorkbench atomic quota columns", () => {
   });
 
   it("shares UI tags across contexts for one physical bucket without leaking to another endpoint", async () => {
-    localStorage.setItem("bucket-workbench.ui_tags.v2.initialized", "1");
     localStorage.setItem(
       buildBucketUiTagsStorageKey("storage-ops", 7),
       JSON.stringify({

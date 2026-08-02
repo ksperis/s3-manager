@@ -27,7 +27,7 @@ const BUCKET_OPS_SURFACES: Record<BucketOpsMode, BucketOpsSurfaceContract> = {
     breadcrumb: { label: "Ceph Admin", to: "/ceph-admin" },
     storageKeys: {
       columns: "ceph-admin.bucket_list.columns.v2",
-      bucketListState: "ceph-admin.bucket_list.state.v1",
+      bucketListState: "ceph-admin.bucket_list.state.v2",
       bulkConfigClipboard: "ceph-admin.bucket_list.bulk_config_clipboard.v2",
     },
     defaultVisibleColumns: ["ui_tags", "owner", "used_bytes", "object_count"],
@@ -43,7 +43,7 @@ const BUCKET_OPS_SURFACES: Record<BucketOpsMode, BucketOpsSurfaceContract> = {
     breadcrumb: { label: "Storage Ops", to: "/storage-ops" },
     storageKeys: {
       columns: "storage-ops.bucket_list.columns.v2",
-      bucketListState: "storage-ops.bucket_list.state.v1",
+      bucketListState: "storage-ops.bucket_list.state.v2",
       bulkConfigClipboard: "storage-ops.bucket_list.bulk_config_clipboard.v2",
     },
     defaultVisibleColumns: ["context_name", "ui_tags", "used_bytes", "object_count"],

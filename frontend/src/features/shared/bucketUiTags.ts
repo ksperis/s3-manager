@@ -7,9 +7,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BucketOpsMode } from "./bucketOpsSurface";
 
 const UI_TAGS_V2_PREFIX = "bucket-workbench.ui_tags.v2";
-const UI_TAGS_V2_RESET_MARKER = `${UI_TAGS_V2_PREFIX}.initialized`;
-const LEGACY_UI_TAG_KEYS = ["bucket-workbench.ui_tags.v1", "ceph-admin.bucket_list.ui_tags.v1"];
-const LIST_STATE_KEYS = ["ceph-admin.bucket_list.state.v1", "storage-ops.bucket_list.state.v1"];
 const STATE_KEY_SEPARATOR = "\u001e";
 
 export type BucketUiTagTarget = {
@@ -73,27 +70,6 @@ const normalizeTags = (values: unknown): string[] => {
   return normalized;
 };
 
-const resetLegacyUiTagsOnce = () => {
-  if (typeof window === "undefined" || localStorage.getItem(UI_TAGS_V2_RESET_MARKER) === "1") return;
-  LEGACY_UI_TAG_KEYS.forEach((key) => localStorage.removeItem(key));
-  LIST_STATE_KEYS.forEach((key) => {
-    const raw = localStorage.getItem(key);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
-      Object.values(parsed).forEach((value) => {
-        if (!value || typeof value !== "object") return;
-        value.tagFilters = [];
-        value.tagFilterMode = "any";
-      });
-      localStorage.setItem(key, JSON.stringify(parsed));
-    } catch {
-      // Keep unrelated list state untouched when it cannot be decoded.
-    }
-  });
-  localStorage.setItem(UI_TAGS_V2_RESET_MARKER, "1");
-};
-
 const readEndpointStore = (mode: BucketOpsMode, endpointId: number): EndpointUiTagStore => {
   try {
     const raw = localStorage.getItem(buildBucketUiTagsStorageKey(mode, endpointId));
@@ -146,10 +122,9 @@ const loadEntries = (mode: BucketOpsMode, selectedEndpointId?: number | null): R
 };
 
 export function useBucketUiTags(mode: BucketOpsMode, selectedEndpointId?: number | null) {
-  const [entries, setEntries] = useState<Record<string, BucketUiTagEntry>>(() => {
-    resetLegacyUiTagsOnce();
-    return loadEntries(mode, selectedEndpointId);
-  });
+  const [entries, setEntries] = useState<Record<string, BucketUiTagEntry>>(() =>
+    loadEntries(mode, selectedEndpointId)
+  );
 
   const reload = useCallback(() => {
     setEntries(loadEntries(mode, selectedEndpointId));
@@ -222,4 +197,3 @@ export function useBucketUiTags(mode: BucketOpsMode, selectedEndpointId?: number
 
   return { entries, tags, applyTags, removeTargets };
 }
-

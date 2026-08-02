@@ -8,26 +8,7 @@ const storedEntry = (name: string, tags: string[]) => ({ name, tenant: null, tag
 describe("useBucketUiTags", () => {
   beforeEach(() => localStorage.clear());
 
-  it("resets v1 tags and persisted tag filters once", () => {
-    localStorage.setItem("bucket-workbench.ui_tags.v1", JSON.stringify({ stale: true }));
-    localStorage.setItem("ceph-admin.bucket_list.ui_tags.v1", JSON.stringify({ stale: true }));
-    localStorage.setItem(
-      "ceph-admin.bucket_list.state.v1",
-      JSON.stringify({
-        "7": { filter: "keep", tagFilters: ["old"], tagFilterMode: "all" },
-      })
-    );
-
-    renderHook(() => useBucketUiTags("ceph-admin", 7));
-
-    expect(localStorage.getItem("bucket-workbench.ui_tags.v1")).toBeNull();
-    expect(localStorage.getItem("ceph-admin.bucket_list.ui_tags.v1")).toBeNull();
-    const state = JSON.parse(localStorage.getItem("ceph-admin.bucket_list.state.v1") ?? "{}");
-    expect(state["7"]).toMatchObject({ filter: "keep", tagFilters: [], tagFilterMode: "any" });
-  });
-
   it("hydrates endpoint changes without copying tags between endpoints", async () => {
-    localStorage.setItem("bucket-workbench.ui_tags.v2.initialized", "1");
     const endpointAKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
     const endpointBKey = buildBucketUiTagsStorageKey("ceph-admin", 8);
     localStorage.setItem(endpointAKey, JSON.stringify({ "\u001fbucket-a": storedEntry("bucket-a", ["alpha"]) }));
@@ -47,7 +28,6 @@ describe("useBucketUiTags", () => {
   });
 
   it("synchronizes storage events for the active endpoint only", async () => {
-    localStorage.setItem("bucket-workbench.ui_tags.v2.initialized", "1");
     const activeKey = buildBucketUiTagsStorageKey("ceph-admin", 7);
     const otherKey = buildBucketUiTagsStorageKey("ceph-admin", 8);
     const { result } = renderHook(() => useBucketUiTags("ceph-admin", 7));
@@ -62,7 +42,6 @@ describe("useBucketUiTags", () => {
   });
 
   it("applies changes to the target endpoint key", () => {
-    localStorage.setItem("bucket-workbench.ui_tags.v2.initialized", "1");
     const { result } = renderHook(() => useBucketUiTags("storage-ops", null));
     const target = createBucketUiTagTarget("storage-ops", 9, "physical-9", "bucket-a", null);
     expect(target).not.toBeNull();
