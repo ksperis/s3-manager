@@ -2,14 +2,47 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import copy
 import hashlib
+import logging
+import os
 import re
 import shlex
 from datetime import date as date_cls
+from datetime import datetime, timedelta, timezone
 from datetime import time as time_cls
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import unquote
 
-from ._shared import *
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.db import (
+    AccountIAMUser,
+    AccountRole,
+    PortalExternalAccessCredential,
+    PortalStorageSpaceMetadata,
+    S3Account,
+    User,
+)
+from app.models.app_settings import PortalSettings
+from app.models.portal import (
+    PortalServerAccessLogEntry,
+    PortalServerAccessLogFilterQuery,
+    PortalServerAccessLogFilterRule,
+    PortalServerAccessLogPage,
+    PortalServerAccessRequesterIdentity,
+    PortalStorageSpaceSummary,
+)
+from app.services import s3_client
+from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
+from app.services.s3_client import get_s3_client
+from app.utils.storage_endpoint_features import resolve_admin_endpoint
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+
+logger = logging.getLogger(__name__)
 
 
 SERVER_ACCESS_LOGGING_SID = "S3ManagerPortalServerAccessLogging"
