@@ -101,7 +101,6 @@ const mocks = vi.hoisted(() => ({
       rgw_account_id: "RGW40703637082424546",
       tags: [],
     },
-    state: { quota_max_size_bytes: 1024 },
   } as any,
 }));
 
