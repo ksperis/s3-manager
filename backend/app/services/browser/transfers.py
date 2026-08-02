@@ -2,7 +2,31 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import os
+import re
+from typing import Optional
+from urllib.parse import unquote
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.core.config import get_settings
+from app.models.browser import BrowserStsCredentials, SseCustomerContext, StsStatus
+from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.sts_service import get_session_token
+from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.storage_endpoint_features import resolve_sts_endpoint
+from ._shared import (
+    STS_SESSION_DURATION_SECONDS,
+    CachedStsCredentials,
+    _get_cached_sts_credentials,
+    _normalize_expiration,
+    _record_sts_failure,
+    _resolve_endpoint,
+    _store_sts_credentials,
+    _sts_cache_key,
+)
+
+settings = get_settings()
 
 
 class BrowserTransfersMixin:
