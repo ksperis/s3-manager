@@ -573,7 +573,8 @@ const NAME_COLUMN_DEFINITION: ResizableColumnDefinition = {
 };
 const SELECTION_COLUMN_WIDTH_PX = 36;
 const MIN_ACTIONS_COLUMN_WIDTH_PX = 108;
-const ROW_ACTION_TARGET_SIZE_PX = 44;
+const COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX = 44;
+const COMPACT_ROW_ACTION_TARGET_SIZE_PX = 24;
 const ROW_ACTION_GAP_PX = 4;
 const ROW_ACTION_CELL_HORIZONTAL_PADDING_PX = 16;
 const DIRECT_ITEM_ACTION_IDS: readonly BrowserActionId[] = [
@@ -1041,21 +1042,6 @@ export default function BrowserPage({
     [capabilityFactsOverride, onCreatePublicLinkForObject],
   );
   const isPortalProfile = resolvedFunctionalProfile === "portal";
-  const maximumDirectItemActionCount =
-    1 +
-    Number(resolvedCapabilityFacts.canDeleteObjects) +
-    Number(
-      isPortalProfile &&
-        resolvedCapabilityFacts.canCreatePublicLinks &&
-        canCreateRoutedPublicLink,
-    );
-  const actionsColumnButtonCount = 1 + maximumDirectItemActionCount;
-  const actionsColumnWidthPx = Math.max(
-    MIN_ACTIONS_COLUMN_WIDTH_PX,
-    ROW_ACTION_CELL_HORIZONTAL_PADDING_PX +
-      actionsColumnButtonCount * ROW_ACTION_TARGET_SIZE_PX +
-      (actionsColumnButtonCount - 1) * ROW_ACTION_GAP_PX,
-  );
   // /browser is credential-first.
   const accessMode = null;
   const [bucketName, setBucketName] = useState("");
@@ -1155,6 +1141,24 @@ export default function BrowserPage({
       : "compact"),
   );
   const compactMode = density === "compact";
+  const rowActionTargetSizePx = compactMode
+    ? COMPACT_ROW_ACTION_TARGET_SIZE_PX
+    : COMFORTABLE_ROW_ACTION_TARGET_SIZE_PX;
+  const maximumDirectItemActionCount =
+    1 +
+    Number(resolvedCapabilityFacts.canDeleteObjects) +
+    Number(
+      isPortalProfile &&
+        resolvedCapabilityFacts.canCreatePublicLinks &&
+        canCreateRoutedPublicLink,
+    );
+  const actionsColumnButtonCount = 1 + maximumDirectItemActionCount;
+  const actionsColumnWidthPx = Math.max(
+    MIN_ACTIONS_COLUMN_WIDTH_PX,
+    ROW_ACTION_CELL_HORIZONTAL_PADDING_PX +
+      actionsColumnButtonCount * rowActionTargetSizePx +
+      (actionsColumnButtonCount - 1) * ROW_ACTION_GAP_PX,
+  );
   const setCompactMode = (value: boolean) =>
     setDensity(value ? "compact" : "comfortable");
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>(
@@ -12368,7 +12372,7 @@ export default function BrowserPage({
       <button
         key={action.id}
         type="button"
-        className={`${rowActionButtonClasses} min-h-11 min-w-11 ${
+        className={`${rowActionButtonClasses} ${
           action.id === "delete"
             ? "text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
             : ""
@@ -14183,7 +14187,7 @@ export default function BrowserPage({
                                 )}
                                 <button
                                   type="button"
-                                  className={`${rowActionButtonClasses} min-h-11 min-w-11`}
+                                  className={rowActionButtonClasses}
                                   aria-label={`More actions for ${item.name}`}
                                   title="More"
                                   onClick={(event) =>

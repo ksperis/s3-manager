@@ -911,6 +911,18 @@ describe("BrowserPage interactions", () => {
     renderPage({ initialEntry: "/manager/browser" });
     const rowA = await findRowByLabel("a.txt");
     expect(rowA).toHaveClass("h-9");
+    for (const actionName of [
+      "Download a.txt",
+      "Delete a.txt",
+      "More actions for a.txt",
+    ]) {
+      const action = within(rowA).getByRole("button", { name: actionName });
+      expect(action).toHaveClass("!h-6", "!w-6");
+      expect(action).not.toHaveClass("min-h-11", "min-w-11");
+    }
+    expect(
+      screen.getByRole("table").querySelector("colgroup col:last-child"),
+    ).toHaveStyle({ width: "108px" });
   });
 
   it("runs the Portal functional profile as a locked minimal browser", async () => {
@@ -1271,6 +1283,10 @@ describe("BrowserPage interactions", () => {
       const selectA = within(rowA).getByRole("checkbox", {
         name: "Select a.txt",
       });
+      expect(rowA).toHaveClass("h-16");
+      expect(
+        within(rowA).getByRole("button", { name: "Download a.txt" }),
+      ).not.toHaveClass("!h-6", "!w-6");
       expect(selectA).not.toBeChecked();
       expect(
         within(rowA).queryByRole("button", {
@@ -2590,7 +2606,7 @@ describe("BrowserPage interactions", () => {
       ).not.toBeInTheDocument();
       expect(
         within(row).getByRole("button", { name: "More actions for a.txt" }),
-      ).toBeInTheDocument();
+      ).toHaveClass("min-h-11", "min-w-11");
 
       await user.click(row);
       const toolbar = screen.getByRole("toolbar", {
