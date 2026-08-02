@@ -326,6 +326,3 @@ def _validate_webhook_target_url(webhook_url: str) -> None:
         allow_private_targets=_WEBHOOK_ALLOW_PRIVATE_TARGETS,
         private_target_hint="; set BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true to allow it",
     )
-
-
-__all__ = [name for name in globals() if not name.startswith("__")]

@@ -376,6 +376,3 @@ def _record_sts_failure(cache_key: str) -> None:
         entry.credentials = None
         entry.failed_until = now + STS_FAILURE_TTL
         _STS_CACHE[cache_key] = entry
-
-
-__all__ = [name for name in globals() if not name.startswith("__")]
