@@ -2,7 +2,11 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from app.db import S3Account, StorageEndpoint, StorageProvider
+from app.models.topic import Topic, TopicConfiguration, TopicCreate, TopicPolicy
 from app.services import sns_client
 from app.services.topics_service import TopicsService
 
@@ -21,6 +25,27 @@ def _account(provider: str | None = None) -> S3Account:
 
 def _ceph_account() -> S3Account:
     return _account(StorageProvider.CEPH.value)
+
+
+@pytest.mark.parametrize(
+    ("model", "payload"),
+    [
+        (
+            Topic,
+            {
+                "name": "topic",
+                "arn": "arn:aws:sns:lab:tenant:topic",
+                "subscriptions": [],
+            },
+        ),
+        (TopicCreate, {"name": "topic", "subscriptions": []}),
+        (TopicPolicy, {"policy": {}, "subscriptions": []}),
+        (TopicConfiguration, {"configuration": {}, "subscriptions": []}),
+    ],
+)
+def test_topic_contracts_reject_removed_subscriptions_field(model, payload):
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        model.model_validate(payload)
 
 
 def test_set_topic_configuration_skips_noop(monkeypatch):
