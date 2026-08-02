@@ -162,21 +162,6 @@ class BrowserTransfersMixin:
         resolved_content_type = content_type or getattr(file, "content_type", None) or "application/octet-stream"
         self.proxy_upload(bucket_name, account, key, file_obj, resolved_content_type, sse_customer=sse_customer)
 
-    def proxy_download(
-        self,
-        bucket_name: str,
-        account: S3ExecutionTarget,
-        key: str,
-        sse_customer: Optional[SseCustomerContext] = None,
-    ):
-        client = self._client(account, request_profile="long_running")
-        kwargs = {"Bucket": bucket_name, "Key": key}
-        kwargs.update(self._sse_customer_params(sse_customer))
-        try:
-            return client.get_object(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
-
     def _filename_from_content_disposition(self, value: Optional[str]) -> Optional[str]:
         if not value:
             return None

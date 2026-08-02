@@ -390,7 +390,7 @@ def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_ma
     assert "active-flag-conn" in owned_private_names
 
 
-def test_touch_last_used_get_capabilities_and_delete(db_session):
+def test_get_capabilities_and_delete(db_session):
     owner = _user(db_session, "owner5@example.test")
     row = _create_row(
         db_session,
@@ -400,43 +400,9 @@ def test_touch_last_used_get_capabilities_and_delete(db_session):
     )
     service = S3ConnectionsService(db_session)
 
-    service.touch_last_used(owner.id, row.id)
-    db_session.refresh(row)
-    assert row.last_used_at is not None
-
     caps = service.get_capabilities(owner.id, row.id)
     assert caps["x"] == 1
     assert caps["can_manage_iam"] is False
 
     service.delete(owner.id, row.id)
     assert db_session.query(S3Connection).filter(S3Connection.id == row.id).first() is None
-
-    # Missing row: no-op
-    service.touch_last_used(owner.id, 99999)
-
-
-def test_create_temporary_and_mask_access_key(db_session):
-    owner = _user(db_session, "owner6@example.test")
-    endpoint = _endpoint(db_session)
-    service = S3ConnectionsService(db_session)
-
-    row = service.create_temporary(
-        created_by_user_id=owner.id,
-        name="temp-conn",
-        storage_endpoint_id=endpoint.id,
-        access_key_id="AKIA-TEMP-KEY-9999",
-        secret_access_key="SECRET-TEMP",
-        session_token="SESSION-TOKEN",
-        expires_at=None,
-        temp_user_uid="tenant$uid",
-        temp_access_key_id="AKIA-TEMP-CHILD",
-    )
-    assert row.is_temporary is True
-    assert row.access_browser is True
-    assert row.access_manager is False
-    assert row.session_token == "SESSION-TOKEN"
-
-    model = service._to_model(row)
-    assert model.access_key_id.startswith("AKIA***")
-    assert service._mask_access_key_id("  SHORT7 ") == "***T7"
-    assert service._mask_access_key_id("") == ""

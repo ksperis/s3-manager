@@ -1098,9 +1098,5 @@ class S3UsersService:
         self.tags.cleanup_orphan_definitions()
         self.db.commit()
 
-    def unlink_user(self, user_id: int) -> None:
-        self.delete_user(user_id, delete_rgw=False)
-
-
 def get_s3_users_service(db: Session) -> S3UsersService:
     return S3UsersService(db)

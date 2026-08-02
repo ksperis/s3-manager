@@ -537,20 +537,6 @@ def test_delete_key_validations(db_session, monkeypatch):
     assert extra_key in fake.deleted_keys
 
 
-def test_unlink_user_removes_interface_key_and_db_row(db_session, monkeypatch):
-    endpoint = _seed_ceph_endpoint(db_session)
-    fake = FakeRGWAdmin()
-    service = _build_service(db_session, monkeypatch, fake)
-
-    created = service.create_user(S3UserCreate(name="Unlink", uid="unlink-me", storage_endpoint_id=endpoint.id))
-    interface_key = db_session.query(S3User).filter_by(id=created.id).one().rgw_access_key
-
-    service.unlink_user(created.id)
-
-    assert interface_key in fake.deleted_keys
-    assert db_session.query(S3User).filter_by(id=created.id).first() is None
-
-
 def test_delete_user_with_delete_rgw_checks_buckets_then_deletes(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()

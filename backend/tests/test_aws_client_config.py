@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.services.aws_client_config import build_interactive_aws_config, build_long_running_aws_config
+from app.services.aws_client_config import build_interactive_aws_config
 from app.services import rgw_iam, s3_client, sns_client, sts_service
 
 
@@ -29,14 +29,6 @@ def test_interactive_aws_config_preserves_service_options():
 
     assert config.s3["addressing_style"] == "path"
     assert config.user_agent_extra == "s3-manager-test"
-
-
-def test_long_running_aws_config_keeps_bounded_connect_and_extended_read_timeout():
-    config = build_long_running_aws_config()
-
-    assert config.connect_timeout == 2.0
-    assert config.read_timeout == 60.0
-    assert config.retries["total_max_attempts"] == 2
 
 
 def test_s3_iam_sns_and_sts_clients_share_interactive_profile(monkeypatch):

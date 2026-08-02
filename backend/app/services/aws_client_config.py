@@ -55,16 +55,3 @@ def build_interactive_aws_config(
         user_agent_extra=user_agent_extra,
     )
 
-
-def build_long_running_aws_config(
-    *,
-    signature_version: str = "s3v4",
-    s3: Optional[dict[str, Any]] = None,
-    user_agent_extra: Optional[str] = None,
-) -> Config:
-    return build_aws_config(
-        request_profile="long_running",
-        signature_version=signature_version,
-        s3=s3,
-        user_agent_extra=user_agent_extra,
-    )

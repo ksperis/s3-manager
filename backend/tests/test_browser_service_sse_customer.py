@@ -168,7 +168,7 @@ def test_head_object_passes_sse_customer_headers(monkeypatch):
     assert "SSECustomerKeyMD5" in kwargs
 
 
-def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
+def test_download_object_passes_sse_customer(monkeypatch):
     calls: list[dict[str, object]] = []
     profiles: list[str] = []
 
@@ -194,7 +194,6 @@ def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
         ),
     )
 
-    proxy_resp = service.proxy_download("bucket-a", _account(), "docs/demo.txt", sse_customer=_sse_context())
     stream, content_type, filename = service.download_object(
         "bucket-a",
         _account(),
@@ -202,12 +201,11 @@ def test_proxy_download_and_download_object_pass_sse_customer(monkeypatch):
         sse_customer=_sse_context(),
     )
 
-    assert proxy_resp["ContentType"] == "text/plain"
     assert content_type == "text/plain"
     assert filename == "demo.txt"
     assert next(iter(stream)) == b"hello"
-    assert len(calls) == 2
-    assert profiles == ["long_running", "long_running"]
+    assert len(calls) == 1
+    assert profiles == ["long_running"]
     for kwargs in calls:
         assert kwargs["SSECustomerAlgorithm"] == "AES256"
         assert "SSECustomerKey" in kwargs

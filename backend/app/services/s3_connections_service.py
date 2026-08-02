@@ -2,14 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.utils.time import utcnow
-from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from app.db.s3_connection import ManagedPrivateAccess, S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
-from app.services.mappers.s3_connection import mask_access_key_id, s3_connection_from_db
+from app.services.mappers.s3_connection import s3_connection_from_db
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.services.tags_service import TagsService
 from app.utils.s3_connection_capabilities import (
@@ -78,16 +77,6 @@ class S3ConnectionsService:
             raise KeyError("S3Connection not found")
         return row
 
-    def touch_last_used(self, user_id: int, connection_id: int) -> None:
-        """Update last_used_at for UX/audit purposes."""
-        try:
-            row = self.get_visible(user_id, connection_id)
-        except KeyError:
-            return
-        row.last_used_at = utcnow()
-        row.updated_at = utcnow()
-        self.db.commit()
-
     def update_credentials(self, user_id: int, connection_id: int, *, access_key_id: str, secret_access_key: str) -> S3Connection:
         """Rotate credentials without mixing with metadata updates."""
         row = self.get_owned(user_id, connection_id)
@@ -133,44 +122,6 @@ class S3ConnectionsService:
             return row
         if row.created_by_user_id != user_id:
             raise KeyError("S3Connection not found")
-        return row
-
-    def create_temporary(
-        self,
-        *,
-        created_by_user_id: int,
-        name: str,
-        storage_endpoint_id: int,
-        access_key_id: str,
-        secret_access_key: str,
-        session_token: Optional[str],
-        expires_at: Optional[datetime],
-        temp_user_uid: Optional[str],
-        temp_access_key_id: Optional[str],
-    ) -> DBS3Connection:
-        now = utcnow()
-        row = DBS3Connection(
-            created_by_user_id=created_by_user_id,
-            name=name,
-            storage_endpoint_id=storage_endpoint_id,
-            custom_endpoint_config=None,
-            is_shared=False,
-            access_manager=False,
-            access_browser=True,
-            is_temporary=True,
-            access_key_id=access_key_id,
-            secret_access_key=secret_access_key,
-            session_token=session_token,
-            expires_at=expires_at,
-            temp_user_uid=temp_user_uid,
-            temp_access_key_id=temp_access_key_id,
-            created_at=now,
-            updated_at=now,
-            last_used_at=now,
-        )
-        self.db.add(row)
-        self.db.commit()
-        self.db.refresh(row)
         return row
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:
@@ -376,9 +327,6 @@ class S3ConnectionsService:
             .first()
             is not None
         )
-
-    def _mask_access_key_id(self, value: str) -> str:
-        return mask_access_key_id(value)
 
     def _validate_manual_endpoint(self, endpoint_url: Optional[str], verify_tls: bool) -> str:
         normalized = (endpoint_url or "").strip()
