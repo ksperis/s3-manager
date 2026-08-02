@@ -51,6 +51,7 @@ export default function CephAdminBrowserPage() {
         ) : (
           <BrowserEmbed
             accountIdForApi={browserSelector}
+            executionContextKind="ceph_admin"
             hasContext={Boolean(browserSelector)}
             workspaceSurface="ceph-admin"
             functionalProfile="advanced"

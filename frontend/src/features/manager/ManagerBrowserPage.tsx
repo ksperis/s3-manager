@@ -73,6 +73,7 @@ function ManagerBrowserContent() {
         ) : (
           <BrowserEmbed
             accountIdForApi={selectorForApi}
+            executionContextKind={selectedContext?.kind ?? null}
             hasContext
             workspaceSurface="manager"
             functionalProfile="advanced"

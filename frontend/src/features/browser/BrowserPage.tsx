@@ -63,6 +63,7 @@ import {
   withS3AccountParam,
   type S3AccountSelector,
 } from "../../api/accountParams";
+import type { ExecutionContextKind } from "../../api/executionContexts";
 import {
   BrowserBucket,
   type BrowserUsageSummary,
@@ -277,7 +278,7 @@ import {
   isStsCredentialsExpiring,
   resolveBrowserTransferAccessBadge,
   resolveBrowserTransferParallelism,
-  resolveLegacyStsTooltip,
+  resolveDirectCredentialStsTooltip,
 } from "./browserTransferPresentation";
 import {
   BROWSER_QUERY_DEBOUNCE_MS,
@@ -373,6 +374,7 @@ const MOBILE_OBJECT_LIST_MEDIA_QUERY = "(max-width: 767px)";
 
 type BrowserPageProps = {
   accountIdForApi?: S3AccountSelector;
+  executionContextKind?: BrowserExecutionContextKind | null;
   hasContext?: boolean;
   workspaceSurface?: BrowserWorkspaceSurface;
   functionalProfile?: BrowserFunctionalProfile;
@@ -397,6 +399,8 @@ type BrowserPageProps = {
   refreshToken?: number;
   transferReporter?: BrowserTransferReporter;
 };
+
+export type BrowserExecutionContextKind = ExecutionContextKind | "ceph_admin";
 
 export type BrowserObjectDetailsRouteTarget = {
   bucketName: string;
@@ -563,6 +567,7 @@ const inspectorEmptyStateClasses =
   "rounded-lg border border-dashed border-[color:var(--ui-border)] bg-[var(--ui-surface-muted)] px-3 py-4 ui-caption text-[var(--ui-text-muted)]";
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
+  executionContextKind: executionContextKindOverride,
   hasContext: hasContextOverride,
   workspaceSurface: workspaceSurfaceOverride,
   functionalProfile: functionalProfileOverride,
@@ -1256,19 +1261,20 @@ export default function BrowserPage({
     resolvedFunctionalProfile === "advanced";
   const bucketConfigContextScope = "browser";
 
-  const contextId =
-    typeof accountIdForApi === "string" ? accountIdForApi : null;
-  const isCephAdminContext = Boolean(
-    contextId && contextId.startsWith("ceph-admin-"),
-  );
-  const isLegacyS3UserContext = Boolean(
-    contextId && contextId.startsWith("s3u-"),
-  );
-  const isLegacyConnectionContext = Boolean(
-    contextId && contextId.startsWith("conn-"),
-  );
-  const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
-  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext && !isPortalProfile;
+  const executionContextKind =
+    executionContextKindOverride ?? selectedContext?.kind ?? null;
+  const isCephAdminContext = executionContextKind === "ceph_admin";
+  const isLegacyS3UserContext = executionContextKind === "legacy_user";
+  const isConnectionContext = executionContextKind === "connection";
+  const directCredentialContextKind = isConnectionContext
+    ? "connection"
+    : isLegacyS3UserContext
+      ? "legacy_user"
+      : null;
+  const stsEnabled =
+    Boolean(effectiveCaps?.sts) &&
+    directCredentialContextKind === null &&
+    !isPortalProfile;
   const sseFeatureEnabled =
     Boolean(effectiveCaps?.sse) && resolvedFunctionalProfile === "advanced";
   const bucketInspectorUsageEnabled = effectiveCaps
@@ -2060,13 +2066,9 @@ export default function BrowserPage({
     const formatted = formatDateTime(stsCredentials.expiration);
     return formatted === "-" ? "" : formatted;
   }, [stsCredentials?.expiration]);
-  const legacyStsTooltip = useMemo(
-    () =>
-      resolveLegacyStsTooltip({
-        isLegacyContext,
-        isLegacyConnectionContext,
-      }),
-    [isLegacyConnectionContext, isLegacyContext],
+  const directCredentialStsTooltip = useMemo(
+    () => resolveDirectCredentialStsTooltip(directCredentialContextKind),
+    [directCredentialContextKind],
   );
   const accessBadge = useMemo(
     () =>
@@ -2078,12 +2080,12 @@ export default function BrowserPage({
         sseActive,
         hasStsCredentials: Boolean(stsCredentials),
         stsExpirationLabel,
-        legacyStsTooltip,
+        directCredentialStsTooltip,
       }),
     [
       corsStatus?.enabled,
       hasS3AccountContext,
-      legacyStsTooltip,
+      directCredentialStsTooltip,
       proxyAllowed,
       sseActive,
       stsCredentials,

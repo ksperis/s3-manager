@@ -4,7 +4,7 @@ import {
   isStsCredentialsExpiring,
   resolveBrowserTransferAccessBadge,
   resolveBrowserTransferParallelism,
-  resolveLegacyStsTooltip,
+  resolveDirectCredentialStsTooltip,
 } from "./browserTransferPresentation";
 
 describe("browser transfer presentation", () => {
@@ -76,7 +76,7 @@ describe("browser transfer presentation", () => {
       sseActive: false,
       hasStsCredentials: false,
       stsExpirationLabel: "",
-      legacyStsTooltip: "",
+      directCredentialStsTooltip: "",
     };
 
     expect(
@@ -113,19 +113,20 @@ describe("browser transfer presentation", () => {
         "Download/Upload mode: STS credentials active (expires at 2026-08-02 12:30).",
     });
 
-    const legacyTooltip = resolveLegacyStsTooltip({
-      isLegacyContext: true,
-      isLegacyConnectionContext: true,
-    });
+    const connectionTooltip = resolveDirectCredentialStsTooltip("connection");
     expect(
       resolveBrowserTransferAccessBadge({
         ...base,
-        legacyStsTooltip: legacyTooltip,
+        directCredentialStsTooltip: connectionTooltip,
       }),
     ).toMatchObject({
       label: "Presign",
-      title: expect.stringContaining("legacy S3 connections"),
+      title: expect.stringContaining("S3 connections"),
     });
+    expect(resolveDirectCredentialStsTooltip("legacy_user")).toContain(
+      "legacy S3 users",
+    );
+    expect(resolveDirectCredentialStsTooltip(null)).toBe("");
     expect(resolveBrowserTransferAccessBadge({ ...base, hasContext: false })).toBeNull();
   });
 });

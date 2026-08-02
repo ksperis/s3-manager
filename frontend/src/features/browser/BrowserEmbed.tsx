@@ -11,6 +11,7 @@ import type {
   BrowserLayoutMode,
 } from "./browserActions";
 import BrowserPage, {
+  type BrowserExecutionContextKind,
   type BrowserDeletedObjectsOptions,
   type BrowserObjectDetailsRouteTarget,
   type BrowserTransferReporter,
@@ -18,6 +19,7 @@ import BrowserPage, {
 
 type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
+  executionContextKind: BrowserExecutionContextKind | null;
   hasContext: boolean;
   workspaceSurface: BrowserWorkspaceSurface;
   functionalProfile: BrowserFunctionalProfile;
@@ -40,6 +42,7 @@ type BrowserEmbedProps = {
 
 export default function BrowserEmbed({
   accountIdForApi,
+  executionContextKind,
   hasContext,
   workspaceSurface,
   functionalProfile,
@@ -62,6 +65,7 @@ export default function BrowserEmbed({
   return (
     <BrowserPage
       accountIdForApi={accountIdForApi}
+      executionContextKind={executionContextKind}
       hasContext={hasContext}
       workspaceSurface={workspaceSurface}
       functionalProfile={functionalProfile}

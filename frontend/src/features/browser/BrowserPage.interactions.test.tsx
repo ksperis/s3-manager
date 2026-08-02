@@ -271,6 +271,7 @@ type RenderPageOptions = {
   allowInspectorPanel?: boolean;
   allowFoldersPanel?: boolean;
   accountIdForApi?: string;
+  executionContextKind?: ComponentProps<typeof BrowserPage>["executionContextKind"];
   workspaceSurface?: ComponentProps<typeof BrowserPage>["workspaceSurface"];
   functionalProfile?: ComponentProps<typeof BrowserPage>["functionalProfile"];
   lockedBucketName?: string;
@@ -288,6 +289,7 @@ function renderPageElement({
   allowInspectorPanel = true,
   allowFoldersPanel = true,
   accountIdForApi,
+  executionContextKind,
   workspaceSurface,
   functionalProfile,
   lockedBucketName,
@@ -302,6 +304,7 @@ function renderPageElement({
       <MemoryRouter initialEntries={[initialEntry]}>
         <BrowserPage
           accountIdForApi={accountIdForApi}
+          executionContextKind={executionContextKind}
           defaultShowInspector={defaultShowInspector}
           defaultShowFolders={defaultShowFolders}
           allowInspectorPanel={allowInspectorPanel}
@@ -342,11 +345,17 @@ function renderPage(options: RenderPageOptions = {}) {
 function renderEmbeddedPage({
   initialEntry = "/manager/browser",
   accountIdForApi = "acc-1",
-}: { initialEntry?: string; accountIdForApi?: string } = {}) {
+  executionContextKind = "account",
+}: {
+  initialEntry?: string;
+  accountIdForApi?: string;
+  executionContextKind?: ComponentProps<typeof BrowserPage>["executionContextKind"];
+} = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <BrowserEmbed
         accountIdForApi={accountIdForApi}
+        executionContextKind={executionContextKind}
         hasContext
         workspaceSurface="manager"
         functionalProfile="advanced"
@@ -838,6 +847,23 @@ describe("BrowserPage interactions", () => {
       name: "Browser",
     });
     expect(heading).toHaveClass("sr-only");
+  });
+
+  it("uses the explicit connection kind for transfer guidance", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      accountIdForApi: "selector-without-prefix",
+      executionContextKind: "connection",
+    });
+
+    await findRowByLabel("a.txt");
+    const moreMenu = await openContextMoreMenu(user);
+
+    expect(
+      within(moreMenu).getByText(
+        "Download/Upload mode: Presigned URLs are active. STS is not available for S3 connections. Presigned URLs are used instead.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("selects from the row while the accessible primary button activates without changing selection", async () => {
@@ -2440,6 +2466,7 @@ describe("BrowserPage interactions", () => {
     const cephAdminRender = renderEmbeddedPage({
       initialEntry: "/ceph-admin/browser",
       accountIdForApi: "ceph-admin-1",
+      executionContextKind: "ceph_admin",
     });
     await findRowByLabel("a.txt");
 

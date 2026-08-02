@@ -108,17 +108,16 @@ export function buildBrowserTransferWarnings({
   return items;
 }
 
-export function resolveLegacyStsTooltip({
-  isLegacyContext,
-  isLegacyConnectionContext,
-}: {
-  isLegacyContext: boolean;
-  isLegacyConnectionContext: boolean;
-}): string {
-  if (!isLegacyContext) return "";
-  return isLegacyConnectionContext
-    ? "STS is not available for legacy S3 connections. Presigned URLs are used instead."
-    : "STS is not available for legacy S3 users. Presigned URLs are used instead.";
+export function resolveDirectCredentialStsTooltip(
+  contextKind: "connection" | "legacy_user" | null,
+): string {
+  if (contextKind === "connection") {
+    return "STS is not available for S3 connections. Presigned URLs are used instead.";
+  }
+  if (contextKind === "legacy_user") {
+    return "STS is not available for legacy S3 users. Presigned URLs are used instead.";
+  }
+  return "";
 }
 
 type BrowserTransferAccessBadgeInput = {
@@ -129,7 +128,7 @@ type BrowserTransferAccessBadgeInput = {
   sseActive: boolean;
   hasStsCredentials: boolean;
   stsExpirationLabel: string;
-  legacyStsTooltip: string;
+  directCredentialStsTooltip: string;
 };
 
 export function resolveBrowserTransferAccessBadge({
@@ -140,7 +139,7 @@ export function resolveBrowserTransferAccessBadge({
   sseActive,
   hasStsCredentials,
   stsExpirationLabel,
-  legacyStsTooltip,
+  directCredentialStsTooltip,
 }: BrowserTransferAccessBadgeInput): BrowserTransferAccessBadge | null {
   if (!hasContext) return null;
   if (corsEnabled === false && !proxyAllowed) {
@@ -185,8 +184,8 @@ export function resolveBrowserTransferAccessBadge({
   }
   return {
     label: "Presign",
-    title: legacyStsTooltip
-      ? `Download/Upload mode: Presigned URLs are active. ${legacyStsTooltip}`
+    title: directCredentialStsTooltip
+      ? `Download/Upload mode: Presigned URLs are active. ${directCredentialStsTooltip}`
       : "Download/Upload mode: Presigned URLs are active.",
     tone: "success",
     indicatorClassName:

@@ -1347,6 +1347,7 @@ export default function PortalStorageSpaceDetailPage() {
         <div className="min-h-[520px] h-[min(72vh,760px)]">
           <BrowserEmbed
             accountIdForApi={accountIdForApi}
+            executionContextKind="portal_account"
             hasContext={hasAccountContext}
             workspaceSurface="portal"
             functionalProfile="portal"
