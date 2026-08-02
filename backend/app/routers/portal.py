@@ -85,11 +85,13 @@ from app.routers.http_errors import (
 )
 from app.services.audit_service import AuditService
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
-from app.services.portal_service import (
+from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
     PortalAccessKeyProtected,
     PortalStorageSpaceNotEmpty,
+)
+from app.services.portal_service import (
     PortalService,
     get_portal_service,
 )

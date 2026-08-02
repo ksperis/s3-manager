@@ -57,13 +57,13 @@ from app.models.access_context import AccountAccess
 from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import app_settings_service, s3_client
-from app.services.portal_service import (
+from app.services.portal.exceptions import (
     PortalAccessKeyLimitExceeded,
     PortalAccessKeyManagementDisabled,
     PortalAccessKeyProtected,
     PortalStorageSpaceNotEmpty,
-    PortalService,
 )
+from app.services.portal_service import PortalService
 from app.services.portal.version_cleanup import PortalStorageSpaceVersionCleanupTarget
 from app.services.portal.trash_restore import PortalDeletedPrefixRestoreTarget
 from app.services.portal_role_sync import sync_portal_role_downgrades

@@ -94,6 +94,12 @@ from app.models.portal import (
 )
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
+from app.services.portal.exceptions import (
+    PortalAccessKeyLimitExceeded,
+    PortalAccessKeyManagementDisabled,
+    PortalAccessKeyProtected,
+    PortalStorageSpaceNotEmpty,
+)
 from app.services.s3_client import get_s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
@@ -136,22 +142,6 @@ def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
         return None
     limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
     return _parse_positive_limit(payload.get(key) or limits_payload.get(key))
-
-
-class PortalAccessKeyLimitExceeded(RuntimeError):
-    """Raised when a portal user reaches the configured IAM user key limit."""
-
-
-class PortalAccessKeyManagementDisabled(RuntimeError):
-    """Raised when portal access-key mutations are disabled by settings."""
-
-
-class PortalAccessKeyProtected(RuntimeError):
-    """Raised when a request targets the active portal credential."""
-
-
-class PortalStorageSpaceNotEmpty(RuntimeError):
-    """Raised when a Storage Space still contains current or historical data."""
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]

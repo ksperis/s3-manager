@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from .portal._shared import *
+from sqlalchemy.orm import Session
+
 from .portal.access_keys import PortalAccessKeysMixin
 from .portal.activity import PortalActivityMixin
 from .portal.buckets_users import PortalBucketsUsersMixin
