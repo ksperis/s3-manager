@@ -834,19 +834,3 @@ class BucketMigrationPlanningMixin:
                 continue
             self.db.rollback()
         return None
-
-    def find_next_runnable_migration_id(self) -> Optional[int]:
-        now = utcnow()
-        row = (
-            self.db.query(BucketMigration)
-            .filter(
-                BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
-                or_(
-                    BucketMigration.worker_lease_until.is_(None),
-                    BucketMigration.worker_lease_until < now,
-                ),
-            )
-            .order_by(BucketMigration.created_at.asc())
-            .first()
-        )
-        return int(row.id) if row else None

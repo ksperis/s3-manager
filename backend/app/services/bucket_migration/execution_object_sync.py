@@ -16,7 +16,6 @@ from urllib.parse import urlencode
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import BucketMigration, BucketMigrationItem
-from app.services.object_diff_common import compare_object_entries
 from app.services.s3_client import _delete_objects_count
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.s3_endpoint import normalize_s3_endpoint
@@ -49,31 +48,6 @@ logger = logging.getLogger(__name__)
 
 
 class BucketMigrationObjectSyncMixin:
-    def _size_only_common_keys(
-        self,
-        source_objects: dict[str, dict[str, Any]],
-        target_objects: dict[str, dict[str, Any]],
-        *,
-        limit: int = 20,
-    ) -> tuple[int, list[str]]:
-        keys = self._size_only_common_key_list(source_objects, target_objects)
-        return len(keys), keys[:limit]
-
-    def _size_only_common_key_list(
-        self,
-        source_objects: dict[str, dict[str, Any]],
-        target_objects: dict[str, dict[str, Any]],
-    ) -> list[str]:
-        keys: list[str] = []
-        for key in sorted(set(source_objects.keys()) & set(target_objects.keys())):
-            comparison = compare_object_entries(source_objects[key], target_objects[key], md5_resolver=self._etag_md5)
-            if comparison.compare_by == "md5":
-                continue
-            if not comparison.equal:
-                continue
-            keys.append(key)
-        return keys
-
     def _strong_verify_size_only_objects(
         self,
         source_ctx: _ResolvedContext,
@@ -726,8 +700,6 @@ class BucketMigrationObjectSyncMixin:
 
     def _version_aware_diff_to_sync_diff(self, diff: _VersionAwareDiff) -> _SyncDiff:
         return _SyncDiff(
-            copy_keys=[],
-            delete_keys=[],
             source_count=diff.source_count,
             target_count=diff.target_count,
             matched_count=diff.matched_count,
@@ -739,8 +711,6 @@ class BucketMigrationObjectSyncMixin:
 
     def _new_empty_sync_diff(self) -> _SyncDiff:
         return _SyncDiff(
-            copy_keys=[],
-            delete_keys=[],
             source_count=0,
             target_count=0,
             matched_count=0,
@@ -2155,69 +2125,6 @@ class BucketMigrationObjectSyncMixin:
             item=item,
             level="info",
             message="Target bucket versioning finalized to match suspended source state.",
-        )
-
-    def _list_current_objects(self, ctx: _ResolvedContext, bucket_name: str) -> dict[str, dict[str, Any]]:
-        objects_by_key: dict[str, dict[str, Any]] = {}
-        for entry in self._iter_bucket_objects(ctx, bucket_name):
-            objects_by_key[entry.key] = {"size": entry.size, "etag": entry.etag}
-        return objects_by_key
-
-    def _compute_sync_diff(
-        self,
-        source_objects: dict[str, dict[str, Any]],
-        target_objects: dict[str, dict[str, Any]],
-        *,
-        allow_delete: bool,
-    ) -> _SyncDiff:
-        source_keys = set(source_objects.keys())
-        target_keys = set(target_objects.keys())
-        only_source = sorted(source_keys - target_keys)
-        only_target = sorted(target_keys - source_keys)
-        common_keys = sorted(source_keys & target_keys)
-
-        copy_keys: list[str] = list(only_source)
-        matched_count = 0
-        different_count = 0
-
-        different_sample: list[dict[str, Any]] = []
-        for key in common_keys:
-            comparison = compare_object_entries(source_objects[key], target_objects[key], md5_resolver=self._etag_md5)
-            if comparison.equal:
-                matched_count += 1
-                continue
-
-            different_count += 1
-            copy_keys.append(key)
-            if len(different_sample) < 200:
-                different_sample.append(
-                    {
-                        "key": key,
-                        "source_size": comparison.source_size,
-                        "target_size": comparison.target_size,
-                        "source_etag": comparison.source_etag,
-                        "target_etag": comparison.target_etag,
-                        "compare_by": comparison.compare_by,
-                    }
-                )
-
-        delete_keys = sorted(only_target) if allow_delete else []
-        sample = {
-            "only_source_sample": only_source[:200],
-            "only_target_sample": only_target[:200],
-            "different_sample": different_sample,
-        }
-
-        return _SyncDiff(
-            copy_keys=sorted(copy_keys),
-            delete_keys=delete_keys,
-            source_count=len(source_keys),
-            target_count=len(target_keys),
-            matched_count=matched_count,
-            different_count=different_count,
-            only_source_count=len(only_source),
-            only_target_count=len(only_target),
-            sample=sample,
         )
 
     def _etag_md5(self, etag: Optional[str]) -> Optional[str]:

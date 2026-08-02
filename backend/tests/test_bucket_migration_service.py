@@ -2063,17 +2063,6 @@ def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled
         last_heartbeat_at=None,
     )
     item = SimpleNamespace(objects_copied=0, objects_deleted=0, updated_at=None)
-    diff = SimpleNamespace(
-        copy_keys=["object-a"],
-        delete_keys=[],
-        source_count=1,
-        target_count=0,
-        matched_count=0,
-        different_count=1,
-        only_source_count=1,
-        only_target_count=0,
-        sample={},
-    )
 
     captured_same_endpoint_flags: list[bool] = []
     captured_event_metadata: list[dict[str, object] | None] = []

@@ -71,8 +71,6 @@ class _ResolvedContext:
 
 @dataclass
 class _SyncDiff:
-    copy_keys: list[str]
-    delete_keys: list[str]
     source_count: int
     target_count: int
     matched_count: int
@@ -141,20 +139,6 @@ class _VersionTimelineDiffKey:
     key: str
     source_version_id: Optional[str]
     target_version_id: Optional[str]
-
-
-@dataclass(frozen=True)
-class _VersionTimelineDiffEntry:
-    key: str
-    kind: str
-    compare_by: str
-    source_version_id: Optional[str]
-    target_version_id: Optional[str]
-    source_size: int
-    target_size: int
-    source_etag: Optional[str]
-    target_etag: Optional[str]
-    reason: Optional[str] = None
 
 
 @dataclass(frozen=True)

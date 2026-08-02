@@ -38,9 +38,6 @@ class BucketMigrationItemRunnerMixin:
     def _store_item_replication_state(self, item: BucketMigrationItem, state: dict[str, Any]) -> None:
         item.replication_state_json = self._json_dumps_safe(state)
 
-    def _clear_item_replication_state(self, item: BucketMigrationItem) -> None:
-        item.replication_state_json = None
-
     def _assert_item_execution_plan_supported(self, item: BucketMigrationItem) -> None:
         plan = self._load_item_execution_plan(item)
         strategy = self._item_execution_strategy(item)
