@@ -953,7 +953,7 @@ def create_portal_access_key(
             audit_metadata.update(
                 {
                     "target_type": key.target_type,
-                    "storage_space_id": key.storage_space_id,
+                    "storage_space_id": key.bucket_name,
                     "permission": key.permission,
                     "external_email": key.external_email,
                 }
@@ -990,7 +990,7 @@ def update_portal_access_key_status(
             audit_metadata.update(
                 {
                     "target_type": key.target_type,
-                    "storage_space_id": key.storage_space_id,
+                    "storage_space_id": key.bucket_name,
                     "permission": key.permission,
                     "external_email": key.external_email,
                 }
@@ -1026,7 +1026,7 @@ def delete_portal_access_key(
             audit_metadata.update(
                 {
                     "target_type": key.target_type,
-                    "storage_space_id": key.storage_space_id,
+                    "storage_space_id": key.bucket_name,
                     "permission": key.permission,
                     "external_email": key.external_email,
                 }

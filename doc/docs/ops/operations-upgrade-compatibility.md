@@ -1,5 +1,12 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical Portal access-key bucket field
+
+Portal access-key responses now expose the selected S3 bucket only as
+`bucket_name`. The duplicate response field `storage_space_id` has been
+removed; it remains the request field used when creating an external key.
+Deploy the backend and frontend together.
+
 ## 2026-08 canonical UI user roles
 
 Migration `0092_canonical_user_roles` converts `users.role` to exactly one of

@@ -6395,7 +6395,6 @@ def test_create_external_access_key_scopes_policy_to_storage_space(
     assert created.target_type == "external"
     assert created.secret_access_key == f"SK-{permission}"
     assert created.external_email == "partner@example.org"
-    assert created.storage_space_id == metadata.bucket_name
     assert created.bucket_name == metadata.bucket_name
     assert created.permission == permission
     assert row.external_email == "partner@example.org"
@@ -6699,8 +6698,8 @@ def test_portal_access_key_route_audits_external_metadata_without_secret(db_sess
                 secret_access_key="SK-EXT",
                 target_type="external",
                 external_email="partner@example.org",
-                storage_space_id="research-data",
                 storage_space_name="Research Data",
+                bucket_name="research-data",
                 permission="read_write",
             )
 

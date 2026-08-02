@@ -13,7 +13,6 @@ import {
 const externalKey: PortalAccessKey = {
   access_key_id: "AK-EXT",
   target_type: "external",
-  storage_space_id: "legacy-bucket",
   storage_space_name: "Research Data",
   bucket_name: "research-data-bucket",
   permission: "read_write",
@@ -54,10 +53,9 @@ describe("portalExternalToolAccess", () => {
     expect(parsePortalExternalToolEndpoint("mailto:user@example.test")).toBeNull();
   });
 
-  it("uses the explicit bucket name before legacy key fields or selected spaces", () => {
+  it("uses the explicit bucket name before the selected space", () => {
     expect(bucketNameForPortalExternalTool(externalKey, storageSpace)).toBe("research-data-bucket");
-    expect(bucketNameForPortalExternalTool({ ...externalKey, bucket_name: null }, storageSpace)).toBe("legacy-bucket");
-    expect(bucketNameForPortalExternalTool({ ...externalKey, bucket_name: null, storage_space_id: null }, storageSpace)).toBe("research-data-bucket");
+    expect(bucketNameForPortalExternalTool({ ...externalKey, bucket_name: null }, storageSpace)).toBe("research-data-bucket");
   });
 
   it("builds a secret-free Cyberduck bookmark scoped to the bucket path", () => {

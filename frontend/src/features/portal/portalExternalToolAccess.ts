@@ -70,7 +70,7 @@ export function bucketNameForPortalExternalTool(
   key: PortalAccessKey | null,
   space: Pick<PortalStorageSpaceSummary, "id" | "internal_bucket_name"> | null
 ): string {
-  return key?.bucket_name || key?.storage_space_id || space?.internal_bucket_name || space?.id || "";
+  return key?.bucket_name || space?.internal_bucket_name || space?.id || "";
 }
 
 export function storageSpaceNameForPortalExternalTool(

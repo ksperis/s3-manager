@@ -22,7 +22,6 @@ class PortalAccessKey(BaseModel):
     session_token: Optional[str] = None
     target_type: Literal["self", "external"] = "self"
     external_email: Optional[str] = None
-    storage_space_id: Optional[str] = None
     storage_space_name: Optional[str] = None
     bucket_name: Optional[str] = None
     permission: Optional[Literal["read_only", "read_write"]] = None
