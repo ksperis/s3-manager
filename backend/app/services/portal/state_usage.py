@@ -2,7 +2,27 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+from typing import Optional, TYPE_CHECKING
+
+from app.db import AccountRole, User
+from app.models.bucket import Bucket
+from app.models.portal import (
+    PortalAccessKey,
+    PortalIAMUser,
+    PortalState,
+    PortalUsage,
+    PortalUsageStorageSpace,
+)
+from app.services.rgw_admin import RGWAdminError
+from app.utils.rgw import resolve_admin_uid
+from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.usage_stats import extract_usage_stats
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+logger = logging.getLogger(__name__)
 
 
 class PortalStateUsageMixin:
