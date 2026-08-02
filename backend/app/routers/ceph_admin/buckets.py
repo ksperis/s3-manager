@@ -99,7 +99,6 @@ from app.routers.ceph_admin.bucket_listing_enrichment import (
     _resolve_owner_names_for_buckets,
 )
 from app.routers.ceph_admin.listing_common import (
-    ListingCancelled as _BucketListingCancelled,
     ListingProgressEmitter as _BucketListingProgressEmitter,
     ListingProgressSnapshot as _BucketListingProgressSnapshot,
     interpolate_progress_percent as _common_interpolate_progress_percent,

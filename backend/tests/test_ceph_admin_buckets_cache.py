@@ -25,6 +25,7 @@ from app.main import app
 from app.routers import dependencies
 from app.routers.ceph_admin import buckets as buckets_router
 from app.routers.ceph_admin import dependencies as ceph_admin_dependencies
+from app.routers.ceph_admin.listing_common import ListingCancelled
 from app.services.bucket_owner_enrichment import invalidate_bucket_owner_metadata_cache
 from app.services.buckets_service import BucketsService
 
@@ -2774,7 +2775,7 @@ def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypat
                 if cancel_check:
                     cancel_check()
                 time.sleep(0.01)
-        except buckets_router._BucketListingCancelled:
+        except ListingCancelled:
             cancelled["value"] = True
             time.sleep(0.15)
             cleanup_finished.set()

@@ -4,7 +4,6 @@ from app.routers import dependencies
 from app.routers.dependencies_internal import (
     account_context,
     auth_session,
-    ceph_admin_context,
     feature_gates,
     portal_access,
     sse_c,
@@ -20,7 +19,6 @@ def test_dependencies_facade_reexports_internal_groups():
     assert dependencies.require_portal_browser_basic_route is portal_access.require_portal_browser_basic_route
     assert dependencies.ensure_manager_tool_allowed is feature_gates.ensure_manager_tool_allowed
     assert dependencies.require_manager_bucket_quota is feature_gates.require_manager_bucket_quota
-    assert dependencies.get_super_admin_rgw_client is ceph_admin_context.get_super_admin_rgw_client
 
 
 def test_audit_service_dependency_uses_database_session(db_session):

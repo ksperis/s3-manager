@@ -22,9 +22,6 @@ from app.routers.dependencies_internal.auth_session import (
     require_internal_cron_token,
     settings,
 )
-from app.routers.dependencies_internal.ceph_admin_context import (
-    get_super_admin_rgw_client,
-)
 from app.routers.dependencies_internal.feature_gates import (
     _build_bucket_migration_admin_account_context_ids,
     _build_bucket_migration_allowed_context_ids,
