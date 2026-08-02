@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 from ._shared import *
-
-
-def get_bucket_migration_webhook_dispatcher():
-    from app.services.bucket_migration_service import get_bucket_migration_webhook_dispatcher as get_dispatcher
-
-    return get_dispatcher()
+from .webhooks import get_bucket_migration_webhook_dispatcher
 
 
 class BucketMigrationProgressMixin:

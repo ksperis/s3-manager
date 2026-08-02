@@ -377,7 +377,7 @@ def test_create_migration_uses_admin_default_parallelism(db_session):
     )
 
     with patch(
-        "app.services.bucket_migration_service.load_app_settings",
+        "app.services.bucket_migration.execution_context.load_app_settings",
         return_value=_app_settings_stub(parallelism_default=7, parallelism_max=12),
     ):
         migration = service.create_migration(payload, user)
@@ -518,7 +518,7 @@ def test_create_migration_clamps_requested_parallelism_to_admin_max(db_session):
     )
 
     with patch(
-        "app.services.bucket_migration_service.load_app_settings",
+        "app.services.bucket_migration.execution_context.load_app_settings",
         return_value=_app_settings_stub(parallelism_default=7, parallelism_max=10),
     ):
         migration = service.create_migration(payload, user)
@@ -884,7 +884,7 @@ def test_claim_next_runnable_migration_respects_max_active_per_endpoint(db_sessi
     db_session.commit()
 
     with patch(
-        "app.services.bucket_migration_service.load_app_settings",
+        "app.services.bucket_migration.execution_context.load_app_settings",
         return_value=_app_settings_stub(max_active_per_endpoint=1),
     ):
         first_claim = service.claim_next_runnable_migration_id(worker_id="worker-1", lease_seconds=120)
@@ -934,7 +934,7 @@ def test_claim_next_runnable_migration_rechecks_endpoint_limit_after_claim(db_se
         service_worker_1 = BucketMigrationService(db_worker_1)
         service_worker_2 = BucketMigrationService(db_worker_2)
         with patch(
-            "app.services.bucket_migration_service.load_app_settings",
+            "app.services.bucket_migration.execution_context.load_app_settings",
             return_value=_app_settings_stub(max_active_per_endpoint=1),
         ):
             with patch.object(service_worker_1, "_active_endpoint_usage", return_value={}), patch.object(
@@ -3591,9 +3591,9 @@ def test_add_event_notifies_webhook_when_configured(db_session):
             captured["item_id"] = item_id
             return True
 
-    with patch("app.services.bucket_migration_service._validate_webhook_target_url", return_value=None):
+    with patch("app.services.bucket_migration.persistence._validate_webhook_target_url", return_value=None):
         with patch(
-            "app.services.bucket_migration_service.get_bucket_migration_webhook_dispatcher",
+            "app.services.bucket_migration.progress.get_bucket_migration_webhook_dispatcher",
             return_value=_Dispatcher(),
         ):
             service._add_event(
@@ -3642,9 +3642,9 @@ def test_add_event_webhook_queue_full_does_not_break_migration_events(db_session
         def enqueue(self, **_kwargs):
             return False
 
-    with patch("app.services.bucket_migration_service._validate_webhook_target_url", return_value=None):
+    with patch("app.services.bucket_migration.persistence._validate_webhook_target_url", return_value=None):
         with patch(
-            "app.services.bucket_migration_service.get_bucket_migration_webhook_dispatcher",
+            "app.services.bucket_migration.progress.get_bucket_migration_webhook_dispatcher",
             return_value=_FullDispatcher(),
         ):
             service._add_event(
@@ -3664,8 +3664,8 @@ def test_bucket_migration_webhook_dispatcher_posts_with_redirects_disabled_and_c
         migration_id=44,
         item_id=None,
     )
-    with patch("app.services.bucket_migration_service._validate_webhook_target_url", return_value=None):
-        with patch("app.services.bucket_migration_service.requests.post") as mocked_post:
+    with patch("app.services.bucket_migration.webhooks._validate_webhook_target_url", return_value=None):
+        with patch("app.services.bucket_migration.webhooks.requests.post") as mocked_post:
             mocked_post.return_value = SimpleNamespace(status_code=202)
             dispatcher._deliver(task)
 
@@ -3698,8 +3698,8 @@ def test_add_event_webhook_failure_does_not_break_migration_events(db_session):
         item_id=None,
     )
     dispatcher = _BucketMigrationWebhookDispatcher(queue_size=10, workers=1, timeout_seconds=1.0)
-    with patch("app.services.bucket_migration_service._validate_webhook_target_url", return_value=None):
-        with patch("app.services.bucket_migration_service.requests.post", side_effect=RuntimeError("network down")):
+    with patch("app.services.bucket_migration.webhooks._validate_webhook_target_url", return_value=None):
+        with patch("app.services.bucket_migration.webhooks.requests.post", side_effect=RuntimeError("network down")):
             dispatcher._deliver(task)
     db_session.flush()
 

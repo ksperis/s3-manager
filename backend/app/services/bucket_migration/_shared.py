@@ -9,7 +9,6 @@ import os
 import queue
 import re
 import socket
-import sys
 import threading
 import time
 import uuid
@@ -37,7 +36,7 @@ from app.db import (
     User,
 )
 from app.models.bucket_migration import BucketMigrationCreateRequest
-from app.services.app_settings_service import load_app_settings as _load_app_settings
+from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService
 from app.services.bucket_migration.precheck import (
     BucketMigrationInspector,
@@ -54,15 +53,6 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-def load_app_settings():
-    facade = sys.modules.get("app.services.bucket_migration_service")
-    if facade is not None:
-        loader = getattr(facade, "load_app_settings", None)
-        if callable(loader) and loader is not load_app_settings:
-            return loader()
-    return _load_app_settings()
 
 _READ_ONLY_POLICY_SID = "S3ManagerMigrationReadOnlyDeny"
 _TARGET_WRITE_LOCK_POLICY_SID = "S3ManagerMigrationTargetWriteLockDeny"
@@ -327,12 +317,6 @@ def _serialize_event_metadata(metadata: Optional[dict[str, Any]]) -> Optional[st
 
 
 def _validate_webhook_target_url(webhook_url: str) -> None:
-    facade = sys.modules.get("app.services.bucket_migration_service")
-    if facade is not None:
-        override = getattr(facade, "_validate_webhook_target_url", None)
-        if callable(override) and override is not _validate_webhook_target_url:
-            override(webhook_url)
-            return
     validate_outbound_url(
         webhook_url,
         field_name="webhook_url",
