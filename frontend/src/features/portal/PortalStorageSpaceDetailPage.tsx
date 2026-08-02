@@ -1291,30 +1291,6 @@ export default function PortalStorageSpaceDetailPage() {
 
   const filesSection = (
     <section id="space-files" className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className={cx("text-[15px] font-bold", uiTitleTextClass)}>
-            {t({ en: "Files", fr: "Fichiers", de: "Dateien" })}
-          </h2>
-          <p className={cx("mt-1 text-xs leading-5", uiMutedTextClass)}>
-            {canModifyObjects
-              ? t({ en: "Upload files, create folders, and choose a file to share outside the account.", fr: "Ajoutez des fichiers, créez des dossiers et choisissez un fichier à partager en externe.", de: "Laden Sie Dateien hoch, erstellen Sie Ordner und wählen Sie eine Datei zum externen Teilen aus." })
-              : t({ en: "Browse and download the files available to you in this space.", fr: "Parcourez et téléchargez les fichiers disponibles dans cet espace.", de: "Durchsuchen und laden Sie die für Sie verfügbaren Dateien in diesem Bereich herunter." })}
-          </p>
-        </div>
-        {canInvitePeople && savedAccessMode === "restricted" ? (
-          <button
-            type="button"
-            onClick={() => {
-              selectSpaceDetailTab("collaborators");
-              setAccessPeopleDialogOpen(true);
-            }}
-            className="text-xs font-bold text-primary hover:underline dark:text-primary-200"
-          >
-            {t({ en: "Invite collaborators", fr: "Inviter des collaborateurs", de: "Mitwirkende einladen" })}
-          </button>
-        ) : null}
-      </div>
       {isArchived ? (
         <PageBanner tone="warning">
           {t({ en: "This space is archived. Files and public links are suspended until it is restored.", fr: "Cet espace est archivé. Les fichiers et liens publics sont suspendus jusqu'à sa restauration.", de: "Dieser Bereich ist archiviert. Dateien und öffentliche Links sind bis zur Wiederherstellung ausgesetzt." })}

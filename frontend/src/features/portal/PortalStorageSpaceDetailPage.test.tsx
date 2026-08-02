@@ -383,6 +383,7 @@ describe("PortalStorageSpaceDetailPage", () => {
     expect(screen.queryByRole("tab", { name: "Trash" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Collaborators" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Files" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Collaborators" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Collaborators" }));
