@@ -8,7 +8,6 @@ from typing import Optional, TYPE_CHECKING
 from app.db import AccountRole, User
 from app.models.bucket import Bucket
 from app.models.portal import (
-    PortalAccessKey,
     PortalIAMUser,
     PortalState,
     PortalUsage,
@@ -77,9 +76,6 @@ class PortalStateUsageMixin:
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account
-        used_bytes = None
-        used_objects = None
-        access_keys: list[PortalAccessKey] = []
         link = self._existing_portal_link(user, account)
         iam_provisioned = bool(
             link
@@ -87,9 +83,6 @@ class PortalStateUsageMixin:
             and link.active_access_key
             and link.active_secret_key
         )
-        quota_max_size_bytes = None
-        quota_max_objects = None
-        max_buckets = None
         portal_settings = self._effective_portal_settings(account)
         can_create_private_storage_spaces = bool(
             portal_settings.allow_private_storage_space_create
@@ -104,15 +97,9 @@ class PortalStateUsageMixin:
                 arn=None,
                 created_at=link.created_at if link else None,
             ),
-            access_keys=access_keys,
+            access_keys=[],
             iam_provisioned=iam_provisioned,
-            max_buckets=max_buckets,
             s3_endpoint=resolve_s3_endpoint(account),
-            used_bytes=used_bytes,
-            used_objects=used_objects,
-            quota_max_size_bytes=quota_max_size_bytes,
-            quota_max_objects=quota_max_objects,
-            just_created=False,
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
             can_create_private_storage_spaces=can_create_private_storage_spaces,
