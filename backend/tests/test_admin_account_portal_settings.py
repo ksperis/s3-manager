@@ -47,6 +47,7 @@ def test_admin_get_account_portal_settings_returns_account_overrides(client, db_
     assert body["admin_override"]["allow_private_storage_space_create"] is False
     assert "portal_manager_override" not in body
     assert "override_policy" not in body
+    assert body["delegated_to_portal_managers"] is False
 
 
 def test_admin_put_account_portal_settings_replaces_legacy_portal_manager_override_and_audits(client, db_session):
@@ -124,6 +125,28 @@ def test_admin_put_account_portal_settings_rejects_non_positive_expiration_days(
     )
 
     assert response.status_code == 422, response.text
+
+
+def test_admin_can_delegate_shared_portal_overrides(client, db_session):
+    account = _seed_account(
+        db_session,
+        overrides={"admin": {"allow_private_storage_space_create": False}},
+    )
+
+    response = client.put(
+        f"/api/admin/accounts/{account.id}/portal-settings",
+        json={
+            "allow_private_storage_space_create": False,
+            "delegated_to_portal_managers": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["admin_override"]["allow_private_storage_space_create"] is False
+    assert body["delegated_to_portal_managers"] is True
+    db_session.refresh(account)
+    assert account.portal_settings_delegated is True
 
 
 def test_admin_account_portal_settings_returns_404_for_unknown_account(client):

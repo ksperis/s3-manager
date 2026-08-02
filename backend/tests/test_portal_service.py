@@ -3689,7 +3689,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     assert target_grant.role == "Viewer"
     target_policy = iam_service.policies[(f"iam-{target.id}", service._bucket_access_policy_name)]
     assert service._extract_storage_space_access(target_policy) == {"bucket-research-data": "Viewer"}
-    assert ("GET", "/portal/settings") not in {
+    assert ("GET", "/portal/settings") in {
         (method, route.path)
         for route in portal_router.router.routes
         for method in getattr(route, "methods", set())
@@ -6489,7 +6489,6 @@ def test_portal_router_no_longer_exposes_legacy_backend_surfaces():
         ("PUT", "/portal/account-settings"),
         ("GET", "/portal/iam-compliance"),
         ("POST", "/portal/iam-compliance/apply"),
-        ("GET", "/portal/settings"),
         ("GET", "/portal/users"),
         ("POST", "/portal/users"),
         ("GET", "/portal/users/{user_id}/buckets"),

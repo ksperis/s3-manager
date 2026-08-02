@@ -123,7 +123,7 @@ class PortalIamMixin:
         ]
         if role == "Editor":
             return editor_actions
-        return [
+        owner_actions = [
             *editor_actions,
             "s3:PutObjectTagging",
             "s3:DeleteObjectTagging",
@@ -133,6 +133,13 @@ class PortalIamMixin:
             "s3:GetBucketAcl",
             "s3:GetBucketPolicy",
             "s3:GetLifecycleConfiguration",
+        ]
+        if role == "Owner":
+            return owner_actions
+        return [
+            *owner_actions,
+            "s3:PutBucketVersioning",
+            "s3:PutLifecycleConfiguration",
         ]
 
     def _bucket_arns(self, bucket_name: str) -> list[str]:
@@ -152,6 +159,8 @@ class PortalIamMixin:
             "s3:AbortMultipartUpload",
             "s3:ListBucketMultipartUploads",
             "s3:ListMultipartUploadParts",
+            "s3:PutBucketVersioning",
+            "s3:PutLifecycleConfiguration",
         ]
 
     def _metadata_visibility(

@@ -35,6 +35,10 @@ class PortalSettingsOverride(BaseModel):
     bucket_defaults: Optional[PortalBucketDefaultsOverride] = None
 
 
+class PortalSettingsAdminUpdate(PortalSettingsOverride):
+    delegated_to_portal_managers: Optional[bool] = None
+
+
 class PortalBucketDefaults(BaseModel):
     versioning: bool = True
     enable_cors: bool = True

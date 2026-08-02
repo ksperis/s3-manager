@@ -27,6 +27,7 @@ from app.models.portal import (
     PortalDeletedPrefixRestoreRequest,
     PortalDeletedPrefixRestoreResult,
     PortalEligibility,
+    PortalProjectSettings,
     PortalPublicLink,
     PortalPublicLinkCreate,
     PortalServerAccessLogEntry,
@@ -45,6 +46,8 @@ from app.models.portal import (
     PortalStorageSpaceImport,
     PortalStorageSpaceIcon,
     PortalStorageSpaceIconChoice,
+    PortalStorageSpaceSettings,
+    PortalStorageSpaceSettingsUpdate,
     PortalStorageSpaceVersionCleanupProgress,
     PortalStorageSpaceVersionCleanupRequest,
     PortalStorageSpaceVersionCleanupResult,
@@ -57,6 +60,7 @@ from app.models.portal import (
     PortalUsage,
     PortalTrashResponse,
 )
+from app.models.app_settings import PortalSettingsOverride
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
 from app.models.manager_stats import ManagerUsageTrendsResponse
@@ -124,12 +128,15 @@ def _raise_portal_storage_runtime(exc: RuntimeError) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
     if "not found" in lowered:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=safe_detail) from exc
+    if "storage space is archived" in lowered:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=safe_detail) from exc
     if (
         "not allowed" in lowered
         or "not provisioned" in lowered
         or "full management access required" in lowered
         or "full content access required" in lowered
         or "only project managers" in lowered
+        or "portal manager rights required" in lowered
         or "ownership applies only" in lowered
         or "already own" in lowered
         or "cannot be changed" in lowered
@@ -561,6 +568,54 @@ def portal_state(
         return service.get_state(actor, access)
     except RuntimeError as exc:
         raise_bad_gateway_from_runtime(exc)
+
+
+@router.get("/settings", response_model=PortalProjectSettings, response_model_exclude_unset=True)
+def get_portal_project_settings(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalProjectSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    can_update = bool(
+        access.role == AccountRole.PORTAL_MANAGER.value
+        and access.account.portal_settings_delegated
+    )
+    return service.get_portal_project_settings(access.account, can_update=can_update)
+
+
+@router.put("/settings", response_model=PortalProjectSettings, response_model_exclude_unset=True)
+def update_portal_project_settings(
+    payload: PortalSettingsOverride,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalProjectSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    if access.role != AccountRole.PORTAL_MANAGER.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal manager rights required")
+    if not access.account.portal_settings_delegated:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal settings delegation is disabled")
+    try:
+        updated = service.update_admin_portal_settings_override(access.account, payload)
+    except RuntimeError as exc:
+        raise_bad_gateway_from_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="update_project_portal_settings",
+        entity_type="account",
+        entity_id=str(access.account.id),
+        account=access.account,
+        metadata={"project_override": payload.model_dump(exclude_unset=True, exclude_none=False)},
+    )
+    return service.get_portal_project_settings(
+        access.account,
+        can_update=updated.delegated_to_portal_managers,
+    )
 
 
 @router.get("/usage", response_model=PortalUsage)
@@ -1920,6 +1975,54 @@ def revoke_portal_storage_space_share(
         return shares
     except RuntimeError as exc:
         _raise_portal_storage_runtime(exc)
+
+
+@router.get("/storage-spaces/{space_id}/settings", response_model=PortalStorageSpaceSettings)
+def get_portal_storage_space_settings(
+    space_id: str,
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.get_storage_space_settings(actor, access, space_id)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+
+
+@router.put("/storage-spaces/{space_id}/settings", response_model=PortalStorageSpaceSettings)
+def update_portal_storage_space_settings(
+    space_id: str,
+    payload: PortalStorageSpaceSettingsUpdate,
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalStorageSpaceSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        updated = service.update_storage_space_settings(actor, access, space_id, payload)
+    except RuntimeError as exc:
+        _raise_portal_storage_runtime(exc)
+    audit_service.record_action(
+        user=actor,
+        scope="portal",
+        action="update_storage_space_settings",
+        entity_type="storage_space",
+        entity_id=space_id,
+        account=access.account,
+        metadata={
+            "storage_space_id": space_id,
+            "versioning_enabled": updated.versioning_enabled,
+            "versioning_status": updated.versioning_status,
+            "lifecycle_enabled": updated.lifecycle_enabled,
+            "version_history_retention_days": updated.version_history_retention_days,
+        },
+    )
+    return updated
 
 
 @router.get("/storage-spaces/{space_id}", response_model=PortalStorageSpace)

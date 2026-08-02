@@ -11,6 +11,7 @@ from .portal.objects import PortalObjectsMixin
 from .portal.server_access_logging import PortalServerAccessLoggingMixin
 from .portal.settings import PortalSettingsMixin
 from .portal.sharing import PortalSharingMixin
+from .portal.space_settings import PortalStorageSpaceSettingsMixin
 from .portal.state_usage import PortalStateUsageMixin
 from .portal.storage_spaces import PortalStorageSpacesMixin
 from .portal.trash_restore import PortalDeletedPrefixRestoreMixin
@@ -22,6 +23,7 @@ class PortalService(
     PortalIamMixin,
     PortalServerAccessLoggingMixin,
     PortalStorageSpaceVersionCleanupMixin,
+    PortalStorageSpaceSettingsMixin,
     PortalDeletedPrefixRestoreMixin,
     PortalStorageSpacesMixin,
     PortalObjectsMixin,

@@ -256,6 +256,20 @@ PortalStorageSpaceVersionCleanupStage = Literal["prepare", "list", "delete", "co
 PortalStorageSpaceVersioningStatus = Literal["Enabled", "Suspended", "Disabled"]
 
 
+class PortalStorageSpaceSettings(BaseModel):
+    versioning_enabled: bool
+    versioning_status: PortalStorageSpaceVersioningStatus
+    lifecycle_enabled: bool
+    version_history_retention_days: int = Field(ge=1)
+    can_update: bool = False
+
+
+class PortalStorageSpaceSettingsUpdate(BaseModel):
+    versioning_enabled: bool
+    lifecycle_enabled: bool
+    version_history_retention_days: int = Field(ge=1)
+
+
 class PortalStorageSpaceVersionCleanupRequest(BaseModel):
     confirmation: str = ""
 
@@ -628,6 +642,14 @@ class PortalUserCard(BaseModel):
 class PortalAccountSettings(BaseModel):
     effective: PortalSettings
     admin_override: PortalSettingsOverride
+    delegated_to_portal_managers: bool = False
+
+
+class PortalProjectSettings(BaseModel):
+    effective: PortalSettings
+    project_override: PortalSettingsOverride
+    delegated_to_portal_managers: bool = False
+    can_update: bool = False
 
 
 class PortalEligibility(BaseModel):

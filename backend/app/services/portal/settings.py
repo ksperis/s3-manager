@@ -39,12 +39,16 @@ class PortalSettingsMixin:
         self,
         account: S3Account,
         admin_override: PortalSettingsOverride,
+        *,
+        delegated_to_portal_managers: Optional[bool] = None,
     ) -> None:
         payload: dict[str, Any] = {}
         admin_payload = self._override_payload(admin_override)
         if admin_payload:
             payload["admin"] = admin_payload
         account.portal_settings_override = json.dumps(payload) if payload else None
+        if delegated_to_portal_managers is not None:
+            account.portal_settings_delegated = bool(delegated_to_portal_managers)
         self.db.add(account)
         self.db.commit()
         self.db.refresh(account)
@@ -115,17 +119,38 @@ class PortalSettingsMixin:
         return PortalAccountSettings(
             effective=effective,
             admin_override=admin_override,
+            delegated_to_portal_managers=bool(account.portal_settings_delegated),
+        )
+
+    def get_portal_project_settings(
+        self,
+        account: S3Account,
+        *,
+        can_update: bool,
+    ) -> PortalProjectSettings:
+        account_settings = self.get_portal_account_settings(account)
+        return PortalProjectSettings(
+            effective=account_settings.effective,
+            project_override=account_settings.admin_override,
+            delegated_to_portal_managers=account_settings.delegated_to_portal_managers,
+            can_update=can_update,
         )
 
     def update_admin_portal_settings_override(
         self,
         account: S3Account,
         override: PortalSettingsOverride,
+        *,
+        delegated_to_portal_managers: Optional[bool] = None,
     ) -> PortalAccountSettings:
         payload = override.model_dump(exclude_unset=True, exclude_none=False)
         admin_override = PortalSettingsOverride.model_validate(payload)
         effective = self._portal_settings().model_copy(deep=True)
         self._apply_admin_overrides(effective, admin_override)
         self.reconcile_portal_server_access_logging(account, portal_settings=effective)
-        self._persist_portal_settings_overrides(account, admin_override)
+        self._persist_portal_settings_overrides(
+            account,
+            admin_override,
+            delegated_to_portal_managers=delegated_to_portal_managers,
+        )
         return self.get_portal_account_settings(account)

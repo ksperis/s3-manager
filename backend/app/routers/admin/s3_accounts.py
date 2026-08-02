@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account as S3AccountDb, User
-from app.models.app_settings import PortalSettingsOverride
+from app.models.app_settings import PortalSettingsAdminUpdate, PortalSettingsOverride
 from app.models.portal import PortalAccountSettings
 from app.models.s3_account import (
     PaginatedS3AccountsResponse,
@@ -163,7 +163,7 @@ def get_account_portal_settings(
 @router.put("/{account_id}/portal-settings", response_model=PortalAccountSettings, response_model_exclude_unset=True)
 def update_account_portal_settings(
     account_id: int,
-    payload: PortalSettingsOverride,
+    payload: PortalSettingsAdminUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -172,8 +172,19 @@ def update_account_portal_settings(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
     service = get_portal_service(db)
+    override = PortalSettingsOverride.model_validate(
+        payload.model_dump(
+            exclude={"delegated_to_portal_managers"},
+            exclude_unset=True,
+            exclude_none=False,
+        )
+    )
     try:
-        updated = service.update_admin_portal_settings_override(account, payload)
+        updated = service.update_admin_portal_settings_override(
+            account,
+            override,
+            delegated_to_portal_managers=payload.delegated_to_portal_managers,
+        )
     except RuntimeError as exc:
         raise_http_exception_from_exception(status.HTTP_502_BAD_GATEWAY, exc)
     audit_service.record_action(
@@ -184,7 +195,10 @@ def update_account_portal_settings(
         entity_id=str(account_id),
         account_id=account_id,
         account_name=account.name,
-        metadata={"admin_override": payload.model_dump(exclude_unset=True, exclude_none=False)},
+        metadata={
+            "admin_override": override.model_dump(exclude_unset=True, exclude_none=False),
+            "delegated_to_portal_managers": updated.delegated_to_portal_managers,
+        },
     )
     return updated
 
