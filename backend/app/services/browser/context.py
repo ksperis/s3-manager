@@ -2,9 +2,44 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.services.aws_client_config import StorageRequestProfile
+import logging
+import re
+from datetime import datetime, timezone
+from typing import Optional
 
-from ._shared import *
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.models.browser import (
+    BrowserObjectSortBy,
+    BrowserObjectSortDir,
+    BucketCorsRule,
+    BucketCorsStatus,
+    SseCustomerContext,
+)
+from app.services.aws_client_config import StorageRequestProfile
+from app.services.s3_client import get_s3_client
+from app.services.s3_execution_context import S3ExecutionTarget
+from app.services.sts_service import get_session_token
+from app.utils.s3_endpoint import resolve_s3_client_options
+from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
+
+from ._shared import (
+    STS_SESSION_DURATION_SECONDS,
+    CachedStsCredentials,
+    _BUCKET_LIST_CACHE,
+    _OBJECT_LAZY_HEAD_CACHE,
+    _OBJECT_LAZY_TAGS_CACHE,
+    _OBJECT_LIST_CACHE,
+    _OBJECT_SORT_SNAPSHOT_CACHE,
+    _get_cached_sts_credentials,
+    _normalize_expiration,
+    _record_sts_failure,
+    _resolve_endpoint,
+    _store_sts_credentials,
+    _sts_cache_key,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserContextMixin:
