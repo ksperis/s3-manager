@@ -7,9 +7,9 @@ from fastapi import HTTPException
 
 from app.db import BucketMigration, BucketMigrationItem, User, UserRole
 from app.main import app
+from app.models.access_context import BucketMigrationAccessScope
 from app.routers import dependencies
 from app.routers.dependencies import (
-    BucketMigrationAccessScope,
     _build_bucket_migration_admin_account_context_ids,
     _build_bucket_migration_allowed_context_ids,
     _ensure_bucket_migration_allowed,

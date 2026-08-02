@@ -8,9 +8,11 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.access_context import EffectiveAccountLink, ManagerActor
+from app.models.account_capabilities import AccountCapabilities
 from app.db import S3Account, S3Connection, S3User, StorageEndpoint, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
-from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
@@ -20,7 +22,6 @@ from app.utils.time import utcnow
 from .auth_session import get_current_actor, settings
 from .ceph_admin_context import _resolve_default_endpoint
 from . import service_loaders, settings_loader
-from .types import AccountCapabilities, ManagerActor
 
 
 def _resolve_ceph_admin_browser_context(

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Laurent Barbe
+# Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
@@ -8,9 +8,32 @@ from typing import Optional, Union
 from app.db import S3Account, User, UserS3Account
 from app.models.account_capabilities import AccountCapabilities
 from app.models.session import ManagerSessionPrincipal
-from app.services.effective_access_service import EffectiveAccountLink
+from app.utils.account_roles import portal_role_for
+
 
 ManagerActor = Union[User, ManagerSessionPrincipal]
+
+
+@dataclass(frozen=True)
+class EffectiveAccountGroupRole:
+    group_id: int
+    group_name: str
+    role: str
+    determines_effective_role: bool = False
+
+
+@dataclass(frozen=True)
+class EffectiveAccountLink:
+    account_id: int
+    role: str
+    is_root: bool = False
+    direct_role: Optional[str] = None
+    direct_determines_effective_role: bool = False
+    group_sources: tuple[EffectiveAccountGroupRole, ...] = ()
+
+    @property
+    def portal_role(self) -> Optional[str]:
+        return portal_role_for(self.role)
 
 
 @dataclass

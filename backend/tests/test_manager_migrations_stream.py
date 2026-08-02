@@ -9,8 +9,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem
+from app.models.access_context import BucketMigrationAccessScope
 from app.routers.manager import migrations as migrations_router
-from app.routers.dependencies import BucketMigrationAccessScope
 
 
 def _seed_migration(session_factory: sessionmaker, *, status: str) -> int:

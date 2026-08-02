@@ -10,7 +10,8 @@ from app.main import app
 from app.models.portal import PortalServerAccessLogPage
 from app.routers import dependencies
 from app.routers import portal as portal_router
-from app.routers.dependencies import AccountAccess, AccountCapabilities
+from app.models.access_context import AccountAccess
+from app.models.account_capabilities import AccountCapabilities
 from tests.s3_account_factory import make_s3_account
 
 

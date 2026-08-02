@@ -63,6 +63,7 @@ from app.models.portal import (
     PortalUsage,
     PortalTrashResponse,
 )
+from app.models.access_context import AccountAccess
 from app.models.app_settings import PortalSettingsOverride
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.ceph_admin.listing_common import parse_filter_query as parse_advanced_filter_query
@@ -70,7 +71,6 @@ from app.models.manager_stats import ManagerUsageTrendsResponse
 from app.models.usage_history import UsageHistoryTrendResponse, UsageHistoryTrendWindow
 from app.routers.bucket_purge_stream import SSE_KEEPALIVE_INTERVAL_SECONDS, format_sse_event
 from app.routers.dependencies import (
-    AccountAccess,
     get_audit_logger,
     get_current_account_user,
     get_portal_account_access,

@@ -35,7 +35,8 @@ from app.models.user import (
     LinkedUiGroup,
     ManagerToolAccess,
 )
-from app.utils.account_roles import max_account_role, portal_role_for
+from app.models.access_context import EffectiveAccountGroupRole, EffectiveAccountLink
+from app.utils.account_roles import max_account_role
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.time import utcnow
 
@@ -45,28 +46,6 @@ MANAGER_TOOL_ROLES = {
     UserRole.UI_ADMIN.value,
     UserRole.UI_USER.value,
 }
-
-
-@dataclass(frozen=True)
-class EffectiveAccountGroupRole:
-    group_id: int
-    group_name: str
-    role: str
-    determines_effective_role: bool = False
-
-
-@dataclass(frozen=True)
-class EffectiveAccountLink:
-    account_id: int
-    role: str
-    is_root: bool = False
-    direct_role: str | None = None
-    direct_determines_effective_role: bool = False
-    group_sources: tuple[EffectiveAccountGroupRole, ...] = ()
-
-    @property
-    def portal_role(self) -> str | None:
-        return portal_role_for(self.role)
 
 
 @dataclass

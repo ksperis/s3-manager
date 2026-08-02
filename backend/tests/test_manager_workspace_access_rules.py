@@ -221,7 +221,7 @@ def test_portal_browser_context_uses_portal_credentials_without_manager_admin(db
     )
     db_session.commit()
     monkeypatch.setattr(
-        dependencies,
+        settings_loader,
         "load_app_settings",
         lambda: AppSettings(
             general=GeneralSettings(
@@ -290,7 +290,7 @@ def test_portal_browser_context_rejects_unavailable_storage_space_bucket(db_sess
     )
     db_session.commit()
     monkeypatch.setattr(
-        dependencies,
+        settings_loader,
         "load_app_settings",
         lambda: AppSettings(
             general=GeneralSettings(

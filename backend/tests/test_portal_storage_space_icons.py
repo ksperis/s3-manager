@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from app.db import AccountRole, AuditLog, PortalStorageSpaceMetadata, S3Account, User, UserRole
 from app.main import app
 from app.routers import dependencies
-from app.routers.dependencies import AccountAccess, AccountCapabilities
+from app.models.access_context import AccountAccess
+from app.models.account_capabilities import AccountCapabilities
 from tests.s3_account_factory import make_s3_account
 
 

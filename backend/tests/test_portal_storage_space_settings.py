@@ -6,7 +6,8 @@ import pytest
 
 from app.db import AccountRole, PortalStorageSpaceMetadata, S3Account, User
 from app.models.portal import PortalStorageSpaceSettingsUpdate
-from app.routers.dependencies import AccountAccess, AccountCapabilities
+from app.models.access_context import AccountAccess
+from app.models.account_capabilities import AccountCapabilities
 from app.services import s3_client
 from app.services.portal_service import PortalService
 from tests.s3_account_factory import make_s3_account

@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import AccountRole, S3Account, StorageProvider, User, UserS3Account
+from app.models.access_context import AccountAccess, EffectiveAccountLink
+from app.models.account_capabilities import AccountCapabilities
 from app.routers.http_errors import raise_http_exception_from_exception
-from app.services.effective_access_service import EffectiveAccountLink
 from app.services.s3_execution_context import S3ExecutionContext
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.account_roles import portal_role_for
@@ -19,7 +20,6 @@ from app.utils.account_roles import portal_role_for
 from .account_context import _parse_account_selector, _resolve_user_account_link, _resolve_workspace_surface
 from .auth_session import get_current_account_user, settings
 from . import settings_loader
-from .types import AccountAccess, AccountCapabilities
 
 def _portal_membership_capabilities(
     link: Optional[UserS3Account | EffectiveAccountLink],

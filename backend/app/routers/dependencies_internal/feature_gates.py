@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
+from app.models.access_context import BucketMigrationAccessScope, EffectiveAccountLink, ManagerActor
+from app.models.account_capabilities import AccountCapabilities
 from app.models.session import ManagerSessionPrincipal
 from app.services.connection_identity_service import ConnectionIdentityService
-from app.services.effective_access_service import EffectiveAccessService, EffectiveAccountLink
+from app.services.effective_access_service import EffectiveAccessService
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -19,7 +21,6 @@ from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_
 from .account_context import get_account_context
 from .auth_session import get_current_actor, get_current_storage_ops_admin, get_current_user
 from . import service_loaders, settings_loader
-from .types import AccountCapabilities, BucketMigrationAccessScope, ManagerActor
 
 ManagerToolKey = Literal[
     "bucket_compare",

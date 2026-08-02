@@ -21,8 +21,8 @@ from app.models.bucket_migration import (
     BucketMigrationDetail,
     BucketMigrationListResponse,
 )
+from app.models.access_context import BucketMigrationAccessScope
 from app.routers.dependencies import (
-    BucketMigrationAccessScope,
     get_audit_logger,
     get_current_bucket_migration_scope,
 )

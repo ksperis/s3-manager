@@ -107,7 +107,7 @@ from app.utils.usage_stats import extract_usage_stats
 from app.utils.time import normalize_utc, utcnow
 
 if TYPE_CHECKING:
-    from app.routers.dependencies import AccountAccess
+    from app.models.access_context import AccountAccess
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

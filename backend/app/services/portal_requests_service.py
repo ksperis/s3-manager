@@ -28,8 +28,8 @@ from app.models.portal_requests import (
     PortalUserAccessRequestCreate,
     PortalUserRemovalRequestCreate,
 )
+from app.models.access_context import AccountAccess
 from app.models.s3_account import S3AccountUpdate
-from app.routers.dependencies_internal.types import AccountAccess
 from app.routers.http_errors import sanitize_error_detail
 from app.services.audit_service import AuditService
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service

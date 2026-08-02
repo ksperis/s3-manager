@@ -13,11 +13,11 @@ from app.core.database import get_db
 from app.core.security import constant_time_equal, decode_token
 from app.db import User, UserRole, is_admin_ui_role, is_superadmin_ui_role
 from app.models.session import ManagerSessionPrincipal
+from app.models.access_context import ManagerActor
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 
 from . import service_loaders
-from .types import ManagerActor
 
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/login")

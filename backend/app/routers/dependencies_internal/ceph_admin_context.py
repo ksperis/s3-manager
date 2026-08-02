@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User, is_admin_ui_role
+from app.models.account_capabilities import AccountCapabilities
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.services.s3_execution_context import S3ExecutionContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
@@ -17,7 +18,6 @@ from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_
 
 from .auth_session import get_current_super_admin
 from . import service_loaders, settings_loader
-from .types import AccountCapabilities
 
 
 def _build_ceph_admin_browser_context(endpoint: StorageEndpoint) -> S3ExecutionContext:

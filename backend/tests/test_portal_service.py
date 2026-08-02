@@ -53,7 +53,8 @@ from app.models.portal import (
     PortalUsage,
     portal_storage_space_version_cleanup_confirmation_phrase,
 )
-from app.routers.dependencies import AccountAccess, AccountCapabilities
+from app.models.access_context import AccountAccess
+from app.models.account_capabilities import AccountCapabilities
 from app.routers import portal as portal_router
 from app.services import s3_client
 from app.services.portal_service import (
