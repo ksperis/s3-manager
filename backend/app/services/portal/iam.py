@@ -74,51 +74,8 @@ def _extract_account_limit(payload: Any, key: str) -> Optional[int]:
 
 
 class PortalIamMixin:
-    def _normalize_actions(self, actions: Optional[list[str]]) -> list[str]:
-        return normalize_string_list(actions)
-
     def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
         return normalize_string_list(origins)
-
-    def _policy_statements(self, policy: Optional[dict]) -> list[dict]:
-        if not policy or not isinstance(policy, dict):
-            return []
-        statements = policy.get("Statement") or []
-        if not isinstance(statements, list):
-            statements = [statements]
-        return [stmt for stmt in statements if isinstance(stmt, dict)]
-
-    def _without_allowed_policy_actions(self, policy: dict, blocked_actions: set[str]) -> dict:
-        statements = policy.get("Statement") or []
-        original_was_list = isinstance(statements, list)
-        if not original_was_list:
-            statements = [statements]
-        filtered_statements: list[dict] = []
-        for statement in statements:
-            if not isinstance(statement, dict):
-                continue
-            current = copy.deepcopy(statement)
-            if str(current.get("Effect") or "").lower() == "allow" and "Action" in current:
-                action = current.get("Action")
-                if isinstance(action, str):
-                    if action.lower() in blocked_actions:
-                        continue
-                elif isinstance(action, list):
-                    allowed_actions = [
-                        item
-                        for item in action
-                        if not isinstance(item, str) or item.lower() not in blocked_actions
-                    ]
-                    if not allowed_actions:
-                        continue
-                    current["Action"] = allowed_actions
-            filtered_statements.append(current)
-        policy["Statement"] = (
-            filtered_statements
-            if original_was_list or len(filtered_statements) != 1
-            else filtered_statements[0]
-        )
-        return policy
 
     def _resolve_group_policy(
         self,
@@ -626,48 +583,8 @@ class PortalIamMixin:
         for metadata in metadata_rows:
             self._sync_storage_space_access_projection(account, metadata, sync_participants=False)
 
-    def _bucket_names_from_resources(self, resources: Any) -> set[str]:
-        if not isinstance(resources, list):
-            resources = [resources]
-        buckets: set[str] = set()
-        for res in resources:
-            if not isinstance(res, str) or not res.startswith("arn:aws:s3:::"):
-                continue
-            name = res.replace("arn:aws:s3:::", "")
-            buckets.add(name.replace("/*", ""))
-        return buckets
-
     def _role_precedence(self, role: PortalStorageSpaceRole) -> int:
         return {"Viewer": 1, "Editor": 2, "Owner": 3, "Manager": 4}[role]
-
-    def _merge_storage_space_role(
-        self,
-        roles_by_bucket: dict[str, PortalStorageSpaceRole],
-        bucket_name: str,
-        role: PortalStorageSpaceRole,
-    ) -> None:
-        current = roles_by_bucket.get(bucket_name)
-        if current is None or self._role_precedence(role) > self._role_precedence(current):
-            roles_by_bucket[bucket_name] = role
-
-    def _extract_storage_space_access(self, policy: Optional[dict]) -> dict[str, PortalStorageSpaceRole]:
-        roles_by_bucket: dict[str, PortalStorageSpaceRole] = {}
-        statements = self._policy_statements(policy)
-        sid_to_role = {
-            self._bucket_access_sid: "Editor",
-            self._storage_space_share_sid("Viewer"): "Viewer",
-            self._storage_space_share_sid("Editor"): "Editor",
-            self._storage_space_share_sid("Owner"): "Owner",
-        }
-        for stmt in statements:
-            sid = stmt.get("Sid")
-            role = sid_to_role.get(sid)
-            if role is None:
-                continue
-            for bucket_name in self._bucket_names_from_resources(stmt.get("Resource") or []):
-                self._merge_storage_space_role(roles_by_bucket, bucket_name, role)
-        return roles_by_bucket
-
     def _db_storage_space_access(
         self,
         target: User,
@@ -1190,30 +1107,6 @@ class PortalIamMixin:
 
         return link, iam_user, created
 
-    def _ensure_portal_policy(self, iam_service: RGWIAMService, username: str) -> None:
-        try:
-            existing = iam_service.list_user_inline_policies(username)
-            if self._inline_policy_name in existing:
-                return
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Unable to list inline policies for %s: %s", username, exc)
-        policy_doc = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "s3:ListAllMyBuckets",
-                        "sts:GetSessionToken",
-                    ],
-                    "Resource": [
-                        "*"
-                    ],
-                }
-            ],
-        }
-        iam_service.put_user_inline_policy(username, self._inline_policy_name, policy_doc)
-
     def _ensure_portal_groups(
         self,
         iam_service: RGWIAMService,
@@ -1289,14 +1182,6 @@ class PortalIamMixin:
         if account is not None and account_role == AccountRole.PORTAL_USER.value:
             self._sync_portal_server_access_log_bucket_policy_if_present(account)
 
-    def _clear_user_bucket_policy(self, iam_service: RGWIAMService, iam_username: Optional[str]) -> None:
-        if not iam_username:
-            raise RuntimeError("IAM username missing for this portal user")
-        try:
-            iam_service.delete_user_inline_policy(iam_username, self._bucket_access_policy_name)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Unable to delete bucket policy for %s: %s", iam_username, exc)
-
     def _ensure_policy_and_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
         return self._ensure_active_key(link, iam_service)
 
@@ -1357,36 +1242,6 @@ class PortalIamMixin:
                 usage_map[name] = (usage_bytes, usage_objects)
         return used_bytes, used_objects, bucket_count
 
-    def _account_usage_summary(self, account: S3Account) -> tuple[Optional[int], Optional[int]]:
-        try:
-            rgw_admin = self._supervision_admin_for_account(account)
-        except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
-            logger.warning("Unable to initialize RGW admin client for portal summary: %s", exc)
-            return None, None
-        if not account.rgw_account_id and not account.rgw_user_uid:
-            return None, None
-        if account.rgw_account_id:
-            try:
-                stats = rgw_admin.get_account_stats(account.rgw_account_id, sync=False) or {}
-            except RGWAdminError as exc:
-                logger.warning("Unable to fetch account stats for portal summary: %s", exc)
-                return None, None
-            if isinstance(stats, dict) and stats.get("not_found"):
-                return None, None
-            usage_payload = None
-            if isinstance(stats, dict):
-                usage_payload = stats.get("stats") or stats.get("usage") or stats.get("total") or stats
-                if isinstance(usage_payload, dict) and "usage" in usage_payload:
-                    usage_payload = usage_payload.get("usage")
-            return extract_usage_stats(usage_payload if isinstance(usage_payload, dict) else None)
-        try:
-            buckets = self._admin_bucket_list(account, admin=rgw_admin)
-        except RGWAdminError as exc:
-            logger.warning("Unable to fetch bucket usage for portal summary: %s", exc)
-            return None, None
-        used_bytes, used_objects, _ = self._bucket_usage_from_list(buckets)
-        return used_bytes, used_objects
-
     def _ensure_active_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
@@ -1446,22 +1301,6 @@ class PortalIamMixin:
                 portal_access_key_from_active_link(link, include_secret=True),
             )
         return keys
-
-    def list_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
-        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
-            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
-        iam_service = self._get_iam_service(account)
-        link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(
-            iam_service,
-            link.iam_username,
-            account_role,
-            portal_settings=portal_settings,
-            account=account,
-        )
-        self._sync_user_storage_space_projection(target, account, account_role, iam_service, link.iam_username)
-        return self.list_existing_user_bucket_access(target, account, account_role)
 
     def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
         """Read bucket permissions without provisioning IAM user/key side effects."""

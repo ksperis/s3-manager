@@ -800,56 +800,6 @@ def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_sessio
     assert keys == []
 
 
-def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
-    account = make_s3_account(db_session, name="portal-account-bootstrap", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-bootstrap@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_MANAGER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=True,
-            can_manage_portal_users=True,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-    service = PortalService(db_session)
-    link = AccountIAMUser(
-        user_id=user.id,
-        account_id=account.id,
-        iam_user_id="iam-uid",
-        iam_username="portal-bootstrap-iam",
-        active_access_key="AK-PORTAL",
-        active_secret_key="SK-PORTAL",
-    )
-    expected_state = PortalState(
-        account_id=account.id,
-        iam_user=PortalIAMUser(iam_user_id="iam-uid", iam_username="portal-bootstrap-iam"),
-        iam_provisioned=True,
-        access_keys=[],
-        account_role=AccountRole.PORTAL_MANAGER.value,
-        can_manage_buckets=True,
-        can_manage_portal_users=True,
-    )
-
-    monkeypatch.setattr(service, "_get_iam_service", lambda acc: object())
-    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, None, True))
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings())
-    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
-    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *args, **kwargs: None)
-    monkeypatch.setattr(service, "get_state", lambda *_args, **_kwargs: expected_state)
-
-    state = service.bootstrap_portal_identity(user, access)
-
-    assert state.just_created is True
-
-
 def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session):
     account = make_s3_account(db_session, name="portal-account-user-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user-visibility@example.com", hashed_password="x", role="ui_user")
@@ -3737,7 +3687,7 @@ def test_storage_space_role_matrix_for_files_shares_and_portal_settings(monkeypa
     )
     assert target_grant.role == "Viewer"
     target_policy = iam_service.policies[(f"iam-{target.id}", service._bucket_access_policy_name)]
-    assert service._extract_storage_space_access(target_policy) == {"bucket-research-data": "Viewer"}
+    assert any(statement["Sid"] == "PortalStorageSpaceViewer" for statement in target_policy["Statement"])
     assert ("GET", "/portal/settings") in {
         (method, route.path)
         for route in portal_router.router.routes
@@ -4208,9 +4158,6 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Viewer"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
-    access = service._extract_storage_space_access(policy)
-
-    assert access == {"research-data": "Viewer"}
     viewer_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceViewer")
     assert {
         "s3:GetBucketLocation",
@@ -4221,9 +4168,6 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Editor"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
-    access = service._extract_storage_space_access(policy)
-
-    assert access == {"research-data": "Editor"}
     assert not any(stmt["Sid"] == "PortalStorageSpaceViewer" for stmt in policy["Statement"])
     editor_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceEditor")
     assert "s3:PutObject" in editor_statement["Action"]
@@ -4231,9 +4175,6 @@ def test_storage_space_share_roles_are_translated_to_iam_policy(db_session):
 
     service._sync_user_storage_space_policy_projection(iam, "portal-iam", {"research-data": "Owner"})
     policy = iam.policies[("portal-iam", service._bucket_access_policy_name)]
-    access = service._extract_storage_space_access(policy)
-
-    assert access == {"research-data": "Owner"}
     owner_statement = next(stmt for stmt in policy["Statement"] if stmt["Sid"] == "PortalStorageSpaceOwner")
     assert "s3:*" not in owner_statement["Action"]
     assert {"s3:PutObject", "s3:DeleteObject", "s3:GetBucketPolicy"}.issubset(owner_statement["Action"])

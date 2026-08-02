@@ -15,7 +15,6 @@ from app.models.portal import (
     PortalAccessKeyCreate,
     PortalAccessKeysState,
     PortalIAMUser,
-    PortalState,
     PortalStorageSpaceRole,
 )
 from app.services.mappers.portal import (
@@ -305,67 +304,6 @@ class PortalAccessKeysMixin:
             storage_space_name=self._display_storage_space_name(metadata.bucket_name, metadata),
             secret_access_key=new_key.secret_access_key if new_key else None,
         )
-
-    def get_portal_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
-        link = self._existing_portal_link(user, access.account)
-        if not link or not link.iam_username:
-            raise RuntimeError("Portal IAM identity is not provisioned for this user.")
-        iam_service = self._get_iam_service(access.account)
-        if not iam_service.get_user(link.iam_username):
-            raise RuntimeError("Portal IAM user is missing. Re-run portal bootstrap.")
-        if not link.active_access_key or not link.active_secret_key:
-            raise RuntimeError("Portal access key is not provisioned for this user.")
-        metas = iam_service.list_access_keys(link.iam_username)
-        meta = next((item for item in metas if item.access_key_id == link.active_access_key), None)
-        if meta is None:
-            raise RuntimeError("Portal access key is missing in IAM. Re-run portal bootstrap.")
-        return portal_access_key_from_iam_metadata(
-            meta,
-            is_portal=True,
-            deletable=False,
-            secret_access_key=link.active_secret_key,
-        )
-
-    def bootstrap_portal_identity(self, user: User, access: "AccountAccess") -> PortalState:
-        account = access.account
-        iam_service = self._get_iam_service(account)
-        link, _, created = self._ensure_portal_user(user, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(
-            iam_service,
-            link.iam_username,
-            access.role,
-            portal_settings=portal_settings,
-            account=account,
-        )
-        self._ensure_policy_and_key(link, iam_service)
-        state = self.get_state(user, access)
-        state.just_created = created
-        return state
-
-    def rotate_portal_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
-        iam_service = self._get_iam_service(access.account)
-        link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
-        self._sync_user_group_membership(
-            iam_service,
-            link.iam_username,
-            access.role,
-            portal_settings=portal_settings,
-            account=access.account,
-        )
-        if not link.iam_username:
-            raise RuntimeError("IAM username missing for this portal user")
-        new_key = iam_service.create_access_key(link.iam_username)
-        previous_active = link.active_access_key
-        portal_key = self._persist_portal_key(link, new_key)
-        if previous_active:
-            try:
-                iam_service.update_access_key_status(link.iam_username, previous_active, "Inactive")
-                logger.info("Previous portal key %s disabled after renewal", previous_active)
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.warning("Unable to disable previous portal key %s: %s", previous_active, exc)
-        return portal_key
 
     def update_access_key_status(self, user: User, access: "AccountAccess", access_key_id: str, active: bool) -> PortalAccessKey:
         portal_settings = self._ensure_access_key_management_allowed(access)
