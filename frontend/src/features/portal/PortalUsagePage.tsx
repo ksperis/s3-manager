@@ -120,7 +120,6 @@ export default function PortalUsagePage() {
     hasAccountContext,
     accountIdForApi,
     selectedAccount,
-    state,
   } = usePortalWorkspaceData({ includeUsage: true, includeTraffic: true, includeHealth: true, trafficWindow });
 
   const tabs = useMemo(
@@ -278,14 +277,14 @@ export default function PortalUsagePage() {
     usage?.used_bytes ??
     (storageBySpace.some((space) => space.usedBytes != null)
       ? storageBySpace.reduce((sum, space) => sum + (space.usedBytes ?? 0), 0)
-      : state?.used_bytes ?? workspace.usedBytes ?? null);
+      : workspace.usedBytes ?? null);
   const totalObjects =
     usage?.used_objects ??
     (storageBySpace.some((space) => space.objectCount != null)
       ? storageBySpace.reduce((sum, space) => sum + (space.objectCount ?? 0), 0)
-      : state?.used_objects ?? workspace.usedObjects ?? null);
-  const quotaBytes = usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? workspace.quotaBytes ?? null;
-  const quotaObjects = usage?.quota_max_objects ?? state?.quota_max_objects ?? workspace.quotaObjects ?? null;
+      : workspace.usedObjects ?? null);
+  const quotaBytes = usage?.quota_max_size_bytes ?? workspace.quotaBytes ?? null;
+  const quotaObjects = usage?.quota_max_objects ?? workspace.quotaObjects ?? null;
   const quotaPercent = percent(totalUsedBytes, quotaBytes);
   const objectQuotaPercent = percent(totalObjects, quotaObjects);
   const remainingBytes =
