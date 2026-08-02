@@ -45,63 +45,11 @@ import {
   BucketProperties,
   CephAdminBucket,
   type CephAdminBucketConfigBackupFeature,
-  deleteCephAdminBucketLogging,
-  deleteCephAdminBucketCors,
-  deleteCephAdminBucketLifecycle,
-  deleteCephAdminBucketNotifications,
-  deleteCephAdminBucketPolicy,
-  getCephAdminBucketCors,
-  getCephAdminBucketEncryption,
-  getCephAdminBucketLifecycle,
-  getCephAdminBucketLogging,
-  getCephAdminBucketNotifications,
-  getCephAdminBucketPolicy,
-  getCephAdminBucketProperties,
-  getCephAdminBucketPublicAccessBlock,
-  getCephAdminBucketWebsite,
-  listCephAdminBuckets,
-  putCephAdminBucketLogging,
-  putCephAdminBucketCors,
-  putCephAdminBucketLifecycle,
-  putCephAdminBucketNotifications,
-  putCephAdminBucketPolicy,
-  refreshCephAdminBucketListingCache,
-  setCephAdminBucketVersioning,
-  streamCephAdminBuckets,
-  updateCephAdminBucketObjectLock,
-  updateCephAdminBucketPublicAccessBlock,
-  updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import {
   STORAGE_OPS_SCOPE_ID,
   decodeStorageOpsBucketRef,
   type StorageOpsBucket,
-  deleteStorageOpsBucketCors,
-  deleteStorageOpsBucketLifecycle,
-  deleteStorageOpsBucketLogging,
-  deleteStorageOpsBucketNotifications,
-  deleteStorageOpsBucketPolicy,
-  getStorageOpsBucketCors,
-  getStorageOpsBucketEncryption,
-  getStorageOpsBucketLifecycle,
-  getStorageOpsBucketLogging,
-  getStorageOpsBucketNotifications,
-  getStorageOpsBucketPolicy,
-  getStorageOpsBucketProperties,
-  getStorageOpsBucketPublicAccessBlock,
-  getStorageOpsBucketWebsite,
-  listStorageOpsBuckets,
-  putStorageOpsBucketCors,
-  putStorageOpsBucketLifecycle,
-  putStorageOpsBucketLogging,
-  putStorageOpsBucketNotifications,
-  putStorageOpsBucketPolicy,
-  refreshStorageOpsBucketListingCache,
-  setStorageOpsBucketVersioning,
-  streamStorageOpsBuckets,
-  updateStorageOpsBucketObjectLock,
-  updateStorageOpsBucketPublicAccessBlock,
-  updateStorageOpsBucketQuota,
 } from "../../api/storageOps";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
 import type { BucketIndexCheckTarget } from "../../api/bucketIndexCheck";
@@ -143,6 +91,7 @@ import BucketOpsRowActionsMenu from "./BucketOpsRowActionsMenu";
 import BucketSelectionActionsBar from "./BucketSelectionActionsBar";
 import ActionProgressCard from "./ActionProgressCard";
 import { useBucketOpsListing } from "./useBucketOpsListing";
+import { resolveBucketOpsApi } from "./bucketOpsApi";
 import { resolveBucketOpsSurface, type BucketOpsMode } from "./bucketOpsSurface";
 import {
   createBucketUiTagTarget,
@@ -441,40 +390,34 @@ export default function BucketOpsWorkbench({ mode, shell }: BucketOpsWorkbenchPr
       ? "privileged Ceph access required"
       : null;
 
-  const listBuckets = isStorageOps ? listStorageOpsBuckets : listCephAdminBuckets;
-  const streamBuckets = isStorageOps ? streamStorageOpsBuckets : streamCephAdminBuckets;
-  const refreshBucketListingCache = isStorageOps
-    ? refreshStorageOpsBucketListingCache
-    : refreshCephAdminBucketListingCache;
-  const getBucketProperties = isStorageOps ? getStorageOpsBucketProperties : getCephAdminBucketProperties;
-  const getBucketPublicAccessBlock = isStorageOps
-    ? getStorageOpsBucketPublicAccessBlock
-    : getCephAdminBucketPublicAccessBlock;
-  const updateBucketPublicAccessBlock = isStorageOps
-    ? updateStorageOpsBucketPublicAccessBlock
-    : updateCephAdminBucketPublicAccessBlock;
-  const getBucketLifecycle = isStorageOps ? getStorageOpsBucketLifecycle : getCephAdminBucketLifecycle;
-  const putBucketLifecycle = isStorageOps ? putStorageOpsBucketLifecycle : putCephAdminBucketLifecycle;
-  const deleteBucketLifecycle = isStorageOps ? deleteStorageOpsBucketLifecycle : deleteCephAdminBucketLifecycle;
-  const getBucketCors = isStorageOps ? getStorageOpsBucketCors : getCephAdminBucketCors;
-  const putBucketCors = isStorageOps ? putStorageOpsBucketCors : putCephAdminBucketCors;
-  const deleteBucketCors = isStorageOps ? deleteStorageOpsBucketCors : deleteCephAdminBucketCors;
-  const getBucketPolicy = isStorageOps ? getStorageOpsBucketPolicy : getCephAdminBucketPolicy;
-  const putBucketPolicy = isStorageOps ? putStorageOpsBucketPolicy : putCephAdminBucketPolicy;
-  const deleteBucketPolicy = isStorageOps ? deleteStorageOpsBucketPolicy : deleteCephAdminBucketPolicy;
-  const getBucketLogging = isStorageOps ? getStorageOpsBucketLogging : getCephAdminBucketLogging;
-  const putBucketLogging = isStorageOps ? putStorageOpsBucketLogging : putCephAdminBucketLogging;
-  const deleteBucketLogging = isStorageOps ? deleteStorageOpsBucketLogging : deleteCephAdminBucketLogging;
-  const getBucketNotifications = isStorageOps ? getStorageOpsBucketNotifications : getCephAdminBucketNotifications;
-  const putBucketNotifications = isStorageOps ? putStorageOpsBucketNotifications : putCephAdminBucketNotifications;
-  const deleteBucketNotifications = isStorageOps
-    ? deleteStorageOpsBucketNotifications
-    : deleteCephAdminBucketNotifications;
-  const getBucketWebsite = isStorageOps ? getStorageOpsBucketWebsite : getCephAdminBucketWebsite;
-  const getBucketEncryption = isStorageOps ? getStorageOpsBucketEncryption : getCephAdminBucketEncryption;
-  const setBucketVersioning = isStorageOps ? setStorageOpsBucketVersioning : setCephAdminBucketVersioning;
-  const updateBucketObjectLock = isStorageOps ? updateStorageOpsBucketObjectLock : updateCephAdminBucketObjectLock;
-  const updateBucketQuota = isStorageOps ? updateStorageOpsBucketQuota : updateCephAdminBucketQuota;
+  const {
+    listBuckets,
+    streamBuckets,
+    refreshBucketListingCache,
+    getBucketProperties,
+    getBucketPublicAccessBlock,
+    updateBucketPublicAccessBlock,
+    getBucketLifecycle,
+    putBucketLifecycle,
+    deleteBucketLifecycle,
+    getBucketCors,
+    putBucketCors,
+    deleteBucketCors,
+    getBucketPolicy,
+    putBucketPolicy,
+    deleteBucketPolicy,
+    getBucketLogging,
+    putBucketLogging,
+    deleteBucketLogging,
+    getBucketNotifications,
+    putBucketNotifications,
+    deleteBucketNotifications,
+    getBucketWebsite,
+    getBucketEncryption,
+    setBucketVersioning,
+    updateBucketObjectLock,
+    updateBucketQuota,
+  } = resolveBucketOpsApi(surface.mode);
 
   const columnsStorageKey = surface.storageKeys.columns;
   const bucketsStateStorageKey = surface.storageKeys.bucketListState;
