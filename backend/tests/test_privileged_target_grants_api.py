@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, S3User, User, UserRole
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole
 from app.main import app
 from app.routers import dependencies
 
@@ -14,6 +14,18 @@ def _ui_admin() -> User:
         is_active=True,
         role=UserRole.UI_ADMIN.value,
     )
+
+
+def _s3_user_endpoint(db_session, *, name: str) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
+    return endpoint
 
 
 def test_ui_admin_can_grant_account_bucket_quota_target(client: TestClient, db_session):
@@ -54,11 +66,13 @@ def test_ui_admin_can_update_account_without_changing_privileged_target(client: 
 
 
 def test_ui_admin_can_grant_s3_user_privileged_targets(client: TestClient, db_session):
+    endpoint = _s3_user_endpoint(db_session, name="privileged-user-ceph")
     s3_user = S3User(
         name="privileged-user",
         rgw_user_uid="privileged-user",
         rgw_access_key="AKIA",
         rgw_secret_key="SECRET",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(s3_user)
     db_session.commit()
@@ -81,11 +95,13 @@ def test_ui_admin_can_grant_s3_user_privileged_targets(client: TestClient, db_se
 
 
 def test_ui_admin_can_update_s3_user_without_changing_privileged_targets(client: TestClient, db_session):
+    endpoint = _s3_user_endpoint(db_session, name="regular-user-ceph")
     s3_user = S3User(
         name="regular-user",
         rgw_user_uid="regular-user",
         rgw_access_key="AKIA",
         rgw_secret_key="SECRET",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(s3_user)
     db_session.commit()

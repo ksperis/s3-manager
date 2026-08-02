@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db import S3Account, S3User
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
 from app.main import app
 from app.models.browser import BrowserBucket, PaginatedBrowserBucketsResponse
 from app.routers import browser as browser_router
@@ -11,6 +11,18 @@ def _account() -> S3Account:
     account = S3Account(name="browser-search-endpoint-test")
     account.id = 77
     return account
+
+
+def _s3_user_endpoint(db_session, *, name: str) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
+    return endpoint
 
 
 def test_browser_bucket_search_endpoint_contract(client):
@@ -220,11 +232,13 @@ def test_browser_usage_summary_hides_account_when_live_usage_is_unavailable(clie
 
 
 def test_browser_usage_summary_uses_live_s3_user_usage(client, db_session, monkeypatch):
+    endpoint = _s3_user_endpoint(db_session, name="browser-summary-ceph")
     s3_user = S3User(
         name="browser-s3-user-summary",
         rgw_user_uid="browser-summary-user",
         rgw_access_key="access",
         rgw_secret_key="secret",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(s3_user)
     db_session.flush()
@@ -262,11 +276,13 @@ def test_browser_usage_summary_uses_live_s3_user_usage(client, db_session, monke
 
 
 def test_browser_usage_summary_hides_s3_user_when_live_usage_is_unavailable(client, db_session, monkeypatch):
+    endpoint = _s3_user_endpoint(db_session, name="browser-summary-empty-ceph")
     s3_user = S3User(
         name="browser-s3-user-summary-empty",
         rgw_user_uid="browser-summary-user-empty",
         rgw_access_key="access",
         rgw_secret_key="secret",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(s3_user)
     db_session.flush()

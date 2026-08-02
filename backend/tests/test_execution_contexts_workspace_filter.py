@@ -112,11 +112,13 @@ def _create_connection(
 
 
 def _create_legacy_user(db_session, *, name: str, uid: str) -> S3User:
+    endpoint = _create_endpoint(db_session, name=f"{name}-endpoint")
     s3_user = S3User(
         name=name,
         rgw_user_uid=uid,
         rgw_access_key=f"S3U-AK-{name}",
         rgw_secret_key=f"S3U-SK-{name}",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(s3_user)
     db_session.commit()

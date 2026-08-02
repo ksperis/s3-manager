@@ -21,9 +21,9 @@ export type S3User = {
   group_details?: { id: number; name: string; avatar?: UiGroupAvatarDescriptor | null }[];
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;
-  storage_endpoint_id?: number | null;
-  storage_endpoint_name?: string | null;
-  storage_endpoint_url?: string | null;
+  storage_endpoint_id: number;
+  storage_endpoint_name: string;
+  storage_endpoint_url: string;
   bucket_count?: number | null;
   allow_manager_bucket_quota?: boolean;
   allow_manager_ceph_s3_user_keys?: boolean;
@@ -34,9 +34,9 @@ export type S3UserSummary = {
   name: string;
   rgw_user_uid: string;
   tags: TagDefinitionSummary[];
-  storage_endpoint_id?: number | null;
-  storage_endpoint_name?: string | null;
-  storage_endpoint_url?: string | null;
+  storage_endpoint_id: number;
+  storage_endpoint_name: string;
+  storage_endpoint_url: string;
   allow_manager_bucket_quota?: boolean;
   allow_manager_ceph_s3_user_keys?: boolean;
 };
@@ -48,7 +48,7 @@ type CreateS3UserPayload = {
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
-  storage_endpoint_id?: number | null;
+  storage_endpoint_id: number;
   tags?: TagDefinitionInput[] | null;
   allow_manager_bucket_quota?: boolean | null;
   allow_manager_ceph_s3_user_keys?: boolean | null;
@@ -58,7 +58,7 @@ type ImportS3UserPayload = {
   uid: string;
   name?: string | null;
   email?: string | null;
-  storage_endpoint_id?: number | null;
+  storage_endpoint_id: number;
 };
 
 export type UpdateS3UserPayload = {
@@ -69,7 +69,6 @@ export type UpdateS3UserPayload = {
   quota_max_size_gb?: number | null;
   quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
-  storage_endpoint_id?: number | null;
   tags?: TagDefinitionInput[] | null;
   allow_manager_bucket_quota?: boolean | null;
   allow_manager_ceph_s3_user_keys?: boolean | null;

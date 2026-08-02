@@ -469,6 +469,8 @@ class AdminAutomationService:
                     raise ValueError("s3_users.spec.name is required to create a new S3 user")
                 uid = spec.uid or item.match.uid
                 endpoint = self._resolve_storage_endpoint(spec.storage_endpoint_id, spec.storage_endpoint_name, spec.storage_endpoint_url)
+                if not endpoint:
+                    raise ValueError("storage_endpoint_id/name/url is required to create an S3 user")
                 if dry_run:
                     return self._created("s3_user", key, dry_run=dry_run)
                 created = self.s3_users.create_user(
@@ -479,7 +481,7 @@ class AdminAutomationService:
                         quota_max_size_gb=spec.quota_max_size_gb,
                         quota_max_size_unit=spec.quota_max_size_unit,
                         quota_max_objects=spec.quota_max_objects,
-                        storage_endpoint_id=endpoint.id if endpoint else None,
+                        storage_endpoint_id=endpoint.id,
                     )
                 )
                 audit_service.record_action(
@@ -497,7 +499,7 @@ class AdminAutomationService:
                 return self._skipped("s3_user", key, dry_run=dry_run)
             if dry_run:
                 return self._updated("s3_user", key, s3_user.id, diff, dry_run=dry_run)
-            update_payload = self._build_s3_user_update(item, s3_user)
+            update_payload = self._build_s3_user_update(item)
             updated = self.s3_users.update_user(s3_user.id, update_payload)
             if spec:
                 self._apply_s3_user_credentials(updated.id, spec)
@@ -883,11 +885,8 @@ class AdminAutomationService:
                 spec.storage_endpoint_name,
                 spec.storage_endpoint_url,
             )
-            desired_id = endpoint.id if endpoint else None
-            if s3_user.storage_endpoint_id and desired_id != s3_user.storage_endpoint_id:
+            if endpoint is None or endpoint.id != s3_user.storage_endpoint_id:
                 raise ValueError("Storage endpoint cannot be changed for an existing S3 user")
-            if desired_id != s3_user.storage_endpoint_id:
-                diff["storage_endpoint_id"] = {"from": s3_user.storage_endpoint_id, "to": desired_id}
         if {"quota_max_size_gb", "quota_max_objects"} & fields_set:
             current_gb, current_objects = self.s3_users._user_quota(s3_user)
             if "quota_max_size_gb" in fields_set:
@@ -1024,24 +1023,16 @@ class AdminAutomationService:
             payload["storage_endpoint_id"] = endpoint.id
         return S3AccountUpdate(**payload)
 
-    def _build_s3_user_update(self, item: S3UserApply, s3_user: S3User) -> S3UserUpdate:
+    def _build_s3_user_update(self, item: S3UserApply) -> S3UserUpdate:
         spec = item.spec
         if not spec:
             return S3UserUpdate()
         payload = spec.model_dump(exclude_unset=True)
         payload.pop("rgw_access_key", None)
         payload.pop("rgw_secret_key", None)
+        payload.pop("storage_endpoint_id", None)
         payload.pop("storage_endpoint_name", None)
         payload.pop("storage_endpoint_url", None)
-        endpoint = self._resolve_storage_endpoint(
-            spec.storage_endpoint_id,
-            spec.storage_endpoint_name,
-            spec.storage_endpoint_url,
-        )
-        if endpoint and s3_user.storage_endpoint_id is None:
-            payload["storage_endpoint_id"] = endpoint.id
-        elif "storage_endpoint_id" in payload:
-            payload.pop("storage_endpoint_id", None)
         return S3UserUpdate(**payload)
 
     def _resolve_storage_endpoint(

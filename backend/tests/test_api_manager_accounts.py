@@ -4,6 +4,8 @@ from app.db import (
     AccountRole,
     S3Account,
     S3User,
+    StorageEndpoint,
+    StorageProvider,
     User,
     UserRole,
     UserS3Account,
@@ -35,12 +37,19 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         )
     )
 
+    endpoint = StorageEndpoint(
+        name="manager-accounts-ceph",
+        endpoint_url="https://manager-accounts-ceph.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+    )
     linked_s3_user = S3User(
         name="linked-s3",
         rgw_user_uid="uid-linked",
         email="linked@example.com",
         rgw_access_key="AKIA-LINKED",
         rgw_secret_key="secret-linked",
+        storage_endpoint=endpoint,
     )
     other_s3_user = S3User(
         name="other-s3",
@@ -48,8 +57,9 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         email="other@example.com",
         rgw_access_key="AKIA-OTHER",
         rgw_secret_key="secret-other",
+        storage_endpoint=endpoint,
     )
-    db_session.add_all([linked_s3_user, other_s3_user])
+    db_session.add_all([endpoint, linked_s3_user, other_s3_user])
     db_session.flush()
     db_session.add(UserS3User(user_id=super_admin.id, s3_user_id=linked_s3_user.id))
     db_session.commit()

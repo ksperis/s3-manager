@@ -21,7 +21,6 @@ from app.db import (
     UserRole,
 )
 from app.services.resource_deletion_purge_service import ResourceDeletionPurgeService
-from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.tags_service import TagsService
 from app.services.ui_group_avatar_service import UiGroupAvatarService
 from app.services.user_avatar_service import UserAvatarService
@@ -84,36 +83,26 @@ def _extract_max_buckets(payload: Any) -> Optional[int]:
 
 
 class S3UsersService:
-    def __init__(self, db: Session, rgw_admin_client: Optional[RGWAdminClient] = None) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
         self.tags = TagsService(db)
-        self.storage_endpoints = StorageEndpointsService(db)
-        self.default_admin = rgw_admin_client
 
     # Helpers
-    def _resolve_endpoint(self, storage_endpoint_id: Optional[int]) -> StorageEndpoint:
-        if storage_endpoint_id:
-            endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
-            if not endpoint:
-                raise ValueError("Storage endpoint not found.")
-            if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-                raise ValueError("Only Ceph endpoints are allowed for S3 users.")
-            if not resolve_feature_flags(endpoint).admin_enabled:
-                raise ValueError("Admin operations are disabled for this endpoint.")
-            return endpoint
-        self.storage_endpoints.ensure_default_endpoint()
-        endpoint = (
-            self.db.query(StorageEndpoint)
-            .filter(StorageEndpoint.is_default.is_(True))
-            .order_by(StorageEndpoint.id.asc())
-            .first()
-        )
+    def _resolve_endpoint(self, storage_endpoint_id: int) -> StorageEndpoint:
+        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
         if not endpoint:
-            raise ValueError("No storage endpoint available.")
+            raise ValueError("Storage endpoint not found.")
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-            raise ValueError("No Ceph endpoint available.")
+            raise ValueError("Only Ceph endpoints are allowed for S3 users.")
         if not resolve_feature_flags(endpoint).admin_enabled:
             raise ValueError("Admin operations are disabled for this endpoint.")
+        return endpoint
+
+    @staticmethod
+    def _endpoint_for_user(s3_user: S3UserModel) -> StorageEndpoint:
+        endpoint = s3_user.storage_endpoint
+        if endpoint is None:
+            raise ValueError("Storage endpoint not found for S3 user.")
         return endpoint
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint) -> RGWAdminClient:
@@ -132,7 +121,7 @@ class S3UsersService:
             raise ValueError(f"Unable to build admin client for {endpoint.name}: {exc}") from exc
 
     def _admin_for_user(self, s3_user: S3UserModel) -> RGWAdminClient:
-        endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)
+        endpoint = self._endpoint_for_user(s3_user)
         return self._admin_for_endpoint(endpoint)
 
     def _interface_bucket_count(self, s3_user: S3UserModel) -> Optional[int]:
@@ -157,7 +146,7 @@ class S3UsersService:
 
     def _user_usage(self, s3_user: S3UserModel) -> tuple[Optional[int], Optional[int], Optional[int]]:
         try:
-            endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)
+            endpoint = self._endpoint_for_user(s3_user)
             if not resolve_feature_flags(endpoint).metrics_enabled:
                 return None, None, None
             admin = self._admin_for_endpoint(endpoint)
@@ -416,11 +405,7 @@ class S3UsersService:
         *,
         include_quota: bool = True,
     ) -> S3UserSchema:
-        endpoint = row.storage_endpoint or (
-            self.db.query(StorageEndpoint).filter(StorageEndpoint.id == row.storage_endpoint_id).first()
-            if row.storage_endpoint_id
-            else None
-        )
+        endpoint = self._endpoint_for_user(row)
         quota_max_size_gb = None
         quota_max_objects = None
         if include_quota:
@@ -437,9 +422,9 @@ class S3UsersService:
             group_details=group_details_map.get(row.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_id=endpoint.id,
+            storage_endpoint_name=endpoint.name,
+            storage_endpoint_url=endpoint.endpoint_url,
             allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
             allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(row),
@@ -526,19 +511,15 @@ class S3UsersService:
         rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
         summaries: list[S3UserSummary] = []
         for row in rows:
-            endpoint = row.storage_endpoint or (
-                self.db.query(StorageEndpoint).filter(StorageEndpoint.id == row.storage_endpoint_id).first()
-                if row.storage_endpoint_id
-                else None
-            )
+            endpoint = self._endpoint_for_user(row)
             summaries.append(
                 S3UserSummary(
                     id=row.id,
                     name=row.name,
                     rgw_user_uid=row.rgw_user_uid,
-                    storage_endpoint_id=endpoint.id if endpoint else None,
-                    storage_endpoint_name=endpoint.name if endpoint else None,
-                    storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    storage_endpoint_id=endpoint.id,
+                    storage_endpoint_name=endpoint.name,
+                    storage_endpoint_url=endpoint.endpoint_url,
                     allow_manager_bucket_quota=bool(row.allow_manager_bucket_quota),
                     allow_manager_ceph_s3_user_keys=bool(row.allow_manager_ceph_s3_user_keys),
                     tags=self.tags.get_s3_user_tags(row),
@@ -634,11 +615,7 @@ class S3UsersService:
         user_ids_map, user_details_map = self._load_user_links([s3_user.id])
         user_ids = user_ids_map.get(s3_user.id, [])
         group_ids_map, group_details_map = self._load_group_links([s3_user.id])
-        endpoint = s3_user.storage_endpoint or (
-            self.db.query(StorageEndpoint).filter(StorageEndpoint.id == s3_user.storage_endpoint_id).first()
-            if s3_user.storage_endpoint_id
-            else None
-        )
+        endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb = None
         quota_max_objects = None
         if include_quota:
@@ -656,9 +633,9 @@ class S3UsersService:
             group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_id=endpoint.id,
+            storage_endpoint_name=endpoint.name,
+            storage_endpoint_url=endpoint.endpoint_url,
             bucket_count=bucket_count,
             allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
             allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
@@ -807,12 +784,6 @@ class S3UsersService:
             s3_user.name = payload.name
         if payload.email is not None:
             s3_user.email = payload.email
-        if payload.storage_endpoint_id is not None:
-            if s3_user.storage_endpoint_id and payload.storage_endpoint_id != s3_user.storage_endpoint_id:
-                raise ValueError("Storage endpoint cannot be changed for an existing S3 user.")
-            if s3_user.storage_endpoint_id is None:
-                endpoint = self._resolve_endpoint(payload.storage_endpoint_id)
-                s3_user.storage_endpoint_id = endpoint.id
         if payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
         if payload.group_ids is not None:
@@ -838,11 +809,7 @@ class S3UsersService:
         user_ids_map, user_details_map = self._load_user_links([s3_user.id])
         user_ids = user_ids_map.get(s3_user.id, [])
         group_ids_map, group_details_map = self._load_group_links([s3_user.id])
-        endpoint = s3_user.storage_endpoint or (
-            self.db.query(StorageEndpoint).filter(StorageEndpoint.id == s3_user.storage_endpoint_id).first()
-            if s3_user.storage_endpoint_id
-            else None
-        )
+        endpoint = self._endpoint_for_user(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         return S3UserSchema(
             id=s3_user.id,
@@ -856,9 +823,9 @@ class S3UsersService:
             group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_id=endpoint.id,
+            storage_endpoint_name=endpoint.name,
+            storage_endpoint_url=endpoint.endpoint_url,
             allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
             allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
@@ -921,11 +888,7 @@ class S3UsersService:
         self.db.add(s3_user)
         self.db.commit()
         self.db.refresh(s3_user)
-        endpoint = s3_user.storage_endpoint or (
-            self.db.query(StorageEndpoint).filter(StorageEndpoint.id == s3_user.storage_endpoint_id).first()
-            if s3_user.storage_endpoint_id
-            else None
-        )
+        endpoint = self._endpoint_for_user(s3_user)
         user_ids_map, user_details_map = self._load_user_links([s3_user.id])
         user_ids = user_ids_map.get(s3_user.id, [])
         group_ids_map, group_details_map = self._load_group_links([s3_user.id])
@@ -942,9 +905,9 @@ class S3UsersService:
             group_details=group_details_map.get(s3_user.id, []),
             quota_max_size_gb=quota_max_size_gb,
             quota_max_objects=quota_max_objects,
-            storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_id=endpoint.id,
+            storage_endpoint_name=endpoint.name,
+            storage_endpoint_url=endpoint.endpoint_url,
             allow_manager_bucket_quota=bool(s3_user.allow_manager_bucket_quota),
             allow_manager_ceph_s3_user_keys=bool(s3_user.allow_manager_ceph_s3_user_keys),
             tags=self.tags.get_s3_user_tags(s3_user),
@@ -1139,5 +1102,5 @@ class S3UsersService:
         self.delete_user(user_id, delete_rgw=False)
 
 
-def get_s3_users_service(db: Session, rgw_admin_client: Optional[RGWAdminClient] = None) -> S3UsersService:
-    return S3UsersService(db, rgw_admin_client=rgw_admin_client)
+def get_s3_users_service(db: Session) -> S3UsersService:
+    return S3UsersService(db)

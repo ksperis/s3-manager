@@ -769,6 +769,7 @@ def test_manager_context_connection_reports_reason_for_non_ceph_endpoint(db_sess
 
 
 def test_manager_workspace_accepts_s3_user_context(db_session):
+    endpoint = _ceph_metrics_endpoint(name="s3-user-context-ceph")
     user = User(
         email="s3-user-context-ok@example.com",
         hashed_password="x",
@@ -780,8 +781,9 @@ def test_manager_workspace_accepts_s3_user_context(db_session):
         rgw_user_uid="legacy-user-uid",
         rgw_access_key="AK-S3U",
         rgw_secret_key="SK-S3U",
+        storage_endpoint=endpoint,
     )
-    db_session.add_all([user, s3_user])
+    db_session.add_all([user, endpoint, s3_user])
     db_session.commit()
     db_session.refresh(user)
     db_session.refresh(s3_user)
@@ -805,6 +807,7 @@ def test_manager_workspace_accepts_s3_user_context(db_session):
 
 
 def test_browser_workspace_rejects_forged_s3_user_context(db_session):
+    endpoint = _ceph_metrics_endpoint(name="browser-forged-s3-user-ceph")
     user = User(
         email="browser-forged-s3-user@example.com",
         hashed_password="x",
@@ -816,8 +819,9 @@ def test_browser_workspace_rejects_forged_s3_user_context(db_session):
         rgw_user_uid="browser-forged-s3-user",
         rgw_access_key="AK-FORGED-S3U",
         rgw_secret_key="SK-FORGED-S3U",
+        storage_endpoint=endpoint,
     )
-    db_session.add_all([user, s3_user])
+    db_session.add_all([user, endpoint, s3_user])
     db_session.commit()
     db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
     db_session.commit()
@@ -977,6 +981,7 @@ def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible
 
 
 def test_workspace_rejects_unlinked_s3_user_context(db_session):
+    endpoint = _ceph_metrics_endpoint(name="s3-user-context-unlinked-ceph")
     user = User(
         email="s3-user-context-ko@example.com",
         hashed_password="x",
@@ -988,8 +993,9 @@ def test_workspace_rejects_unlinked_s3_user_context(db_session):
         rgw_user_uid="legacy-user-ko",
         rgw_access_key="AK-S3U-KO",
         rgw_secret_key="SK-S3U-KO",
+        storage_endpoint=endpoint,
     )
-    db_session.add_all([user, s3_user])
+    db_session.add_all([user, endpoint, s3_user])
     db_session.commit()
     db_session.refresh(user)
     db_session.refresh(s3_user)

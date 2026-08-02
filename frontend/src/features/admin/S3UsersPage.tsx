@@ -162,7 +162,6 @@ export default function S3UsersPage() {
     quota_max_size_gb: "",
     quota_max_size_unit: "GiB",
     quota_max_objects: "",
-    storage_endpoint_id: "",
     allow_manager_bucket_quota: false,
     allow_manager_ceph_s3_user_keys: false,
   });
@@ -453,10 +452,7 @@ export default function S3UsersPage() {
     setImportEndpointId((prev) =>
       adminCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
     );
-    if (!editForm.storage_endpoint_id && firstCephId) {
-      setEditForm((prev) => ({ ...prev, storage_endpoint_id: firstCephId }));
-    }
-  }, [adminCephEndpoints, editForm.storage_endpoint_id]);
+  }, [adminCephEndpoints]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -528,7 +524,6 @@ export default function S3UsersPage() {
       quota_max_size_gb: quota.value,
       quota_max_size_unit: quota.unit,
       quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
-      storage_endpoint_id: user.storage_endpoint_id ? String(user.storage_endpoint_id) : "",
       allow_manager_bucket_quota: Boolean(user.allow_manager_bucket_quota),
       allow_manager_ceph_s3_user_keys: Boolean(user.allow_manager_ceph_s3_user_keys),
     };
@@ -551,10 +546,6 @@ export default function S3UsersPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    if (!editingUser.storage_endpoint_id) {
-      setEditError("Storage endpoint is missing for this user.");
-      return;
-    }
     setEditBusy(true);
     setEditError(null);
     try {
@@ -614,7 +605,7 @@ export default function S3UsersPage() {
         quota_max_size_gb: createForm.quota_max_size_gb ? Number(createForm.quota_max_size_gb) : undefined,
         quota_max_size_unit: createForm.quota_max_size_gb ? createForm.quota_max_size_unit : undefined,
         quota_max_objects: createForm.quota_max_objects ? Number(createForm.quota_max_objects) : undefined,
-        storage_endpoint_id: createForm.storage_endpoint_id ? Number(createForm.storage_endpoint_id) : undefined,
+        storage_endpoint_id: Number(createForm.storage_endpoint_id),
       });
       setShowCreateModal(false);
       setCreateForm((prev) => ({
@@ -797,7 +788,7 @@ export default function S3UsersPage() {
       cellClassName: "min-w-[160px] align-top",
       render: (user) => (
         <span title={user.storage_endpoint_url || undefined}>
-          {user.storage_endpoint_name || "—"}
+          {user.storage_endpoint_name}
         </span>
       ),
     },
@@ -1161,8 +1152,8 @@ export default function S3UsersPage() {
                 },
                 {
                   label: "Endpoint",
-                  value: editingUser.storage_endpoint_name ?? "—",
-                  title: editingUser.storage_endpoint_url || undefined,
+                  value: editingUser.storage_endpoint_name,
+                  title: editingUser.storage_endpoint_url,
                 },
               ]}
             />

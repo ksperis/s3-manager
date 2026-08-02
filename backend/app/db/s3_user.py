@@ -25,7 +25,7 @@ class S3User(Base):
     rgw_secret_key = Column(EncryptedString, nullable=False)
     created_at = Column(UTCDateTime(), default=utcnow, nullable=False)
     updated_at = Column(UTCDateTime(), default=utcnow, onupdate=utcnow, nullable=False)
-    storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
+    storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False)
     allow_manager_bucket_quota = Column(Boolean, default=False, nullable=False, server_default="0")
     allow_manager_ceph_s3_user_keys = Column(Boolean, default=False, nullable=False, server_default="0")
 

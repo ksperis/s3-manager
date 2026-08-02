@@ -23,15 +23,15 @@ class S3User(BaseModel):
     rgw_user_uid: str
     email: Optional[str] = None
     created_at: Optional[datetime] = None
-    user_ids: list[int] = []
+    user_ids: list[int] = Field(default_factory=list)
     user_details: list[UserAssociationDetail] = Field(default_factory=list)
     group_ids: list[int] = Field(default_factory=list)
     group_details: list[S3UserGroupDetail] = Field(default_factory=list)
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
-    storage_endpoint_id: Optional[int] = None
-    storage_endpoint_name: Optional[str] = None
-    storage_endpoint_url: Optional[str] = None
+    storage_endpoint_id: int
+    storage_endpoint_name: str
+    storage_endpoint_url: str
     bucket_count: Optional[int] = None
     allow_manager_bucket_quota: bool = False
     allow_manager_ceph_s3_user_keys: bool = False
@@ -45,7 +45,7 @@ class S3UserCreate(BaseModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
-    storage_endpoint_id: Optional[int] = None
+    storage_endpoint_id: int
     tags: list[TagDefinitionInput] = Field(default_factory=list)
 
     @field_validator("tags", mode="before")
@@ -58,7 +58,7 @@ class S3UserImport(BaseModel):
     uid: str
     name: Optional[str] = None
     email: Optional[str] = None
-    storage_endpoint_id: Optional[int] = None
+    storage_endpoint_id: int
 
 
 class S3UserUpdate(BaseModel):
@@ -69,7 +69,6 @@ class S3UserUpdate(BaseModel):
     quota_max_size_gb: Optional[float] = None
     quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
-    storage_endpoint_id: Optional[int] = None
     tags: Optional[list[TagDefinitionInput]] = None
     allow_manager_bucket_quota: Optional[bool] = None
     allow_manager_ceph_s3_user_keys: Optional[bool] = None
@@ -104,9 +103,9 @@ class S3UserSummary(BaseModel):
     id: int
     name: str
     rgw_user_uid: str
-    storage_endpoint_id: Optional[int] = None
-    storage_endpoint_name: Optional[str] = None
-    storage_endpoint_url: Optional[str] = None
+    storage_endpoint_id: int
+    storage_endpoint_name: str
+    storage_endpoint_url: str
     allow_manager_bucket_quota: bool = False
     allow_manager_ceph_s3_user_keys: bool = False
     tags: list[TagDefinitionSummary] = Field(default_factory=list)

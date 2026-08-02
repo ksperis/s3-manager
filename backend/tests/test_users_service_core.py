@@ -11,6 +11,8 @@ from app.db import (
     S3Account,
     S3Connection,
     S3User,
+    StorageEndpoint,
+    StorageProvider,
     User,
     UserRole,
     UserS3Account,
@@ -49,11 +51,22 @@ def _seed_user(db_session, email: str, role: str = UserRole.UI_USER.value, passw
 
 
 def _seed_s3_user(db_session, name: str) -> S3User:
+    endpoint = db_session.query(StorageEndpoint).order_by(StorageEndpoint.id.asc()).first()
+    if endpoint is None:
+        endpoint = StorageEndpoint(
+            name="users-service-ceph",
+            endpoint_url="https://users-service-ceph.example.test",
+            provider=StorageProvider.CEPH.value,
+            is_default=True,
+        )
+        db_session.add(endpoint)
+        db_session.flush()
     entry = S3User(
         name=name,
         rgw_user_uid=f"{name}-uid",
         rgw_access_key=f"{name}-AK",
         rgw_secret_key=f"{name}-SK",
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(entry)
     db_session.commit()

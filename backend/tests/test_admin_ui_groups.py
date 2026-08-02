@@ -13,6 +13,8 @@ from app.db import (
     S3Account,
     S3Connection,
     S3User,
+    StorageEndpoint,
+    StorageProvider,
     User,
     UserRole,
     UserS3Account,
@@ -56,13 +58,20 @@ def _account(db_session, *, name: str = "group-account") -> S3Account:
 
 
 def _s3_user(db_session, *, name: str = "group-s3-user") -> S3User:
+    endpoint = StorageEndpoint(
+        name=f"{name}-endpoint",
+        endpoint_url=f"https://{name}-endpoint.example.test",
+        provider=StorageProvider.CEPH.value,
+        is_default=True,
+    )
     s3_user = S3User(
         name=name,
         rgw_user_uid=f"uid-{name}",
         rgw_access_key=f"AK-{name}",
         rgw_secret_key=f"SK-{name}",
+        storage_endpoint=endpoint,
     )
-    db_session.add(s3_user)
+    db_session.add_all([endpoint, s3_user])
     db_session.commit()
     db_session.refresh(s3_user)
     return s3_user

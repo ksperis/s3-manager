@@ -92,6 +92,14 @@ def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
     return endpoint
 
 
+def test_admin_s3_user_writes_require_an_explicit_endpoint(client: TestClient):
+    create_response = client.post("/api/admin/s3-users", json={"name": "missing-endpoint"})
+    import_response = client.post("/api/admin/s3-users/import", json=[{"uid": "missing-endpoint"}])
+
+    assert create_response.status_code == 422
+    assert import_response.status_code == 422
+
+
 def test_admin_create_s3_user_with_quota_unit(monkeypatch, client: TestClient, db_session):
     endpoint = _seed_ceph_endpoint(db_session)
     fake_rgw = FakeRGWAdmin()

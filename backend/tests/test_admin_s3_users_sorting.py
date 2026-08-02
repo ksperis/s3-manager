@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from app.db import S3User, UiGroup, UiGroupS3User, User, UserRole, UserS3User
+from app.db import S3User, StorageEndpoint, StorageProvider, UiGroup, UiGroupS3User, User, UserRole, UserS3User
 from app.services.tags_service import TagsService
 
 
@@ -15,6 +15,16 @@ def _seed_s3_user(
     uid: str,
     created_at: datetime | None = None,
 ) -> S3User:
+    endpoint = db_session.query(StorageEndpoint).order_by(StorageEndpoint.id.asc()).first()
+    if endpoint is None:
+        endpoint = StorageEndpoint(
+            name="sorting-ceph",
+            endpoint_url="https://sorting-ceph.example.test",
+            provider=StorageProvider.CEPH.value,
+            is_default=True,
+        )
+        db_session.add(endpoint)
+        db_session.flush()
     row = S3User(
         name=name,
         rgw_user_uid=uid,
@@ -23,6 +33,7 @@ def _seed_s3_user(
         rgw_secret_key="SECRET",
         created_at=created_at,
         updated_at=created_at,
+        storage_endpoint_id=endpoint.id,
     )
     db_session.add(row)
     db_session.commit()
