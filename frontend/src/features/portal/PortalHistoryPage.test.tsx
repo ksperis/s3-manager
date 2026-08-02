@@ -47,7 +47,7 @@ vi.mock("./usePortalWorkspaceData", () => ({
   }),
 }));
 
-function renderPage(initialEntry = "/portal/history?view=transfers") {
+function renderPage(initialEntry = "/portal/history") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <PortalHistoryPage />
@@ -83,7 +83,7 @@ describe("PortalHistoryPage", () => {
     expect(mocks.fetchPortalServerAccessLogPage).not.toHaveBeenCalled();
   });
 
-  it("normalizes the removed transfers view to governance activity", async () => {
+  it("switches from governance activity to manager access logs", async () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();

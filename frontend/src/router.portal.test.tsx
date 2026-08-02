@@ -85,7 +85,6 @@ describe("portal routes", () => {
       "shares/:userId",
       "requests",
       "history",
-      "transfers",
       "usage",
       "settings",
     ]);

@@ -154,8 +154,7 @@ Portal canonical routes are:
 
 `/portal/history` is the only Portal history destination. Its default Activity
 view contains governance changes only. `view=access` selects manager-only S3
-provider access logs. Stale `view=transfers` values normalize to Activity, and
-`/portal/transfers` redirects to `/portal/history`.
+provider access logs. Former Portal transfer URLs are not routed.
 
 Portal administration mock pages such as `/portal/users`, `/portal/groups`,
 and `/portal/policies` are intentionally not routed in the production Portal
