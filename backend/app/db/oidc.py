@@ -30,7 +30,12 @@ class OidcProvider(Base):
     client_id = Column(String, nullable=False)
     client_secret = Column(EncryptedString, nullable=True)
     redirect_uri = Column(String, nullable=False)
-    scopes_json = Column(Text, nullable=False, default='["openid","email","profile"]')
+    scopes_json = Column(
+        Text,
+        nullable=False,
+        default='["openid","email","profile"]',
+        server_default='["openid","email","profile"]',
+    )
     prompt = Column(String, nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
     icon_url = Column(String, nullable=True)

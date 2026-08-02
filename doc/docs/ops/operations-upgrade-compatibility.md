@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 canonical UI-managed OIDC scopes
+
+Migration `0083_canonical_oidc_provider_scopes` rewrites every UI-managed OIDC
+scope set as a non-empty JSON list of trimmed strings. Empty, malformed, or
+non-list values receive the current `openid`, `email`, and `profile` defaults.
+
+Deploy the migration and backend together. OIDC provider loading now rejects
+any remaining malformed, empty, or non-string scope set instead of repairing it
+at runtime. The ORM and database defaults are also aligned. Data cleanup is not
+reversed on downgrade.
+
 ## 2026-08 canonical persisted application settings
 
 Migration `0082_canonical_app_settings_payload` rewrites every database-backed

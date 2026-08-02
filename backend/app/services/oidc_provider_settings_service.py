@@ -244,17 +244,13 @@ def _environment_source(provider_id: str, field: str) -> str:
     return f"OIDC_PROVIDERS__{provider_id.upper()}__{field.upper()}"
 
 
-def _load_scopes(raw: Optional[str]) -> list[str]:
-    if not raw:
-        return list(OIDC_PROVIDER_DEFAULT_SCOPES)
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, list):
-        scopes = [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
-        return scopes or list(OIDC_PROVIDER_DEFAULT_SCOPES)
-    return list(OIDC_PROVIDER_DEFAULT_SCOPES)
+def _load_scopes(raw: str) -> list[str]:
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("OIDC provider scopes must be a non-empty JSON list")
+    if any(not isinstance(item, str) or not item.strip() for item in parsed):
+        raise ValueError("OIDC provider scopes must contain non-empty strings")
+    return [item.strip() for item in parsed]
 
 
 def _dump_scopes(scopes: list[str]) -> str:

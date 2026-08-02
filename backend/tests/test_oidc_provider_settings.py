@@ -6,6 +6,7 @@ from importlib import util
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 import sqlalchemy as sa
@@ -16,6 +17,7 @@ from app.db import AuditLog, OidcLoginState, OidcProvider, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.services.oidc_provider_settings_service import (
+    _load_scopes,
     list_effective_oidc_providers,
     resolve_oidc_provider_map,
 )
@@ -58,6 +60,13 @@ def _superadmin_user() -> User:
         is_active=True,
         role=UserRole.UI_SUPERADMIN.value,
     )
+
+
+def test_ui_provider_scopes_require_a_non_empty_string_list():
+    assert _load_scopes('["openid","email"]') == ["openid", "email"]
+    for raw in ("{", "{}", "[]", '["openid",""]', '["openid",42]'):
+        with pytest.raises(ValueError):
+            _load_scopes(raw)
 
 
 class _FakeUsersService:
