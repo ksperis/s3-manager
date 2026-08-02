@@ -2,7 +2,29 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+import uuid
+from contextlib import contextmanager
+from copy import deepcopy
+from typing import Any, Optional
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.db import BucketMigrationItem
+from app.services.s3_execution_context import S3ExecutionTarget
+from app.utils.rgw import resolve_admin_uid
+
+from ._shared import (
+    _MIGRATION_USER_AGENT_MARKER,
+    _READ_ONLY_POLICY_SID,
+    _SOURCE_COPY_GRANT_POLICY_SID,
+    _TARGET_WRITE_LOCK_POLICY_SID,
+    _ResolvedContext,
+    _json_dumps,
+    _json_loads,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BucketMigrationPolicyGrantsMixin:
