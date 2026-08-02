@@ -8,7 +8,6 @@ from typing import Callable
 
 from app.core.sensitive_data import sanitize_error_detail
 from app.models.ceph_admin import (
-    CephAdminAdminOpsResult,
     CephAdminBucketIndexCheckBatchBucketResult,
     CephAdminBucketIndexCheckBatchProgress,
     CephAdminBucketIndexCheckBatchResult,
