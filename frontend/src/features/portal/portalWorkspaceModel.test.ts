@@ -5,13 +5,6 @@ describe("buildPortalWorkspaceModel", () => {
   it("uses canonical storage spaces as the workspace source", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
-      state: {
-        account_id: 101,
-        iam_user: {},
-        access_keys: [],
-        max_buckets: 4,
-        can_manage_buckets: true,
-      },
       storageSpaces: [
         {
           id: "research-data",
@@ -50,17 +43,12 @@ describe("buildPortalWorkspaceModel", () => {
       usedBytes: 2048,
       objectCount: 12,
     });
-    expect(workspace.maxBuckets).toBe(4);
+    expect(workspace.maxBuckets).toBeNull();
   });
 
   it("keeps an empty canonical storage space list empty", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
-      state: {
-        account_id: 101,
-        iam_user: {},
-        access_keys: [],
-      },
       storageSpaces: [],
       usage: null,
       userEmail: null,
@@ -78,14 +66,6 @@ describe("buildPortalWorkspaceModel", () => {
   it("prefers PortalUsage quotas and per-space usage when API data is available", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
-      state: {
-        account_id: 101,
-        iam_user: {},
-        access_keys: [],
-        quota_max_size_bytes: 10_000,
-        quota_max_objects: 1_000,
-        max_buckets: 4,
-      },
       storageSpaces: [
         {
           id: "research-data",
@@ -131,11 +111,6 @@ describe("buildPortalWorkspaceModel", () => {
   it("uses the explicit visibility field independently from operational status", () => {
     const workspace = buildPortalWorkspaceModel({
       account: { id: "101", name: "Account 101", tags: [] },
-      state: {
-        account_id: 101,
-        iam_user: {},
-        access_keys: [],
-      },
       storageSpaces: [
         {
           id: "shared-space",

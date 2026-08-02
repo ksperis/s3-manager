@@ -461,14 +461,13 @@ export function usePortalWorkspaceData({
 
   const workspace = useMemo(() => {
     const base = buildPortalWorkspaceModel({
-        account: selectedAccount,
-        state,
-        storageSpaces,
-        usage,
-        userEmail: readUserEmail(),
-        locale,
-        t,
-      });
+      account: selectedAccount,
+      storageSpaces,
+      usage,
+      userEmail: readUserEmail(),
+      locale,
+      t,
+    });
     return {
       ...base,
       activity: activity ? activity.map((item) => activityFromApi(item, locale, t)) : [],
@@ -481,7 +480,7 @@ export function usePortalWorkspaceData({
       dataInBytes: traffic?.totals.bytes_in ?? null,
       dataOutBytes: traffic?.totals.bytes_out ?? null,
     };
-  }, [activity, alerts, locale, selectedAccount, state, storageSpaces, t, traffic, usage]);
+  }, [activity, alerts, locale, selectedAccount, storageSpaces, t, traffic, usage]);
   const healthAlerts = useMemo<PortalWorkspaceAlert[]>(() => {
     if (!health) return [];
     const ongoingIncident = health.incidents.find(

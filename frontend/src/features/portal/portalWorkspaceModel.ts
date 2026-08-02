@@ -4,7 +4,6 @@
  */
 import type { PortalAccount } from "../../api/portal";
 import type {
-  PortalState,
   PortalStorageSpaceAccountMemberRole,
   PortalStorageSpaceCollaboratorPreview,
   PortalStorageSpaceShareScope,
@@ -50,6 +49,7 @@ export type PortalWorkspaceSpace = {
   createdLabel: string;
   usedBytes?: number | null;
   quotaBytes?: number | null;
+  quotaObjects?: number | null;
   objectCount?: number | null;
   createdAt?: string | null;
   archivedAt?: string | null;
@@ -157,7 +157,6 @@ export function storageSpaceObjectPath(space: Pick<PortalWorkspaceSpace, "id">, 
 
 export function buildPortalWorkspaceModel({
   account,
-  state,
   storageSpaces,
   usage,
   userEmail,
@@ -165,7 +164,6 @@ export function buildPortalWorkspaceModel({
   t = translate,
 }: {
   account: PortalAccount | null;
-  state: PortalState | null;
   storageSpaces?: PortalStorageSpaceSummary[] | null;
   usage: PortalUsage | null;
   userEmail: string | null;
@@ -212,6 +210,7 @@ export function buildPortalWorkspaceModel({
       createdLabel: createdLabel(storageSpace.created_at, locale),
       usedBytes: usageSpace?.used_bytes ?? storageSpace.used_bytes ?? null,
       quotaBytes: usageSpace?.quota_max_size_bytes ?? storageSpace.quota_max_size_bytes ?? null,
+      quotaObjects: usageSpace?.quota_max_objects ?? storageSpace.quota_max_objects ?? null,
       objectCount: usageSpace?.object_count ?? storageSpace.object_count ?? null,
       createdAt: storageSpace.created_at ?? null,
       archivedAt: storageSpace.archived_at ?? null,
@@ -230,11 +229,11 @@ export function buildPortalWorkspaceModel({
     activity: [],
     alerts: [],
     usageTrend: [],
-    usedBytes: usage?.used_bytes ?? state?.used_bytes ?? spaceUsedBytes,
-    usedObjects: usage?.used_objects ?? state?.used_objects ?? spaceObjectCount,
-    quotaBytes: usage?.quota_max_size_bytes ?? state?.quota_max_size_bytes ?? null,
-    quotaObjects: usage?.quota_max_objects ?? state?.quota_max_objects ?? null,
-    maxBuckets: usage?.max_buckets ?? state?.max_buckets ?? null,
+    usedBytes: usage?.used_bytes ?? spaceUsedBytes,
+    usedObjects: usage?.used_objects ?? spaceObjectCount,
+    quotaBytes: usage?.quota_max_size_bytes ?? null,
+    quotaObjects: usage?.quota_max_objects ?? null,
+    maxBuckets: usage?.max_buckets ?? null,
     requestCount: null,
     dataInBytes: null,
     dataOutBytes: null,
