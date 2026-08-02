@@ -711,7 +711,6 @@ const PORTAL_STATE = {
 
 const PORTAL_PROJECT_SETTINGS = {
   effective: {
-    allow_portal_key: false,
     browser_access_enabled: true,
     allow_private_storage_space_create: true,
     allow_portal_named_bucket_create: false,

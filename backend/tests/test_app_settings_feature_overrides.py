@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.db import AppSetting
-from app.models.app_settings import AppSettings, BrandingSettings
+from app.models.app_settings import AppSettings, BrandingSettings, PortalSettingsOverride
 from app.services import app_settings_service
 
 
@@ -120,6 +120,17 @@ def test_app_settings_json_bootstrap_imports_once_to_db(monkeypatch, tmp_path, d
     assert db_session.query(AppSetting).count() == 1
 
 
+def test_app_settings_json_bootstrap_rejects_removed_portal_key_setting(tmp_path):
+    settings_path = tmp_path / "app_settings.json"
+    settings_path.write_text(
+        json.dumps({"portal": {"allow_portal_key": True}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        app_settings_service._load_persisted_settings_from_disk(settings_path)
+
+
 def test_app_settings_db_errors_are_not_hidden_by_disk_fallback(monkeypatch):
     def _broken_session():
         raise RuntimeError("settings db unavailable")
@@ -200,6 +211,13 @@ def test_manager_ceph_s3_user_keys_flag_default_enabled():
 def test_portal_feature_flag_default_disabled():
     settings = AppSettings()
     assert settings.general.portal_enabled is False
+
+
+def test_removed_portal_key_setting_is_rejected():
+    with pytest.raises(ValidationError):
+        AppSettings(portal={"allow_portal_key": True})
+    with pytest.raises(ValidationError):
+        PortalSettingsOverride(allow_portal_key=True)
 
 
 def test_bucket_integrity_check_flag_default_enabled():

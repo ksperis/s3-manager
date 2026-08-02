@@ -29,7 +29,6 @@ class PortalBucketDefaultsOverride(BaseModel):
 class PortalSettingsOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    allow_portal_key: Optional[bool] = None
     browser_access_enabled: Optional[bool] = None
     allow_private_storage_space_create: Optional[bool] = None
     allow_portal_named_bucket_create: Optional[bool] = None
@@ -144,7 +143,8 @@ class LoginSettings(BaseModel):
 
 
 class PortalSettings(BaseModel):
-    allow_portal_key: bool = False
+    model_config = ConfigDict(extra="forbid")
+
     browser_access_enabled: bool = False
     allow_private_storage_space_create: bool = True
     allow_portal_named_bucket_create: bool = False

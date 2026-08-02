@@ -1,5 +1,16 @@
 # Operations: Upgrade and Compatibility Notes
 
+## 2026-08 removal of the dead Portal key setting
+
+Migration `0093_remove_dead_portal_key_setting` removes `allow_portal_key`
+from global application settings and account-level Portal overrides. The flag
+was persisted and exposed by the API but never affected Portal behavior.
+
+Deploy the migration, backend, and frontend together. Portal settings payloads
+containing the removed field are rejected, including custom bootstrap JSON
+files. Invalid bootstrap files now fail explicitly instead of silently loading
+defaults. Downgrade does not recreate this no-op value.
+
 ## 2026-08 canonical Portal access-key bucket field
 
 Portal access-key responses now expose the selected S3 bucket only as

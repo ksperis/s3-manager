@@ -28,7 +28,6 @@ const makeTag = (id: number, label: string, color_key = "neutral", scope = "stan
 
 const makePortalAccountSettings = (overrides?: Record<string, unknown>) => ({
   effective: {
-    allow_portal_key: false,
     browser_access_enabled: false,
     allow_private_storage_space_create: true,
     allow_portal_named_bucket_create: false,

@@ -66,8 +66,6 @@ class PortalSettingsMixin:
         portal_settings: PortalSettings,
         override: PortalSettingsOverride,
     ) -> None:
-        if override.allow_portal_key is not None:
-            portal_settings.allow_portal_key = override.allow_portal_key
         if override.browser_access_enabled is not None:
             portal_settings.browser_access_enabled = override.browser_access_enabled
         if override.allow_private_storage_space_create is not None:

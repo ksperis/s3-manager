@@ -880,7 +880,7 @@ def test_get_state_keeps_portal_identity_metadata_local(monkeypatch, db_session)
     )
     service = PortalService(db_session)
 
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_key=True))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings())
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: pytest.fail("PortalState must not initialize IAM"))
     monkeypatch.setattr(service, "_account_quota", lambda acc: pytest.fail("PortalState must not load quotas"))
 

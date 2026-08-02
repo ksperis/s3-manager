@@ -57,7 +57,6 @@ vi.mock("./usePortalWorkspaceData", () => ({
 describe("PortalSettingsPage", () => {
   const projectSettings = {
     effective: {
-      allow_portal_key: false,
       browser_access_enabled: true,
       allow_private_storage_space_create: true,
       allow_portal_named_bucket_create: false,

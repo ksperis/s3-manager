@@ -34,11 +34,8 @@ def _settings_path() -> Path:
 def _load_persisted_settings_from_disk(settings_path: Path) -> AppSettings:
     if not settings_path.exists():
         return AppSettings()
-    try:
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
-        return AppSettings(**data)
-    except Exception:
-        return AppSettings()
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+    return AppSettings.model_validate(data)
 
 
 def _open_settings_session():
