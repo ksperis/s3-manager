@@ -2,7 +2,18 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+
+from app.core.config import get_settings
+from app.db import S3Account, S3Connection, S3User
+from app.services.app_settings_service import load_app_settings
+from app.services.s3_client import get_s3_client
+from app.services.s3_execution_context import S3ExecutionContext, S3ExecutionTarget
+from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
+from ._shared import _MIGRATION_USER_AGENT_MARKER, _MigrationRuntimeLimits, _ResolvedContext
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class BucketMigrationExecutionContextMixin:

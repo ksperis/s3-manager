@@ -2,7 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+from typing import Any, Optional
+
+from app.db import BucketMigration, User
+from app.services.effective_access_service import EffectiveAccessService
+from app.utils.time import utcnow
+from ._shared import _json_dumps, _validate_webhook_target_url
 
 
 class BucketMigrationPersistenceMixin:
