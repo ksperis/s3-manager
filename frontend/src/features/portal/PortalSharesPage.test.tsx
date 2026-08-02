@@ -170,6 +170,10 @@ describe("PortalSharesPage", () => {
     expect(screen.getByRole("button", { name: "Request member" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request removal" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Review access" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Editor User" })).toHaveAttribute(
+      "href",
+      "/portal/shares/13",
+    );
     expect(screen.getAllByRole("link", { name: "Review access" })[1]).toHaveAttribute(
       "href",
       "/portal/shares/13",
@@ -209,6 +213,7 @@ describe("PortalSharesPage", () => {
 
     expect(await screen.findByText("Editor User")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Review access" })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Editor User" })).not.toBeInTheDocument();
   });
 
   it("normalizes the obsolete access view back to project members", async () => {

@@ -118,9 +118,18 @@ function CollaboratorsInventory({
               size="sm"
             />
             <span className="min-w-0">
-              <span className="block truncate font-semibold text-[var(--ui-text)]">
-                {collaborator.display_name || collaborator.email}
-              </span>
+              {collaborator.can_review_access ? (
+                <Link
+                  to={`/portal/shares/${encodeURIComponent(collaborator.user_id)}`}
+                  className="block truncate font-semibold text-primary hover:underline dark:text-primary-200"
+                >
+                  {collaborator.display_name || collaborator.email}
+                </Link>
+              ) : (
+                <span className="block truncate font-semibold text-[var(--ui-text)]">
+                  {collaborator.display_name || collaborator.email}
+                </span>
+              )}
               <span
                 className={cx(
                   "block truncate text-[11px] font-medium",
