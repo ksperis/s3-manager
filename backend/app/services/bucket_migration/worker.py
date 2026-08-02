@@ -2,8 +2,20 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+import os
+import socket
+import threading
+import uuid
+from typing import Optional
+
+from sqlalchemy.orm import sessionmaker
+
+from app.core.config import get_settings
 from app.services.bucket_migration_service import BucketMigrationService
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class BucketMigrationWorker:

@@ -2,7 +2,22 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+import queue
+import threading
+from typing import Any, Optional
+
+import requests
+
+from ._shared import (
+    _WebhookDispatchTask,
+    _WEBHOOK_QUEUE_SIZE,
+    _WEBHOOK_TIMEOUT_SECONDS,
+    _WEBHOOK_WORKERS,
+    _validate_webhook_target_url,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class _BucketMigrationWebhookDispatcher:
