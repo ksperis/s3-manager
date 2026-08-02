@@ -2,7 +2,18 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from ._shared import *
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.models.browser import CleanupObjectVersionsPayload, CleanupObjectVersionsResponse
+from app.services.object_listing_temp_store import TemporarySqliteStore
+from app.services.s3_client import _delete_objects
+from app.services.s3_execution_context import S3ExecutionTarget
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserVersionsMixin:
