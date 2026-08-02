@@ -80,18 +80,4 @@ describe("usePortalWorkspaceData", () => {
       expect(mocks.listPortalStorageSpacesMock).toHaveBeenCalledWith("101", undefined);
     });
   });
-
-  it("removes the legacy persisted Portal transfer history", async () => {
-    window.localStorage.setItem("portal:v3:transfers", "[]");
-
-    render(
-      <LanguageProvider>
-        <Probe />
-      </LanguageProvider>
-    );
-
-    await waitFor(() => {
-      expect(window.localStorage.getItem("portal:v3:transfers")).toBeNull();
-    });
-  });
 });

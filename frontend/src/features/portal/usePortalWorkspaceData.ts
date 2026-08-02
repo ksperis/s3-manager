@@ -24,7 +24,7 @@ import {
 import { WORKSPACE_TRAFFIC_TREND_WINDOWS } from "../../components/workspaceDashboardKpis";
 import { useI18n } from "../../i18n";
 import { extractApiError } from "../../utils/apiError";
-import { CLIENT_STORAGE_KEYS, readClientJson, removeClientStorage } from "../../utils/clientStorage";
+import { CLIENT_STORAGE_KEYS, readClientJson } from "../../utils/clientStorage";
 import {
   buildPortalWorkspaceModel,
   type PortalWorkspaceActivityItem,
@@ -120,10 +120,6 @@ export function usePortalWorkspaceData({
   const [refreshToken, setRefreshToken] = useState(0);
   const refreshWorkspaceData = useCallback(() => {
     setRefreshToken((token) => token + 1);
-  }, []);
-
-  useEffect(() => {
-    removeClientStorage(CLIENT_STORAGE_KEYS.legacyPortalTransfers);
   }, []);
 
   useEffect(() => {

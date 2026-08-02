@@ -15,7 +15,6 @@ export const CLIENT_STORAGE_KEYS = {
   brandingPrimaryColor: "branding.primary_color",
   generalSettingsCache: "settings:general:v1",
   selectorTagsPreference: "showSelectorTags",
-  legacyPortalTransfers: "portal:v3:transfers",
   browserRootUiStateV2: "browser:root-ui-state:v2",
   browserRootContextSelections: "browser:root-context-selections:v2",
   browserPathHistory: "browser:path-history:v1",

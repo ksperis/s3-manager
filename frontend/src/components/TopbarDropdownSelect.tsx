@@ -26,7 +26,7 @@ export type TopbarDropdownOption = {
   triggerAddon?: ReactNode;
 };
 
-export type TopbarDropdownSearchConfig = {
+type TopbarDropdownSearchConfig = {
   threshold?: number;
   ariaLabel: string;
   placeholder: string;
