@@ -2,9 +2,31 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from app.services.aws_client_config import StorageRequestProfile
+import logging
+import os
+from datetime import datetime, timezone
+from typing import Optional, TYPE_CHECKING
 
-from ._shared import *
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.db import S3Account, User
+from app.models.portal import (
+    PortalStorageObjectDetail,
+    PortalStorageObjectRestoreResponse,
+    PortalStorageObjectVersion,
+    PortalStorageObjectVersionsResponse,
+    PortalStorageSpaceRole,
+    PortalTrashItem,
+    PortalTrashResponse,
+)
+from app.services.aws_client_config import StorageRequestProfile
+from app.services.s3_client import get_s3_client
+from app.utils.s3_endpoint import resolve_s3_client_options
+
+if TYPE_CHECKING:
+    from app.models.access_context import AccountAccess
+
+logger = logging.getLogger(__name__)
 
 
 class PortalObjectsMixin:
