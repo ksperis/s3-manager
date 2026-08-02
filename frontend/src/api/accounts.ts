@@ -37,7 +37,7 @@ export type S3Account = {
   quota_max_objects?: number | null;
   rgw_account_id?: string;
   rgw_user_uid?: string | null;
-  is_s3_user?: boolean | null;
+  is_s3_user: boolean;
   root_user_email?: string | null;
   root_user_id?: number | null;
   email?: string | null;
@@ -65,7 +65,7 @@ export type S3AccountSummary = {
   name: string;
   tags: TagDefinitionSummary[];
   rgw_account_id?: string | null;
-  is_s3_user?: boolean | null;
+  is_s3_user: boolean;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;
   group_ids?: number[] | null;

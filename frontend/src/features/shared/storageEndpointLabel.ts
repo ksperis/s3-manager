@@ -38,7 +38,7 @@ export function formatAccountLabel(
 ): string {
   const isLegacyUser = isExecutionContext(context)
     ? context.kind === "legacy_user"
-    : context.is_s3_user === true;
+    : context.is_s3_user;
   const isConnection = isExecutionContext(context) && context.kind === "connection";
   const badge = includeContextBadge
     ? isConnection

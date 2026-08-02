@@ -278,22 +278,8 @@ export default function S3AccountsPage() {
   );
 
   const resolveS3AccountType = (
-    account:
-      | Pick<S3Account, "rgw_account_id" | "rgw_user_uid" | "is_s3_user">
-      | (S3AccountSummary & { rgw_user_uid?: string | null })
-  ): "tenant" | "rgw_user" => {
-    if (typeof account.is_s3_user === "boolean") {
-      return account.is_s3_user ? "rgw_user" : "tenant";
-    }
-    if (account.rgw_account_id) {
-      return "tenant";
-    }
-    const maybeUserUid = (account as Partial<S3Account>).rgw_user_uid;
-    if (typeof maybeUserUid === "string" && maybeUserUid.trim()) {
-      return "rgw_user";
-    }
-    return "rgw_user";
-  };
+    account: Pick<S3Account, "is_s3_user">
+  ): "tenant" | "rgw_user" => account.is_s3_user ? "rgw_user" : "tenant";
 
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
     if (quotaGb == null) {
