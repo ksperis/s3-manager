@@ -308,6 +308,8 @@ expect the removed columns.
    validate the dump by restoring it to a separate database.
 3. If the migration reports associations without useful rights, set
    `S3_MANAGER_DB_BACKUP_VERIFIED=true` only after that restore verification.
+   Empty databases and databases without such associations do not require this
+   override.
 4. Run Alembic through revision `0069` while the old processes remain stopped.
 5. Deploy the new backend and frontend together, then start new workers.
 6. Run `python -m app.scripts.reconcile_portal_iam` first in its default dry-run

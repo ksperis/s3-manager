@@ -32,6 +32,30 @@ def _assert_backup_before_irreversible_cleanup() -> None:
         )
 
 
+def _has_links_without_rights(table_name: str, *, root_capable: bool) -> bool:
+    root_clause = "is_root IS TRUE OR " if root_capable else ""
+    row = op.get_bind().execute(
+        sa.text(
+            f"SELECT 1 FROM {table_name} WHERE NOT ("
+            f"{root_clause}account_admin IS TRUE OR ("
+            "account_admin IS FALSE AND "
+            "account_role IN ('portal_user', 'portal_manager')"
+            ")) LIMIT 1"
+        )
+    ).first()
+    return row is not None
+
+
+def _irreversible_cleanup_required() -> bool:
+    return _has_links_without_rights(
+        "user_s3_accounts",
+        root_capable=True,
+    ) or _has_links_without_rights(
+        "ui_group_s3_accounts",
+        root_capable=False,
+    )
+
+
 def _migrate_account_links(table_name: str, *, root_capable: bool) -> None:
     op.add_column(table_name, sa.Column("role", sa.String(), nullable=True))
     root_clause = "is_root IS TRUE OR " if root_capable else ""
@@ -69,7 +93,8 @@ def _migrate_account_links(table_name: str, *, root_capable: bool) -> None:
 
 
 def upgrade() -> None:
-    _assert_backup_before_irreversible_cleanup()
+    if _irreversible_cleanup_required():
+        _assert_backup_before_irreversible_cleanup()
     _migrate_account_links("user_s3_accounts", root_capable=True)
     _migrate_account_links("ui_group_s3_accounts", root_capable=False)
 

@@ -18,7 +18,7 @@ from app.db import Base
 def test_alembic_head_matches_sqlalchemy_metadata(tmp_path, monkeypatch):
     database_path = tmp_path / "schema-current.sqlite"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
-    monkeypatch.setenv("S3_MANAGER_DB_BACKUP_VERIFIED", "true")
+    monkeypatch.delenv("S3_MANAGER_DB_BACKUP_VERIFIED", raising=False)
     get_settings.cache_clear()
 
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))

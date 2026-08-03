@@ -85,7 +85,7 @@ def test_upgrade_requires_verified_backup_before_deleting_no_right_links(monkeyp
         assert connection.execute(sa.text("SELECT COUNT(*) FROM user_s3_accounts")).scalar_one() == 1
 
 
-def test_upgrade_requires_verified_backup_even_when_cleanup_is_empty(monkeypatch):
+def test_upgrade_allows_empty_database_without_backup_override(monkeypatch):
     engine = sa.create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
         _create_legacy_schema(connection)
@@ -93,14 +93,52 @@ def test_upgrade_requires_verified_backup_even_when_cleanup_is_empty(monkeypatch
         _install_operations(monkeypatch, migration, connection)
         monkeypatch.delenv("S3_MANAGER_DB_BACKUP_VERIFIED", raising=False)
 
-        with pytest.raises(RuntimeError, match="restorable database backup"):
-            migration.upgrade()
+        migration.upgrade()
 
-        columns = {
+        direct_columns = {
             column["name"]
             for column in sa.inspect(connection).get_columns("user_s3_accounts")
         }
-        assert "role" not in columns
+        group_columns = {
+            column["name"]
+            for column in sa.inspect(connection).get_columns("ui_group_s3_accounts")
+        }
+        assert "role" in direct_columns
+        assert "role" in group_columns
+        assert {"account_admin", "account_role"}.isdisjoint(direct_columns)
+        assert {"account_admin", "account_role"}.isdisjoint(group_columns)
+
+
+def test_upgrade_allows_convertible_links_without_backup_override(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        _create_legacy_schema(connection)
+        connection.execute(
+            sa.text(
+                "INSERT INTO user_s3_accounts "
+                "(id, user_id, account_id, is_root, account_admin, account_role) "
+                "VALUES (1, 1, 1, 0, 0, 'portal_user')"
+            )
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO ui_group_s3_accounts "
+                "(id, group_id, account_id, account_admin, account_role) "
+                "VALUES (1, 1, 1, 0, 'portal_manager')"
+            )
+        )
+        migration = _load_migration()
+        _install_operations(monkeypatch, migration, connection)
+        monkeypatch.delenv("S3_MANAGER_DB_BACKUP_VERIFIED", raising=False)
+
+        migration.upgrade()
+
+        assert connection.execute(
+            sa.text("SELECT role FROM user_s3_accounts")
+        ).scalar_one() == "portal_user"
+        assert connection.execute(
+            sa.text("SELECT role FROM ui_group_s3_accounts")
+        ).scalar_one() == "portal_manager"
 
 
 def test_upgrade_deletes_no_right_links_and_quarantines_shared_connections(monkeypatch):
