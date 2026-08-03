@@ -7,25 +7,20 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models.bucket_operation import (
+    BucketOperationTarget,
+    deduplicate_bucket_targets,
+    normalize_bucket_names,
+)
+
 
 BucketIntegrityStatus = Literal["passed", "completed_with_errors", "failed", "canceled"]
 BucketIntegrityCheckMode = Literal["head", "get"]
 BucketIntegrityFailureStage = Literal["list", "head", "get"]
 
 
-class BucketIntegrityTarget(BaseModel):
-    context_id: str
-    bucket_name: str
-
-    @model_validator(mode="after")
-    def validate_target(self):
-        self.context_id = (self.context_id or "").strip()
-        self.bucket_name = (self.bucket_name or "").strip()
-        if not self.context_id:
-            raise ValueError("context_id is required.")
-        if not self.bucket_name:
-            raise ValueError("bucket_name is required.")
-        return self
+class BucketIntegrityTarget(BucketOperationTarget):
+    pass
 
 
 class BucketIntegrityCheckRequest(BaseModel):
@@ -39,16 +34,8 @@ class BucketIntegrityCheckRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_request(self):
-        self.buckets = list(dict.fromkeys(bucket.strip() for bucket in self.buckets if bucket and bucket.strip()))
-        deduped_targets: list[BucketIntegrityTarget] = []
-        seen_targets: set[tuple[str, str]] = set()
-        for target in self.targets:
-            key = (target.context_id, target.bucket_name)
-            if key in seen_targets:
-                continue
-            seen_targets.add(key)
-            deduped_targets.append(target)
-        self.targets = deduped_targets
+        self.buckets = normalize_bucket_names(self.buckets)
+        self.targets = deduplicate_bucket_targets(self.targets)
         if bool(self.buckets) == bool(self.targets):
             raise ValueError("Provide exactly one of buckets or targets.")
         return self
