@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, List, Literal, Optional, Set
 import logging
 import json
-import re
 import sqlite3
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -58,6 +57,7 @@ from app.utils.rgw import (
     is_rgw_account_id,
 )
 from app.utils.s3_errors import format_s3_error, s3_error_code
+from app.utils.s3_etag import etag_md5
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -1060,16 +1060,6 @@ class BucketsService:
             if not continuation_token:
                 break
 
-    def _etag_md5(self, etag: Optional[str]) -> Optional[str]:
-        if not etag:
-            return None
-        value = etag.strip().strip('"')
-        if not value:
-            return None
-        if re.fullmatch(r"[0-9a-fA-F]{32}", value):
-            return value.lower()
-        return None
-
     def _stable_compare_value(self, value: Any) -> str:
         try:
             return json.dumps(value, ensure_ascii=True, sort_keys=True, default=str)
@@ -1096,7 +1086,7 @@ class BucketsService:
                 self._list_bucket_objects_for_compare(target_bucket, target_account),
             )
             diff = index.build_content_diff(
-                md5_resolver=self._etag_md5,
+                md5_resolver=etag_md5,
                 ignore_modified_after=ignore_modified_after,
             )
             logger.info(

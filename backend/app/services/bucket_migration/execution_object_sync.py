@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -18,6 +17,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.db import BucketMigration, BucketMigrationItem
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.utils.s3_endpoint import normalize_s3_endpoint
+from app.utils.s3_etag import etag_md5
 from app.utils.time import utcnow
 
 from ._shared import (
@@ -1315,8 +1315,8 @@ class BucketMigrationObjectSyncMixin:
             target_size = target_entry.size
             source_etag = source_entry.etag
             target_etag = target_entry.etag
-            source_md5 = self._etag_md5(source_etag)
-            target_md5 = self._etag_md5(target_etag)
+            source_md5 = etag_md5(source_etag)
+            target_md5 = etag_md5(target_etag)
             if source_md5 and target_md5:
                 compare_by = "md5"
                 equal = source_md5 == target_md5
@@ -2007,7 +2007,7 @@ class BucketMigrationObjectSyncMixin:
         etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
         shared_checksum_compare = next((field for field in _VERSION_CHECKSUM_FIELDS if field in checksums), None)
         compare_by = shared_checksum_compare.lower() if shared_checksum_compare else (
-            "md5" if self._etag_md5(etag) else "size"
+            "md5" if etag_md5(etag) else "size"
         )
         metadata = head.get("Metadata") if isinstance(head.get("Metadata"), dict) else {}
         return _VersionedObjectDetails(
@@ -2040,8 +2040,8 @@ class BucketMigrationObjectSyncMixin:
                 compare_by = field.lower()
                 break
         else:
-            source_md5 = self._etag_md5(source_details.etag)
-            target_md5 = self._etag_md5(target_details.etag)
+            source_md5 = etag_md5(source_details.etag)
+            target_md5 = etag_md5(target_details.etag)
             if source_md5 and target_md5:
                 compare_by = "md5"
                 if source_md5 != target_md5:
@@ -2109,16 +2109,6 @@ class BucketMigrationObjectSyncMixin:
             level="info",
             message="Target bucket versioning finalized to match suspended source state.",
         )
-
-    def _etag_md5(self, etag: Optional[str]) -> Optional[str]:
-        if not etag:
-            return None
-        value = etag.strip().strip('"')
-        if not value:
-            return None
-        if re.fullmatch(r"[0-9a-fA-F]{32}", value):
-            return value.lower()
-        return None
 
     def _is_same_endpoint(self, source_ctx: _ResolvedContext, target_ctx: _ResolvedContext) -> bool:
         source_endpoint = normalize_s3_endpoint(source_ctx.endpoint)
