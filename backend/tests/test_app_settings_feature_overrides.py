@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.db import AppSetting
+from app.models import app_settings as app_settings_models
 from app.models.app_settings import AppSettings, BrandingSettings, PortalSettingsOverride
 from app.services import app_settings_service
 
@@ -206,6 +207,31 @@ def test_branding_settings_reject_invalid_logo_url():
 def test_manager_ceph_s3_user_keys_flag_default_enabled():
     settings = AppSettings()
     assert settings.general.manager_ceph_s3_user_keys_enabled is True
+
+
+def test_app_settings_defaults_are_built_from_current_runtime_config(monkeypatch):
+    runtime = SimpleNamespace(
+        cors_origins=["https://first.example"],
+        bucket_migration_parallelism_max=3,
+        bucket_migration_max_active_per_endpoint=2,
+    )
+    monkeypatch.setattr(app_settings_models, "get_settings", lambda: runtime)
+
+    first = AppSettings()
+    runtime.cors_origins = ["https://second.example"]
+    runtime.bucket_migration_parallelism_max = 7
+    runtime.bucket_migration_max_active_per_endpoint = 5
+    second = AppSettings()
+
+    assert first.portal.bucket_defaults.cors_allowed_origins == ["https://first.example"]
+    assert first.manager.bucket_migration_parallelism_default == 3
+    assert first.manager.bucket_migration_parallelism_max == 3
+    assert first.manager.bucket_migration_max_active_per_endpoint == 2
+    assert second.portal.bucket_defaults.cors_allowed_origins == ["https://second.example"]
+    assert second.manager.bucket_migration_parallelism_default == 7
+    assert second.manager.bucket_migration_parallelism_max == 7
+    assert second.manager.bucket_migration_max_active_per_endpoint == 5
+    assert first.general is not second.general
 
 
 def test_portal_feature_flag_default_disabled():

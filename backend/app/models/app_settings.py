@@ -9,11 +9,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.config import get_settings
 from app.models.storage_endpoint import StorageEndpointPublic
 
-_settings = get_settings()
-
 
 def _default_portal_cors_origins() -> list[str]:
-    return list(_settings.cors_origins or [])
+    return list(get_settings().cors_origins or [])
+
+
+def _default_bucket_migration_parallelism_max() -> int:
+    return get_settings().bucket_migration_parallelism_max
+
+
+def _default_bucket_migration_max_active_per_endpoint() -> int:
+    return get_settings().bucket_migration_max_active_per_endpoint
 
 
 class PortalBucketDefaultsOverride(BaseModel):
@@ -154,20 +160,22 @@ class PortalSettings(BaseModel):
     storage_space_version_cleanup_enabled: bool = True
     max_portal_user_access_keys: int = Field(default=2, ge=1)
     bucket_defaults: PortalBucketDefaults = Field(default_factory=PortalBucketDefaults)
+
+
 class ManagerSettings(BaseModel):
     allow_manager_user_usage_stats: bool = True
     bucket_migration_parallelism_default: int = Field(
-        default=_settings.bucket_migration_parallelism_max,
+        default_factory=_default_bucket_migration_parallelism_max,
         ge=1,
         le=128,
     )
     bucket_migration_parallelism_max: int = Field(
-        default=_settings.bucket_migration_parallelism_max,
+        default_factory=_default_bucket_migration_parallelism_max,
         ge=1,
         le=128,
     )
     bucket_migration_max_active_per_endpoint: int = Field(
-        default=_settings.bucket_migration_max_active_per_endpoint,
+        default_factory=_default_bucket_migration_max_active_per_endpoint,
         ge=1,
         le=64,
     )
@@ -216,10 +224,10 @@ class OnboardingSettings(BaseModel):
 
 
 class AppSettings(BaseModel):
-    general: GeneralSettings = GeneralSettings()
-    portal: PortalSettings = PortalSettings()
-    manager: ManagerSettings = ManagerSettings()
-    quota_notifications: QuotaNotificationSettings = QuotaNotificationSettings()
-    browser: BrowserSettings = BrowserSettings()
-    onboarding: OnboardingSettings = OnboardingSettings()
-    branding: BrandingSettings = BrandingSettings()
+    general: GeneralSettings = Field(default_factory=GeneralSettings)
+    portal: PortalSettings = Field(default_factory=PortalSettings)
+    manager: ManagerSettings = Field(default_factory=ManagerSettings)
+    quota_notifications: QuotaNotificationSettings = Field(default_factory=QuotaNotificationSettings)
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    onboarding: OnboardingSettings = Field(default_factory=OnboardingSettings)
+    branding: BrandingSettings = Field(default_factory=BrandingSettings)
