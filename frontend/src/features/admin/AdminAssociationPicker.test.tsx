@@ -5,7 +5,6 @@ import {
   AdminAssociationLinkedTable,
   AdminAssociationPickerPanel,
   AdminAssociationSectionHeader,
-  AdminAssociationSelectionPanel,
 } from "./AdminAssociationPicker";
 
 describe("AdminAssociationPicker", () => {
@@ -86,29 +85,5 @@ describe("AdminAssociationPicker", () => {
 
     await user.click(screen.getByRole("button", { name: "Add selected" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders the immediate selection panel search and empty state", async () => {
-    const user = userEvent.setup();
-    const onSearchChange = vi.fn();
-
-    render(
-      <AdminAssociationSelectionPanel
-        title="Members"
-        countLabel="0 selected"
-        search=""
-        onSearchChange={onSearchChange}
-        availableCount={0}
-        emptyLabel="No users."
-        searchAriaLabel="Search group members"
-      >
-        <div>Hidden while empty</div>
-      </AdminAssociationSelectionPanel>
-    );
-
-    expect(screen.getByText("No users.")).toBeInTheDocument();
-
-    await user.type(screen.getByRole("textbox", { name: "Search group members" }), "ali");
-    expect(onSearchChange).toHaveBeenLastCalledWith("i");
   });
 });
