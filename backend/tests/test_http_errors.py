@@ -9,11 +9,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app import main
+from app.core.sensitive_data import sanitize_error_detail
 from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_bad_request_from_value_error,
     raise_http_exception_from_exception,
-    sanitize_error_detail,
 )
 
 

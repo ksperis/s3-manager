@@ -20,7 +20,7 @@ from app.services.traffic_service import (
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/metrics", tags=["ceph-admin-metrics"])
 

@@ -18,7 +18,7 @@ from app.models.healthcheck import (
     WorkspaceEndpointHealthOverviewResponse,
 )
 from app.routers.dependencies import get_current_super_admin
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_service import HealthCheckService, HealthWindow
 from app.services.operation_lease_service import (

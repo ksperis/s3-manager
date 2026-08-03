@@ -26,7 +26,7 @@ from app.routers.dependencies import (
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
 from app.services.audit_service import AuditService
 from app.services.tags_service import serialize_tag_summaries
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/s3-users", tags=["admin-s3-users"])
 logger = logging.getLogger(__name__)

@@ -5,10 +5,7 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 
-from app.core.sensitive_data import (
-    sanitize_error_detail,
-    sanitized_error_log_detail,
-)
+from app.core.sensitive_data import sanitize_error_detail as _sanitize_error_detail
 
 
 def raise_bad_gateway_from_runtime(exc: RuntimeError) -> NoReturn:
@@ -43,5 +40,5 @@ def raise_bad_request_from_value_error(exc: ValueError) -> NoReturn:
 def raise_http_exception_from_exception(status_code: int, exc: Exception) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
-        detail=sanitize_error_detail(str(exc)),
+        detail=_sanitize_error_detail(str(exc)),
     ) from exc

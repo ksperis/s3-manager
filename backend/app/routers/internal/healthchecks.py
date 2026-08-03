@@ -13,7 +13,7 @@ from app.services.operation_lease_service import (
     OperationLeaseService,
     default_operation_lease_ttl_seconds,
 )
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/internal/healthchecks", tags=["internal-healthchecks"])
 

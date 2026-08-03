@@ -17,7 +17,7 @@ from app.models.portal_requests import (
     PortalAdminRequestType,
 )
 from app.routers.dependencies import get_current_super_admin
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 from app.services.portal_requests_service import (
     PortalRequestConflict,
     PortalRequestExecutionError,

@@ -20,7 +20,7 @@ from app.services.audit_service import AuditService
 from app.services.ui_groups_service import UiGroupsService, get_ui_groups_service
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.ui_group_avatar_service import UiGroupAvatarService
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/groups", tags=["admin-groups"])
 

@@ -22,7 +22,7 @@ from app.services.buckets_service import BucketsService
 from app.services.long_running_s3_client import LongRunningS3ClientService
 from app.utils.aws_errors import aws_error_code
 from app.utils.s3_errors import format_s3_error
-from app.utils.http_errors import sanitized_error_log_detail
+from app.core.sensitive_data import sanitized_error_log_detail
 
 
 logger = logging.getLogger(__name__)

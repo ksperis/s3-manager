@@ -23,7 +23,7 @@ from app.services.listing_progress import (
     ListingProgressSnapshot,
 )
 from app.utils.cache import prune_expired_lru_cache
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 from app.routers.sse_worker import (
     SSE_KEEPALIVE_INTERVAL_SECONDS,
     format_sse_event,

@@ -20,7 +20,7 @@ from app.routers.dependencies import (
     require_iam_capable_manager,
     require_manager_ceph_s3_user_keys,
 )
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 from app.services.managed_private_access_service import (
     ManagedPrivateAccessCleanupPending,
     ManagedPrivateAccessConflict,

@@ -83,9 +83,8 @@ from app.routers.sse_worker import (
 from app.utils.http_errors import (
     raise_bad_gateway_from_runtime,
     raise_http_exception_from_exception,
-    sanitize_error_detail,
-    sanitized_error_log_detail,
 )
+from app.core.sensitive_data import sanitize_error_detail, sanitized_error_log_detail
 from app.services.audit_service import AuditService
 from app.services.avatar_image_service import MAX_AVATAR_BYTES
 from app.services.portal.exceptions import (

@@ -10,7 +10,7 @@ from app.services.s3_execution_context import S3ExecutionContext
 from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_current_account_admin
 from app.services.objects_service import ObjectsService, get_objects_service
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/manager/buckets/{bucket_name}/objects", tags=["manager-objects"])
 

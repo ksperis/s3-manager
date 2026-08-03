@@ -9,7 +9,7 @@ from app.models.key_rotation import KeyRotationRequest, KeyRotationResponse
 from app.routers.dependencies import get_audit_service, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.key_rotation_service import KeyRotationService, get_key_rotation_service
-from app.utils.http_errors import sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
 
 router = APIRouter(prefix="/admin/key-rotation", tags=["admin-key-rotation"])
 

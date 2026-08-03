@@ -27,7 +27,8 @@ from app.services.audit_service import AuditService
 from app.services.portal_service import get_portal_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.tags_service import serialize_tag_summaries
-from app.utils.http_errors import raise_http_exception_from_exception, sanitize_error_detail
+from app.core.sensitive_data import sanitize_error_detail
+from app.utils.http_errors import raise_http_exception_from_exception
 
 router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
