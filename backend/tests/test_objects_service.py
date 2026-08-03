@@ -106,7 +106,7 @@ def test_create_folder_and_delete_objects(monkeypatch):
     deleted_payloads: list[tuple] = []
 
     monkeypatch.setattr("app.services.objects_service.get_s3_client", lambda *args, **kwargs: fake)
-    monkeypatch.setattr("app.services.objects_service._delete_objects", lambda *args: deleted_payloads.append(args))
+    monkeypatch.setattr("app.services.objects_service.delete_objects", lambda *args: deleted_payloads.append(args))
 
     service.create_folder("bucket-1", _account(), "path/to/folder")
     assert ("put_object", {"Bucket": "bucket-1", "Key": "path/to/folder/", "Body": b""}) in fake.calls

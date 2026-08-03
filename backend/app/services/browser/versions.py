@@ -10,7 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.models.browser import CleanupObjectVersionsPayload, CleanupObjectVersionsResponse
 from app.services.object_listing_temp_store import TemporarySqliteStore
-from app.services.s3_client import _delete_objects
+from app.services.s3_client import delete_objects
 from app.services.s3_execution_context import S3ExecutionTarget
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,7 @@ class BrowserVersionsMixin:
                     if not versions_batch:
                         return
                     batch = list(versions_batch)
-                    _delete_objects(client, bucket_name, batch)
+                    delete_objects(client, bucket_name, batch)
                     conn.executemany(
                         "DELETE FROM cleanup_versions WHERE key = ? AND version_id = ?",
                         [(item["Key"], item["VersionId"]) for item in batch],
@@ -213,7 +213,7 @@ class BrowserVersionsMixin:
                     if not markers_batch:
                         return
                     batch = list(markers_batch)
-                    _delete_objects(client, bucket_name, batch)
+                    delete_objects(client, bucket_name, batch)
                     deleted_delete_markers += len(batch)
                     markers_batch.clear()
 

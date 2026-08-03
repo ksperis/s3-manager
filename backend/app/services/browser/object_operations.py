@@ -23,7 +23,7 @@ from app.models.browser import (
     PresignedUrl,
     SseCustomerContext,
 )
-from app.services.s3_client import _delete_objects
+from app.services.s3_client import delete_objects
 from app.services.s3_execution_context import S3ExecutionTarget
 
 
@@ -215,7 +215,7 @@ class BrowserObjectOperationsMixin:
             return 0
         client = self._client(account)
         try:
-            _delete_objects(client, bucket_name, items)
+            delete_objects(client, bucket_name, items)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
         self.invalidate_object_list_cache_for_account(account, bucket_name)

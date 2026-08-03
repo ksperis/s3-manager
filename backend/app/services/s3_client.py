@@ -1264,7 +1264,7 @@ def delete_bucket_policy(
     logger.debug("Deleted policy for bucket %s", bucket_name)
 
 
-def _delete_objects(client, bucket_name: str, items: Iterable[dict]) -> None:
+def delete_objects(client, bucket_name: str, items: Iterable[dict]) -> None:
     _delete_objects_count(client, bucket_name, items)
 
 

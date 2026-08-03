@@ -9,7 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.services.s3_execution_context import S3ExecutionTarget
 from app.models.object import ListObjectsResponse, S3Object
 from app.services.aws_client_config import StorageRequestProfile
-from app.services.s3_client import _delete_objects, get_s3_client
+from app.services.s3_client import delete_objects, get_s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class ObjectsService:
             return
         client = self._client(account)
         try:
-            _delete_objects(client, bucket_name, [{"Key": key} for key in keys])
+            delete_objects(client, bucket_name, [{"Key": key} for key in keys])
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
         logger.debug("Deleted %s objects from bucket %s", len(keys), bucket_name)
